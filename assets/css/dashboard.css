@@ -1,0 +1,320 @@
+/* Dashboard CSS */
+
+.dashboard-layout {
+    overflow-y: auto;
+    /* Убеждаемся, что фон такой же темный и с картинкой, как на главной */
+    /* Стили body уже подтянуты из main.css */
+}
+
+/* === Global Header (как на главной, но адаптированный) === */
+.main-header {
+    background: transparent; /* Прозрачный фон для лого */
+    padding: 20px 0;
+    margin-bottom: 20px;
+}
+
+.main-header .header-content {
+    max-width: 1200px; /* Совпадает с .container */
+    margin: 0 auto;
+    padding: 0 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.main-header .logo {
+    height: 60px; /* Размер лого */
+    width: auto;
+}
+
+.main-header .user-area {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    color: white; /* Текст белый на темном фоне */
+    background: rgba(0, 0, 0, 0.4); /* Полупрозрачная подложка для читаемости */
+    padding: 10px 20px;
+    border-radius: 20px;
+    backdrop-filter: blur(5px);
+}
+
+.main-header .username {
+    font-weight: 500;
+}
+
+.main-header .btn-logout {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.4);
+    padding: 5px 15px;
+    border-radius: 15px;
+    font-size: 0.9em;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.main-header .btn-logout:hover {
+    background-color: rgba(231, 76, 60, 0.8); /* Красный при наведении */
+    border-color: #e74c3c;
+}
+
+
+/* === Main Container === */
+.dashboard-layout .container {
+    max-width: 1200px;
+    margin: 0 auto 50px; /* Отступ снизу */
+    padding: 0 20px;
+}
+
+/* === Navigation Tiles === */
+.nav-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr); /* 4 колонки ровно */
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.nav-tile {
+    background: rgba(255, 255, 255, 0.15); /* Полупрозрачный белый */
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    backdrop-filter: blur(5px);
+}
+
+.nav-tile:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-5px);
+}
+
+.nav-tile.active {
+    background: #fff;
+    color: #333; /* Активная плитка белая с темным текстом */
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+}
+
+.nav-tile .icon {
+    font-size: 2.5em;
+    margin-bottom: 10px;
+}
+
+.nav-tile .label {
+    font-weight: bold;
+    font-size: 1.1em;
+    font-family: 'Philosopher', sans-serif; /* Шрифт для меню */
+}
+
+/* === Content Styles === */
+
+.dashboard-title {
+    margin-top: 0;
+    color: #444;
+    border-bottom: 2px solid #6d2f8e; /* MLP Purple */
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+    font-family: 'Philosopher', sans-serif; /* Магический заголовок */
+    font-weight: 700;
+}
+
+/* Playlist Info Block */
+.playlist-info {
+    margin-bottom: 20px; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    background: #fff; 
+    padding: 15px; 
+    border-radius: 8px; 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.playlist-date {
+    color: #555;
+}
+
+.status-badge {
+    margin-left: 10px; 
+    padding: 3px 8px; 
+    border-radius: 4px; 
+    font-weight: bold;
+}
+
+.status-badge.old {
+    color: #d35400; 
+    background: #fdebd0;
+}
+
+.status-badge.fresh {
+    color: #27ae60; 
+    background: #e8f8f5;
+    font-weight: normal;
+}
+
+.playlist-list {
+    font-size: 1.1em; 
+    line-height: 1.6;
+}
+
+.playlist-list span.meta {
+    color: #777; 
+    font-size: 0.9em;
+}
+
+.search-bar {
+    margin-bottom: 20px; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center;
+}
+
+.search-input {
+    width: 300px;
+}
+
+.search-hint {
+    color: #777; 
+    font-size: 0.9em;
+}
+
+
+/* Tabs Content */
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+    animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Cards */
+.card {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 8px;
+    padding: 25px;
+    margin-bottom: 25px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+.card.danger-zone {
+    border-left: 5px solid #e74c3c;
+}
+
+/* Tables */
+.dashboard-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.dashboard-table th, .dashboard-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.dashboard-table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    color: #555;
+    cursor: pointer;
+}
+
+.dashboard-table tr:hover {
+    background-color: #f1f1f1;
+}
+
+/* Buttons */
+button {
+    cursor: pointer;
+    padding: 8px 16px;
+    border-radius: 4px;
+    border: none;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+
+.btn-primary {
+    background-color: #6d2f8e;
+    color: white;
+}
+.btn-primary:hover {
+    background-color: #552470;
+}
+
+.btn-warning {
+    background: #f39c12; 
+    color: white;
+}
+
+.btn-danger {
+    background-color: #e74c3c;
+    color: white;
+}
+.btn-danger:hover {
+    background-color: #c0392b;
+}
+
+/* Inputs */
+input[type="text"], input[type="number"], input[type="password"] {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+/* Flash Messages */
+.flash-message {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    padding: 15px 25px;
+    min-width: 300px;
+    text-align: center;
+    border-radius: 8px;
+    font-weight: 500;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from { top: -100px; opacity: 0; }
+    to { top: 20px; opacity: 1; }
+}
+
+.alert-success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.alert-error, .alert-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .nav-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .main-header .header-content {
+        flex-direction: column;
+        gap: 15px;
+    }
+}

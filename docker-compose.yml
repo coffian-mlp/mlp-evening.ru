@@ -1,0 +1,47 @@
+services:
+  # Наш веб-сервер (Nginx)
+  web:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/var/www/html
+      - ./.docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - php
+      - db
+    networks:
+      - mlp-net
+
+  # Интерпретатор PHP
+  php:
+    build:
+      context: .
+      dockerfile: .docker/php/Dockerfile
+    volumes:
+      - ./:/var/www/html
+    networks:
+      - mlp-net
+
+  # База данных MySQL
+  db:
+    image: mysql:5.7
+    environment:
+      MYSQL_DATABASE: coffian_eplist
+      MYSQL_USER: coffian_eplist
+      MYSQL_PASSWORD: HmyV4b2z
+      MYSQL_ROOT_PASSWORD: root_password_secret
+    volumes:
+      - db_data:/var/lib/mysql
+      # Магия! Этот файл автоматически выполнится при первом запуске контейнера,
+      # создав структуру таблиц и наполнив их данными.
+      - ./coffian_eplist.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - mlp-net
+
+networks:
+  mlp-net:
+    driver: bridge
+
+volumes:
+  db_data:

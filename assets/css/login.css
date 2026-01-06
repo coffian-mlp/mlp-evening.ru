@@ -1,0 +1,74 @@
+/* === Стили страницы входа === */
+.login-wrapper {
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    height: 80vh;
+}
+
+.login-box {
+    background: rgba(255, 255, 255, 0.95); 
+    padding: 30px; 
+    border-radius: 8px; 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+    width: 100%; 
+    max-width: 400px; 
+    text-align: center;
+}
+
+.login-title {
+    margin-top: 0; 
+    color: #444; 
+    border-bottom: 2px solid #6d2f8e; 
+    padding-bottom: 10px; 
+    margin-bottom: 20px;
+}
+
+.error-alert {
+    background-color: #f8d7da; 
+    color: #721c24; 
+    padding: 10px; 
+    border-radius: 4px; 
+    margin-bottom: 20px; 
+    border: 1px solid #f5c6cb;
+}
+
+.form-group {
+    margin-bottom: 20px; 
+    text-align: left;
+}
+
+.form-label {
+    display: block; 
+    margin-bottom: 5px; 
+    color: #555;
+}
+
+.form-input {
+    width: 100%; 
+    padding: 12px; 
+    border: 1px solid #ddd; 
+    border-radius: 4px; 
+    box-sizing: border-box;
+}
+
+.btn-submit {
+    width: 100%; 
+    padding: 12px; 
+    background-color: #6d2f8e; 
+    color: white; 
+    border: none; 
+    border-radius: 4px; 
+    cursor: pointer; 
+    font-weight: bold;
+}
+
+.back-link-wrapper {
+    margin-top: 20px;
+}
+
+.back-link {
+    text-decoration: none; 
+    color: #6d2f8e;
+}
+

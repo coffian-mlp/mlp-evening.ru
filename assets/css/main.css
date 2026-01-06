@@ -1,0 +1,166 @@
+/* === Общие стили === */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: 'Open Sans', 'Segoe UI', Tahoma, sans-serif; /* Основной шрифт */
+    background: url(/assets/img/bg.jpg) no-repeat center center fixed #2B1F43;
+    background-size: cover;
+    color: #333;
+}
+
+/* Заголовки с магическим шрифтом */
+h1, h2, h3, h4, h5, h6, .logo-font {
+    font-family: 'Philosopher', sans-serif;
+}
+
+/* Класс для главной страницы (плеера), где не нужен скролл */
+body.player-layout {
+    overflow: hidden;
+}
+
+/* Класс для дашборда, где скролл нужен */
+body.dashboard-layout {
+    overflow-y: auto;
+    /* Убрали background: #f0f2f5; чтобы осталась картинка */
+    padding: 20px;
+}
+
+/* === Стили Плеера (Index) === */
+.player-container {
+    display: flex;
+    height: 100vh; /* Фоллбек для старых браузеров */
+    height: 100dvh; /* Dynamic Viewport Height для мобилок */
+}
+
+.video-container {
+    flex: 3.5;
+    display: flex;
+    flex-direction: column;
+    padding: 6px;
+}
+
+.header {
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    color: white;
+}
+
+.header .logo {
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.header .menu {
+    display: flex;
+    gap: 20px;
+}
+
+.header .menu a {
+    color: white;
+    text-decoration: none;
+    font-size: 16px;
+}
+
+.video-content {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    width: 100%;
+}
+
+.video-content iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+.chat-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #333;
+    width: 100%;
+    height: 100%;
+}
+
+@media (max-width: 768px) {
+    .player-container {
+        flex-direction: column;
+    }
+
+    .header {
+        height: auto;
+        padding: 10px 20px;
+        flex-shrink: 0;
+    }
+    
+    .header .logo {
+        height: 40px;
+        width: auto;
+    }
+
+    .video-container {
+        flex: 0 0 auto;
+        padding: 0;
+        width: 100%;
+    }
+    
+    .video-content {
+        width: 100%;
+        aspect-ratio: 16/9;
+    }
+
+    .chat-container {
+        flex: 1;
+        height: auto;
+        min-height: 0;
+    }
+}
+
+/* === Утилиты === */
+.hidden { display: none; }
+
+/* === Чат иконки === */
+/* Имена пользователей и заголовок чата - магическим шрифтом */
+/* Добавляем 'a', чтобы ссылки тоже окрашивались, и '*' для вложенных элементов */
+.chatbro_header_title,
+.chatbro_message_name,
+.chatbro_message_name a,
+.chatbro_chat_name {
+    font-family: 'Philosopher', sans-serif !important;
+    max-width: unset !important;
+}
+
+.chatbro_message_attachment_reply .chatbro_message_name,
+.chatbro_message_attachment_reply .chatbro_message_name a {
+    max-width: 45% !important;
+}
+
+/* Сам текст сообщений - обычным шрифтом (наследуется от body, но на всякий случай) */
+.chatbro_message_block, 
+.chatbro_message_content {
+    font-family: 'Open Sans', sans-serif !important;
+}
+
+.chatbro_messages .chatbro_message_admin, .chatbro_fake_messages .chatbro_message_admin {
+  border: none !important;
+  background: none !important;
+}
+.chatbro_messages .chatbro_message_moder, .chatbro_fake_messages .chatbro_message_moder {
+  border: none !important;
+  background: none !important;
+}
+.chatbro_messages .chatbro_message_admin::after, .chatbro_fake_messages .chatbro_message_admin::after, .chatbro_messages .chatbro_message_moder::after, .chatbro_fake_messages .chatbro_message_moder::after {
+  display: none;
+}

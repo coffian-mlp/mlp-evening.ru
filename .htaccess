@@ -1,0 +1,19 @@
+# === MLP-Evening .htaccess ===
+
+# 1. Обработка ошибок
+ErrorDocument 404 /404.php
+
+# 2. Безопасность: Запрещаем листинг директорий (чтобы не видели список файлов)
+Options -Indexes
+
+# 3. Базовая защита конфигов (на всякий случай, если Apache не настроен скрывать их)
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+<Files "config.php">
+    Order allow,deny
+    Deny from all
+</Files>
+
