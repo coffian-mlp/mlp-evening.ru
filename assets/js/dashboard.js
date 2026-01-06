@@ -1,13 +1,5 @@
 $(document).ready(function() {
     
-    // --- CSRF Protection Setup ---
-    // Автоматически добавляем токен во все AJAX запросы
-    $.ajaxSetup({
-        headers: {
-            'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content')
-        }
-    });
-
     // --- Логика переключения вкладок ---
     $(".nav-tile").click(function() {
         // Убираем активный класс у всех плиток и контента
@@ -21,8 +13,7 @@ $(document).ready(function() {
         var target = $(this).data("target");
         $(target).addClass("active");
 
-        // Обновляем URL хеш (история браузера)
-        // Используем replaceState, чтобы избежать дефолтного скролла к якорю
+        // Обновляем URL хеш
         if(history.pushState) {
             history.pushState(null, null, target);
         }
@@ -65,15 +56,15 @@ $(document).ready(function() {
 
     function getCellValue(row, index){ return $(row).children('td').eq(index).text() }
 
-    // --- AJAX обработка форм ---
+    // --- AJAX обработка форм (Специфично для Dashbaord) ---
+    // В main.js уже есть настройки CSRF, так что тут просто делаем запросы
     $("form").on("submit", function(e) {
-        e.preventDefault(); // Останавливаем обычную отправку формы
+        e.preventDefault(); 
         
         var $form = $(this);
         var $btn = $form.find("button[type='submit']");
         var originalText = $btn.text();
         
-        // Визуальная индикация загрузки
         $btn.prop("disabled", true).text("⏳...");
 
         $.ajax({
@@ -82,60 +73,33 @@ $(document).ready(function() {
             data: $form.serialize(),
             dataType: "json",
             success: function(response) {
-                // Если сервер просит перезагрузку (например, после регенерации плейлиста)
                 if (response.data && response.data.reload) {
                     location.reload();
                     return;
                 }
 
-                // Показываем сообщение
-                showFlashMessage(response.message, response.type);
+                // Используем глобальную функцию из main.js
+                window.showFlashMessage(response.message, response.type);
                 
-                // Если успех
                 if (response.success) {
-                    // Очищаем поля ввода (кроме hidden)
                     $form.find("input[type='text'], input[type='number']").val("");
                     
-                    // Специфичная логика для обновления интерфейса
                     var action = $form.find("input[name='action']").val();
-                    
                     if (action === 'clear_watching_log') {
-                        // Очищаем таблицу истории визуально
                         $("#tab-history table tr:not(:first)").remove();
                         $("#tab-history table").append("<tr><td colspan='3' style='text-align:center; color:#999;'>История пуста (обновите страницу)</td></tr>");
                     }
                 }
             },
             error: function(xhr, status, error) {
-                showFlashMessage("❌ Ошибка соединения: " + error, "error");
+                window.showFlashMessage("❌ Ошибка соединения: " + error, "error");
             },
             complete: function() {
-                // Возвращаем кнопку в исходное состояние (если не было перезагрузки)
-                if (!$btn.prop("disabled") === false) { // Если кнопка еще существует
+                if (!$btn.prop("disabled") === false) { 
                      $btn.prop("disabled", false).text(originalText);
                 }
             }
         });
     });
-
-    // --- Функция показа уведомлений ---
-    function showFlashMessage(message, type) {
-        // Удаляем старые сообщения
-        $('.flash-message').remove();
-
-        var alertClass = (type === 'error') ? 'alert-danger' : 'alert-success';
-        
-        var $msg = $('<div class="flash-message ' + alertClass + '">' + message + '</div>');
-        $('body').append($msg);
-
-        // Автоскрытие только для успеха
-        if (type !== 'error') {
-            setTimeout(function() {
-                $msg.fadeOut(500, function() {
-                    $(this).remove();
-                });
-            }, 3000);
-        }
-    }
 
 });

@@ -4,15 +4,17 @@ require_once __DIR__ . '/src/EpisodeManager.php';
 require_once __DIR__ . '/src/Auth.php';
 
 // 🔒 ЗАЩИТА: Только для авторизованных
-Auth::requireLogin();
+Auth::requireAdmin();
 
 $manager = new EpisodeManager();
 
-// Получаем данные
-$eveningPlaylist = $manager->getEveningPlaylist();
-$allEpisodes = $manager->getAllEpisodes();
-$watchHistory = $manager->getWatchHistory();
-$currentStreamUrl = $manager->getOption('stream_url', 'https://goodgame.ru/player?161438#autoplay');
+    // Получаем данные
+    $eveningPlaylist = $manager->getEveningPlaylist();
+    $allEpisodes = $manager->getAllEpisodes();
+    $watchHistory = $manager->getWatchHistory();
+    $currentStreamUrl = $manager->getOption('stream_url', 'https://goodgame.ru/player?161438#autoplay');
+    $currentChatMode = $manager->getOption('chat_mode', 'local');
+    $currentRateLimit = $manager->getOption('chat_rate_limit', 0);
 
 // Отделяем метаданные и эпизоды
 $playlistMeta = $eveningPlaylist['_meta'] ?? null;
@@ -194,6 +196,35 @@ require_once __DIR__ . '/src/templates/header.php';
     <!-- Вкладка 4: Управление -->
     <div id="tab-controls" class="tab-content">
         
+        <div class="card">
+            <h3 class="dashboard-title">💬 Настройки Чата</h3>
+            <form method="post" action="api.php">
+                <input type="hidden" name="action" value="update_settings">
+                
+                <div class="chat-options" style="display: flex; gap: 20px; margin-bottom: 15px;">
+                    <label style="cursor: pointer;">
+                        <input type="radio" name="chat_mode" value="local" <?= $currentChatMode === 'local' ? 'checked' : '' ?>>
+                        🦄 Локальный чат (Новый)
+                    </label>
+                    <label style="cursor: pointer;">
+                        <input type="radio" name="chat_mode" value="chatbro" <?= $currentChatMode === 'chatbro' ? 'checked' : '' ?>>
+                        🤖 ChatBro (Старый)
+                    </label>
+                    <label style="cursor: pointer;">
+                        <input type="radio" name="chat_mode" value="none" <?= $currentChatMode === 'none' ? 'checked' : '' ?>>
+                        🚫 Без чата
+                    </label>
+                </div>
+                
+                <label for="chat_rate_limit" style="display: block; margin-bottom: 5px; font-weight: bold;">Анти-спам задержка (сек):</label>
+                <input type="number" id="chat_rate_limit" name="chat_rate_limit" value="<?= $currentRateLimit ?>" min="0" max="60" style="width: 60px; padding: 5px;">
+                <span style="color: #666; font-size: 0.9em;">(0 = отключено)</span>
+
+                <br><br>
+                <button type="submit" class="btn-primary">Сохранить режим</button>
+            </form>
+        </div>
+
         <div class="card">
             <h3 class="dashboard-title">📺 Настройки Плеера</h3>
             <form method="post" action="api.php">

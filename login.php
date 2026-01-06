@@ -9,16 +9,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
     
     if (Auth::login($username, $password)) {
-        header("Location: /dashboard.php");
+        if (Auth::isAdmin()) {
+            header("Location: /dashboard.php");
+        } else {
+            header("Location: /");
+        }
         exit();
     } else {
-        $error = 'Неверный логин или пароль!';
+        $error = 'Упс! Неверное имя или пароль. Попробуй еще раз!';
     }
 }
 
-// Если уже залогинен - сразу в дашборд
+// Если уже залогинен
 if (Auth::check()) {
-    header("Location: /dashboard.php");
+    if (Auth::isAdmin()) {
+        header("Location: /dashboard.php");
+    } else {
+        header("Location: /");
+    }
     exit();
 }
 
@@ -41,13 +49,13 @@ require_once __DIR__ . '/src/templates/header.php';
 
         <form method="post">
             <div class="form-group">
-                <label for="username" class="form-label">Логин</label>
-                <input type="text" id="username" name="username" class="form-input" placeholder="Введите логин..." required>
+                <label for="username" class="form-label">Твое имя (Логин)</label>
+                <input type="text" id="username" name="username" class="form-input" placeholder="Пинки Пай" required>
             </div>
             
             <div class="form-group">
-                <label for="password" class="form-label">Пароль</label>
-                <input type="password" id="password" name="password" class="form-input" placeholder="Введите пароль..." required>
+                <label for="password" class="form-label">Секретное слово (Пароль)</label>
+                <input type="password" id="password" name="password" class="form-input" placeholder="••••••••" required>
             </div>
             
             <button type="submit" class="btn-submit">Войти</button>

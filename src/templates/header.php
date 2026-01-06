@@ -23,6 +23,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&family=Philosopher:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="/assets/css/main.css">
+    <link rel="stylesheet" href="/assets/css/chat.css">
+    <link rel="stylesheet" href="/assets/css/modal.css">
     <?php if (isset($extraCss)) echo $extraCss; ?>
     
     <?php if (isset($_SESSION['user_id'])): ?>

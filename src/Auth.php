@@ -16,6 +16,20 @@ class Auth {
             exit();
         }
     }
+
+    public static function isAdmin() {
+        if (!self::check()) return false;
+        return isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
+    }
+
+    public static function requireAdmin() {
+        self::requireLogin();
+        if (!self::isAdmin()) {
+            http_response_code(403);
+            require __DIR__ . '/../403.php'; 
+            exit();
+        }
+    }
     
     public static function requireApiLogin() {
         if (!self::check()) {

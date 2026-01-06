@@ -1,5 +1,8 @@
     <!-- Конец контента -->
     <script src="/assets/js/main.js"></script>
+    <?php if (isset($enableLocalChat) && $enableLocalChat): ?>
+        <script src="/assets/js/local-chat.js"></script>
+    <?php endif; ?>
     <?php if (isset($showChatBro) && $showChatBro): ?>
         <script src="/assets/js/chatbro.js"></script>
     <?php endif; ?>

@@ -152,7 +152,6 @@ body.dashboard-layout {
 .chatbro_message_content {
     font-family: 'Open Sans', sans-serif !important;
 }
-
 .chatbro_messages .chatbro_message_admin, .chatbro_fake_messages .chatbro_message_admin {
   border: none !important;
   background: none !important;
@@ -163,4 +162,88 @@ body.dashboard-layout {
 }
 .chatbro_messages .chatbro_message_admin::after, .chatbro_fake_messages .chatbro_message_admin::after, .chatbro_messages .chatbro_message_moder::after, .chatbro_fake_messages .chatbro_message_moder::after {
   display: none;
+}
+
+/* === Стили уведомлений (Flash Messages) === */
+.flash-message {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 15px 25px;
+    border-radius: 50px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    z-index: 9999;
+    font-weight: bold;
+    color: white;
+    cursor: pointer;
+    text-align: center;
+    min-width: 300px;
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from { top: -50px; opacity: 0; }
+    to { top: 20px; opacity: 1; }
+}
+
+.flash-message.alert-success {
+    background-color: #4caf50; /* Green */
+    background: linear-gradient(135deg, #4caf50, #8bc34a);
+}
+
+.flash-message.alert-danger {
+    background-color: #f44336; /* Red */
+    background: linear-gradient(135deg, #f44336, #e91e63);
+}
+
+/* === Общие кнопки === */
+.btn-primary {
+    background: #6d2f8e;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.btn-primary:hover { background: #562473; }
+
+.btn-danger {
+    background: #e74c3c;
+    color: white;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.btn-danger:hover { background: #c0392b; }
+
+.btn-warning {
+    background: #f1c40f;
+    color: #333;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.btn-warning:hover { background: #f39c12; }
+
+/* Кнопка "Вернуться" (используется в 404/403) */
+.btn-return, .btn-home {
+    display: inline-block;
+    background-color: #6d2f8e;
+    color: white;
+    padding: 12px 25px;
+    border-radius: 25px;
+    text-decoration: none;
+    font-weight: bold;
+    transition: transform 0.2s, background 0.2s;
+    margin-top: 20px;
+}
+.btn-return:hover, .btn-home:hover {
+    background-color: #562473;
+    transform: translateY(-2px);
 }

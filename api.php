@@ -6,6 +6,7 @@ ini_set('display_errors', 0);
 
 require_once __DIR__ . '/src/EpisodeManager.php';
 require_once __DIR__ . '/src/Auth.php';
+require_once __DIR__ . '/src/ChatManager.php';
 
 header('Content-Type: application/json');
 
@@ -18,18 +19,24 @@ register_shutdown_function(function() {
 });
 
 try {
-    // 🔒 ЗАЩИТА: API доступен только авторизованным
-    Auth::requireApiLogin();
-
-    // 🛡️ ЗАЩИТА: Проверка CSRF токена
-    $csrfToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-    if (!Auth::checkCsrfToken($csrfToken)) {
-        echo json_encode([
-            'success' => false, 
-            'message' => 'CSRF Token Mismatch: Обновите страницу и попробуйте снова.', 
-            'type' => 'error'
-        ]);
-        exit();
+    // 🛡️ CSRF Protection for POST requests
+    // We check token only if user IS logged in, OR if we want to protect public forms too.
+    // For now, let's keep strict check if token is present, but allow public access if logic permits.
+    // But wait, the original logic required login. Let's make it flexible.
+    
+    $isLoggedIn = Auth::check();
+    
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $csrfToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+        // If user is logged in, we MUST verify token.
+        if ($isLoggedIn && !Auth::checkCsrfToken($csrfToken)) {
+             echo json_encode([
+                'success' => false, 
+                'message' => 'CSRF Token Mismatch: Обновите страницу.', 
+                'type' => 'error'
+            ]);
+            exit();
+        }
     }
 
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -39,7 +46,8 @@ try {
 
     $action = $_POST['action'] ?? '';
     $manager = new EpisodeManager();
-
+    // Lazy load ChatManager only when needed
+    
     function sendResponse($success, $message, $type = 'success', $data = []) {
         echo json_encode([
             'success' => $success,
@@ -50,6 +58,25 @@ try {
         exit();
     }
 
+    // Public Actions
+    if ($action === 'login') {
+         $username = $_POST['username'] ?? '';
+         $password = $_POST['password'] ?? '';
+         
+         if (Auth::login($username, $password)) {
+             sendResponse(true, "Добро пожаловать, $username! Рады тебя видеть!", 'success', ['reload' => true]);
+         } else {
+             sendResponse(false, "Упс! Неверное имя или пароль.", 'error');
+         }
+    }
+
+    // Protected Actions
+    if (!$isLoggedIn && $action !== 'login') { // Allow 'login' or other public actions later
+         // For now, most actions require login
+         Auth::requireApiLogin(); 
+    }
+
+
     switch ($action) {
         case 'update_settings':
             if (isset($_POST['stream_url'])) {
@@ -57,11 +84,27 @@ try {
                 // Простейшая валидация
                 if (filter_var($url, FILTER_VALIDATE_URL)) {
                     $manager->setOption('stream_url', $url);
-                    sendResponse(true, "✅ Ссылка на стрим обновлена!");
+                    // Не возвращаем сразу, вдруг еще настройки есть
                 } else {
                     sendResponse(false, "❌ Некорректный формат ссылки.", 'error');
                 }
             }
+            
+            if (isset($_POST['chat_mode'])) {
+                $mode = $_POST['chat_mode'];
+                $validModes = ['local', 'chatbro', 'none'];
+                if (in_array($mode, $validModes)) {
+                    $manager->setOption('chat_mode', $mode);
+                }
+            }
+            
+            if (isset($_POST['chat_rate_limit'])) {
+                $limit = (int)$_POST['chat_rate_limit'];
+                if ($limit < 0) $limit = 0;
+                $manager->setOption('chat_rate_limit', $limit);
+            }
+            
+            sendResponse(true, "✅ Настройки обновлены!");
             break;
 
         case 'regenerate_playlist':
@@ -112,7 +155,32 @@ try {
 
         case 'logout':
             Auth::logout();
-            sendResponse(true, "До встречи!", 'success', ['reload' => true]); 
+            sendResponse(true, "До скорой встречи!", 'success', ['reload' => true]); 
+            break;
+
+        case 'send_message':
+            $message = $_POST['message'] ?? '';
+            if (empty($message)) {
+                sendResponse(false, "Эй, сообщение не может быть пустым!", 'error');
+            }
+            
+            // Assuming user is logged in because of the check above
+            $userId = $_SESSION['user_id'];
+            $username = $_SESSION['username'];
+            
+            $chat = new ChatManager();
+            $manager = new EpisodeManager(); // Need to get option
+            $rateLimit = (int)$manager->getOption('chat_rate_limit', 0);
+            
+            if (!$chat->checkRateLimit($userId, $rateLimit)) {
+                sendResponse(false, "Не так быстро, сахарок! Подожди $rateLimit сек.", 'error');
+            }
+
+            if ($chat->addMessage($userId, $username, $message)) {
+                sendResponse(true, "Сообщение отправлено");
+            } else {
+                sendResponse(false, "Ой, что-то пошло не так при отправке...", 'error');
+            }
             break;
             
         default:
