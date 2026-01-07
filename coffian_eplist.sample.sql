@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `login` varchar(50) NOT NULL UNIQUE,
   `nickname` varchar(50) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
-  `role` varchar(20) NOT NULL DEFAULT 'admin',
+  `role` varchar(20) NOT NULL DEFAULT 'user',
   `avatar_url` varchar(255) DEFAULT NULL,
   `chat_color` varchar(7) DEFAULT '#6d2f8e',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS `chat_messages` (
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `edited_at` DATETIME DEFAULT NULL,
     `is_deleted` TINYINT(1) DEFAULT 0,
+    `deleted_at` DATETIME DEFAULT NULL,
     INDEX (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
 
