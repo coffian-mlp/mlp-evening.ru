@@ -71,6 +71,23 @@ INSERT INTO `users` (`login`, `password_hash`, `role`) VALUES
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `chat_messages`
+--
+
+CREATE TABLE IF NOT EXISTS `chat_messages` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `user_id` INT NULL,
+    `username` VARCHAR(50) NOT NULL,
+    `message` TEXT NOT NULL,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `edited_at` DATETIME DEFAULT NULL,
+    `is_deleted` TINYINT(1) DEFAULT 0,
+    INDEX (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `episode_list`
 --
 
@@ -112,4 +129,3 @@ CREATE TABLE IF NOT EXISTS `watching_now` (
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
-

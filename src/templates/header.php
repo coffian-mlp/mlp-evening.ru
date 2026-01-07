@@ -30,6 +30,11 @@
     <!-- jQuery (Local) -->
     <script src="/assets/js/jquery.min.js"></script>
     
+    <script>
+        // Pass PHP session data to JS
+        window.currentUserId = <?= isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'null' ?>;
+        window.currentUserRole = "<?= isset($_SESSION['role']) ? $_SESSION['role'] : '' ?>";
+    </script>
 </head>
 <body class="<?= $bodyClass ?? '' ?>">
 

@@ -30,17 +30,28 @@ session_write_close();
 
 $chat = new ChatManager();
 $lastId = isset($_SERVER["HTTP_LAST_EVENT_ID"]) ? (int)$_SERVER["HTTP_LAST_EVENT_ID"] : 0;
+// Мы можем использовать отдельный заголовок или параметр для отслеживания времени последнего обновления,
+// но стандарт SSE использует только Last-Event-ID.
+// Чтобы не усложнять, будем просто запоминать время старта скрипта и искать изменения с этого момента.
+// Но это работает только в рамках одного соединения.
+// Лучший способ: использовать timestamp как часть ID или просто проверять изменения за последние N секунд.
+// Давай попробуем гибридный подход: при каждом такте цикла мы знаем "текущее" время проверки.
+
+// Для простоты: храним время последнего чека в этой сессии.
+$lastCheckTime = gmdate('Y-m-d H:i:s', time() - 2); // -2 секунды на всякий случай
 
 // If client connects without Last-Event-ID, maybe send recent history?
 // Or just wait for new. Let's send recent 50 if lastId is 0.
 if ($lastId === 0) {
     $history = $chat->getMessages(20);
-    // History comes newest first from getMessages, but we want to send them chronologically
-    $history = array_reverse($history); 
+    // getMessages returns messages in chronological order (oldest first),
+    // so we can send them directly.
     
     foreach ($history as $msg) {
         sendEvent($msg);
-        $lastId = $msg['id'];
+        if ($msg['id'] > $lastId) {
+            $lastId = $msg['id'];
+        }
     }
 }
 
@@ -54,12 +65,20 @@ while (true) {
         break;
     }
 
-    $newMessages = $chat->getMessagesAfter($lastId);
+    // Ищем новые сообщения (ID > lastId) ИЛИ измененные (edited_at > lastCheckTime)
+    // Важно: getMessagesAfter мы обновили, теперь она принимает второй аргумент
+    $newMessages = $chat->getMessagesAfter($lastId, $lastCheckTime);
+    
+    // Обновляем время проверки ТЕКУЩИМ моментом (в UTC для базы)
+    $lastCheckTime = gmdate('Y-m-d H:i:s');
     
     if (!empty($newMessages)) {
         foreach ($newMessages as $msg) {
             sendEvent($msg);
-            $lastId = $msg['id'];
+            // Обновляем lastId только если это реально новое сообщение, а не старое отредактированное
+            if ($msg['id'] > $lastId) {
+                $lastId = $msg['id'];
+            }
         }
     } else {
         // Keep-alive heartbeat

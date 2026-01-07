@@ -316,6 +316,41 @@ body.dashboard-layout {
     margin-left: 5px;
 }
 
+.chat-actions {
+    opacity: 0;
+    transition: opacity 0.2s;
+    margin-left: 5px;
+}
+
+.chat-message:hover .chat-actions {
+    opacity: 1;
+}
+
+.chat-action-btn {
+    background: none;
+    border: none;
+    color: #999;
+    cursor: pointer;
+    font-size: 0.8em;
+    padding: 0 2px;
+}
+
+.chat-action-btn:hover {
+    color: #6d2f8e;
+}
+
+.chat-action-btn.delete-btn:hover {
+    color: #e74c3c;
+}
+
+.edited-mark {
+    font-size: 0.75em;
+    color: #999;
+    font-style: italic;
+    margin-left: 5px;
+    cursor: help;
+}
+
 .chat-input-area {
     padding: 10px;
     border-top: 1px solid #eee;

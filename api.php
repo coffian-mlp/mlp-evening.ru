@@ -379,6 +379,39 @@ try {
                 sendResponse(false, "Ой, что-то пошло не так при отправке...", 'error');
             }
             break;
+
+        case 'edit_message':
+            $messageId = (int)($_POST['message_id'] ?? 0);
+            $newMessage = trim($_POST['message'] ?? '');
+            
+            if (!$messageId || empty($newMessage)) {
+                sendResponse(false, "Некорректные данные для редактирования.", 'error');
+            }
+            
+            $chat = new ChatManager();
+            if ($chat->editMessage($messageId, $_SESSION['user_id'], $newMessage)) {
+                sendResponse(true, "Сообщение обновлено!");
+            } else {
+                sendResponse(false, "Не удалось отредактировать сообщение (возможно, прошло больше 10 минут или это не твое сообщение).", 'error');
+            }
+            break;
+
+        case 'delete_message':
+            $messageId = (int)($_POST['message_id'] ?? 0);
+            if (!$messageId) {
+                sendResponse(false, "Некорректный ID сообщения.", 'error');
+            }
+
+            $chat = new ChatManager();
+            // Check if admin
+            $isAdmin = Auth::isAdmin();
+            
+            if ($chat->deleteMessage($messageId, $_SESSION['user_id'], $isAdmin)) {
+                sendResponse(true, "Сообщение удалено.");
+            } else {
+                sendResponse(false, "Не удалось удалить сообщение.", 'error');
+            }
+            break;
             
         default:
             sendResponse(false, "❌ Неизвестное действие: $action", 'error');

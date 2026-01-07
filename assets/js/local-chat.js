@@ -10,12 +10,19 @@ $(document).ready(function() {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
+    // Current User Data (Populated by PHP in global scope or via API check)
+    // For now, let's assume we can get it from a global variable if set in header
+    const currentUserId = window.currentUserId || null;
+    const currentUserRole = window.currentUserRole || null; // 'admin' or 'user'
+
     // Append message to UI
     function appendMessage(data) {
         const div = document.createElement('div');
         div.className = 'chat-message';
+        div.dataset.id = data.id; // Store message ID
         
         // Format time (HH:MM)
+        // Since backend now sends ISO 8601 (e.g. 2023-10-27T10:00:00Z), we can parse it directly
         const date = new Date(data.created_at);
         const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         
@@ -25,11 +32,50 @@ $(document).ready(function() {
             ? `<img src="${escapeHtml(data.avatar_url)}" class="chat-avatar" alt="">` 
             : '';
 
+        // Deleted State
+        if (data.deleted) {
+            div.innerHTML = `
+                ${avatarHtml}
+                <span class="username" ${colorStyle}>${escapeHtml(data.username)}:</span>
+                <span class="text" style="color:#999; font-style:italic;">Сообщение удалено</span>
+                <span class="timestamp" title="${data.created_at}">${timeStr}</span>
+            `;
+            chatMessages.appendChild(div);
+            scrollToBottom();
+            return;
+        }
+
+        // Actions (Edit/Delete)
+        let actionsHtml = '';
+        const isMyMessage = (currentUserId && parseInt(data.user_id) === parseInt(currentUserId));
+        const isAdmin = (currentUserRole === 'admin');
+        const isRecent = ((new Date() - date) / 1000 / 60) < 10; // < 10 mins
+
+        // Show buttons if: (My Message AND Recent) OR (Admin)
+        if ((isMyMessage && isRecent) || isAdmin) {
+            // Edit only for self and recent (Admin can't edit others' messages typically, but can delete)
+            if (isMyMessage && isRecent) {
+                actionsHtml += `<button class="chat-action-btn edit-btn" title="Редактировать">✎</button>`;
+            }
+            // Delete for self or Admin
+            if (isMyMessage || isAdmin) {
+                actionsHtml += `<button class="chat-action-btn delete-btn" title="Удалить">🗑</button>`;
+            }
+        }
+
+        let editedMark = '';
+        if (data.edited_at) {
+            const editDate = new Date(data.edited_at);
+            editedMark = `<span class="edited-mark" title="Отредактировано: ${editDate.toLocaleString()}">(изм.)</span>`;
+        }
+
         div.innerHTML = `
             ${avatarHtml}
             <span class="username" ${colorStyle}>${escapeHtml(data.username)}:</span>
             <span class="text">${escapeHtml(data.message)}</span>
+            ${editedMark}
             <span class="timestamp" title="${data.created_at}">${timeStr}</span>
+            <span class="chat-actions">${actionsHtml}</span>
         `;
         
         chatMessages.appendChild(div);
@@ -57,7 +103,33 @@ $(document).ready(function() {
             if (e.data === 'keepalive') return;
             
             const data = JSON.parse(e.data);
-            appendMessage(data);
+            
+            // Check if this message already exists in UI (for updates/edits)
+            const existingMsg = document.querySelector(`.chat-message[data-id="${data.id}"]`);
+            if (existingMsg) {
+                // Replace content (simplest way to handle edit/delete updates)
+                // Ideally, we should refactor appendMessage to return HTML string or be reusable
+                // For now, let's just reload the whole element logic by removing and re-appending?
+                // No, that breaks scroll and visual flow if it's way up.
+                // Let's manually update the text part.
+                
+                if (data.deleted) {
+                    existingMsg.querySelector('.text').innerHTML = '<em style="color:#999;">Сообщение удалено</em>';
+                    existingMsg.querySelector('.chat-actions').remove(); // Remove buttons
+                } else {
+                    existingMsg.querySelector('.text').textContent = data.message;
+                    if (!existingMsg.querySelector('.edited-mark')) {
+                         const ts = existingMsg.querySelector('.timestamp');
+                         const mark = document.createElement('span');
+                         mark.className = 'edited-mark';
+                         mark.textContent = '(изм.)';
+                         mark.title = 'Отредактировано';
+                         existingMsg.insertBefore(mark, ts);
+                    }
+                }
+            } else {
+                appendMessage(data);
+            }
         } catch (err) {
             console.error("Chat parse error", err);
         }
@@ -75,24 +147,31 @@ $(document).ready(function() {
             const message = chatInput.value.trim();
             if (!message) return;
 
-            const csrfToken = $('meta[name="csrf-token"]').attr('content');
+            // Check if we are in "Edit Mode"
+            const editingId = chatInput.dataset.editingId;
+            const action = editingId ? 'edit_message' : 'send_message';
+            const data = {
+                action: action,
+                message: message
+            };
+            if (editingId) data.message_id = editingId;
 
-            // Optimistic UI update? No, let's wait for SSE to ensure consistency
-            // But we can clear input immediately
             const oldVal = chatInput.value;
             chatInput.value = '';
+            
+            // Clear editing state visual
+            if (editingId) {
+                chatInput.removeAttribute('data-editing-id');
+                chatForm.querySelector('button').textContent = 'Отправить';
+                chatInput.classList.remove('editing-mode');
+            }
 
             $.ajax({
                 url: 'api.php',
                 method: 'POST',
-                data: {
-                    action: 'send_message',
-                    message: message
-                },
-                // Headers are set globally in main.js
+                data: data,
                 success: function(response) {
                     if (!response.success) {
-                        // Use global notification instead of alert
                         if (window.showFlashMessage) {
                              window.showFlashMessage(response.message, 'error');
                         } else {
@@ -104,14 +183,45 @@ $(document).ready(function() {
                 error: function() {
                     if (window.showFlashMessage) {
                          window.showFlashMessage("Ошибка сети. Попробуй позже.", 'error');
-                    } else {
-                         alert("Network error");
                     }
                     chatInput.value = oldVal;
                 }
             });
         });
     }
+
+    // 2.5 Handle Message Actions (Event Delegation)
+    $(document).on('click', '.edit-btn', function(e) {
+        e.preventDefault();
+        const msgDiv = $(this).closest('.chat-message');
+        const msgId = msgDiv.attr('data-id');
+        const text = msgDiv.find('.text').text(); // Get raw text
+        
+        // Set input to edit mode
+        if (chatInput) {
+            chatInput.value = text;
+            chatInput.focus();
+            chatInput.dataset.editingId = msgId;
+            chatInput.classList.add('editing-mode');
+            const submitBtn = chatForm.querySelector('button');
+            if (submitBtn) submitBtn.textContent = 'Сохранить';
+        }
+    });
+
+    $(document).on('click', '.delete-btn', function(e) {
+        e.preventDefault();
+        if(!confirm('Удалить сообщение?')) return;
+        
+        const msgDiv = $(this).closest('.chat-message');
+        const msgId = msgDiv.attr('data-id');
+
+        $.post('api.php', { action: 'delete_message', message_id: msgId }, function(res) {
+            if(!res.success) {
+                if (window.showFlashMessage) window.showFlashMessage(res.message, 'error');
+            }
+            // Success is handled via SSE update
+        }, 'json');
+    });
 
     // 3. Auth Modal Logic (Login + Register)
     const loginLink = $('#login-link');
@@ -259,7 +369,7 @@ $(document).ready(function() {
             const originalText = btn.text();
             btn.prop('disabled', true).text('Сохранение...');
             profileError.hide();
-
+            
             const formData = new FormData(this);
 
             $.ajax({
