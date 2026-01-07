@@ -174,20 +174,22 @@ try {
             $userManager = new UserManager();
             $id = $_POST['user_id'] ?? ''; // Если пусто - создание, если есть - редактирование
             $login = trim($_POST['login'] ?? '');
+            $nickname = trim($_POST['nickname'] ?? '');
             $role = $_POST['role'] ?? 'user';
             $password = $_POST['password'] ?? '';
             
             if (empty($login)) sendResponse(false, "Логин обязателен", 'error');
+            if (empty($nickname)) $nickname = $login; // Fallback
             
             try {
                 if (!empty($id)) {
                     // Update
-                    $userManager->updateUser($id, $login, $role, $password); // Пароль может быть пустым
+                    $userManager->updateUser($id, $login, $nickname, $role, $password); // Пароль может быть пустым
                     sendResponse(true, "Пользователь обновлен");
                 } else {
                     // Create
                     if (empty($password)) sendResponse(false, "Для нового пользователя нужен пароль", 'error');
-                    $userManager->createUser($login, $password, $role);
+                    $userManager->createUser($login, $password, $role, $nickname);
                     sendResponse(true, "Пользователь создан");
                 }
             } catch (Exception $e) {

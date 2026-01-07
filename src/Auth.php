@@ -46,7 +46,7 @@ class Auth {
 
         $db = Database::getInstance()->getConnection();
         
-        $stmt = $db->prepare("SELECT id, login, password_hash, role FROM users WHERE login = ?");
+        $stmt = $db->prepare("SELECT id, login, nickname, password_hash, role FROM users WHERE login = ?");
         $stmt->bind_param("s", $login);
         $stmt->execute();
         $res = $stmt->get_result();
@@ -54,7 +54,8 @@ class Auth {
         if ($res && $row = $res->fetch_assoc()) {
             if (password_verify($password, $row['password_hash'])) {
                 $_SESSION['user_id'] = $row['id'];
-                $_SESSION['username'] = $row['login'];
+                // Теперь используем nickname для отображения!
+                $_SESSION['username'] = !empty($row['nickname']) ? $row['nickname'] : $row['login'];
                 $_SESSION['role'] = $row['role'];
                 
                 self::generateCsrfToken();

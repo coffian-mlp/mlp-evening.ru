@@ -49,6 +49,7 @@ INSERT INTO `site_options` (`key_name`, `value`) VALUES
 CREATE TABLE IF NOT EXISTS `users` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `login` varchar(50) NOT NULL UNIQUE,
+  `nickname` varchar(50) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
   `role` varchar(20) NOT NULL DEFAULT 'admin',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,

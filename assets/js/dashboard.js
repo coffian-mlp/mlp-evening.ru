@@ -156,6 +156,7 @@ function loadUsers() {
                         <tr>
                             <td>${u.id}</td>
                             <td>${escapeHtml(u.login)}</td>
+                            <td>${escapeHtml(u.nickname)}</td>
                             <td><span class="status-badge ${u.role === 'admin' ? 'old' : 'fresh'}">${u.role}</span></td>
                             <td>${u.created_at ? u.created_at : '-'}</td>
                             <td style="text-align: right;">
@@ -182,6 +183,7 @@ function openUserModal() {
     // Сброс формы
     $('#user_id').val('');
     $('#user_login').val('');
+    $('#user_nickname').val('');
     $('#user_password').val('');
     $('#user_role').val('user');
     $('#user-modal-title').text('Новый пони');
@@ -195,6 +197,7 @@ function editUser(user) {
     $('#user-modal').fadeIn(200).css('display', 'flex');
     $('#user_id').val(user.id);
     $('#user_login').val(user.login);
+    $('#user_nickname').val(user.nickname);
     $('#user_password').val(''); // Пароль не показываем
     $('#user_role').val(user.role);
     $('#user-modal-title').text('Редактировать пони');

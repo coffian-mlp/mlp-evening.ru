@@ -210,6 +210,7 @@ require_once __DIR__ . '/src/templates/header.php';
                     <tr>
                         <th>ID</th>
                         <th>Логин</th>
+                        <th>Никнейм</th>
                         <th>Роль</th>
                         <th>Дата регистрации</th>
                         <th style="text-align: right;">Действия</th>
@@ -231,13 +232,18 @@ require_once __DIR__ . '/src/templates/header.php';
                 <input type="hidden" name="action" value="save_user">
                 <input type="hidden" name="user_id" id="user_id">
                 
-                <div class="form-group">
-                    <label class="form-label">Логин</label>
-                    <input type="text" name="login" id="user_login" class="form-input" required>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Роль</label>
+            <div class="form-group">
+                <label class="form-label">Логин (для входа)</label>
+                <input type="text" name="login" id="user_login" class="form-input" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Никнейм (в чате)</label>
+                <input type="text" name="nickname" id="user_nickname" class="form-input" placeholder="Если пусто, будет как логин">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Роль</label>
                     <select name="role" id="user_role" class="form-input">
                         <option value="user">Пользователь</option>
                         <option value="admin">Администратор</option>

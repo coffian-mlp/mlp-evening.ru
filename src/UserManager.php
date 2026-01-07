@@ -10,7 +10,7 @@ class UserManager {
     }
 
     public function getAllUsers() {
-        $result = $this->db->query("SELECT id, login, role, created_at FROM users ORDER BY id ASC");
+        $result = $this->db->query("SELECT id, login, nickname, role, created_at FROM users ORDER BY id ASC");
         $users = [];
         if ($result) {
             while ($row = $result->fetch_assoc()) {
@@ -21,14 +21,16 @@ class UserManager {
     }
 
     public function getUserById($id) {
-        $stmt = $this->db->prepare("SELECT id, login, role FROM users WHERE id = ?");
+        $stmt = $this->db->prepare("SELECT id, login, nickname, role FROM users WHERE id = ?");
         $stmt->bind_param("i", $id);
         $stmt->execute();
         $res = $stmt->get_result();
         return $res ? $res->fetch_assoc() : null;
     }
 
-    public function createUser($login, $password, $role = 'user') {
+    public function createUser($login, $password, $role = 'user', $nickname = null) {
+        if (empty($nickname)) $nickname = $login; // По умолчанию ник = логин
+
         // Проверка на уникальность логина
         $stmt = $this->db->prepare("SELECT id FROM users WHERE login = ?");
         $stmt->bind_param("s", $login);
@@ -40,8 +42,8 @@ class UserManager {
 
         $hash = password_hash($password, PASSWORD_DEFAULT);
         
-        $stmt = $this->db->prepare("INSERT INTO users (login, password_hash, role) VALUES (?, ?, ?)");
-        $stmt->bind_param("sss", $login, $hash, $role);
+        $stmt = $this->db->prepare("INSERT INTO users (login, nickname, password_hash, role) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("ssss", $login, $nickname, $hash, $role);
         
         if ($stmt->execute()) {
             return $stmt->insert_id;
@@ -50,7 +52,9 @@ class UserManager {
         }
     }
 
-    public function updateUser($id, $login, $role, $password = null) {
+    public function updateUser($id, $login, $nickname, $role, $password = null) {
+        if (empty($nickname)) $nickname = $login;
+
         // Проверка на уникальность логина (исключая текущего юзера)
         $stmt = $this->db->prepare("SELECT id FROM users WHERE login = ? AND id != ?");
         $stmt->bind_param("si", $login, $id);
@@ -62,11 +66,11 @@ class UserManager {
 
         if (!empty($password)) {
             $hash = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $this->db->prepare("UPDATE users SET login = ?, role = ?, password_hash = ? WHERE id = ?");
-            $stmt->bind_param("sssi", $login, $role, $hash, $id);
+            $stmt = $this->db->prepare("UPDATE users SET login = ?, nickname = ?, role = ?, password_hash = ? WHERE id = ?");
+            $stmt->bind_param("ssssi", $login, $nickname, $role, $hash, $id);
         } else {
-            $stmt = $this->db->prepare("UPDATE users SET login = ?, role = ? WHERE id = ?");
-            $stmt->bind_param("ssi", $login, $role, $id);
+            $stmt = $this->db->prepare("UPDATE users SET login = ?, nickname = ?, role = ? WHERE id = ?");
+            $stmt->bind_param("sssi", $login, $nickname, $role, $id);
         }
 
         if (!$stmt->execute()) {
