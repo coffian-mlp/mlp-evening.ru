@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `login` varchar(50) NOT NULL UNIQUE,
   `password_hash` varchar(255) NOT NULL,
   `role` varchar(20) NOT NULL DEFAULT 'admin',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
