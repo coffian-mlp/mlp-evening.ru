@@ -19,8 +19,15 @@ $(document).ready(function() {
         const date = new Date(data.created_at);
         const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         
+        // Color & Avatar
+        const colorStyle = data.chat_color ? `style="color: ${escapeHtml(data.chat_color)}"` : '';
+        const avatarHtml = data.avatar_url 
+            ? `<img src="${escapeHtml(data.avatar_url)}" class="chat-avatar" alt="">` 
+            : '';
+
         div.innerHTML = `
-            <span class="username">${escapeHtml(data.username)}:</span>
+            ${avatarHtml}
+            <span class="username" ${colorStyle}>${escapeHtml(data.username)}:</span>
             <span class="text">${escapeHtml(data.message)}</span>
             <span class="timestamp" title="${data.created_at}">${timeStr}</span>
         `;
@@ -115,12 +122,17 @@ $(document).ready(function() {
     const registerForm = $('#ajax-register-form');
     const registerError = $('#register-error');
 
-    if (loginLink.length > 0) {
-        loginLink.on('click', function(e) {
-            e.preventDefault();
-            // Force flex for centering
-            modal.css('display', 'flex').hide().fadeIn(200);
-        });
+    // Global function to open modal
+    window.openLoginModal = function(e) {
+        if (e) e.preventDefault();
+        modal.css('display', 'flex').hide().fadeIn(200);
+    };
+
+    if (modal.length > 0) {
+        // Bind to existing link if present
+        if (loginLink.length > 0) {
+             loginLink.on('click', window.openLoginModal);
+        }
 
         closeModal.on('click', function() {
             modal.hide();
@@ -169,7 +181,7 @@ $(document).ready(function() {
                     }
                 },
                 error: function() {
-                    loginError.text('Ошибка сервера. Попробуйте позже.').show();
+                    loginError.text('Ошибка сервера :(').show();
                 }
             });
         });
@@ -182,7 +194,7 @@ $(document).ready(function() {
             const pass = $('#reg_pass').val();
             const conf = $('#reg_pass_conf').val();
             if (pass !== conf) {
-                registerError.text('Пароли не совпадают!').show();
+                registerError.text('Пароли не совпадают :(').show();
                 return;
             }
 
@@ -201,6 +213,79 @@ $(document).ready(function() {
                 },
                 error: function() {
                     registerError.text('Ошибка сервера. Попробуйте позже.').show();
+                }
+            });
+        });
+    }
+
+    // Logout Logic
+    $('#logout-form').on('submit', function(e) {
+        e.preventDefault();
+        $.post('api.php', $(this).serialize(), function(res) {
+            if (res.success) {
+                location.reload();
+            } else {
+                if (window.showFlashMessage) window.showFlashMessage(res.message, 'error');
+            }
+        }, 'json').fail(function() {
+             if (window.showFlashMessage) window.showFlashMessage('Ошибка сети :(', 'error');
+        });
+    });
+
+    // 4. Profile Modal Logic
+    const profileModal = $('#profile-modal');
+    const profileForm = $('#ajax-profile-form');
+    const profileError = $('#profile-error');
+
+    window.openProfileModal = function(e) {
+        if (e) e.preventDefault();
+        profileModal.css('display', 'flex').hide().fadeIn(200);
+    };
+
+    $('.close-modal-profile').on('click', function() {
+        profileModal.fadeOut(200);
+    });
+
+    $(window).on('click', function(e) {
+        if ($(e.target).is(profileModal)) {
+            profileModal.fadeOut(200);
+        }
+    });
+
+    if (profileForm.length > 0) {
+        profileForm.on('submit', function(e) {
+            e.preventDefault();
+            const btn = $(this).find('button[type="submit"]');
+            const originalText = btn.text();
+            btn.prop('disabled', true).text('Сохранение...');
+            profileError.hide();
+
+            const formData = new FormData(this);
+
+            $.ajax({
+                url: 'api.php',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                dataType: 'json',
+                success: function(res) {
+                    if (res.success) {
+                        if (res.data && res.data.reload) {
+                            location.reload(); 
+                        } else {
+                            profileModal.fadeOut(200);
+                            if (window.showFlashMessage) window.showFlashMessage("Профиль обновлен!", "success");
+                            btn.prop('disabled', false).text(originalText);
+                        }
+                    } else {
+                        profileError.text(res.message).show();
+                        btn.prop('disabled', false).text(originalText);
+                    }
+                },
+                error: function() {
+                    profileError.text('Ошибка сервера :(').show();
+                    btn.prop('disabled', false).text(originalText);
                 }
             });
         });

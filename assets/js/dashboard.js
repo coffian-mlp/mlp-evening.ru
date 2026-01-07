@@ -2,26 +2,19 @@ $(document).ready(function() {
     
     // --- Логика переключения вкладок ---
     $(".nav-tile").click(function() {
-        // Убираем активный класс у всех плиток и контента
         $(".nav-tile").removeClass("active");
         $(".tab-content").removeClass("active");
-        
-        // Добавляем активный класс нажатой плитке
         $(this).addClass("active");
         
-        // Показываем соответствующий контент
         var target = $(this).data("target");
         $(target).addClass("active");
 
-        // Обновляем URL хеш
         if(history.pushState) {
             history.pushState(null, null, target);
-        }
-        else {
+        } else {
             window.location.hash = target;
         } 
 
-        // Если открыли вкладку пользователей - загружаем список
         if (target === '#tab-users') {
             loadUsers();
         }
@@ -29,7 +22,6 @@ $(document).ready(function() {
 
     // --- Проверка хеша при загрузке ---
     if (window.location.hash) {
-        // Блокируем стандартный скролл браузера к якорю
         setTimeout(function() {
             window.scrollTo(0, 0);
         }, 1);
@@ -40,7 +32,7 @@ $(document).ready(function() {
         }
     }
 
-    // --- Логика поиска по таблице (Библиотека) ---
+    // --- Логика поиска по таблице ---
     $("#searchInput").on("keyup", function() {
         var value = $(this).val().toLowerCase();
         $("#fulltable tbody tr").filter(function() {
@@ -66,16 +58,14 @@ $(document).ready(function() {
 
     function getCellValue(row, index){ return $(row).children('td').eq(index).text() }
 
-    // --- AJAX обработка форм (Специфично для Dashbaord) ---
-    // В main.js уже есть настройки CSRF, так что тут просто делаем запросы
-    $("form").on("submit", function(e) {
+    // --- AJAX обработка форм (Dashboard + User Modal) ---
+    $("form").not('#profile-form').on("submit", function(e) {
         e.preventDefault(); 
         
         var $form = $(this);
         var $btn = $form.find("button[type='submit']");
         var originalText = $btn.text();
         
-        // Если это форма пользователя, проверяем пароль
         if ($form.attr('id') === 'user-form') {
             var pass = $('#user_password').val();
             var id = $('#user_id').val();
@@ -87,10 +77,15 @@ $(document).ready(function() {
 
         $btn.prop("disabled", true).text("⏳...");
 
+        // Use FormData for all forms to support files
+        var formData = new FormData(this);
+
         $.ajax({
             url: $form.attr("action"),
             type: $form.attr("method"),
-            data: $form.serialize(),
+            data: formData,
+            processData: false,
+            contentType: false,
             dataType: "json",
             success: function(response) {
                 if (response.data && response.data.reload) {
@@ -98,12 +93,10 @@ $(document).ready(function() {
                     return;
                 }
 
-                // Используем глобальную функцию из main.js
                 window.showFlashMessage(response.message, response.type);
                 
                 if (response.success) {
-                    // Очистка полей, кроме скрытых action
-                    $form.find("input[type='text'], input[type='number'], input[type='password']").val("");
+                    $form.find("input[type='text'], input[type='number'], input[type='password'], input[type='url'], input[type='file']").val("");
                     
                     var action = $form.find("input[name='action']").val();
                     if (action === 'clear_watching_log') {
@@ -111,7 +104,6 @@ $(document).ready(function() {
                         $("#tab-history table").append("<tr><td colspan='3' style='text-align:center; color:#999;'>История пуста (обновите страницу)</td></tr>");
                     }
                     
-                    // Если сохранили пользователя - закрываем окно и обновляем список
                     if (action === 'save_user') {
                         closeUserModal();
                         loadUsers();
@@ -129,15 +121,40 @@ $(document).ready(function() {
         });
     });
 
-});
+    // --- Обработка формы профиля (Profile Page) ---
+    $('#profile-form').on('submit', function(e) {
+        e.preventDefault();
+        const form = $(this);
+        const btn = form.find('button[type="submit"]');
+        const originalText = btn.text();
+        
+        btn.prop('disabled', true).text('Сохранение...');
+        
+        $.post(form.attr('action'), form.serialize(), function(res) {
+            if (res.success) {
+                showFlashMessage(res.message, 'success');
+                if (res.data && res.data.reload) {
+                    setTimeout(() => location.reload(), 1000);
+                }
+            } else {
+                showFlashMessage(res.message || 'Ошибка сохранения', 'error');
+                btn.prop('disabled', false).text(originalText);
+            }
+        }, 'json')
+        .fail(function() {
+            showFlashMessage('Ошибка сервера', 'error');
+            btn.prop('disabled', false).text(originalText);
+        });
+    });
 
-// --- Функции управления пользователями (Глобальные) ---
+}); // End document.ready
+
+// --- Глобальные функции ---
 
 function loadUsers() {
     var $tbody = $('#users-table tbody');
     $tbody.html('<tr><td colspan="4" style="text-align:center;">Загрузка...</td></tr>');
     
-    // Используем $.ajax вместо $.post для надежности с заголовками
     $.ajax({
         url: 'api.php',
         method: 'POST',
@@ -152,11 +169,16 @@ function loadUsers() {
                 }
                 
                 res.data.users.forEach(function(u) {
+                    var avatar = u.avatar_url 
+                        ? `<img src="${escapeHtml(u.avatar_url)}" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:8px;border:1px solid #eee;">` 
+                        : '';
+                    var nameDisplay = `<span style="color:${escapeHtml(u.chat_color || '#333')}; font-weight:bold;">${escapeHtml(u.nickname)}</span>`;
+
                     var row = `
                         <tr>
                             <td>${u.id}</td>
                             <td>${escapeHtml(u.login)}</td>
-                            <td>${escapeHtml(u.nickname)}</td>
+                            <td>${avatar}${nameDisplay}</td>
                             <td><span class="status-badge ${u.role === 'admin' ? 'old' : 'fresh'}">${u.role}</span></td>
                             <td>${u.created_at ? u.created_at : '-'}</td>
                             <td style="text-align: right;">
@@ -179,12 +201,13 @@ function loadUsers() {
 }
 
 function openUserModal() {
-    // Force flex for centering
     $('#user-modal').css('display', 'flex').hide().fadeIn(200);
-    // Сброс формы
     $('#user_id').val('');
     $('#user_login').val('');
     $('#user_nickname').val('');
+    $('#user_avatar_file').val('');
+    $('#user_avatar_url').val('');
+    $('#user_chat_color').val('#6d2f8e');
     $('#user_password').val('');
     $('#user_role').val('user');
     $('#user-modal-title').text('Новый пони');
@@ -199,7 +222,10 @@ function editUser(user) {
     $('#user_id').val(user.id);
     $('#user_login').val(user.login);
     $('#user_nickname').val(user.nickname);
-    $('#user_password').val(''); // Пароль не показываем
+    $('#user_avatar_file').val('');
+    $('#user_avatar_url').val(user.avatar_url || '');
+    $('#user_chat_color').val(user.chat_color || '#6d2f8e');
+    $('#user_password').val('');
     $('#user_role').val(user.role);
     $('#user-modal-title').text('Редактировать пони');
 }

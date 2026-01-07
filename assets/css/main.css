@@ -411,3 +411,14 @@ body.dashboard-layout {
     margin-bottom: 20px;
     color: #6d2f8e;
 }
+
+/* === Chat Avatars === */
+.chat-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: middle;
+    object-fit: cover;
+    border: 1px solid rgba(0,0,0,0.1);
+}

@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS `users` (
   `nickname` varchar(50) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
   `role` varchar(20) NOT NULL DEFAULT 'admin',
+  `avatar_url` varchar(255) DEFAULT NULL,
+  `chat_color` varchar(7) DEFAULT '#6d2f8e',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

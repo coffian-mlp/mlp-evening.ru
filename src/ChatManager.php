@@ -45,7 +45,12 @@ class ChatManager {
 
     public function getMessages($limit = 50) {
         $limit = (int)$limit;
-        $query = "SELECT * FROM chat_messages ORDER BY created_at DESC LIMIT $limit";
+        // Join with users to get current color and avatar
+        $query = "SELECT cm.*, u.chat_color, u.avatar_url 
+                  FROM chat_messages cm 
+                  LEFT JOIN users u ON cm.user_id = u.id 
+                  ORDER BY cm.created_at DESC LIMIT $limit";
+        
         $result = $this->db->query($query);
         
         $messages = [];
@@ -54,12 +59,18 @@ class ChatManager {
                 $messages[] = $row;
             }
         }
-        return array_reverse($messages); // Return oldest first for chat display
+        return array_reverse($messages); 
     }
 
     public function getMessagesAfter($lastId) {
         $lastId = (int)$lastId;
-        $stmt = $this->db->prepare("SELECT * FROM chat_messages WHERE id > ? ORDER BY id ASC");
+        $stmt = $this->db->prepare("
+            SELECT cm.*, u.chat_color, u.avatar_url 
+            FROM chat_messages cm 
+            LEFT JOIN users u ON cm.user_id = u.id 
+            WHERE cm.id > ? 
+            ORDER BY cm.id ASC
+        ");
         $stmt->bind_param("i", $lastId);
         $stmt->execute();
         $res = $stmt->get_result();

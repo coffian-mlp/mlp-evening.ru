@@ -251,6 +251,20 @@ require_once __DIR__ . '/src/templates/header.php';
                 </div>
                 
                 <div class="form-group">
+                    <label class="form-label">Аватар</label>
+                    <input type="file" name="avatar_file" id="user_avatar_file" class="form-input" accept="image/jpeg,image/png,image/gif,image/webp">
+                    <input type="text" name="avatar_url" id="user_avatar_url" class="form-input" placeholder="Или ссылка..." style="margin-top: 5px;">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Цвет ника</label>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="color" name="chat_color" id="user_chat_color" value="#6d2f8e" style="height: 38px; width: 60px; border: none; padding: 0; cursor: pointer;">
+                        <span style="font-size: 0.9em; color: #666;">Цвет в чате</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
                     <label class="form-label">Пароль</label>
                     <input type="password" name="password" id="user_password" class="form-input" placeholder="Пусто = не менять">
                     <small style="color: #777;">Заполните только если хотите сменить.</small>

@@ -8,6 +8,7 @@ require_once __DIR__ . '/src/EpisodeManager.php';
 require_once __DIR__ . '/src/Auth.php';
 require_once __DIR__ . '/src/ChatManager.php';
 require_once __DIR__ . '/src/UserManager.php';
+require_once __DIR__ . '/src/UploadManager.php';
 
 header('Content-Type: application/json');
 
@@ -28,12 +29,17 @@ try {
     $isLoggedIn = Auth::check();
     
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        $csrfToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+        // Check header OR post field
+        $csrfToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_POST['csrf_token'] ?? '';
+        
         // If user is logged in, we MUST verify token.
+        // Exception: 'login' action might be called while session exists (e.g. re-login?) - though usually we logout first.
+        // Let's rely on Auth::checkCsrfToken returning false if token is empty.
+        
         if ($isLoggedIn && !Auth::checkCsrfToken($csrfToken)) {
              echo json_encode([
                 'success' => false, 
-                'message' => 'CSRF Token Mismatch: Обновите страницу.', 
+                'message' => 'Ошибка безопасности. Обнови страничку!', 
                 'type' => 'error'
             ]);
             exit();
@@ -84,8 +90,8 @@ try {
         }
 
         // 2. Валидация данных
-        if (mb_strlen($login) < 3) sendResponse(false, "Логин слишком короткий (минимум 3 символа)", 'error');
-        if (mb_strlen($password) < 6) sendResponse(false, "Пароль слишком короткий (минимум 6 символов)", 'error');
+        if (mb_strlen($login) < 3) sendResponse(false, "Логин слишком короткий (нужно хотя бы 3 символа)", 'error');
+        if (mb_strlen($password) < 6) sendResponse(false, "Пароль слишком короткий (нужно хотя бы 6 символов)", 'error');
         
         // 3. Создание пользователя
         $userManager = new UserManager();
@@ -95,9 +101,9 @@ try {
             
             // 4. Автоматический вход
             if (Auth::login($login, $password)) {
-                sendResponse(true, "Ура! Регистрация успешна! Добро пожаловать!", 'success', ['reload' => true]);
+                sendResponse(true, "Ура! Ты с нами! Добро пожаловать!", 'success', ['reload' => true]);
             } else {
-                sendResponse(true, "Регистрация успешна! Теперь можно войти.", 'success');
+                sendResponse(true, "Ура! Ты с нами! Теперь можно войти.", 'success');
             }
             
         } catch (Exception $e) {
@@ -106,9 +112,66 @@ try {
     }
 
     // Protected Actions
-    if (!$isLoggedIn && $action !== 'login') { // Allow 'login' or other public actions later
-         // For now, most actions require login
+    if (!$isLoggedIn && $action !== 'login' && $action !== 'register') { 
          Auth::requireApiLogin(); 
+    }
+
+    if ($action === 'update_profile') {
+        $userId = $_SESSION['user_id'];
+        $data = [];
+        
+        if (isset($_POST['nickname'])) {
+            $nick = trim($_POST['nickname']);
+            if (empty($nick)) sendResponse(false, "Никнейм не может быть пустым", 'error');
+            $data['nickname'] = $nick;
+        }
+        
+        if (isset($_POST['login'])) {
+            $login = trim($_POST['login']);
+            if (mb_strlen($login) < 3) sendResponse(false, "Логин слишком короткий", 'error');
+            $data['login'] = $login;
+        }
+        
+        if (isset($_POST['chat_color'])) {
+            $color = trim($_POST['chat_color']);
+            if (!preg_match('/^#[a-fA-F0-9]{6}$/', $color)) $color = '#6d2f8e';
+            $data['chat_color'] = $color;
+        }
+        
+        // Avatar Logic
+        if (isset($_POST['avatar_url']) || isset($_FILES['avatar_file'])) {
+            $url = trim($_POST['avatar_url'] ?? '');
+            
+            try {
+                $uploadManager = new UploadManager();
+                // 1. File Upload
+                if (isset($_FILES['avatar_file']) && $_FILES['avatar_file']['error'] !== UPLOAD_ERR_NO_FILE) {
+                    $url = $uploadManager->uploadFromPost($_FILES['avatar_file']);
+                }
+                // 2. URL Download (only if external URL)
+                elseif (!empty($url) && strpos($url, '/upload/avatars/') !== 0 && filter_var($url, FILTER_VALIDATE_URL)) {
+                    $url = $uploadManager->uploadFromUrl($url);
+                }
+                
+                $data['avatar_url'] = $url;
+            } catch (Exception $e) {
+                sendResponse(false, "Аватар: " . $e->getMessage(), 'error');
+            }
+        }
+        
+        if (!empty($_POST['password'])) {
+            if (mb_strlen($_POST['password']) < 6) sendResponse(false, "Пароль слишком короткий", 'error');
+            $data['password'] = $_POST['password'];
+        }
+
+        $userManager = new UserManager();
+        try {
+            $userManager->updateProfile($userId, $data);
+            if (isset($data['nickname'])) $_SESSION['username'] = $data['nickname'];
+            sendResponse(true, "Профиль обновлен!", 'success', ['reload' => true]);
+        } catch (Exception $e) {
+            sendResponse(false, $e->getMessage(), 'error');
+        }
     }
 
 
@@ -206,24 +269,66 @@ try {
             if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
             
             $userManager = new UserManager();
-            $id = $_POST['user_id'] ?? ''; // Если пусто - создание, если есть - редактирование
+            $id = $_POST['user_id'] ?? ''; 
             $login = trim($_POST['login'] ?? '');
             $nickname = trim($_POST['nickname'] ?? '');
             $role = $_POST['role'] ?? 'user';
             $password = $_POST['password'] ?? '';
             
+            // New fields & Uploads
+            $chat_color = trim($_POST['chat_color'] ?? '');
+            $raw_avatar_url = trim($_POST['avatar_url'] ?? '');
+            $avatar_url = $raw_avatar_url; // Default
+            
+            try {
+                $uploadManager = new UploadManager();
+                // 1. File
+                if (isset($_FILES['avatar_file']) && $_FILES['avatar_file']['error'] !== UPLOAD_ERR_NO_FILE) {
+                    $avatar_url = $uploadManager->uploadFromPost($_FILES['avatar_file']);
+                }
+                // 2. URL Download
+                elseif (!empty($raw_avatar_url) && strpos($raw_avatar_url, '/upload/avatars/') !== 0 && filter_var($raw_avatar_url, FILTER_VALIDATE_URL)) {
+                    $avatar_url = $uploadManager->uploadFromUrl($raw_avatar_url);
+                }
+            } catch (Exception $e) {
+                sendResponse(false, "Аватар: " . $e->getMessage(), 'error');
+            }
+            
             if (empty($login)) sendResponse(false, "Логин обязателен", 'error');
-            if (empty($nickname)) $nickname = $login; // Fallback
+            if (empty($nickname)) $nickname = $login; 
             
             try {
                 if (!empty($id)) {
                     // Update
-                    $userManager->updateUser($id, $login, $nickname, $role, $password); // Пароль может быть пустым
+                    $data = [
+                        'login' => $login,
+                        'nickname' => $nickname,
+                        'role' => $role,
+                        'avatar_url' => $avatar_url,
+                        'chat_color' => $chat_color
+                    ];
+                    if (!empty($password)) {
+                        if (mb_strlen($password) < 6) sendResponse(false, "Пароль слишком короткий", 'error');
+                        $data['password'] = $password;
+                    }
+                    
+                    $userManager->updateUser($id, $data);
                     sendResponse(true, "Пользователь обновлен");
                 } else {
                     // Create
                     if (empty($password)) sendResponse(false, "Для нового пользователя нужен пароль", 'error');
-                    $userManager->createUser($login, $password, $role, $nickname);
+                    if (mb_strlen($password) < 6) sendResponse(false, "Пароль слишком короткий", 'error');
+                    
+                    $newId = $userManager->createUser($login, $password, $role, $nickname);
+                    
+                    // Update extra fields
+                    if (!empty($avatar_url) || !empty($chat_color)) {
+                        $userManager->updateUser($newId, [
+                            'avatar_url' => $avatar_url,
+                            'chat_color' => $chat_color
+                        ]);
+                    }
+                    
                     sendResponse(true, "Пользователь создан");
                 }
             } catch (Exception $e) {
