@@ -70,6 +70,19 @@ require_once __DIR__ . '/src/templates/header.php';
     <div class="chat-container" id="chat">
         <?php if ($enableLocalChat): ?>
             <!-- Local Chat UI -->
+            <div id="chat-notification-area"></div>
+            
+            <!-- Confirmation Overlay -->
+            <div id="chat-confirmation-overlay" class="chat-overlay" style="display: none;">
+                <div class="chat-confirm-box">
+                    <p id="chat-confirm-text">Вы уверены?</p>
+                    <div class="chat-confirm-buttons">
+                        <button id="chat-confirm-yes" class="btn-primary btn-sm">Да</button>
+                        <button id="chat-confirm-no" class="btn-danger btn-sm">Нет</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="chat-messages" id="chat-messages">
                 <div class="chat-welcome">Добро пожаловать в Поняшный чат! 🦄<br>Не стесняйся, пиши!</div>
             </div>

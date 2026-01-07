@@ -22,6 +22,12 @@ class Auth {
         return isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
     }
 
+    public static function isModerator() {
+        if (!self::check()) return false;
+        $role = $_SESSION['role'] ?? '';
+        return $role === 'admin' || $role === 'moderator';
+    }
+
     public static function requireAdmin() {
         self::requireLogin();
         if (!self::isAdmin()) {

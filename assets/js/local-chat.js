@@ -11,12 +11,53 @@ $(document).ready(function() {
     }
 
     // Current User Data (Populated by PHP in global scope or via API check)
-    // For now, let's assume we can get it from a global variable if set in header
     const currentUserId = window.currentUserId || null;
     const currentUserRole = window.currentUserRole || null; // 'admin' or 'user'
+    
+    // Calculate Clock Skew
+    // window.serverTime is PHP time() (seconds)
+    // Date.now() is Client time (milliseconds)
+    // skew = ServerTime - ClientTime
+    let timeSkew = 0;
+    if (window.serverTime) {
+        const clientNowSeconds = Math.floor(Date.now() / 1000);
+        timeSkew = window.serverTime - clientNowSeconds;
+    }
+
+    // Helper for Chat Notifications
+    function showChatNotification(message, type = 'info') {
+        const area = $('#chat-notification-area');
+        if (!area.length) {
+            // Fallback to global flash message if area not found
+            if (window.showFlashMessage) window.showFlashMessage(message, type);
+            return;
+        }
+
+        // Remove existing to prevent overlap (since absolute positioned)
+        area.empty();
+
+        const notification = $('<div class="chat-notification"></div>')
+            .addClass(type)
+            .text(message);
+        
+        area.append(notification);
+        notification.fadeIn(200);
+
+        // Auto hide
+        setTimeout(() => {
+            notification.fadeOut(300, () => {
+                notification.remove();
+            });
+        }, 3000);
+
+        // Click to close
+        notification.on('click', function() {
+            $(this).remove();
+        });
+    }
 
     // Append message to UI
-    function appendMessage(data) {
+    function createMessageElement(data) {
         const div = document.createElement('div');
         div.className = 'chat-message';
         div.dataset.id = data.id; // Store message ID
@@ -28,39 +69,36 @@ $(document).ready(function() {
         
         // Color & Avatar
         const colorStyle = data.chat_color ? `style="color: ${escapeHtml(data.chat_color)}"` : '';
-        const avatarHtml = data.avatar_url 
-            ? `<img src="${escapeHtml(data.avatar_url)}" class="chat-avatar" alt="">` 
-            : '';
-
-        // Deleted State
-        if (data.deleted) {
-            div.innerHTML = `
-                ${avatarHtml}
-                <span class="username" ${colorStyle}>${escapeHtml(data.username)}:</span>
-                <span class="text" style="color:#999; font-style:italic;">Сообщение удалено</span>
-                <span class="timestamp" title="${data.created_at}">${timeStr}</span>
-            `;
-            chatMessages.appendChild(div);
-            scrollToBottom();
-            return;
-        }
+        const avatarUrl = data.avatar_url ? escapeHtml(data.avatar_url) : '/assets/img/default-avatar.png'; // Fallback image?
+        const avatarHtml = `<img src="${avatarUrl}" class="chat-avatar" alt="">`;
 
         // Actions (Edit/Delete)
         let actionsHtml = '';
         const isMyMessage = (currentUserId && parseInt(data.user_id) === parseInt(currentUserId));
-        const isAdmin = (currentUserRole === 'admin');
-        const isRecent = ((new Date() - date) / 1000 / 60) < 10; // < 10 mins
+        const canModerate = (currentUserRole === 'admin' || currentUserRole === 'moderator');
+        
+        // Fix for Timezone Diff using Skew:
+        // We want to compare Message Time vs Server Time (calculated via client time + skew)
+        // Message Date (object) is correct local time (from UTC).
+        // Corrected Now = Date.now() + skew*1000
+        const correctedNow = new Date(Date.now() + (timeSkew * 1000));
+        const diffMinutes = (correctedNow - date) / 1000 / 60;
+        
+        // Check 10 mins limit (allow small negative drift -1m just in case)
+        const isRecent = diffMinutes >= -1 && diffMinutes < 10; 
 
-        // Show buttons if: (My Message AND Recent) OR (Admin)
-        if ((isMyMessage && isRecent) || isAdmin) {
-            // Edit only for self and recent (Admin can't edit others' messages typically, but can delete)
+        if ((isMyMessage && isRecent) || canModerate) {
+            // Edit only for self and recent
             if (isMyMessage && isRecent) {
                 actionsHtml += `<button class="chat-action-btn edit-btn" title="Редактировать">✎</button>`;
             }
-            // Delete for self or Admin
-            if (isMyMessage || isAdmin) {
+            // Delete for self or Admin (ALWAYS allowed for self)
+            if (isMyMessage || canModerate) {
                 actionsHtml += `<button class="chat-action-btn delete-btn" title="Удалить">🗑</button>`;
             }
+        } else if (isMyMessage) {
+            // Even if not recent, allow delete for self
+             actionsHtml += `<button class="chat-action-btn delete-btn" title="Удалить">🗑</button>`;
         }
 
         let editedMark = '';
@@ -68,16 +106,76 @@ $(document).ready(function() {
             const editDate = new Date(data.edited_at);
             editedMark = `<span class="edited-mark" title="Отредактировано: ${editDate.toLocaleString()}">(изм.)</span>`;
         }
-
-        div.innerHTML = `
-            ${avatarHtml}
-            <span class="username" ${colorStyle}>${escapeHtml(data.username)}:</span>
-            <span class="text">${escapeHtml(data.message)}</span>
-            ${editedMark}
-            <span class="timestamp" title="${data.created_at}">${timeStr}</span>
-            <span class="chat-actions">${actionsHtml}</span>
-        `;
         
+        // Debug display inside message (Temporary) - hidden now
+        const debugInfo = ''; 
+
+        // Deleted State Special Content
+        if (data.deleted) {
+             let restoreHtml = '';
+             // Check if can restore: Admin OR (My Message AND Deleted recently)
+             if (canModerate || isMyMessage) {
+                 if (canModerate) {
+                     // Admins can always restore
+                     restoreHtml = `<button class="chat-action-btn restore-btn" title="Восстановить">↺</button>`;
+                 } else if (data.deleted_at) {
+                     // Users within 10 mins
+                     const delDate = new Date(data.deleted_at);
+                     // Using correctedNow for consistency
+                     const delDiff = (correctedNow - delDate) / 1000 / 60;
+                     // Logic: recently deleted (0-10m)
+                     if (delDiff >= -1 && delDiff < 10) {
+                         restoreHtml = `<button class="chat-action-btn restore-btn" title="Восстановить">↺</button>`;
+                     }
+                 }
+             }
+
+             div.innerHTML = `
+                <div class="chat-avatar-wrapper">
+                    ${avatarHtml}
+                </div>
+                <div class="chat-content">
+                    <div class="chat-header">
+                        <div class="user-info">
+                            <span class="username" ${colorStyle}>${escapeHtml(data.username)}</span>
+                            <span class="chat-actions">${restoreHtml}</span>
+                        </div>
+                        <span class="meta-info">
+                            <span class="timestamp" title="${data.created_at}">${timeStr}</span>
+                        </span>
+                    </div>
+                    <div class="chat-text" style="color:#999; font-style:italic;">
+                        Сообщение удалено
+                    </div>
+                </div>
+            `;
+            // Note: We return the div, we don't append it here anymore for createMessageElement
+        } else {
+            div.innerHTML = `
+                <div class="chat-avatar-wrapper">
+                    ${avatarHtml}
+                </div>
+                <div class="chat-content">
+                    <div class="chat-header">
+                        <div class="user-info">
+                            <span class="username" ${colorStyle}>${escapeHtml(data.username)}</span>
+                            <span class="chat-actions">${actionsHtml}</span>
+                        </div>
+                        <span class="meta-info">
+                            <span class="timestamp" title="${data.created_at}">${timeStr}</span>
+                        </span>
+                    </div>
+                    <div class="chat-text">
+                        ${escapeHtml(data.message)} ${editedMark} ${debugInfo}
+                    </div>
+                </div>
+            `;
+        }
+        return div;
+    }
+
+    function appendMessage(data) {
+        const div = createMessageElement(data);
         chatMessages.appendChild(div);
         scrollToBottom();
     }
@@ -93,6 +191,36 @@ $(document).ready(function() {
         return text.replace(/[&<>"']/g, function(m) { return map[m]; });
     }
 
+    // Helper for Chat Confirmation
+    function showChatConfirmation(text, onConfirm) {
+        const overlay = $('#chat-confirmation-overlay');
+        const msg = $('#chat-confirm-text');
+        const yesBtn = $('#chat-confirm-yes');
+        const noBtn = $('#chat-confirm-no');
+
+        if (!overlay.length) {
+            // Fallback if overlay is missing
+            if (confirm(text)) onConfirm();
+            return;
+        }
+
+        msg.text(text);
+        overlay.css('display', 'flex').hide().fadeIn(200);
+
+        // Remove previous handlers
+        yesBtn.off('click');
+        noBtn.off('click');
+
+        yesBtn.on('click', function() {
+            overlay.fadeOut(200);
+            onConfirm();
+        });
+
+        noBtn.on('click', function() {
+            overlay.fadeOut(200);
+        });
+    }
+
     // 1. Initialize SSE connection
     // We use Last-Event-ID automatically handled by browser/EventSource
     const evtSource = new EventSource('/chat_stream.php');
@@ -105,27 +233,18 @@ $(document).ready(function() {
             const data = JSON.parse(e.data);
             
             // Check if this message already exists in UI (for updates/edits)
+            // Fix: Use a safer check. Some elements might be missing if we are not careful.
             const existingMsg = document.querySelector(`.chat-message[data-id="${data.id}"]`);
             if (existingMsg) {
-                // Replace content (simplest way to handle edit/delete updates)
-                // Ideally, we should refactor appendMessage to return HTML string or be reusable
-                // For now, let's just reload the whole element logic by removing and re-appending?
-                // No, that breaks scroll and visual flow if it's way up.
-                // Let's manually update the text part.
-                
-                if (data.deleted) {
-                    existingMsg.querySelector('.text').innerHTML = '<em style="color:#999;">Сообщение удалено</em>';
-                    existingMsg.querySelector('.chat-actions').remove(); // Remove buttons
+                // Completely replace the element to handle state changes (Active <-> Deleted)
+                // We must ensure newMsg is created successfully
+                const newMsg = createMessageElement(data);
+                // Check if existingMsg is still child of chatMessages (it should be, but let's be safe)
+                if (chatMessages.contains(existingMsg)) {
+                    chatMessages.replaceChild(newMsg, existingMsg);
                 } else {
-                    existingMsg.querySelector('.text').textContent = data.message;
-                    if (!existingMsg.querySelector('.edited-mark')) {
-                         const ts = existingMsg.querySelector('.timestamp');
-                         const mark = document.createElement('span');
-                         mark.className = 'edited-mark';
-                         mark.textContent = '(изм.)';
-                         mark.title = 'Отредактировано';
-                         existingMsg.insertBefore(mark, ts);
-                    }
+                    // Fallback: just append if it somehow got detached (unlikely)
+                    chatMessages.appendChild(newMsg);
                 }
             } else {
                 appendMessage(data);
@@ -172,18 +291,12 @@ $(document).ready(function() {
                 data: data,
                 success: function(response) {
                     if (!response.success) {
-                        if (window.showFlashMessage) {
-                             window.showFlashMessage(response.message, 'error');
-                        } else {
-                             alert("Error: " + response.message);
-                        }
+                        showChatNotification(response.message, 'error');
                         chatInput.value = oldVal; // Restore if failed
                     }
                 },
                 error: function() {
-                    if (window.showFlashMessage) {
-                         window.showFlashMessage("Ошибка сети. Попробуй позже.", 'error');
-                    }
+                    showChatNotification("Ошибка сети. Попробуй позже.", 'error');
                     chatInput.value = oldVal;
                 }
             });
@@ -195,7 +308,8 @@ $(document).ready(function() {
         e.preventDefault();
         const msgDiv = $(this).closest('.chat-message');
         const msgId = msgDiv.attr('data-id');
-        const text = msgDiv.find('.text').text(); // Get raw text
+        // Get text from .chat-text, excluding .edited-mark
+        let text = msgDiv.find('.chat-text').clone().children().remove().end().text().trim();
         
         // Set input to edit mode
         if (chatInput) {
@@ -210,17 +324,30 @@ $(document).ready(function() {
 
     $(document).on('click', '.delete-btn', function(e) {
         e.preventDefault();
-        if(!confirm('Удалить сообщение?')) return;
-        
         const msgDiv = $(this).closest('.chat-message');
         const msgId = msgDiv.attr('data-id');
 
-        $.post('api.php', { action: 'delete_message', message_id: msgId }, function(res) {
-            if(!res.success) {
-                if (window.showFlashMessage) window.showFlashMessage(res.message, 'error');
-            }
-            // Success is handled via SSE update
-        }, 'json');
+        showChatConfirmation('Удалить сообщение?', function() {
+            $.post('api.php', { action: 'delete_message', message_id: msgId }, function(res) {
+                if(!res.success) {
+                    showChatNotification(res.message, 'error');
+                }
+            }, 'json');
+        });
+    });
+
+    $(document).on('click', '.restore-btn', function(e) {
+        e.preventDefault();
+        const msgDiv = $(this).closest('.chat-message');
+        const msgId = msgDiv.attr('data-id');
+
+        showChatConfirmation('Восстановить сообщение?', function() {
+            $.post('api.php', { action: 'restore_message', message_id: msgId }, function(res) {
+                if(!res.success) {
+                    showChatNotification(res.message, 'error');
+                }
+            }, 'json');
+        });
     });
 
     // 3. Auth Modal Logic (Login + Register)

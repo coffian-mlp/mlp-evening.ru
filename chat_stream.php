@@ -66,8 +66,10 @@ while (true) {
     }
 
     // Ищем новые сообщения (ID > lastId) ИЛИ измененные (edited_at > lastCheckTime)
-    // Важно: getMessagesAfter мы обновили, теперь она принимает второй аргумент
-    $newMessages = $chat->getMessagesAfter($lastId, $lastCheckTime);
+    // Используем нахлёст (overlap) в 5 секунд, чтобы не пропустить события из-за рассинхрона часов
+    // Клиент должен уметь обрабатывать дубликаты (он это уже делает)
+    $searchTime = date('Y-m-d H:i:s', strtotime($lastCheckTime) - 5);
+    $newMessages = $chat->getMessagesAfter($lastId, $searchTime);
     
     // Обновляем время проверки ТЕКУЩИМ моментом (в UTC для базы)
     $lastCheckTime = gmdate('Y-m-d H:i:s');

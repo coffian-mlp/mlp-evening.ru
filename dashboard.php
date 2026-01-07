@@ -246,6 +246,7 @@ require_once __DIR__ . '/src/templates/header.php';
                 <label class="form-label">Роль</label>
                     <select name="role" id="user_role" class="form-input">
                         <option value="user">Пользователь</option>
+                        <option value="moderator">Модератор</option>
                         <option value="admin">Администратор</option>
                     </select>
                 </div>

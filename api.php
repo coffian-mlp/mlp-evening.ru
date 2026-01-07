@@ -403,13 +403,29 @@ try {
             }
 
             $chat = new ChatManager();
-            // Check if admin
-            $isAdmin = Auth::isAdmin();
+            // Check if admin or moderator
+            $canModerate = Auth::isModerator();
             
-            if ($chat->deleteMessage($messageId, $_SESSION['user_id'], $isAdmin)) {
+            if ($chat->deleteMessage($messageId, $_SESSION['user_id'], $canModerate)) {
                 sendResponse(true, "Сообщение удалено.");
             } else {
                 sendResponse(false, "Не удалось удалить сообщение.", 'error');
+            }
+            break;
+
+        case 'restore_message':
+            $messageId = (int)($_POST['message_id'] ?? 0);
+            if (!$messageId) {
+                sendResponse(false, "Некорректный ID сообщения.", 'error');
+            }
+
+            $chat = new ChatManager();
+            $canModerate = Auth::isModerator();
+            
+            if ($chat->restoreMessage($messageId, $_SESSION['user_id'], $canModerate)) {
+                sendResponse(true, "Сообщение восстановлено! ✨");
+            } else {
+                sendResponse(false, "Не удалось восстановить (время вышло или нет прав).", 'error');
             }
             break;
             

@@ -34,6 +34,8 @@
         // Pass PHP session data to JS
         window.currentUserId = <?= isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'null' ?>;
         window.currentUserRole = "<?= isset($_SESSION['role']) ? $_SESSION['role'] : '' ?>";
+        // Pass server time (seconds) to calculate clock skew
+        window.serverTime = <?= time() ?>;
     </script>
 </head>
 <body class="<?= $bodyClass ?? '' ?>">

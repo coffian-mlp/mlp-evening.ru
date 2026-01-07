@@ -283,8 +283,85 @@ body.dashboard-layout {
     border-radius: 10px;
     overflow: hidden;
     height: 100%;
+    position: relative; /* For notifications */
 }
 
+.chat-notification {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    padding: 10px;
+    border-radius: 5px;
+    color: white;
+    text-align: center;
+    font-size: 14px;
+    font-weight: bold;
+    z-index: 100;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    display: none;
+    cursor: pointer;
+}
+
+.chat-notification.success {
+    background-color: #4caf50;
+    background: linear-gradient(135deg, #4caf50, #8bc34a);
+}
+
+.chat-notification.error {
+    background-color: #f44336;
+    background: linear-gradient(135deg, #f44336, #e91e63);
+}
+
+/* === Confirmation Overlay === */
+.chat-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 200;
+    border-radius: 10px; /* Match container radius */
+}
+
+.chat-confirm-box {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    max-width: 85%;
+    animation: popIn 0.2s ease-out;
+}
+
+@keyframes popIn {
+    from { transform: scale(0.8); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.chat-confirm-box p {
+    margin: 0 0 15px 0;
+    font-weight: bold;
+    color: #333;
+}
+
+.chat-confirm-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.btn-sm {
+    padding: 6px 15px;
+    font-size: 13px;
+    min-width: 60px;
+}
+
+/* === Chat Messages === */
 .chat-messages {
     flex: 1;
     overflow-y: auto;
@@ -296,30 +373,74 @@ body.dashboard-layout {
 }
 
 .chat-message {
+    display: flex;
+    align-items: flex-start;
+    padding: 5px 0;
     word-wrap: break-word;
     line-height: 1.4;
 }
 
-.chat-message .username {
-    font-weight: bold;
-    color: #673ab7; /* Twilight Sparkle color */
-    margin-right: 5px;
+.chat-avatar-wrapper {
+    flex-shrink: 0;
+    margin-right: 10px;
 }
 
-.chat-message .text {
-    color: #333;
+/* === Chat Avatars (Old class removed, handled in .chat-message block) === */
+.chat-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+
+.chat-content {
+    flex-grow: 1;
+    min-width: 0; /* Fix flex child overflow */
+}
+
+.chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 2px;
+}
+
+.chat-message .user-info {
+    display: flex;
+    align-items: center;
+    gap: 8px; /* Отступ между именем и кнопками */
+}
+
+.chat-message .username {
+    font-family: 'Philosopher', sans-serif;
+    font-weight: bold;
+    font-size: 16px;
+    color: #673ab7; /* Twilight Sparkle color */
+}
+
+.chat-message .meta-info {
+    display: flex;
+    align-items: center;
 }
 
 .chat-message .timestamp {
-    font-size: 0.75em;
+    font-family: 'Philosopher', sans-serif;
+    font-size: 12px;
     color: #999;
-    margin-left: 5px;
+}
+
+.chat-text {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 16px;
+    color: #333;
 }
 
 .chat-actions {
     opacity: 0;
     transition: opacity 0.2s;
-    margin-left: 5px;
+    display: flex;
+    gap: 4px;
 }
 
 .chat-message:hover .chat-actions {
@@ -331,8 +452,9 @@ body.dashboard-layout {
     border: none;
     color: #999;
     cursor: pointer;
-    font-size: 0.8em;
-    padding: 0 2px;
+    font-size: 14px; /* Чуть крупнее (было 12px) */
+    padding: 0 4px;
+    line-height: 1;
 }
 
 .chat-action-btn:hover {
@@ -341,6 +463,10 @@ body.dashboard-layout {
 
 .chat-action-btn.delete-btn:hover {
     color: #e74c3c;
+}
+
+.chat-action-btn.restore-btn:hover {
+    color: #2ecc71; /* Зеленый для восстановления */
 }
 
 .edited-mark {
@@ -445,15 +571,4 @@ body.dashboard-layout {
     margin-top: 0;
     margin-bottom: 20px;
     color: #6d2f8e;
-}
-
-/* === Chat Avatars === */
-.chat-avatar {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    margin-right: 5px;
-    vertical-align: middle;
-    object-fit: cover;
-    border: 1px solid rgba(0,0,0,0.1);
 }

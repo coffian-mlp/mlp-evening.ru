@@ -91,21 +91,49 @@ class ChatManager {
             return false; // Нет прав
         }
 
-        // Удаление без проверки времени!
-        $updateStmt = $this->db->prepare("UPDATE chat_messages SET is_deleted = 1 WHERE id = ?");
+        // Удаление с установкой времени deleted_at
+        // Также обновляем edited_at, чтобы стрим заметил изменение!
+        $updateStmt = $this->db->prepare("UPDATE chat_messages SET is_deleted = 1, deleted_at = UTC_TIMESTAMP(), edited_at = UTC_TIMESTAMP() WHERE id = ?");
+        $updateStmt->bind_param("i", $messageId);
+        return $updateStmt->execute();
+    }
+
+    public function restoreMessage($messageId, $userId, $isAdmin = false) {
+        $stmt = $this->db->prepare("SELECT user_id, deleted_at FROM chat_messages WHERE id = ?");
+        $stmt->bind_param("i", $messageId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+
+        if (!$res || !($row = $res->fetch_assoc())) {
+            return false;
+        }
+
+        if (!$isAdmin) {
+            if ($row['user_id'] != $userId) return false; // Чужое сообщение
+
+            // Проверка времени на восстановление (10 минут)
+            if ($row['deleted_at']) {
+                $delTime = strtotime($row['deleted_at']);
+                // Сравниваем с UTC, так как deleted_at в UTC
+                if ((time() - $delTime) > 600) {
+                    return false; // Время вышло
+                }
+            } else {
+                // Если deleted_at нет, но оно удалено - странно, но запретим
+                return false;
+            }
+        }
+
+        // Восстановление: сбрасываем флаг и таймер, обновляем edited_at чтобы чат увидел изменение
+        // edited_at обновляется принудительно, чтобы стрим подхватил изменение статуса
+        $updateStmt = $this->db->prepare("UPDATE chat_messages SET is_deleted = 0, deleted_at = NULL, edited_at = UTC_TIMESTAMP() WHERE id = ?");
         $updateStmt->bind_param("i", $messageId);
         return $updateStmt->execute();
     }
 
     private function processMessages($messages) {
         foreach ($messages as &$msg) {
-            if (!empty($msg['is_deleted'])) {
-                $msg['message'] = '<em style="color:#999;">Сообщение удалено</em>';
-                // Можно добавить флаг, чтобы фронтенд знал
-                $msg['deleted'] = true;
-            }
             // Форматируем дату в ISO 8601 UTC (добавляем Z)
-            // Это скажет JS, что время в UTC
             if ($msg['created_at']) {
                 $msg['created_at'] = date('Y-m-d\TH:i:s\Z', strtotime($msg['created_at']));
             }
@@ -113,6 +141,17 @@ class ChatManager {
                 $msg['edited_at'] = date('Y-m-d\TH:i:s\Z', strtotime($msg['edited_at']));
             } else {
                 $msg['edited_at'] = null; // Явно null, если нет
+            }
+            if ($msg['deleted_at']) {
+                $msg['deleted_at'] = date('Y-m-d\TH:i:s\Z', strtotime($msg['deleted_at']));
+            } else {
+                $msg['deleted_at'] = null;
+            }
+
+            if (!empty($msg['is_deleted'])) {
+                $msg['message'] = '<em style="color:#999;">Сообщение удалено</em>';
+                // Можно добавить флаг, чтобы фронтенд знал
+                $msg['deleted'] = true;
             }
         }
         return $messages;
