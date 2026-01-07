@@ -82,21 +82,63 @@ require_once __DIR__ . '/src/templates/header.php';
 </div>
 
 
-<!-- Login Modal -->
+<!-- Auth Modal -->
 <div id="login-modal" class="modal-overlay" style="display: none;">
-    <div class="modal-content">
+    <div class="modal-content" style="max-width: 400px;">
         <span class="close-modal">&times;</span>
-        <h3>🔐 Вход в библиотеку</h3>
-        <form id="ajax-login-form">
-            <div class="form-group">
-                <input type="text" name="username" class="form-input" placeholder="Твое имя (Логин)" required>
-            </div>
-            <div class="form-group">
-                <input type="password" name="password" class="form-input" placeholder="Секретное слово (Пароль)" required>
-            </div>
-            <button type="submit" class="btn-submit">Войти</button>
-            <div id="login-error" class="error-msg" style="display:none; color: red; margin-top: 10px;"></div>
-        </form>
+        
+        <div class="auth-tabs" style="display: flex; justify-content: center; gap: 20px; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+            <a href="#" class="auth-tab-link active" data-target="#login-form-wrapper" style="text-decoration: none; color: #6d2f8e; font-weight: bold; border-bottom: 2px solid #6d2f8e;">Вход</a>
+            <a href="#" class="auth-tab-link" data-target="#register-form-wrapper" style="text-decoration: none; color: #999;">Регистрация</a>
+        </div>
+
+        <!-- LOGIN -->
+        <div id="login-form-wrapper">
+            <h3>🔐 Вход в библиотеку</h3>
+            <form id="ajax-login-form">
+                <div class="form-group">
+                    <input type="text" name="username" class="form-input" placeholder="Логин" required>
+                </div>
+                <div class="form-group">
+                    <input type="password" name="password" class="form-input" placeholder="Пароль" required>
+                </div>
+                <button type="submit" class="btn-primary btn-block">Войти</button>
+                <div id="login-error" class="error-msg" style="display:none; color: red; margin-top: 10px;"></div>
+            </form>
+        </div>
+
+        <!-- REGISTER -->
+        <div id="register-form-wrapper" style="display: none;">
+            <h3>✨ Новый читатель</h3>
+            <form id="ajax-register-form">
+                <input type="hidden" name="action" value="register">
+                
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <input type="text" name="login" class="form-input" placeholder="Логин (для входа)*" required minlength="3">
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <input type="text" name="nickname" class="form-input" placeholder="Никнейм (для чата)">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <input type="password" name="password" id="reg_pass" class="form-input" placeholder="Пароль (мин. 6)*" required minlength="6">
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <input type="password" name="password_confirm" id="reg_pass_conf" class="form-input" placeholder="Повторите пароль*" required>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label style="font-size: 0.85em; color: #666; display: block; margin-bottom: 3px;">Как зовут дракончика-помощника?*</label>
+                    <input type="text" name="captcha" class="form-input" placeholder="Ответ..." required>
+                </div>
+
+                <button type="submit" class="btn-primary btn-block">Зарегистрироваться</button>
+                <div id="register-error" class="error-msg" style="display:none; color: red; margin-top: 10px;"></div>
+            </form>
+        </div>
+
     </div>
 </div>
 

@@ -106,17 +106,20 @@ $(document).ready(function() {
         });
     }
 
-    // 3. Login Modal Logic
+    // 3. Auth Modal Logic (Login + Register)
     const loginLink = $('#login-link');
     const modal = $('#login-modal');
     const closeModal = $('.close-modal');
     const loginForm = $('#ajax-login-form');
     const loginError = $('#login-error');
+    const registerForm = $('#ajax-register-form');
+    const registerError = $('#register-error');
 
     if (loginLink.length > 0) {
         loginLink.on('click', function(e) {
             e.preventDefault();
-            modal.show();
+            // Force flex for centering
+            modal.css('display', 'flex').hide().fadeIn(200);
         });
 
         closeModal.on('click', function() {
@@ -130,11 +133,28 @@ $(document).ready(function() {
             }
         });
 
+        // Tab Switching
+        $('.auth-tab-link').on('click', function(e) {
+            e.preventDefault();
+            
+            // UI Update
+            $('.auth-tab-link').removeClass('active').css({
+                'border-bottom': 'none', 'color': '#999'
+            });
+            $(this).addClass('active').css({
+                'border-bottom': '2px solid #6d2f8e', 'color': '#6d2f8e'
+            });
+
+            // Show Content
+            const targetId = $(this).data('target');
+            $('#login-form-wrapper, #register-form-wrapper').hide();
+            $(targetId).fadeIn(200);
+        });
+
+        // Login Submit
         loginForm.on('submit', function(e) {
             e.preventDefault();
             const formData = $(this).serialize();
-            
-            // Add login action
             const data = formData + '&action=login';
 
             $.ajax({
@@ -143,13 +163,44 @@ $(document).ready(function() {
                 data: data,
                 success: function(res) {
                     if (res.success) {
-                        location.reload(); // Reload to update UI state
+                        location.reload(); 
                     } else {
                         loginError.text(res.message).show();
                     }
                 },
                 error: function() {
                     loginError.text('Ошибка сервера. Попробуйте позже.').show();
+                }
+            });
+        });
+
+        // Register Submit
+        registerForm.on('submit', function(e) {
+            e.preventDefault();
+            
+            // Simple Client-side validation
+            const pass = $('#reg_pass').val();
+            const conf = $('#reg_pass_conf').val();
+            if (pass !== conf) {
+                registerError.text('Пароли не совпадают!').show();
+                return;
+            }
+
+            const formData = $(this).serialize(); // action=register is inside
+            
+            $.ajax({
+                url: 'api.php',
+                method: 'POST',
+                data: formData,
+                success: function(res) {
+                    if (res.success) {
+                        location.reload(); // Reload to update UI state
+                    } else {
+                        registerError.text(res.message).show();
+                    }
+                },
+                error: function() {
+                    registerError.text('Ошибка сервера. Попробуйте позже.').show();
                 }
             });
         });

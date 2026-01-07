@@ -179,7 +179,8 @@ function loadUsers() {
 }
 
 function openUserModal() {
-    $('#user-modal').fadeIn(200).css('display', 'flex');
+    // Force flex for centering
+    $('#user-modal').css('display', 'flex').hide().fadeIn(200);
     // Сброс формы
     $('#user_id').val('');
     $('#user_login').val('');
@@ -194,7 +195,7 @@ function closeUserModal() {
 }
 
 function editUser(user) {
-    $('#user-modal').fadeIn(200).css('display', 'flex');
+    $('#user-modal').css('display', 'flex').hide().fadeIn(200);
     $('#user_id').val(user.id);
     $('#user_login').val(user.login);
     $('#user_nickname').val(user.nickname);

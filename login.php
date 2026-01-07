@@ -61,8 +61,9 @@ require_once __DIR__ . '/src/templates/header.php';
             <button type="submit" class="btn-submit">Войти</button>
         </form>
         
-        <div class="back-link-wrapper">
+        <div class="back-link-wrapper" style="display: flex; justify-content: space-between; align-items: center;">
             <a href="/" class="back-link">&larr; Вернуться к просмотру</a>
+            <a href="/register.php" class="back-link" style="font-weight: bold;">Регистрация</a>
         </div>
     </div>
 </div>

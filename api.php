@@ -71,6 +71,40 @@ try {
          }
     }
 
+    if ($action === 'register') {
+        $login = trim($_POST['login'] ?? '');
+        $nickname = trim($_POST['nickname'] ?? '');
+        $password = $_POST['password'] ?? '';
+        $captcha = mb_strtolower(trim($_POST['captcha'] ?? ''), 'UTF-8');
+        
+        // 1. Валидация Капчи
+        $validAnswers = ['спайк', 'spike', 'дракончик спайк', 'спайк дракончик'];
+        if (!in_array($captcha, $validAnswers)) {
+            sendResponse(false, "Неверный ответ на вопрос про дракончика! Попробуй еще раз.", 'error');
+        }
+
+        // 2. Валидация данных
+        if (mb_strlen($login) < 3) sendResponse(false, "Логин слишком короткий (минимум 3 символа)", 'error');
+        if (mb_strlen($password) < 6) sendResponse(false, "Пароль слишком короткий (минимум 6 символов)", 'error');
+        
+        // 3. Создание пользователя
+        $userManager = new UserManager();
+        try {
+            // Создаем обычного пользователя (role='user')
+            $userManager->createUser($login, $password, 'user', $nickname);
+            
+            // 4. Автоматический вход
+            if (Auth::login($login, $password)) {
+                sendResponse(true, "Ура! Регистрация успешна! Добро пожаловать!", 'success', ['reload' => true]);
+            } else {
+                sendResponse(true, "Регистрация успешна! Теперь можно войти.", 'success');
+            }
+            
+        } catch (Exception $e) {
+            sendResponse(false, $e->getMessage(), 'error');
+        }
+    }
+
     // Protected Actions
     if (!$isLoggedIn && $action !== 'login') { // Allow 'login' or other public actions later
          // For now, most actions require login
