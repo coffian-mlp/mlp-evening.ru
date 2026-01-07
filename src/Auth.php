@@ -12,7 +12,7 @@ class Auth {
 
     public static function requireLogin() {
         if (!self::check()) {
-            header('Location: /login.php');
+            header('Location: /');
             exit();
         }
     }
