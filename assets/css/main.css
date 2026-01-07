@@ -39,10 +39,18 @@ body.dashboard-layout {
 }
 
 .video-container {
-    flex: 3.5;
+    flex: 3; /* Видео занимает 3 части (75%) */
     display: flex;
     flex-direction: column;
     padding: 6px;
+    min-width: 0;
+}
+
+/* Специфичные стили для чата внутри плеера */
+.player-container .chat-container {
+    flex: 1; /* Чат занимает 1 часть (25%) */
+    min-width: 300px; /* Минимальный разумный предел */
+    border-left: 1px solid rgba(0,0,0,0.1);
 }
 
 .header {

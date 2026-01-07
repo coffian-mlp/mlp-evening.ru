@@ -63,6 +63,10 @@ require_once __DIR__ . '/src/templates/header.php';
             <div class="icon">📜</div>
             <div class="label">История просмотров</div>
         </div>
+        <div class="nav-tile" data-target="#tab-users">
+            <div class="icon">👥</div>
+            <div class="label">Пользователи</div>
+        </div>
         <div class="nav-tile" data-target="#tab-controls">
             <div class="icon">⚙️</div>
             <div class="label">Управление</div>
@@ -190,6 +194,64 @@ require_once __DIR__ . '/src/templates/header.php';
                     </tr>
                 <?php endforeach; ?>
             </table>
+        </div>
+    </div>
+
+    <!-- Вкладка 3.5: Пользователи -->
+    <div id="tab-users" class="tab-content">
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 class="dashboard-title">👥 Управление Пользователями</h3>
+                <button class="btn-primary" onclick="openUserModal()">➕ Добавить пони</button>
+            </div>
+            
+            <table class="dashboard-table" id="users-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Логин</th>
+                        <th>Роль</th>
+                        <th>Дата регистрации</th>
+                        <th style="text-align: right;">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="4" style="text-align:center;">Загрузка...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- User Modal -->
+    <div id="user-modal" class="modal-overlay">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeUserModal()">&times;</span>
+            <h3 id="user-modal-title">Пользователь</h3>
+            <form id="user-form" action="api.php" method="post">
+                <input type="hidden" name="action" value="save_user">
+                <input type="hidden" name="user_id" id="user_id">
+                
+                <div class="form-group">
+                    <label class="form-label">Логин</label>
+                    <input type="text" name="login" id="user_login" class="form-input" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Роль</label>
+                    <select name="role" id="user_role" class="form-input">
+                        <option value="user">Пользователь</option>
+                        <option value="admin">Администратор</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Пароль</label>
+                    <input type="password" name="password" id="user_password" class="form-input" placeholder="Пусто = не менять">
+                    <small style="color: #777;">Заполните только если хотите сменить.</small>
+                </div>
+                
+                <button type="submit" class="btn-primary" style="width:100%">💾 Сохранить</button>
+            </form>
         </div>
     </div>
 

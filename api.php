@@ -7,6 +7,7 @@ ini_set('display_errors', 0);
 require_once __DIR__ . '/src/EpisodeManager.php';
 require_once __DIR__ . '/src/Auth.php';
 require_once __DIR__ . '/src/ChatManager.php';
+require_once __DIR__ . '/src/UserManager.php';
 
 header('Content-Type: application/json');
 
@@ -156,6 +157,61 @@ try {
         case 'logout':
             Auth::logout();
             sendResponse(true, "До скорой встречи!", 'success', ['reload' => true]); 
+            break;
+
+        // --- User Management (Admin Only) ---
+        case 'get_users':
+            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            
+            $userManager = new UserManager();
+            $users = $userManager->getAllUsers();
+            sendResponse(true, "Список получен", 'success', ['users' => $users]);
+            break;
+
+        case 'save_user':
+            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            
+            $userManager = new UserManager();
+            $id = $_POST['user_id'] ?? ''; // Если пусто - создание, если есть - редактирование
+            $login = trim($_POST['login'] ?? '');
+            $role = $_POST['role'] ?? 'user';
+            $password = $_POST['password'] ?? '';
+            
+            if (empty($login)) sendResponse(false, "Логин обязателен", 'error');
+            
+            try {
+                if (!empty($id)) {
+                    // Update
+                    $userManager->updateUser($id, $login, $role, $password); // Пароль может быть пустым
+                    sendResponse(true, "Пользователь обновлен");
+                } else {
+                    // Create
+                    if (empty($password)) sendResponse(false, "Для нового пользователя нужен пароль", 'error');
+                    $userManager->createUser($login, $password, $role);
+                    sendResponse(true, "Пользователь создан");
+                }
+            } catch (Exception $e) {
+                sendResponse(false, $e->getMessage(), 'error');
+            }
+            break;
+
+        case 'delete_user':
+            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            
+            $id = $_POST['user_id'] ?? '';
+            if (empty($id)) sendResponse(false, "ID не указан", 'error');
+            
+            // Не даем удалить самого себя
+            if ($id == $_SESSION['user_id']) {
+                sendResponse(false, "Нельзя удалить самого себя!", 'error');
+            }
+            
+            $userManager = new UserManager();
+            if ($userManager->deleteUser($id)) {
+                sendResponse(true, "Пользователь удален");
+            } else {
+                sendResponse(false, "Ошибка удаления", 'error');
+            }
             break;
 
         case 'send_message':

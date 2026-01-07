@@ -30,7 +30,6 @@
     <!-- jQuery (Local) -->
     <script src="/assets/js/jquery.min.js"></script>
     
-    <?php if (isset($extraScripts)) echo $extraScripts; ?>
 </head>
 <body class="<?= $bodyClass ?? '' ?>">
 

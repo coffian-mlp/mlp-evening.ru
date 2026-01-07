@@ -20,10 +20,20 @@ $(document).ready(function() {
         else {
             window.location.hash = target;
         } 
+
+        // Если открыли вкладку пользователей - загружаем список
+        if (target === '#tab-users') {
+            loadUsers();
+        }
     });
 
     // --- Проверка хеша при загрузке ---
     if (window.location.hash) {
+        // Блокируем стандартный скролл браузера к якорю
+        setTimeout(function() {
+            window.scrollTo(0, 0);
+        }, 1);
+        
         var $targetTile = $('.nav-tile[data-target="' + window.location.hash + '"]');
         if ($targetTile.length) {
             $targetTile.click();
@@ -65,6 +75,16 @@ $(document).ready(function() {
         var $btn = $form.find("button[type='submit']");
         var originalText = $btn.text();
         
+        // Если это форма пользователя, проверяем пароль
+        if ($form.attr('id') === 'user-form') {
+            var pass = $('#user_password').val();
+            var id = $('#user_id').val();
+            if (!id && !pass) {
+                window.showFlashMessage("Пароль обязателен для нового пользователя", "error");
+                return;
+            }
+        }
+
         $btn.prop("disabled", true).text("⏳...");
 
         $.ajax({
@@ -82,12 +102,19 @@ $(document).ready(function() {
                 window.showFlashMessage(response.message, response.type);
                 
                 if (response.success) {
-                    $form.find("input[type='text'], input[type='number']").val("");
+                    // Очистка полей, кроме скрытых action
+                    $form.find("input[type='text'], input[type='number'], input[type='password']").val("");
                     
                     var action = $form.find("input[name='action']").val();
                     if (action === 'clear_watching_log') {
                         $("#tab-history table tr:not(:first)").remove();
                         $("#tab-history table").append("<tr><td colspan='3' style='text-align:center; color:#999;'>История пуста (обновите страницу)</td></tr>");
+                    }
+                    
+                    // Если сохранили пользователя - закрываем окно и обновляем список
+                    if (action === 'save_user') {
+                        closeUserModal();
+                        loadUsers();
                     }
                 }
             },
@@ -103,3 +130,102 @@ $(document).ready(function() {
     });
 
 });
+
+// --- Функции управления пользователями (Глобальные) ---
+
+function loadUsers() {
+    var $tbody = $('#users-table tbody');
+    $tbody.html('<tr><td colspan="4" style="text-align:center;">Загрузка...</td></tr>');
+    
+    // Используем $.ajax вместо $.post для надежности с заголовками
+    $.ajax({
+        url: 'api.php',
+        method: 'POST',
+        data: { action: 'get_users' },
+        dataType: 'json',
+        success: function(res) {
+            if (res.success) {
+                $tbody.empty();
+                if (res.data.users.length === 0) {
+                    $tbody.html('<tr><td colspan="4" style="text-align:center;">Нет пользователей</td></tr>');
+                    return;
+                }
+                
+                res.data.users.forEach(function(u) {
+                    var row = `
+                        <tr>
+                            <td>${u.id}</td>
+                            <td>${escapeHtml(u.login)}</td>
+                            <td><span class="status-badge ${u.role === 'admin' ? 'old' : 'fresh'}">${u.role}</span></td>
+                            <td>${u.created_at ? u.created_at : '-'}</td>
+                            <td style="text-align: right;">
+                                <button class="btn-warning" onclick='editUser(${JSON.stringify(u)})' style="padding: 5px 10px; font-size: 0.9em;">✏️</button>
+                                <button class="btn-danger" onclick="deleteUser(${u.id})" style="padding: 5px 10px; font-size: 0.9em;">🗑️</button>
+                            </td>
+                        </tr>
+                    `;
+                    $tbody.append(row);
+                });
+            } else {
+                var errorMsg = res.message || 'Неизвестная ошибка';
+                $tbody.html('<tr><td colspan="4" style="text-align:center; color:red;">Ошибка: ' + escapeHtml(errorMsg) + '</td></tr>');
+            }
+        },
+        error: function(xhr, status, error) {
+             $tbody.html('<tr><td colspan="4" style="text-align:center; color:red;">Сбой сети: ' + escapeHtml(error) + ' <br> ' + xhr.responseText + '</td></tr>');
+        }
+    });
+}
+
+function openUserModal() {
+    $('#user-modal').fadeIn(200).css('display', 'flex');
+    // Сброс формы
+    $('#user_id').val('');
+    $('#user_login').val('');
+    $('#user_password').val('');
+    $('#user_role').val('user');
+    $('#user-modal-title').text('Новый пони');
+}
+
+function closeUserModal() {
+    $('#user-modal').fadeOut(200);
+}
+
+function editUser(user) {
+    $('#user-modal').fadeIn(200).css('display', 'flex');
+    $('#user_id').val(user.id);
+    $('#user_login').val(user.login);
+    $('#user_password').val(''); // Пароль не показываем
+    $('#user_role').val(user.role);
+    $('#user-modal-title').text('Редактировать пони');
+}
+
+function deleteUser(id) {
+    if (!confirm('Точно изгнать этого пони?')) return;
+    
+    $.ajax({
+        url: 'api.php',
+        method: 'POST',
+        data: { action: 'delete_user', user_id: id },
+        dataType: 'json',
+        success: function(res) {
+            window.showFlashMessage(res.message, res.type);
+            if (res.success) {
+                loadUsers();
+            }
+        },
+        error: function(xhr, status, error) {
+            window.showFlashMessage("Ошибка сети: " + error, 'error');
+        }
+    });
+}
+
+function escapeHtml(text) {
+    if (text == null) return '';
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
