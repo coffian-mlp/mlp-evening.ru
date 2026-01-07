@@ -17,22 +17,18 @@
     <meta property="og:type" content="website">
     <meta property="og:locale" content="ru_RU">
     
-    <!-- Google Fonts: Philosopher (для заголовков) и Open Sans (для текста) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&family=Philosopher:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    <!-- Fonts: Local Philosopher & Open Sans -->
+    <link rel="stylesheet" href="/assets/css/fonts.css">
 
     <link rel="stylesheet" href="/assets/css/main.css">
-    <link rel="stylesheet" href="/assets/css/chat.css">
-    <link rel="stylesheet" href="/assets/css/modal.css">
     <?php if (isset($extraCss)) echo $extraCss; ?>
     
     <?php if (isset($_SESSION['user_id'])): ?>
         <meta name="csrf-token" content="<?= Auth::generateCsrfToken() ?>">
     <?php endif; ?>
 
-    <!-- jQuery нужен везде -->
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
+    <!-- jQuery (Local) -->
+    <script src="/assets/js/jquery.min.js"></script>
     
     <?php if (isset($extraScripts)) echo $extraScripts; ?>
 </head>

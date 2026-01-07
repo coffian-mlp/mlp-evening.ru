@@ -34,25 +34,20 @@
 }
 
 .form-group {
-    margin-bottom: 20px; 
-    text-align: left;
+    /* Styles inherited from main.css */
+    margin-bottom: 20px;
 }
 
 .form-label {
-    display: block; 
-    margin-bottom: 5px; 
-    color: #555;
+   /* Styles inherited from main.css */
 }
 
 .form-input {
-    width: 100%; 
-    padding: 12px; 
-    border: 1px solid #ddd; 
-    border-radius: 4px; 
-    box-sizing: border-box;
+    /* Styles inherited from main.css */
 }
 
 .btn-submit {
+    /* Just specific overrides if needed, or use .btn-block .btn-primary */
     width: 100%; 
     padding: 12px; 
     background-color: #6d2f8e; 

@@ -31,6 +31,7 @@ body.dashboard-layout {
 }
 
 /* === Стили Плеера (Index) === */
+/* Old .chat-container removed/merged above */
 .player-container {
     display: flex;
     height: 100vh; /* Фоллбек для старых браузеров */
@@ -78,21 +79,13 @@ body.dashboard-layout {
     width: 100%;
 }
 
-.video-content iframe {
+    .video-content iframe {
     width: 100%;
     height: 100%;
     border: none;
 }
 
-.chat-container {
-    flex: 1;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    color: #333;
-    width: 100%;
-    height: 100%;
-}
+/* Chat container styles are now global (see above) */
 
 @media (max-width: 768px) {
     .player-container {
@@ -198,52 +191,215 @@ body.dashboard-layout {
 }
 
 /* === Общие кнопки === */
-.btn-primary {
-    background: #6d2f8e;
-    color: white;
+.btn, .btn-primary, .btn-danger, .btn-warning, .btn-return, .btn-home {
+    display: inline-block;
     padding: 10px 20px;
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    transition: background 0.2s;
+    text-decoration: none;
+    font-weight: bold;
+    text-align: center;
+    transition: background 0.2s, transform 0.2s;
+    font-size: 14px;
+}
+
+.btn-primary {
+    background: #6d2f8e;
+    color: white;
 }
 .btn-primary:hover { background: #562473; }
 
 .btn-danger {
     background: #e74c3c;
     color: white;
-    padding: 8px 15px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background 0.2s;
 }
 .btn-danger:hover { background: #c0392b; }
 
 .btn-warning {
     background: #f1c40f;
     color: #333;
-    padding: 8px 15px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background 0.2s;
 }
 .btn-warning:hover { background: #f39c12; }
 
 /* Кнопка "Вернуться" (используется в 404/403) */
 .btn-return, .btn-home {
-    display: inline-block;
     background-color: #6d2f8e;
     color: white;
     padding: 12px 25px;
-    border-radius: 25px;
-    text-decoration: none;
-    font-weight: bold;
-    transition: transform 0.2s, background 0.2s;
+    border-radius: 25px !important; /* Force rounded specifically for these */
     margin-top: 20px;
 }
 .btn-return:hover, .btn-home:hover {
     background-color: #562473;
     transform: translateY(-2px);
+}
+
+.btn-block {
+    display: block;
+    width: 100%;
+}
+
+/* === Формы и Инпуты === */
+.form-group {
+    margin-bottom: 20px; 
+    text-align: left;
+}
+
+.form-label {
+    display: block; 
+    margin-bottom: 5px; 
+    color: #555;
+    font-weight: 600;
+}
+
+.form-input, input[type="text"], input[type="number"], input[type="password"] {
+    width: 100%; 
+    padding: 10px 12px; 
+    border: 1px solid #ddd; 
+    border-radius: 4px; 
+    box-sizing: border-box;
+    font-family: inherit;
+    font-size: 14px;
+}
+.form-input:focus, input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:focus {
+    outline: none;
+    border-color: #9c27b0;
+}
+
+/* === Local Chat Styles (Merged) === */
+.chat-container {
+    display: flex;
+    flex-direction: column;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 10px;
+    overflow: hidden;
+    height: 100%;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.chat-message {
+    word-wrap: break-word;
+    line-height: 1.4;
+}
+
+.chat-message .username {
+    font-weight: bold;
+    color: #673ab7; /* Twilight Sparkle color */
+    margin-right: 5px;
+}
+
+.chat-message .text {
+    color: #333;
+}
+
+.chat-message .timestamp {
+    font-size: 0.75em;
+    color: #999;
+    margin-left: 5px;
+}
+
+.chat-input-area {
+    padding: 10px;
+    border-top: 1px solid #eee;
+    background: #fafafa;
+}
+
+#chat-form {
+    display: flex;
+    gap: 5px;
+}
+
+#chat-input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: inherit;
+}
+
+#chat-input:focus {
+    outline: none;
+    border-color: #9c27b0;
+}
+
+#chat-form button {
+    background: #9c27b0;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 15px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.2s;
+}
+
+#chat-form button:hover {
+    background: #7b1fa2;
+}
+
+.chat-login-prompt {
+    text-align: center;
+    font-size: 0.9em;
+    color: #666;
+}
+
+.chat-login-prompt a {
+    color: #9c27b0;
+    font-weight: bold;
+}
+
+/* === Modal Styles (Merged) === */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    display: none; /* Hidden by default */
+}
+
+.modal-content {
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    width: 100%;
+    max-width: 350px;
+    position: relative;
+    text-align: center;
+}
+
+.close-modal {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    color: #aaa;
+}
+
+.close-modal:hover {
+    color: #000;
+}
+
+.modal-content h3 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: #6d2f8e;
 }
