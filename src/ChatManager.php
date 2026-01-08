@@ -351,9 +351,9 @@ class ChatManager {
 
     public function getMessages($limit = 50) {
         $limit = (int)$limit;
-        // Join with users to get current color and avatar
+        // Join with users to get current color and avatar and ROLE
         // Сортируем по ID DESC, чтобы получить последние $limit сообщений
-        $query = "SELECT cm.*, u.chat_color, u.avatar_url 
+        $query = "SELECT cm.*, u.chat_color, u.avatar_url, u.role 
                   FROM chat_messages cm 
                   LEFT JOIN users u ON cm.user_id = u.id 
                   ORDER BY cm.id DESC LIMIT $limit";
@@ -375,7 +375,7 @@ class ChatManager {
         $params = [$lastId];
         $types = "i";
         
-        $sql = "SELECT cm.*, u.chat_color, u.avatar_url 
+        $sql = "SELECT cm.*, u.chat_color, u.avatar_url, u.role 
                 FROM chat_messages cm 
                 LEFT JOIN users u ON cm.user_id = u.id 
                 WHERE cm.id > ?";

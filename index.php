@@ -83,6 +83,38 @@ require_once __DIR__ . '/src/templates/header.php';
                 </div>
             </div>
 
+            <!-- Ban/Mute Input Overlay -->
+            <div id="chat-input-overlay" class="chat-overlay" style="display: none;">
+                <div class="chat-confirm-box" style="width: 300px;">
+                    <h4 id="chat-input-title" style="margin-top:0; color:#6d2f8e;">Действие</h4>
+                    <p id="chat-input-desc" style="font-size:0.9em; color:#666;"></p>
+                    
+                    <!-- Mute specific inputs -->
+                    <div id="chat-input-mute-opts" style="display:none; margin-bottom:10px;">
+                        <select id="chat-mute-time" class="form-input" style="width:100%; margin-bottom:5px;">
+                            <option value="15">15 минут</option>
+                            <option value="60">1 час</option>
+                            <option value="180">3 часа</option>
+                            <option value="1440">24 часа</option>
+                            <option value="10080">7 дней</option>
+                        </select>
+                    </div>
+
+                    <!-- Purge specific inputs -->
+                    <div id="chat-input-purge-opts" style="display:none; margin-bottom:10px;">
+                        <label style="font-size:0.9em; color:#666;">Количество:</label>
+                        <input type="number" id="chat-purge-count" class="form-input" value="50" min="1" max="100" style="width:100%;">
+                    </div>
+
+                    <input type="text" id="chat-input-reason" class="form-input" placeholder="Причина..." style="width:100%; margin-bottom:15px;">
+                    
+                    <div class="chat-confirm-buttons">
+                        <button id="chat-input-submit" class="btn-primary btn-sm">ОК</button>
+                        <button id="chat-input-cancel" class="btn-danger btn-sm">Отмена</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="chat-messages" id="chat-messages">
                 <div class="chat-welcome">Добро пожаловать в Поняшный чат! 🦄<br>Не стесняйся, пиши!</div>
             </div>
@@ -92,8 +124,10 @@ require_once __DIR__ . '/src/templates/header.php';
                         // Global User Info for JS
                         window.currentUserId = <?= json_encode($_SESSION['user_id']) ?>;
                         window.currentUserRole = <?= json_encode($_SESSION['role'] ?? 'user') ?>;
-                        window.currentUsername = <?= json_encode($_SESSION['username']) ?>; // Actually nickname in session usually, but 'username' key used in login
+                        window.isModerator = <?= json_encode(Auth::isModerator()) ?>; // Add this flag
+                        window.currentUsername = <?= json_encode($_SESSION['username']) ?>;
                         window.currentUserNickname = <?= json_encode($currentUser['nickname'] ?? $_SESSION['username']) ?>;
+                        window.csrfToken = <?= json_encode(Auth::generateCsrfToken()) ?>;
                     </script>
                     <div id="quote-preview-area" class="hidden"></div>
                     <!-- Toolbar -->
@@ -237,5 +271,19 @@ require_once __DIR__ . '/src/templates/header.php';
         <?php endif; ?>
     </div>
 </div>
+
+<!-- Context Menu (Global) -->
+<ul id="chat-context-menu" class="chat-context-menu" style="display: none;">
+    <li data-action="reply">💬 Ответить</li>
+    <li data-action="quote">❞ Цитата</li>
+    <li data-action="edit" style="display:none;">✎ Редактировать</li>
+    <li data-action="delete" class="danger" style="display:none;">🗑️ Удалить</li>
+    <?php if (Auth::isModerator()): ?>
+        <li class="separator mod-only"></li>
+        <li data-action="purge" class="danger mod-only">🧹 Purge (50)</li>
+        <li data-action="mute" class="warning mod-only">🤐 Мут (15м)</li>
+        <li data-action="ban" class="danger mod-only">🔨 Бан (Навсегда)</li>
+    <?php endif; ?>
+</ul>
 
 <?php require_once __DIR__ . '/src/templates/footer.php'; ?>

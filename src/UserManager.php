@@ -171,9 +171,12 @@ class UserManager {
     }
 
     public function muteUser($userId, $minutes, $moderatorId = null, $reason = null) {
-        // Use UTC_TIMESTAMP + interval
-        $stmt = $this->db->prepare("UPDATE users SET muted_until = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE), ban_reason = ? WHERE id = ?");
-        $stmt->bind_param("isi", $minutes, $reason, $userId);
+        // Calculate UTC time in PHP to avoid SQL syntax issues with INTERVAL binding
+        $muteUntil = gmdate('Y-m-d H:i:s', time() + ($minutes * 60));
+        
+        // Also ensure is_banned is 0, so it displays as Muted, not Banned
+        $stmt = $this->db->prepare("UPDATE users SET muted_until = ?, ban_reason = ?, is_banned = 0 WHERE id = ?");
+        $stmt->bind_param("ssi", $muteUntil, $reason, $userId);
         $res = $stmt->execute();
 
         if ($res && $moderatorId) {

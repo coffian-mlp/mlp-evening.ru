@@ -62,6 +62,9 @@ $(document).ready(function() {
         const div = document.createElement('div');
         div.className = 'chat-message';
         div.dataset.id = data.id; // Store message ID
+        div.dataset.userId = data.user_id; // Store User ID for moderation
+        div.dataset.userRole = data.role || 'user'; // Store User Role for moderation check
+        div.dataset.timestamp = data.created_at; // Store ISO timestamp for calculations
 
         // Check for Mention
         // Use window.currentUserNickname (preferred) or window.currentUsername
@@ -131,6 +134,19 @@ $(document).ready(function() {
         const isMyMessage = (currentUserId && parseInt(data.user_id) === parseInt(currentUserId));
         const canModerate = (currentUserRole === 'admin' || currentUserRole === 'moderator');
         
+        // Target Role logic for Moderation
+        const targetRole = data.role || 'user';
+        let canPunish = false;
+        
+        if (canModerate && !isMyMessage) {
+            if (currentUserRole === 'admin') {
+                canPunish = true; // Admin can punish anyone (except self, handled by !isMyMessage)
+            } else if (currentUserRole === 'moderator') {
+                // Moderator can punish only normal users
+                canPunish = (targetRole === 'user');
+            }
+        }
+
         // Quote button (Available for everyone if not deleted)
         if (!data.deleted) {
             actionsHtml += `<button class="chat-action-btn quote-btn" title="Цитировать">❝</button>`;
@@ -158,6 +174,11 @@ $(document).ready(function() {
         } else if (isMyMessage) {
             // Even if not recent, allow delete for self
              actionsHtml += `<button class="chat-action-btn delete-btn" title="Удалить">🗑</button>`;
+        }
+
+        // Add Mod Menu Button if allowed to punish
+        if (canPunish) {
+             actionsHtml += `<button class="chat-action-btn mod-menu-btn" title="Модерация">⚡</button>`;
         }
 
         let editedMark = '';
@@ -283,6 +304,245 @@ $(document).ready(function() {
 
         noBtn.on('click', function() {
             overlay.fadeOut(200);
+        });
+    }
+
+    // Helper for Chat Input (Ban/Mute/Purge)
+    function showChatInput(title, desc, type, onConfirm) {
+        const overlay = $('#chat-input-overlay');
+        if (!overlay.length) return;
+
+        $('#chat-input-title').text(title);
+        $('#chat-input-desc').text(desc);
+        $('#chat-input-reason').val(''); // Clear input
+        
+        // Reset visibility
+        $('#chat-input-mute-opts').hide();
+        $('#chat-input-purge-opts').hide();
+        $('#chat-input-reason').show(); // Show by default
+
+        if (type === 'mute') {
+            $('#chat-input-mute-opts').show();
+        } else if (type === 'purge') {
+            $('#chat-input-purge-opts').show();
+            $('#chat-input-reason').hide(); // No reason for purge needed usually, or use as optional?
+            // API doesn't take reason for purge currently, so hide it.
+        }
+
+        overlay.css('display', 'flex').hide().fadeIn(200);
+
+        const submitBtn = $('#chat-input-submit');
+        const cancelBtn = $('#chat-input-cancel');
+
+        submitBtn.off('click').on('click', function() {
+            const reason = $('#chat-input-reason').val().trim() || 'Нарушение правил';
+            const minutes = type === 'mute' ? $('#chat-mute-time').val() : null;
+            const count = type === 'purge' ? $('#chat-purge-count').val() : null;
+            
+            overlay.fadeOut(200);
+            onConfirm(reason, minutes, count);
+        });
+
+        cancelBtn.off('click').on('click', function() {
+            overlay.fadeOut(200);
+        });
+    }
+
+    // 11. Context Menu (Right Click)
+    const contextMenu = $('#chat-context-menu');
+    let contextTargetId = null;
+    let contextTargetUsername = null;
+    let contextTargetUserId = null;
+
+    if (contextMenu.length) {
+        // Show Menu
+        function showContextMenu(e, targetMsgEl) {
+            e.preventDefault();
+            e.stopPropagation(); // Prevent propagation
+
+            contextTargetId = targetMsgEl.data('id');
+            contextTargetUsername = targetMsgEl.find('.username').text();
+            contextTargetUserId = targetMsgEl.data('userId');
+
+            // Position
+            let x = e.pageX;
+            let y = e.pageY;
+            
+            // Hide Punish options if not allowed
+            const targetRole = targetMsgEl.data('userRole') || 'user';
+            const msgUserId = targetMsgEl.data('userId'); // Ensure we get UserID from DOM
+            const isSelf = (currentUserId && msgUserId == currentUserId);
+            const isMyMessage = isSelf; // Alias for clarity
+
+            // Check Time Limit for Edit/Delete (10 mins)
+            // We need created_at. Let's store it in data attribute or parse from time element?
+            // Parsing time element is unreliable (formatted).
+            // Let's rely on data attribute or just allow click and let server reject? 
+            // Better UX: check time.
+            // We don't have raw timestamp in DOM. Let's add it in createMessageElement!
+            const rawTime = targetMsgEl.data('timestamp'); 
+            let isRecent = false;
+            if (rawTime) {
+                const msgDate = new Date(rawTime);
+                const correctedNow = new Date(Date.now() + (timeSkew * 1000));
+                const diffMinutes = (correctedNow - msgDate) / 1000 / 60;
+                isRecent = diffMinutes >= -1 && diffMinutes < 10;
+            }
+
+            // --- User Actions (Edit/Delete) ---
+            const canEdit = (isMyMessage && isRecent);
+            const canDelete = (isMyMessage) || currentUserRole === 'admin' || currentUserRole === 'moderator';
+            
+            if (canEdit) {
+                contextMenu.find('[data-action="edit"]').show();
+            } else {
+                contextMenu.find('[data-action="edit"]').hide();
+            }
+
+            if (canDelete) {
+                contextMenu.find('[data-action="delete"]').show();
+            } else {
+                contextMenu.find('[data-action="delete"]').hide();
+            }
+
+            // --- Moderation Actions ---
+            let canPunish = false;
+            if (!isSelf) {
+                if (currentUserRole === 'admin') canPunish = true;
+                if (currentUserRole === 'moderator' && targetRole === 'user') canPunish = true;
+            }
+            
+            if (canPunish) {
+                contextMenu.find('.mod-only').show(); // Using class for cleaner selection
+            } else {
+                contextMenu.find('.mod-only').hide();
+            }
+
+            // Temporarily show to calculate dimensions (after hiding items)
+            contextMenu.css({ visibility: 'hidden', display: 'block' });
+            const menuHeight = contextMenu.outerHeight();
+            const menuWidth = contextMenu.outerWidth();
+            contextMenu.css({ visibility: 'visible', display: 'none' }); // Hide again properly
+
+            const windowHeight = $(window).height();
+            const windowWidth = $(window).width();
+            const scrollTop = $(window).scrollTop();
+
+            // Vertical Flip
+            if ((y - scrollTop + menuHeight) > windowHeight) {
+                // If triggered by button, move ABOVE button
+                if ($(e.target).hasClass('mod-menu-btn')) {
+                     y = $(e.target).offset().top - menuHeight;
+                } else {
+                     y -= menuHeight;
+                }
+            }
+            
+            // Horizontal Flip (if needed, though unlikely for chat width)
+            if ((x + menuWidth) > windowWidth) {
+                x -= menuWidth;
+            }
+
+            contextMenu.css({
+                top: y + 'px',
+                left: x + 'px'
+            }).show();
+        }
+
+        $(document).on('contextmenu', '.chat-message', function(e) {
+            showContextMenu(e, $(this));
+        });
+
+        // Handle Mod Button Click
+        $(document).on('click', '.mod-menu-btn', function(e) {
+            showContextMenu(e, $(this).closest('.chat-message'));
+        });
+
+        // Hide Menu
+        $(document).on('click', function(e) {
+            // If click is not on menu, hide
+            if (!$(e.target).closest('#chat-context-menu').length) {
+                contextMenu.hide();
+            }
+        });
+
+        // Menu Actions
+        contextMenu.on('click', 'li', function() {
+            const action = $(this).data('action');
+            if (!action) return;
+            
+            contextMenu.hide(); // Hide immediately
+            
+            if (!contextTargetId) return;
+
+            switch(action) {
+                case 'quote':
+                    // Trigger existing quote logic
+                    $(`.chat-message[data-id="${contextTargetId}"] .quote-btn`).click();
+                    break;
+                case 'edit':
+                    // Manually trigger edit logic (since button might be hidden or not rendered if we rely on menu)
+                    // Or simulate click if button exists?
+                    // Better reuse logic.
+                    {
+                        const msgDiv = $(`.chat-message[data-id="${contextTargetId}"]`);
+                        let text = msgDiv.find('.chat-text').clone().children().remove().end().text().trim();
+                        if (chatInput) {
+                            chatInput.value = text;
+                            chatInput.focus();
+                            chatInput.dataset.editingId = contextTargetId;
+                            chatInput.classList.add('editing-mode');
+                            const submitBtn = chatForm.querySelector('button');
+                            if (submitBtn) submitBtn.textContent = 'Сохранить';
+                        }
+                    }
+                    break;
+                case 'reply':
+                    // Just mention
+                    if (chatInput && contextTargetUsername) {
+                        chatInput.value += `@${contextTargetUsername} `;
+                        chatInput.focus();
+                    }
+                    break;
+                case 'delete':
+                    // Trigger delete logic
+                    $(`.chat-message[data-id="${contextTargetId}"] .delete-btn`).click();
+                    break;
+                case 'purge':
+                    showChatInput(`Purge: ${contextTargetUsername}`, 'Удалить последние сообщения:', 'purge', function(reason, minutes, count) {
+                        $.post('api.php', { 
+                            action: 'purge_messages', 
+                            user_id: contextTargetUserId,
+                            count: count || 50
+                        }, function(res) {
+                            showChatNotification(res.message, res.success ? 'success' : 'error');
+                        }, 'json');
+                    });
+                    break;
+                case 'ban':
+                    showChatInput(`Бан: ${contextTargetUsername}`, 'Укажите причину бана:', 'ban', function(reason) {
+                        $.post('api.php', { 
+                            action: 'ban_user', 
+                            user_id: contextTargetUserId, 
+                            reason: reason 
+                        }, function(res) {
+                            showChatNotification(res.message, res.success ? 'success' : 'error');
+                        }, 'json');
+                    });
+                    break;
+                case 'mute':
+                    showChatInput(`Мут: ${contextTargetUsername}`, 'Выберите срок и причину:', 'mute', function(reason, minutes) {
+                        $.post('api.php', { 
+                            action: 'mute_user', 
+                            user_id: contextTargetUserId, 
+                            minutes: minutes,
+                            reason: reason
+                        }, function(res) {
+                            showChatNotification(res.message, res.success ? 'success' : 'error');
+                        }, 'json');
+                    });
+                    break;
+            }
         });
     }
 

@@ -25,6 +25,7 @@
     <link rel="stylesheet" href="/assets/css/markdown.css">
     <link rel="stylesheet" href="/assets/css/dragdrop.css">
     <link rel="stylesheet" href="/assets/css/chat-media.css">
+    <link rel="stylesheet" href="/assets/css/context-menu.css">
     <?php if (isset($extraCss)) echo $extraCss; ?>
     
     <?php if (isset($_SESSION['user_id'])): ?>
