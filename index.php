@@ -88,9 +88,25 @@ require_once __DIR__ . '/src/templates/header.php';
             </div>
             <div class="chat-input-area">
                  <?php if (isset($_SESSION['user_id'])): ?>
+                    <script>
+                        // Global User Info for JS
+                        window.currentUserId = <?= json_encode($_SESSION['user_id']) ?>;
+                        window.currentUserRole = <?= json_encode($_SESSION['role'] ?? 'user') ?>;
+                        window.currentUsername = <?= json_encode($_SESSION['username']) ?>; // Actually nickname in session usually, but 'username' key used in login
+                        window.currentUserNickname = <?= json_encode($currentUser['nickname'] ?? $_SESSION['username']) ?>;
+                    </script>
                     <div id="quote-preview-area" class="hidden"></div>
+                    <!-- Toolbar -->
+                    <div class="chat-toolbar">
+                        <button type="button" class="chat-format-btn" data-format="bold" title="Жирный (**text**)">B</button>
+                        <button type="button" class="chat-format-btn" data-format="italic" title="Курсив (*text*)">I</button>
+                        <button type="button" class="chat-format-btn" data-format="strike" title="Зачеркнутый (~~text~~)">S</button>
+                        <button type="button" class="chat-format-btn" data-format="quote" title="Цитата (> text)">❞</button>
+                        <button type="button" class="chat-format-btn" data-format="code" title="Код (`text`)">&lt;/&gt;</button>
+                        <button type="button" class="chat-format-btn" data-format="spoiler" title="Спойлер (||text||)">👁</button>
+                    </div>
                     <form id="chat-form">
-                        <input type="text" id="chat-input" placeholder="Напиши что-нибудь..." autocomplete="off">
+                        <textarea id="chat-input" placeholder="Напиши что-нибудь..." rows="1"></textarea>
                         <button type="submit">Отправить</button>
                     </form>
                  <?php else: ?>

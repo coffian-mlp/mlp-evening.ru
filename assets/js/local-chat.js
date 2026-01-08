@@ -62,6 +62,26 @@ $(document).ready(function() {
         const div = document.createElement('div');
         div.className = 'chat-message';
         div.dataset.id = data.id; // Store message ID
+
+        // Check for Mention
+        // Use window.currentUserNickname (preferred) or window.currentUsername
+        // We check for @Nickname (case insensitive or exact?) - usually exact or loose.
+        // Let's try exact match with @ prefix.
+        const myNick = window.currentUserNickname || window.currentUsername;
+        if (myNick) {
+            // Backend sends escaped HTML, so we might need to match escaped nick? 
+            // Usually username is simple, but let's be careful.
+            // Search in data.message content.
+            // The message might contain HTML tags (spans), so simple includes might fail if name is split (unlikely).
+            // Safer: regex for @MyNick\b
+            const mentionRegex = new RegExp(`@${escapeRegExp(myNick)}\\b`, 'i');
+            // We check the raw message if possible, but data.message is processed HTML.
+            // It should contain <span class="md-mention">@Nick</span>
+            // So we check text content? No, data.message is HTML string.
+            if (mentionRegex.test(data.message)) {
+                div.classList.add('message-mentioned');
+            }
+        }
         
         // Format time (HH:MM)
         // Since backend now sends ISO 8601 (e.g. 2023-10-27T10:00:00Z), we can parse it directly
@@ -230,6 +250,10 @@ $(document).ready(function() {
             "'": '&#039;'
         };
         return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+    }
+
+    function escapeRegExp(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
     // Helper for Chat Confirmation
@@ -659,4 +683,119 @@ $(document).ready(function() {
             });
         });
     }
+
+    // 5. Chat Toolbar Logic
+    $('.chat-format-btn').on('click', function(e) {
+        e.preventDefault();
+        const format = $(this).data('format');
+        const input = document.getElementById('chat-input'); 
+        
+        const start = input.selectionStart;
+        const end = input.selectionEnd;
+        const text = input.value;
+        let selectedText = text.substring(start, end);
+        
+        // NEW: Check for external selection if internal is empty
+        // This allows selecting text in chat and clicking a button to copy & format it
+        if (start === end) {
+            const globalSel = window.getSelection().toString();
+            if (globalSel && globalSel.trim().length > 0) {
+                selectedText = globalSel.trim();
+            }
+        }
+        
+        let replacement = '';
+        let newStart = start; // Cursor position after
+        let newEnd = end;
+
+        if (format === 'quote') {
+             // Blockquote logic: prepend > to lines
+             if (selectedText.length > 0) {
+                 replacement = selectedText.split('\n').map(line => '> ' + line).join('\n');
+             } else {
+                 replacement = '> ';
+             }
+             // For quote, we usually want to select the whole block or place cursor at end?
+             // Let's place cursor after the inserted text
+             newStart = start + replacement.length;
+             newEnd = newStart;
+        } else {
+            let startTag = '', endTag = '';
+            switch(format) {
+                case 'bold': startTag = '**'; endTag = '**'; break;
+                case 'italic': startTag = '*'; endTag = '*'; break;
+                case 'strike': startTag = '~~'; endTag = '~~'; break;
+                case 'code': startTag = '`'; endTag = '`'; break;
+                case 'spoiler': startTag = '||'; endTag = '||'; break;
+            }
+            replacement = startTag + selectedText + endTag;
+            
+            if (start === end) {
+                // Empty selection: place cursor inside tags
+                newStart = start + startTag.length;
+                newEnd = newStart;
+            } else {
+                // Wrap selection: keep selection around text (including tags? or just text?)
+                // Usually editors keep selection around the whole thing or just text.
+                // Let's select the whole new block
+                newStart = start;
+                newEnd = start + replacement.length;
+            }
+        }
+        
+        input.value = text.substring(0, start) + replacement + text.substring(end);
+        
+        input.focus();
+        input.selectionStart = newStart;
+        input.selectionEnd = newEnd;
+        
+        // Trigger auto-resize
+        input.dispatchEvent(new Event('input'));
+    });
+
+    // 9. Auto-resize Textarea & Handle Enter
+    const chatTextarea = document.getElementById('chat-input');
+    if (chatTextarea) {
+        chatTextarea.addEventListener('input', function() {
+            this.style.height = 'auto'; // Reset to re-calculate
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+
+        chatTextarea.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault(); // Prevent newline
+                // Trigger submit
+                const event = new Event('submit', { cancelable: true });
+                document.getElementById('chat-form').dispatchEvent(event);
+            }
+        });
+    }
+
+    // 6. Handle Spoiler Reveal
+    $(document).on('click', '.md-spoiler', function() {
+        $(this).toggleClass('revealed');
+    });
+
+    // 7. Handle Mention Click (Insert into input)
+    $(document).on('click', '.md-mention', function() {
+        const username = $(this).text(); // Includes @
+        if (chatInput) {
+            chatInput.value += (chatInput.value ? ' ' : '') + username + ' ';
+            chatInput.focus();
+        }
+    });
+
+    // 8. Handle Username Click (Insert Mention)
+    $(document).on('click', '.chat-message .username', function(e) {
+        // Only if not holding modifier keys (to allow default selection if needed)
+        if (e.ctrlKey || e.metaKey) return;
+        
+        const username = $(this).text().trim();
+        if (chatInput && username) {
+            // Clean username just in case
+            const safeName = username.replace(/\s+/g, ' ');
+            chatInput.value += (chatInput.value ? ' ' : '') + '@' + safeName + ' ';
+            chatInput.focus();
+        }
+    });
 });

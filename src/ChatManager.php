@@ -145,6 +145,44 @@ class ChatManager {
         return $updateStmt->execute();
     }
 
+    // ✨ Parse Markdown and Mentions (Safe after htmlspecialchars)
+    private function parseMarkdown($text) {
+        // 0. Blockquote: > text (standard Markdown style)
+        // We use multiline modifier 'm'
+        // Regex matches lines starting with > (possibly with space) and wraps content in <blockquote>
+        $text = preg_replace('/^&gt;\s?(.*?)$/m', '<blockquote class="md-quote">$1</blockquote>', $text);
+        
+        // Also support >> for nested or alternative style if needed, but let's stick to standard > for now.
+        // Or we can map >> to nested quote? Let's just treat multiple > as nested.
+        // Actually, simple replacement might not handle nested well without recursion, 
+        // but for single level > it's fine.
+        // Let's also support &gt;&gt; for "greentext" style specifically if user wants it separate? 
+        // User asked for "standard quotes" instead of "greentext".
+        // So > text => blockquote.
+
+        // 1. Spoilers: ||text|| => <span class="md-spoiler">text</span>
+        $text = preg_replace('/\|\|(.*?)\|\|/s', '<span class="md-spoiler" title="Спойлер!">$1</span>', $text);
+
+        // 2. Bold: **text** => <b>text</b>
+        $text = preg_replace('/\*\*(.*?)\*\*/s', '<b class="md-bold">$1</b>', $text);
+
+        // 3. Italic: *text* => <i>text</i> (using only * for standard MD, ignoring _ to avoid mess with names)
+        // Using lookbehind/lookahead to ensure it's not part of another word if needed, but simple is fine for now
+        $text = preg_replace('/(?<!\*)\*(?!\*)(.*?)\*/s', '<i class="md-italic">$1</i>', $text);
+
+        // 4. Strikethrough: ~~text~~ => <s>text</s>
+        $text = preg_replace('/~~(.*?)~~/s', '<s class="md-strike">$1</s>', $text);
+
+        // 5. Monospace/Code: `text` => <code>text</code>
+        $text = preg_replace('/`(.*?)`/s', '<code class="md-code">$1</code>', $text);
+
+        // 6. User Mentions: @Username
+        // Pattern: @ followed by word characters (letters, numbers, underscores)
+        $text = preg_replace('/@([\wа-яА-ЯёЁ0-9_]+)/u', '<span class="md-mention">@$1</span>', $text);
+
+        return $text;
+    }
+
     private function processMessages($messages) {
         // Collect all quoted message IDs
         $allQuotedIds = [];
@@ -181,6 +219,9 @@ class ChatManager {
                         if ($qRow['is_deleted']) {
                              $qRow['message'] = '<em style="color:#999;">Сообщение удалено</em>';
                              $qRow['deleted'] = true;
+                        } else {
+                            // Parse markdown in quote too!
+                            $qRow['message'] = $this->parseMarkdown($qRow['message']);
                         }
                         $quotedDetails[$qRow['id']] = $qRow;
                     }
@@ -208,6 +249,10 @@ class ChatManager {
                 $msg['message'] = '<em style="color:#999;">Сообщение удалено</em>';
                 // Можно добавить флаг, чтобы фронтенд знал
                 $msg['deleted'] = true;
+            } else {
+                // Apply Markdown Parsing here!
+                // It is already htmlspecialchars()'d in DB save, so we are safe to add HTML tags.
+                $msg['message'] = $this->parseMarkdown($msg['message']);
             }
 
             // Attach Quoted Messages
