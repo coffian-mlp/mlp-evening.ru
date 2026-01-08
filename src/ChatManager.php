@@ -229,7 +229,7 @@ class ChatManager {
         
         // 7.1 Images (Ends with extension)
         // Matches http(s)://... .jpg/png/gif/webp NOT inside quotes/attributes
-        $text = preg_replace('/(?<!href="|src="|\[|!\[)(https?:\/\/[^\s<]+\.(?:jpg|jpeg|png|gif|webp))(?![^<]*>|\])/i', '<img src="$1" class="chat-img" onclick="window.open(this.src, \'_blank\')">', $text);
+        $text = preg_replace('/(?<!href="|src="|\[|!\[)(https?:\/\/[^\s<]+\.(?:jpg|jpeg|png|gif|webp))(?![^<]*>|\])/i', '<img src="$1" class="chat-img">', $text);
 
         // 7.2 YouTube (Standard & Short)
         // Revert to standard embed without fancy policies for now, as localhost is tricky
@@ -244,7 +244,7 @@ class ChatManager {
 
         // 8. Explicit Markdown Images: ![alt](url)
         // Basic check for http/https/relative url to prevent javascript:
-        $text = preg_replace('/!\[(.*?)\]\(((https?:\/\/|\/)[^\s\)]+)\)/', '<img src="$2" alt="$1" class="chat-img" onclick="window.open(this.src, \'_blank\')">', $text);
+        $text = preg_replace('/!\[(.*?)\]\(((https?:\/\/|\/)[^\s\)]+)\)/', '<img src="$2" alt="$1" class="chat-img">', $text);
 
         // 9. Explicit Markdown Links: [text](url)
         $text = preg_replace('/\[(.*?)\]\(((https?:\/\/|\/)[^\s\)]+)\)/', '<a href="$2" target="_blank" rel="noopener noreferrer" class="chat-link">$1</a>', $text);

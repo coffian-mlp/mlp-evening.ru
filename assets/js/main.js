@@ -1,5 +1,32 @@
 // main.js - Глобальные скрипты для всего сайта
 
+// --- Global Lightbox ---
+$(document).ready(function() {
+    // Click on Chat Images & Stickers
+    $(document).on('click', '.chat-message img:not(.emoji), .sticker-preview-img', function(e) {
+        // Prevent default link navigation if wrapped in <a>
+        e.preventDefault();
+        
+        var src = $(this).attr('src');
+        // Check if wrapped in link to high-res image
+        var parentLink = $(this).closest('a');
+        if (parentLink.length) {
+            var href = parentLink.attr('href');
+            if (href && href.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i)) {
+                src = href;
+            }
+        }
+        
+        $('#global-lightbox-img').attr('src', src);
+        $('#global-lightbox').addClass('active').fadeIn(200);
+    });
+
+    // Close on click
+    $('#global-lightbox').click(function(e) {
+        $(this).removeClass('active').fadeOut(200);
+    });
+});
+
 $(document).ready(function() {
     
     // --- 1. CSRF Protection Setup ---

@@ -22,6 +22,9 @@ $(document).ready(function() {
             loadPunishedUsers();
             loadAuditLogs();
         }
+        if (target === '#tab-stickers') {
+            loadStickers();
+        }
     });
 
     // --- Проверка хеша при загрузке ---
@@ -71,7 +74,8 @@ $(document).ready(function() {
     function getCellValue(row, index){ return $(row).children('td').eq(index).text() }
 
     // --- AJAX обработка форм (Dashboard + User Modal + Mod Modals) ---
-    $("form").not('#profile-form').on("submit", function(e) {
+    // Исключаем специальные формы, у которых есть свои обработчики
+    $("form").not('#profile-form, #add-sticker-form, #create-pack-form, #zip-import-form').on("submit", function(e) {
         e.preventDefault(); 
         
         var $form = $(this);
@@ -143,6 +147,84 @@ $(document).ready(function() {
         });
     });
 
+    // --- Обработка добавления стикера ---
+    $('#add-sticker-form').on('submit', function(e) {
+        // We handle this inside addSticker function logic or generic form logic?
+        // Actually, generic logic handles files. But we want custom reload.
+        e.preventDefault();
+        var formData = new FormData(this);
+        var btn = $(this).find('button');
+        btn.prop('disabled', true);
+
+        $.ajax({
+            url: 'api.php',
+            type: 'POST',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function(res) {
+                if (res.success) {
+                    window.showFlashMessage(res.message, 'success');
+                    loadStickers();
+                    $('#add-sticker-form')[0].reset();
+                    // Restore pack selection
+                    $('#sticker-pack-select').val(window.currentPackId);
+                } else {
+                    window.showFlashMessage(res.message, 'error');
+                }
+            },
+            complete: function() { btn.prop('disabled', false); }
+        });
+    });
+
+    $('#create-pack-form').on('submit', function(e) {
+        e.preventDefault();
+        $.post('api.php', $(this).serialize(), function(res) {
+            if (res.success) {
+                window.showFlashMessage(res.message, 'success');
+                $('#create-pack-form')[0].reset();
+                loadPacks();
+            } else {
+                window.showFlashMessage(res.message, 'error');
+            }
+        }, 'json');
+    });
+
+    // --- Обработка формы редактирования пака ---
+    $('#edit-pack-form').on('submit', function(e) {
+        e.preventDefault();
+        $.post('api.php', $(this).serialize(), function(res) {
+            window.showFlashMessage(res.message, res.success ? 'success' : 'error');
+            if (res.success) {
+                closeModal('#pack-modal');
+                loadPacks();
+            }
+        }, 'json');
+    });
+
+    $('#zip-import-form').on('submit', function(e) {
+        e.preventDefault();
+        var formData = new FormData(this);
+        var btn = $(this).find('button');
+        btn.prop('disabled', true).text('Распаковка...');
+
+        $.ajax({
+            url: 'api.php',
+            type: 'POST',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function(res) {
+                window.showFlashMessage(res.message, res.success ? 'success' : 'error');
+                if (res.success) {
+                    $('#zip-import-form')[0].reset();
+                    loadStickers();
+                }
+            },
+            complete: function() { btn.prop('disabled', false).text('Загрузить ZIP'); }
+        });
+    });
+
     // --- Обработка формы профиля (Profile Page) ---
     $('#profile-form').on('submit', function(e) {
         e.preventDefault();
@@ -171,7 +253,10 @@ $(document).ready(function() {
 
 }); // End document.ready
 
-// --- Глобальные функции ---
+    // --- Lightbox Logic ---
+    // Removed: Using global lightbox in main.js
+    
+    // --- Глобальные функции ---
 
 function loadUsers() {
     var $tbody = $('#users-table tbody');
@@ -433,6 +518,142 @@ function unmuteUser(id) {
     $.post('api.php', { action: 'unmute_user', user_id: id }, function(res) {
         showFlashMessage(res.message, res.success ? 'success' : 'error');
         if(res.success) { loadUsers(); loadPunishedUsers(); loadAuditLogs(); }
+    }, 'json');
+}
+
+// --- Stickers Logic ---
+
+function loadStickers() {
+    var $tbody = $('#stickers-table tbody');
+    $tbody.html('<tr><td colspan="4" style="text-align:center;">Загрузка...</td></tr>');
+    
+    // Also refresh packs list to stay sync
+    loadPacks();
+
+    $.post('api.php', { action: 'get_stickers' }, function(res) {
+        if (res.success) {
+            $tbody.empty();
+            if (res.data.stickers.length === 0) {
+                $tbody.html('<tr><td colspan="4" style="text-align:center;">Нет стикеров</td></tr>');
+                return;
+            }
+            
+            res.data.stickers.forEach(function(s) {
+                var row = `
+                    <tr>
+                        <td><img src="${escapeHtml(s.image_url)}" class="sticker-preview-img" style="height: 32px; vertical-align: middle;"></td>
+                        <td>:${escapeHtml(s.code)}:</td>
+                        <td><small>${escapeHtml(s.pack_name || 'default')}</small></td>
+                        <td style="text-align: right;">
+                             <button class="btn-danger" onclick="deleteSticker(${s.id})" style="padding: 5px 10px; font-size: 0.9em;">🗑️</button>
+                        </td>
+                    </tr>
+                `;
+                $tbody.append(row);
+            });
+        } else {
+            $tbody.html(`<tr><td colspan="4" style="text-align:center; color:red;">Ошибка: ${escapeHtml(res.message)}</td></tr>`);
+        }
+    }, 'json');
+}
+
+function loadPacks() {
+    $.post('api.php', { action: 'get_packs' }, function(res) {
+        if (res.success) {
+            var $list = $('#packs-list');
+            var $select = $('#sticker-pack-select');
+            $list.empty();
+            $select.empty().append('<option value="">-- Выбрать пак --</option>');
+            
+            res.data.packs.forEach(function(p) {
+                // List Item
+                var item = $(`<li class="pack-item">
+                    <div class="pack-info">
+                        <span>${escapeHtml(p.name)} <small style="color:#999;">(${p.code})</small></span>
+                    </div>
+                    <div class="pack-actions">
+                        <button class="btn-xs btn-warning edit-pack-btn" title="Редактировать">✏️</button>
+                        <button class="btn-xs btn-danger delete-pack-btn" title="Удалить">🗑️</button>
+                    </div>
+                </li>`);
+                
+                // Click on text -> Select
+                item.find('.pack-info').click(function() {
+                    // Select logic for ZIP upload context
+                    $('#zip-upload-card').show();
+                    $('#zip-target-pack-name').text(p.name);
+                    $('#zip-pack-id').val(p.id);
+                    // Also select in dropdown
+                    $('#sticker-pack-select').val(p.id);
+                    window.currentPackId = p.id;
+                    
+                    // Highlight active item
+                    $('.pack-item').css('background', '');
+                    item.css('background', '#e8f0fe');
+                    
+                    // Filter table (Visual only for now)
+                    $('#stickers-table tbody tr').show().filter(function() {
+                        var text = $(this).find('td:nth-child(3)').text();
+                        return text !== p.name;
+                    }).hide();
+                    $('#current-pack-label').text(`(${p.name})`);
+                });
+
+                // Edit Action
+                item.find('.edit-pack-btn').click(function(e) {
+                    e.stopPropagation();
+                    openEditPackModal(p);
+                });
+
+                // Delete Action
+                item.find('.delete-pack-btn').click(function(e) {
+                    e.stopPropagation();
+                    deletePack(p.id, p.name);
+                });
+                
+                $list.append(item);
+
+                // Dropdown Option
+                $select.append(`<option value="${p.id}">${escapeHtml(p.name)}</option>`);
+            });
+        }
+    }, 'json');
+}
+
+// --- Pack Actions ---
+
+function openEditPackModal(pack) {
+    $('#edit_pack_id').val(pack.id);
+    $('#edit_pack_name').val(pack.name);
+    $('#edit_pack_code').val(pack.code);
+    $('#pack-modal').css('display', 'flex').hide().fadeIn(200);
+}
+
+function deletePack(id, name) {
+    if (!confirm(`Точно удалить пак "${name}"?\n\nВНИМАНИЕ: Все стикеры внутри будут удалены безвозвратно!`)) return;
+    
+    $.post('api.php', { action: 'delete_pack', id: id }, function(res) {
+        window.showFlashMessage(res.message, res.success ? 'success' : 'error');
+        if (res.success) {
+            loadPacks();
+            // Reset right panel if deleted pack was selected
+            if (window.currentPackId == id) {
+                $('#zip-upload-card').hide();
+                $('#sticker-pack-select').val('');
+                loadStickers(); // Refresh all
+            }
+        }
+    }, 'json');
+}
+
+function deleteSticker(id) {
+    if (!confirm('Удалить этот стикер?')) return;
+    
+    $.post('api.php', { action: 'delete_sticker', id: id }, function(res) {
+        window.showFlashMessage(res.message, res.type);
+        if (res.success) {
+            loadStickers();
+        }
     }, 'json');
 }
 

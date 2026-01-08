@@ -125,6 +125,22 @@ CREATE TABLE IF NOT EXISTS `user_options` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `chat_stickers`
+--
+
+CREATE TABLE IF NOT EXISTS `chat_stickers` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `code` varchar(50) NOT NULL COMMENT 'Код стикера без двоеточий',
+  `image_url` varchar(255) NOT NULL,
+  `collection` varchar(50) DEFAULT 'default',
+  `sort_order` int(11) DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `episode_list`
 --
 

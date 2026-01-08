@@ -1,0 +1,20 @@
+/* Stickers */
+.chat-sticker {
+    max-height: 64px; /* Standard emoji/sticker height */
+    max-width: 100%;
+    vertical-align: middle;
+    margin: 0 2px;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.chat-sticker:hover {
+    transform: scale(1.1);
+}
+
+/* Sticker Only Message (Larger) */
+/* We can detect this with JS or just generic CSS if it's the only child? 
+   Hard to do reliable "only child" for text nodes via CSS. 
+   Let's keep it simple for now. 
+*/
+

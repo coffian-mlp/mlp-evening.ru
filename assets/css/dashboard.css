@@ -255,3 +255,141 @@
         gap: 15px;
     }
 }
+
+/* --- Stickers & Packs New Styles --- */
+
+/* Pack List */
+.pack-item {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.2s;
+}
+
+.pack-item:hover {
+    background: rgba(0, 0, 0, 0.05); /* Adaptive for white/transparent bg */
+}
+
+.pack-info {
+    cursor: pointer;
+    flex: 1;
+}
+
+.pack-actions {
+    display: flex;
+    gap: 5px;
+    opacity: 0.3;
+    transition: opacity 0.2s;
+}
+
+.pack-item:hover .pack-actions {
+    opacity: 1;
+}
+
+/* Lightbox styles removed (using global lightbox.css) */
+
+.sticker-preview-img {
+    cursor: zoom-in;
+    transition: transform 0.1s;
+}
+
+.sticker-preview-img:hover {
+    transform: scale(1.1);
+}
+
+/* Small helper for action buttons in packs */
+.btn-xs {
+    padding: 2px 6px;
+    font-size: 0.8em;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    margin-left: 5px;
+}
+
+/* Modals */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 25px;
+    border-radius: 8px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    position: relative;
+}
+
+.close-modal {
+    position: absolute;
+    right: 15px;
+    top: 10px;
+    font-size: 24px;
+    cursor: pointer;
+    color: #aaa;
+}
+
+.close-modal:hover {
+    color: #333;
+}
+
+/* --- Color Picker Custom UI (Restored) --- */
+.color-picker-ui {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 5px;
+}
+
+.color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.2s, border-color 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.color-swatch:hover {
+    transform: scale(1.1);
+}
+
+.color-swatch.active {
+    border-color: #333;
+    transform: scale(1.1);
+}
+
+.manual-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: #eee;
+    padding: 2px 8px;
+    border-radius: 15px;
+}
+
+.color-manual-input {
+    border: none;
+    background: transparent;
+    width: 60px;
+    font-family: monospace;
+    font-size: 0.9em;
+    color: #333;
+    outline: none;
+    text-transform: uppercase;
+}

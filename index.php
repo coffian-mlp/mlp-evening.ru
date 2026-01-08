@@ -23,6 +23,12 @@ Auth::check(); // Init session
         $userOptions = $userManager->getUserOptions($_SESSION['user_id']);
     }
 
+    // Получаем стикеры для фронтенда
+    require_once __DIR__ . '/src/StickerManager.php';
+    $stickerManager = new StickerManager();
+    // Получаем плоский список code => url
+    $stickerMap = $stickerManager->getAllStickers(true); 
+
 $config = ConfigManager::getInstance();
 // Получаем ссылку, или ставим дефолтную, если в базе пусто
 $streamUrl = $config->getOption('stream_url', 'https://goodgame.ru/player?161438#autoplay');
@@ -143,6 +149,8 @@ require_once __DIR__ . '/src/templates/header.php';
                         window.csrfToken = <?= json_encode(Auth::generateCsrfToken()) ?>;
                         // Inject DB Options
                         window.userOptions = <?= json_encode($userOptions) ?>;
+                        // Inject Stickers
+                        window.stickerMap = <?= json_encode($stickerMap) ?>;
                     </script>
                     <div id="quote-preview-area" class="hidden"></div>
                     <!-- Toolbar -->

@@ -35,6 +35,16 @@ class UploadManager {
                  'application/msword' => 'doc',
                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx'
              ];
+        } elseif ($context === 'sticker') {
+             $this->uploadDir = __DIR__ . '/../upload/stickers/';
+             $this->maxSize = 2 * 1024 * 1024; // 2 MB max for stickers
+             $this->allowedTypes = [
+                'image/jpeg' => 'jpg',
+                'image/pjpeg' => 'jpg',
+                'image/png' => 'png',
+                'image/gif' => 'gif',
+                'image/webp' => 'webp'
+            ];
         } else {
              // Default Avatar
              $this->uploadDir = __DIR__ . '/../upload/avatars/';
@@ -99,7 +109,10 @@ class UploadManager {
         $ext = $this->allowedTypes[$mime];
         
         // Use prefix based on context
-        $prefix = ($this->context === 'chat') ? 'chat_' : 'av_';
+        if ($this->context === 'chat') $prefix = 'chat_';
+        elseif ($this->context === 'sticker') $prefix = 'st_';
+        else $prefix = 'av_';
+        
         $filename = uniqid($prefix) . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
         $targetPath = $this->uploadDir . $filename;
 
@@ -108,7 +121,10 @@ class UploadManager {
         }
 
         // Return relative path
-        $relDir = ($this->context === 'chat') ? '/upload/chat/' : '/upload/avatars/';
+        if ($this->context === 'chat') $relDir = '/upload/chat/';
+        elseif ($this->context === 'sticker') $relDir = '/upload/stickers/';
+        else $relDir = '/upload/avatars/';
+        
         return $relDir . $filename;
     }
 
@@ -152,7 +168,11 @@ class UploadManager {
         }
 
         $ext = $this->allowedTypes[$mime];
-        $prefix = ($this->context === 'chat') ? 'chat_url_' : 'av_url_';
+        
+        if ($this->context === 'chat') $prefix = 'chat_url_';
+        elseif ($this->context === 'sticker') $prefix = 'st_url_';
+        else $prefix = 'av_url_';
+
         $filename = uniqid($prefix) . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
         $targetPath = $this->uploadDir . $filename;
 
@@ -160,7 +180,10 @@ class UploadManager {
             throw new Exception("Не удалось сохранить файл на диск.");
         }
 
-        $relDir = ($this->context === 'chat') ? '/upload/chat/' : '/upload/avatars/';
+        if ($this->context === 'chat') $relDir = '/upload/chat/';
+        elseif ($this->context === 'sticker') $relDir = '/upload/stickers/';
+        else $relDir = '/upload/avatars/';
+        
         return $relDir . $filename;
     }
 }

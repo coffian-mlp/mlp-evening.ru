@@ -185,6 +185,21 @@ $(document).ready(function() {
         // Format message (handles quotes and fixes double escaping)
         // Backend already uses htmlspecialchars(), so data.message is safe HTML entities.
         function formatMessage(text) {
+            // Stickers Logic 🦄
+            // window.stickerMap is injected in index.php { code: url, ... }
+            if (window.stickerMap) {
+                // We use a regex to match :code:
+                // Note: text is already HTML escaped, so special chars are entities. 
+                // But colons are safe.
+                // We assume codes are alphanumeric + underscore.
+                text = text.replace(/:([a-zA-Z0-9_]+):/g, function(match, code) {
+                    if (window.stickerMap[code]) {
+                        return `<img src="${window.stickerMap[code]}" class="chat-sticker" alt=":${code}:" title=":${code}:">`;
+                    }
+                    return match;
+                });
+            }
+
             // New lines
             return text.replace(/\n/g, '<br>');
         }
