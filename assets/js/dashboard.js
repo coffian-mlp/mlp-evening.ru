@@ -301,12 +301,17 @@ function loadAuditLogs() {
                 }
                 
                 res.data.logs.forEach(function(log) {
+                    var targetName = escapeHtml(log.target_nickname || log.target_login || '?');
+                    var targetLink = log.target_id 
+                        ? `<a href="#" onclick="openUserCard(${log.target_id}); return false;">${targetName}</a>`
+                        : targetName;
+                        
                     var row = `
                         <tr>
                             <td>${log.id}</td>
                             <td>${escapeHtml(log.mod_nickname || log.mod_login || 'System')}</td>
                             <td><b>${escapeHtml(log.action)}</b></td>
-                            <td>${log.target_id} (${escapeHtml(log.target_nickname || log.target_login || '?')})</td>
+                            <td>${targetLink} (ID: ${log.target_id})</td>
                             <td>${escapeHtml(log.details || '')}</td>
                             <td>${log.created_at}</td>
                         </tr>
@@ -339,6 +344,20 @@ function closeUserModal() {
 
 function closeModal(selector) {
     $(selector).fadeOut(200);
+}
+
+function openUserCard(userId) {
+    // Reuse the existing editUser logic but fetch fresh data first
+    $.post('api.php', { action: 'get_users' }, function(res) {
+        if (res.success) {
+            var user = res.data.users.find(u => u.id == userId);
+            if (user) {
+                editUser(user);
+            } else {
+                window.showFlashMessage("Пользователь не найден", "error");
+            }
+        }
+    }, 'json');
 }
 
 function editUser(user) {
