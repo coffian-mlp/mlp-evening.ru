@@ -138,6 +138,43 @@ class UserManager {
         return $stmt->execute();
     }
 
+    // --- Options Methods (New) ---
+
+    public function setUserOption($userId, $key, $value) {
+        // ON DUPLICATE KEY UPDATE logic
+        $sql = "INSERT INTO user_options (user_id, option_key, option_value) VALUES (?, ?, ?)
+                ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)";
+        $stmt = $this->db->prepare($sql);
+        $stmt->bind_param("iss", $userId, $key, $value);
+        return $stmt->execute();
+    }
+
+    public function getUserOptions($userId, $optionKey = null) {
+        if ($optionKey) {
+            $stmt = $this->db->prepare("SELECT option_value FROM user_options WHERE user_id = ? AND option_key = ?");
+            $stmt->bind_param("is", $userId, $optionKey);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            if ($res && $row = $res->fetch_assoc()) {
+                return $row['option_value'];
+            }
+            return null;
+        }
+
+        $stmt = $this->db->prepare("SELECT option_key, option_value FROM user_options WHERE user_id = ?");
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        
+        $options = [];
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $options[$row['option_key']] = $row['option_value'];
+            }
+        }
+        return $options;
+    }
+
     // --- Moderation Methods ---
 
     public function getBanStatus($userId) {
@@ -225,4 +262,3 @@ class UserManager {
         return $logs;
     }
 }
-

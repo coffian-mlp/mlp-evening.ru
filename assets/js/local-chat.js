@@ -5,6 +5,87 @@ $(document).ready(function() {
     const chatMessages = document.getElementById('chat-messages');
     const chatForm = document.getElementById('chat-form');
     const chatInput = document.getElementById('chat-input');
+
+    // === Notification Logic (Title Alert) ===
+    
+    // Default Settings
+    const defaultSettings = {
+        chat_title_enabled: 'true'
+    };
+
+    // Load Settings from DB (injected via PHP) or fallback to defaults
+    // window.userOptions is populated in index.php
+    const userOpts = window.userOptions || {};
+    
+    let titleAlertEnabled = (userOpts.chat_title_enabled !== undefined) ? (userOpts.chat_title_enabled === 'true') : (defaultSettings.chat_title_enabled === 'true');
+
+    // Helper to save option
+    function saveOption(key, value) {
+        if (!window.currentUserId) return; // Only for logged in users
+        
+        $.post('api.php', {
+            action: 'save_user_option',
+            key: key,
+            value: value
+        });
+    }
+
+    // State
+    let originalTitle = document.title;
+    let unreadCount = 0;
+    let windowFocused = true;
+    let titleInterval = null;
+
+    // Track Window Focus
+    $(window).on('focus', function() {
+        windowFocused = true;
+        unreadCount = 0;
+        if (titleInterval) {
+            clearInterval(titleInterval);
+            titleInterval = null;
+        }
+        document.title = originalTitle;
+    }).on('blur', function() {
+        windowFocused = false;
+    });
+
+    function toggleTitleAlert(enable) {
+        titleAlertEnabled = enable;
+        saveOption('chat_title_enabled', enable ? 'true' : 'false');
+        updateNotificationUI();
+    }
+
+    // Update UI
+    function updateNotificationUI() {
+        const titleBtn = $('#toggle-title-alert');
+        
+        titleBtn.text(titleAlertEnabled ? '🔔' : '🔕');
+        titleBtn.toggleClass('active', titleAlertEnabled);
+
+        $('#profile-title-toggle').prop('checked', titleAlertEnabled);
+    }
+    
+    // Blink Title
+    function blinkTitle() {
+        if (!titleAlertEnabled || windowFocused) return;
+        
+        unreadCount++;
+        
+        if (!titleInterval) {
+            let isOriginal = false;
+            titleInterval = setInterval(() => {
+                document.title = isOriginal ? originalTitle : `(${unreadCount}) Новые сообщения!`;
+                isOriginal = !isOriginal;
+            }, 1000);
+        }
+    }
+
+    // Bind Events
+    $('#toggle-title-alert').on('click', function() { toggleTitleAlert(!titleAlertEnabled); });
+    $('#profile-title-toggle').on('change', function() { toggleTitleAlert(this.checked); });
+
+    // Initialize UI immediately
+    updateNotificationUI();
     
     // Auto-scroll helper
     function scrollToBottom() {
@@ -24,6 +105,11 @@ $(document).ready(function() {
         const clientNowSeconds = Math.floor(Date.now() / 1000);
         timeSkew = window.serverTime - clientNowSeconds;
     }
+    
+    // Store Page Load Server Time to filter history notifications
+    // We add a small buffer (e.g. 1 sec) so we don't miss messages arriving *right now*
+    const startClientTime = Date.now() / 1000;
+    window.chatStartServerTime = startClientTime + timeSkew;
 
     // Helper for Chat Notifications
     function showChatNotification(message, type = 'info') {
@@ -573,6 +659,16 @@ $(document).ready(function() {
                 }
             } else {
                 appendMessage(data);
+
+                // Notification Logic
+                // Only notify if message is NEW (newer than page load) and NOT from me
+                const msgDate = new Date(data.created_at);
+                const msgTime = msgDate.getTime() / 1000;
+                
+                // Compare with startServerTime
+                if (msgTime > window.chatStartServerTime && data.user_id != currentUserId) {
+                    blinkTitle();
+                }
             }
         } catch (err) {
             console.error("Chat parse error", err);

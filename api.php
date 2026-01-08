@@ -281,6 +281,24 @@ try {
             sendResponse(true, "Логи получены", 'success', ['logs' => $logs]);
             break;
 
+        case 'save_user_option':
+            $key = $_POST['key'] ?? '';
+            $value = $_POST['value'] ?? '';
+            
+            // Whitelist keys to prevent garbage
+            $allowedKeys = ['chat_title_enabled'];
+            if (!in_array($key, $allowedKeys)) {
+                sendResponse(false, "Некорректная настройка", 'error');
+            }
+            
+            $userManager = new UserManager();
+            if ($userManager->setUserOption($_SESSION['user_id'], $key, $value)) {
+                 sendResponse(true, "Saved");
+            } else {
+                 sendResponse(false, "DB Error", 'error');
+            }
+            break;
+
         case 'save_user':
             if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
             

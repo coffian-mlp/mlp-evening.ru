@@ -111,6 +111,22 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `user_options`
+--
+
+CREATE TABLE IF NOT EXISTS `user_options` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `user_id` INT NOT NULL,
+  `option_key` VARCHAR(50) NOT NULL,
+  `option_value` TEXT,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  UNIQUE KEY `unique_user_option` (`user_id`, `option_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `episode_list`
 --
 

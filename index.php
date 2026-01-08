@@ -13,12 +13,14 @@ require_once __DIR__ . '/src/UserManager.php'; // Добавляем UserManager
 
 Auth::check(); // Init session
 
-// Получаем данные текущего пользователя для модалки профиля
-$currentUser = null;
-if (Auth::check()) {
-    $userManager = new UserManager();
-    $currentUser = $userManager->getUserById($_SESSION['user_id']);
-}
+    // Получаем данные текущего пользователя для модалки профиля
+    $currentUser = null;
+    $userOptions = [];
+    if (Auth::check()) {
+        $userManager = new UserManager();
+        $currentUser = $userManager->getUserById($_SESSION['user_id']);
+        $userOptions = $userManager->getUserOptions($_SESSION['user_id']);
+    }
 
 $manager = new EpisodeManager();
 // Получаем ссылку, или ставим дефолтную, если в базе пусто
@@ -115,10 +117,20 @@ require_once __DIR__ . '/src/templates/header.php';
                 </div>
             </div>
 
+            <div class="chat-top-bar">
+                <span class="chat-title">Чат</span>
+                <div class="chat-settings">
+                    <button id="toggle-title-alert" class="icon-btn" title="Моргание вкладки">🔔</button>
+                </div>
+            </div>
             <div class="chat-messages" id="chat-messages">
                 <div class="chat-welcome">Добро пожаловать в Поняшный чат! 🦄<br>Не стесняйся, пиши!</div>
             </div>
             <div class="chat-input-area">
+                <script>
+                    // Global Config
+                    window.serverTime = <?= time() ?>;
+                </script>
                  <?php if (isset($_SESSION['user_id'])): ?>
                     <script>
                         // Global User Info for JS
@@ -128,6 +140,8 @@ require_once __DIR__ . '/src/templates/header.php';
                         window.currentUsername = <?= json_encode($_SESSION['username']) ?>;
                         window.currentUserNickname = <?= json_encode($currentUser['nickname'] ?? $_SESSION['username']) ?>;
                         window.csrfToken = <?= json_encode(Auth::generateCsrfToken()) ?>;
+                        // Inject DB Options
+                        window.userOptions = <?= json_encode($userOptions) ?>;
                     </script>
                     <div id="quote-preview-area" class="hidden"></div>
                     <!-- Toolbar -->
@@ -261,6 +275,15 @@ require_once __DIR__ . '/src/templates/header.php';
             <div class="form-group" style="margin-bottom: 15px;">
                  <label class="form-label">Сменить пароль (если хочешь)</label>
                  <input type="password" name="password" class="form-input" placeholder="Новый пароль">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label class="form-label">Уведомления</label>
+                <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" id="profile-title-toggle" style="margin-right: 5px;"> Моргание вкладки
+                    </label>
+                </div>
             </div>
 
             <button type="submit" class="btn-primary btn-block">Сохранить</button>
