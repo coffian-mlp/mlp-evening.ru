@@ -1,32 +1,13 @@
 <?php
 
 require_once __DIR__ . '/Database.php';
+require_once __DIR__ . '/ConfigManager.php';
 
 class EpisodeManager {
     private $db;
 
     public function __construct() {
         $this->db = Database::getInstance()->getConnection();
-    }
-
-    public function getOption($key, $default = null) {
-        $stmt = $this->db->prepare("SELECT value, updated_at FROM site_options WHERE key_name = ?");
-        $stmt->bind_param("s", $key);
-        $stmt->execute();
-        $res = $stmt->get_result();
-        
-        if ($res && $row = $res->fetch_assoc()) {
-            return $row['value'];
-        }
-        return $default;
-    }
-
-    public function setOption($key, $value) {
-        $stmt = $this->db->prepare("INSERT INTO site_options (key_name, value, updated_at) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE value = ?, updated_at = NOW()");
-        $stmt->bind_param("sss", $key, $value, $value);
-        $result = $stmt->execute();
-        $stmt->close();
-        return $result;
     }
 
     public function getEveningPlaylist($limit = 8) {
@@ -38,11 +19,9 @@ class EpisodeManager {
     }
 
     public function getSavedPlaylist() {
-        $stmt = $this->db->prepare("SELECT value, updated_at FROM site_options WHERE key_name = 'current_playlist'");
-        $stmt->execute();
-        $res = $stmt->get_result();
+        $row = ConfigManager::getInstance()->getOptionDetails('current_playlist');
         
-        if ($res && $row = $res->fetch_assoc()) {
+        if ($row) {
             $data = json_decode($row['value'], true);
             if (is_array($data)) {
                 $data['_meta'] = [
@@ -60,7 +39,7 @@ class EpisodeManager {
         $playlist = $this->generateWeightedPlaylist($limit);
         
         $json = json_encode($playlist);
-        $this->setOption('current_playlist', $json);
+        ConfigManager::getInstance()->setOption('current_playlist', $json);
         
         $playlist['_meta'] = [
             'updated_at' => date('Y-m-d H:i:s'),

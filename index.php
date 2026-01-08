@@ -8,6 +8,7 @@ $bodyClass = 'player-layout';
 
 // Подключаем менеджер для получения ссылки из БД
 require_once __DIR__ . '/src/EpisodeManager.php';
+require_once __DIR__ . '/src/ConfigManager.php';
 require_once __DIR__ . '/src/Auth.php';
 require_once __DIR__ . '/src/UserManager.php'; // Добавляем UserManager
 
@@ -22,10 +23,10 @@ Auth::check(); // Init session
         $userOptions = $userManager->getUserOptions($_SESSION['user_id']);
     }
 
-$manager = new EpisodeManager();
+$config = ConfigManager::getInstance();
 // Получаем ссылку, или ставим дефолтную, если в базе пусто
-$streamUrl = $manager->getOption('stream_url', 'https://goodgame.ru/player?161438#autoplay');
-$chatMode = $manager->getOption('chat_mode', 'local');
+$streamUrl = $config->getOption('stream_url', 'https://goodgame.ru/player?161438#autoplay');
+$chatMode = $config->getOption('chat_mode', 'local');
 
 // Конфигурируем флаги для шаблонов
 $enableLocalChat = ($chatMode === 'local');

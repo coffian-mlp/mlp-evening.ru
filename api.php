@@ -5,6 +5,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', 0);
 
 require_once __DIR__ . '/src/EpisodeManager.php';
+require_once __DIR__ . '/src/ConfigManager.php';
 require_once __DIR__ . '/src/Auth.php';
 require_once __DIR__ . '/src/ChatManager.php';
 require_once __DIR__ . '/src/UserManager.php';
@@ -177,11 +178,13 @@ try {
 
     switch ($action) {
         case 'update_settings':
+            $config = ConfigManager::getInstance();
+            
             if (isset($_POST['stream_url'])) {
                 $url = trim($_POST['stream_url']);
                 // Простейшая валидация
                 if (filter_var($url, FILTER_VALIDATE_URL)) {
-                    $manager->setOption('stream_url', $url);
+                    $config->setOption('stream_url', $url);
                     // Не возвращаем сразу, вдруг еще настройки есть
                 } else {
                     sendResponse(false, "❌ Некорректный формат ссылки.", 'error');
@@ -192,14 +195,14 @@ try {
                 $mode = $_POST['chat_mode'];
                 $validModes = ['local', 'chatbro', 'none'];
                 if (in_array($mode, $validModes)) {
-                    $manager->setOption('chat_mode', $mode);
+                    $config->setOption('chat_mode', $mode);
                 }
             }
             
             if (isset($_POST['chat_rate_limit'])) {
                 $limit = (int)$_POST['chat_rate_limit'];
                 if ($limit < 0) $limit = 0;
-                $manager->setOption('chat_rate_limit', $limit);
+                $config->setOption('chat_rate_limit', $limit);
             }
             
             sendResponse(true, "✅ Настройки обновлены!");
@@ -490,8 +493,7 @@ try {
             }
             
             $chat = new ChatManager();
-            $manager = new EpisodeManager(); // Need to get option
-            $rateLimit = (int)$manager->getOption('chat_rate_limit', 0);
+            $rateLimit = (int)ConfigManager::getInstance()->getOption('chat_rate_limit', 0);
             
             if (!$chat->checkRateLimit($userId, $rateLimit)) {
                 sendResponse(false, "Не так быстро, сахарок! Подожди $rateLimit сек.", 'error');

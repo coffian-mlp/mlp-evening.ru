@@ -1,20 +1,22 @@
 <?php
 
 require_once __DIR__ . '/src/EpisodeManager.php';
+require_once __DIR__ . '/src/ConfigManager.php';
 require_once __DIR__ . '/src/Auth.php';
 
 // 🔒 ЗАЩИТА: Только для авторизованных
 Auth::requireAdmin();
 
 $manager = new EpisodeManager();
+$config = ConfigManager::getInstance();
 
     // Получаем данные
     $eveningPlaylist = $manager->getEveningPlaylist();
     $allEpisodes = $manager->getAllEpisodes();
     $watchHistory = $manager->getWatchHistory();
-    $currentStreamUrl = $manager->getOption('stream_url', 'https://goodgame.ru/player?161438#autoplay');
-    $currentChatMode = $manager->getOption('chat_mode', 'local');
-    $currentRateLimit = $manager->getOption('chat_rate_limit', 0);
+    $currentStreamUrl = $config->getOption('stream_url', 'https://goodgame.ru/player?161438#autoplay');
+    $currentChatMode = $config->getOption('chat_mode', 'local');
+    $currentRateLimit = $config->getOption('chat_rate_limit', 0);
 
 // Отделяем метаданные и эпизоды
 $playlistMeta = $eveningPlaylist['_meta'] ?? null;
