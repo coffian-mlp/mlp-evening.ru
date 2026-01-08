@@ -3,6 +3,7 @@
 
 require_once __DIR__ . '/src/ChatManager.php';
 require_once __DIR__ . '/src/Auth.php';
+require_once __DIR__ . '/src/UserManager.php';
 
 // Disable time limit for long-running script (or set to reasonable value like 60s for shared hosting)
 set_time_limit(0); 
@@ -16,19 +17,13 @@ header('X-Accel-Buffering: no'); // Nginx specific: disable buffering
 // 🔒 Optional: Restrict access to logged in users
 if (!Auth::check()) {
     // Если мы хотим разрешить чтение всем, то просто убираем этот блок или комментируем.
-    // Но если логика требует авторизации:
-    /*
-    echo "event: error\n";
-    echo "data: Unauthorized\n\n";
-    flush();
-    exit();
-    */
 }
 
 // ⚡ ВАЖНО: Закрываем сессию, чтобы не блокировать другие запросы (AJAX отправку сообщений)!
 session_write_close();
 
 $chat = new ChatManager();
+$userManager = new UserManager();
 $lastId = isset($_SERVER["HTTP_LAST_EVENT_ID"]) ? (int)$_SERVER["HTTP_LAST_EVENT_ID"] : 0;
 // Мы можем использовать отдельный заголовок или параметр для отслеживания времени последнего обновления,
 // но стандарт SSE использует только Last-Event-ID.
@@ -58,11 +53,42 @@ if ($lastId === 0) {
 // Main loop
 $start = time();
 $maxExecTime = 50; // Restart every 50 seconds to avoid timeouts on shared hosting
+$lastOnlineUpdate = 0; // Throttling
+
+// Identify current user for last_seen
+$currentUserId = null;
+// Auth check was done above, but session closed. Auth::check() relies on session.
+// Wait, session_write_close() saves data but keeps $_SESSION array available in memory for read?
+// Yes, usually.
+if (Auth::check()) {
+    $currentUserId = $_SESSION['user_id'];
+    try {
+        $userManager->updateLastSeen($currentUserId);
+    } catch (Exception $e) { /* Ignore DB error if col missing */ }
+}
 
 while (true) {
     if (time() - $start > $maxExecTime) {
         // Graceful exit to let client reconnect
         break;
+    }
+
+    // --- Online Status Update (Every 10s) ---
+    if (time() - $lastOnlineUpdate > 10) {
+        try {
+            if ($currentUserId) {
+                $userManager->updateLastSeen($currentUserId);
+            }
+            
+            $onlineUsers = $userManager->getOnlineUsers(2); // 2 minutes window
+            echo "event: online_count\n";
+            echo "data: " . json_encode(['count' => count($onlineUsers), 'users' => $onlineUsers]) . "\n\n";
+            flush();
+            
+            $lastOnlineUpdate = time();
+        } catch (Exception $e) {
+            // Ignore if DB fails (e.g. column missing)
+        }
     }
 
     // Ищем новые сообщения (ID > lastId) ИЛИ измененные (edited_at > lastCheckTime)

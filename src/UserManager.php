@@ -289,4 +289,40 @@ class UserManager {
         }
         return $logs;
     }
+
+    // --- Online Status Methods ---
+
+    public function updateLastSeen($userId) {
+        // Use UTC timestamp
+        $now = gmdate('Y-m-d H:i:s');
+        $stmt = $this->db->prepare("UPDATE users SET last_seen = ? WHERE id = ?");
+        $stmt->bind_param("si", $now, $userId);
+        return $stmt->execute();
+    }
+
+    public function getOnlineUsers($minutes = 5) {
+        // Users active in last N minutes
+        // We use UTC for comparison
+        $threshold = gmdate('Y-m-d H:i:s', time() - ($minutes * 60));
+        
+        $sql = "SELECT u.id, u.nickname, uo_color.option_value as chat_color
+                FROM users u
+                LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
+                WHERE u.last_seen > ?
+                ORDER BY u.nickname ASC";
+                
+        $stmt = $this->db->prepare($sql);
+        $stmt->bind_param("s", $threshold);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        
+        $users = [];
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                if (empty($row['chat_color'])) $row['chat_color'] = '#6d2f8e';
+                $users[] = $row;
+            }
+        }
+        return $users;
+    }
 }

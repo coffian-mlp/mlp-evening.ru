@@ -144,7 +144,7 @@ require_once __DIR__ . '/src/templates/header.php';
             </div>
 
             <div class="chat-top-bar">
-                <span class="chat-title">Чат</span>
+                <span class="chat-title">Чат <small id="online-counter" style="font-size: 0.7em; color: #aaa; margin-left: 5px; cursor: help;" title="Кто здесь?">(0)</small></span>
                 <div class="chat-settings">
                     <button id="toggle-title-alert" class="icon-btn" title="Моргание вкладки">🔔</button>
                 </div>

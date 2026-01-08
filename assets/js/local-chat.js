@@ -673,6 +673,30 @@ $(document).ready(function() {
     // We use Last-Event-ID automatically handled by browser/EventSource
     const evtSource = new EventSource('/chat_stream.php');
 
+    // Handle Online Count Event
+    evtSource.addEventListener('online_count', function(e) {
+        try {
+            const data = JSON.parse(e.data);
+            const count = data.count;
+            const users = data.users;
+            
+            const counterEl = document.getElementById('online-counter');
+            if (counterEl) {
+                counterEl.textContent = `(${count})`;
+                
+                // Tooltip with names
+                if (users && users.length > 0) {
+                    const names = users.map(u => u.nickname).join(', ');
+                    counterEl.title = "Онлайн: " + names;
+                } else {
+                    counterEl.title = "Никого нет... 👻";
+                }
+            }
+        } catch (err) {
+            console.error("Online parse error", err);
+        }
+    });
+
     evtSource.onmessage = function(e) {
         try {
             // Keepalive check
