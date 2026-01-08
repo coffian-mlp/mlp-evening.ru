@@ -88,6 +88,7 @@ require_once __DIR__ . '/src/templates/header.php';
             </div>
             <div class="chat-input-area">
                  <?php if (isset($_SESSION['user_id'])): ?>
+                    <div id="quote-preview-area" class="hidden"></div>
                     <form id="chat-form">
                         <input type="text" id="chat-input" placeholder="Напиши что-нибудь..." autocomplete="off">
                         <button type="submit">Отправить</button>

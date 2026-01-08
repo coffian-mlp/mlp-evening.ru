@@ -1,4 +1,5 @@
 // Local Chat Logic using SSE (Server-Sent Events)
+// Updated by Twilight Sparkle
 
 $(document).ready(function() {
     const chatMessages = document.getElementById('chat-messages');
@@ -72,11 +73,49 @@ $(document).ready(function() {
         const avatarUrl = data.avatar_url ? escapeHtml(data.avatar_url) : '/assets/img/default-avatar.png'; // Fallback image?
         const avatarHtml = `<img src="${avatarUrl}" class="chat-avatar" alt="">`;
 
-        // Actions (Edit/Delete)
+        // Format message (handles quotes and fixes double escaping)
+        // Backend already uses htmlspecialchars(), so data.message is safe HTML entities.
+        function formatMessage(text) {
+            // New lines
+            return text.replace(/\n/g, '<br>');
+        }
+        
+        // Quoted Cards HTML
+        let quotesHtml = '';
+        if (data.quotes && data.quotes.length > 0) {
+            data.quotes.forEach(q => {
+                 const qAvatar = q.avatar_url ? escapeHtml(q.avatar_url) : '/assets/img/default-avatar.png';
+                 const qColor = q.chat_color ? `style="color: ${escapeHtml(q.chat_color)}"` : '';
+                 let qContent = escapeHtml(q.message || '');
+                 if (q.deleted) {
+                     qContent = '<em style="color:#999;">Сообщение удалено</em>';
+                 }
+                 
+                 quotesHtml += `
+                    <div class="quote-card" data-id="${q.id}">
+                        <div class="quote-header">
+                            <span class="quote-author" ${qColor}>${escapeHtml(q.username)}</span>
+                            <div style="display:flex; gap:5px; align-items:center;">
+                                <span>${new Date(q.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                <a href="#" class="quote-link-btn" title="Перейти к сообщению" data-target-id="${q.id}">🔗</a>
+                            </div>
+                        </div>
+                        <div class="quote-content">${qContent}</div>
+                    </div>
+                 `;
+            });
+        }
+
+        // Actions (Edit/Delete/Quote)
         let actionsHtml = '';
         const isMyMessage = (currentUserId && parseInt(data.user_id) === parseInt(currentUserId));
         const canModerate = (currentUserRole === 'admin' || currentUserRole === 'moderator');
         
+        // Quote button (Available for everyone if not deleted)
+        if (!data.deleted) {
+            actionsHtml += `<button class="chat-action-btn quote-btn" title="Цитировать">❝</button>`;
+        }
+
         // Fix for Timezone Diff using Skew:
         // We want to compare Message Time vs Server Time (calculated via client time + skew)
         // Message Date (object) is correct local time (from UTC).
@@ -144,6 +183,7 @@ $(document).ready(function() {
                             <span class="timestamp" title="${data.created_at}">${timeStr}</span>
                         </span>
                     </div>
+                    ${quotesHtml}
                     <div class="chat-text" style="color:#999; font-style:italic;">
                         Сообщение удалено
                     </div>
@@ -165,8 +205,9 @@ $(document).ready(function() {
                             <span class="timestamp" title="${data.created_at}">${timeStr}</span>
                         </span>
                     </div>
+                    ${quotesHtml}
                     <div class="chat-text">
-                        ${escapeHtml(data.message)} ${editedMark} ${debugInfo}
+                        ${formatMessage(data.message)} ${editedMark} ${debugInfo}
                     </div>
                 </div>
             `;
@@ -259,6 +300,82 @@ $(document).ready(function() {
         // Browser handles reconnection automatically, but we can update UI state if needed
     };
 
+    // State for quoting
+    let pendingQuotes = [];
+    const quotePreviewArea = $('#quote-preview-area');
+    
+    // Update Quote Preview UI
+    function updateQuotePreview() {
+        quotePreviewArea.empty();
+        if (pendingQuotes.length === 0) {
+            quotePreviewArea.addClass('hidden');
+            return;
+        }
+        
+        quotePreviewArea.removeClass('hidden');
+        pendingQuotes.forEach(q => {
+            const item = $(`
+                <div class="quote-preview-item">
+                    <span><b>${escapeHtml(q.username)}</b>: ${escapeHtml(q.text.substring(0, 20))}${q.text.length>20?'...':''}</span>
+                    <span class="quote-preview-remove" data-id="${q.id}">&times;</span>
+                </div>
+            `);
+            quotePreviewArea.append(item);
+        });
+    }
+
+    // Handle Remove Quote
+    $(document).on('click', '.quote-preview-remove', function() {
+        const id = $(this).data('id');
+        pendingQuotes = pendingQuotes.filter(q => q.id != id);
+        updateQuotePreview();
+    });
+
+    // Handle Quote Button
+    $(document).on('click', '.quote-btn', function(e) {
+        e.preventDefault();
+        const msgDiv = $(this).closest('.chat-message');
+        const msgId = msgDiv.attr('data-id');
+        const username = msgDiv.find('.username').text().trim();
+        
+        // Get text, remove .edited-mark or other children if any
+        let text = msgDiv.find('.chat-text').clone().children().remove().end().text().trim();
+        
+        // Avoid duplicate quotes
+        if (!pendingQuotes.find(q => q.id == msgId)) {
+            pendingQuotes.push({ id: msgId, username: username, text: text });
+            updateQuotePreview();
+            chatInput.focus();
+        }
+    });
+
+    // Handle Link to Message
+    $(document).on('click', '.quote-link-btn', function(e) {
+        e.preventDefault();
+        e.stopPropagation(); // Stop card expand
+        
+        const targetId = $(this).data('targetId');
+        const targetEl = $(`.chat-message[data-id="${targetId}"]`);
+        
+        if (targetEl.length) {
+            targetEl[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetEl.addClass('highlight-message');
+            setTimeout(() => targetEl.removeClass('highlight-message'), 2000);
+        } else {
+            showChatNotification("Сообщение не найдено (возможно, оно слишком старое)", 'info');
+        }
+    });
+
+    // Handle Click on Quote Card (Expand)
+    $(document).on('click', '.quote-card', function() {
+        const content = $(this).find('.quote-content');
+        if (content.hasClass('expanded')) {
+            content.removeClass('expanded');
+        } else {
+            content.addClass('expanded');
+        }
+    });
+
     // 2. Handle Send Message
     if (chatForm) {
         chatForm.addEventListener('submit', function(e) {
@@ -274,10 +391,21 @@ $(document).ready(function() {
                 message: message
             };
             if (editingId) data.message_id = editingId;
+            
+            // Add Quoted IDs
+            if (pendingQuotes.length > 0 && !editingId) {
+                 const ids = pendingQuotes.map(q => q.id);
+                 data.quoted_msg_ids = ids.join(',');
+            }
 
             const oldVal = chatInput.value;
             chatInput.value = '';
             
+            // Clear quotes locally
+            const oldQuotes = [...pendingQuotes];
+            pendingQuotes = [];
+            updateQuotePreview();
+
             // Clear editing state visual
             if (editingId) {
                 chatInput.removeAttribute('data-editing-id');
@@ -293,11 +421,15 @@ $(document).ready(function() {
                     if (!response.success) {
                         showChatNotification(response.message, 'error');
                         chatInput.value = oldVal; // Restore if failed
+                        pendingQuotes = oldQuotes; // Restore quotes
+                        updateQuotePreview();
                     }
                 },
                 error: function() {
                     showChatNotification("Ошибка сети. Попробуй позже.", 'error');
                     chatInput.value = oldVal;
+                    pendingQuotes = oldQuotes;
+                    updateQuotePreview();
                 }
             });
         });

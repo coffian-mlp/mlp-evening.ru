@@ -365,6 +365,12 @@ try {
             $userId = $_SESSION['user_id'];
             $username = $_SESSION['username'];
             
+            // Handle Quoted Messages
+            $quotedMsgIds = [];
+            if (!empty($_POST['quoted_msg_ids'])) {
+                $quotedMsgIds = explode(',', $_POST['quoted_msg_ids']);
+            }
+            
             $chat = new ChatManager();
             $manager = new EpisodeManager(); // Need to get option
             $rateLimit = (int)$manager->getOption('chat_rate_limit', 0);
@@ -373,7 +379,7 @@ try {
                 sendResponse(false, "Не так быстро, сахарок! Подожди $rateLimit сек.", 'error');
             }
 
-            if ($chat->addMessage($userId, $username, $message)) {
+            if ($chat->addMessage($userId, $username, $message, $quotedMsgIds)) {
                 sendResponse(true, "Сообщение отправлено");
             } else {
                 sendResponse(false, "Ой, что-то пошло не так при отправке...", 'error');

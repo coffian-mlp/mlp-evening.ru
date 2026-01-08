@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="/assets/css/fonts.css">
 
     <link rel="stylesheet" href="/assets/css/main.css">
+    <link rel="stylesheet" href="/assets/css/quotes.css">
     <?php if (isset($extraCss)) echo $extraCss; ?>
     
     <?php if (isset($_SESSION['user_id'])): ?>

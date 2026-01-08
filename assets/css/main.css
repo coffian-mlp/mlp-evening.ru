@@ -436,6 +436,17 @@ body.dashboard-layout {
     color: #333;
 }
 
+.chat-quote {
+    border-left: 3px solid #6d2f8e;
+    background: #f9f9f9;
+    padding: 5px 10px;
+    margin: 5px 0;
+    color: #555;
+    font-size: 0.9em;
+    font-style: italic;
+    white-space: pre-wrap;
+}
+
 .chat-actions {
     opacity: 0;
     transition: opacity 0.2s;

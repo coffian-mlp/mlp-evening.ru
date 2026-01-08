@@ -27,7 +27,7 @@ class ChatManager {
         return true;
     }
 
-    public function addMessage($userId, $username, $message) {
+    public function addMessage($userId, $username, $message, $quotedMsgIds = []) {
         $message = trim($message);
         if (empty($message)) {
             return false;
@@ -36,9 +36,23 @@ class ChatManager {
         // Basic HTML escaping to prevent XSS
         $message = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
 
+        $quotedJson = null;
+        if (!empty($quotedMsgIds) && is_array($quotedMsgIds)) {
+            // Validate that all IDs are integers
+            $quotedMsgIds = array_filter($quotedMsgIds, 'is_numeric');
+            $quotedMsgIds = array_map('intval', $quotedMsgIds);
+            if (!empty($quotedMsgIds)) {
+                // Ensure unique IDs
+                $quotedMsgIds = array_unique($quotedMsgIds);
+                // Re-index array
+                $quotedMsgIds = array_values($quotedMsgIds);
+                $quotedJson = json_encode($quotedMsgIds);
+            }
+        }
+
         // Используем UTC для хранения!
-        $stmt = $this->db->prepare("INSERT INTO chat_messages (user_id, username, message, created_at) VALUES (?, ?, ?, UTC_TIMESTAMP())");
-        $stmt->bind_param("iss", $userId, $username, $message);
+        $stmt = $this->db->prepare("INSERT INTO chat_messages (user_id, username, message, created_at, quoted_msg_ids) VALUES (?, ?, ?, UTC_TIMESTAMP(), ?)");
+        $stmt->bind_param("isss", $userId, $username, $message, $quotedJson);
         $result = $stmt->execute();
         $stmt->close();
         return $result;
@@ -132,6 +146,48 @@ class ChatManager {
     }
 
     private function processMessages($messages) {
+        // Collect all quoted message IDs
+        $allQuotedIds = [];
+        foreach ($messages as $msg) {
+            if (!empty($msg['quoted_msg_ids'])) {
+                $ids = json_decode($msg['quoted_msg_ids'], true);
+                if (is_array($ids)) {
+                    $allQuotedIds = array_merge($allQuotedIds, $ids);
+                }
+            }
+        }
+        
+        $quotedDetails = [];
+        if (!empty($allQuotedIds)) {
+            $allQuotedIds = array_unique($allQuotedIds);
+            // Fetch details for these messages
+            // Beware of too many IDs, but usually it's small.
+            $idsStr = implode(',', array_map('intval', $allQuotedIds));
+            
+            if ($idsStr) {
+                // Fetch minimal details for quoting
+                $qQuery = "SELECT cm.id, cm.username, cm.message, cm.created_at, cm.is_deleted, u.chat_color, u.avatar_url 
+                           FROM chat_messages cm
+                           LEFT JOIN users u ON cm.user_id = u.id
+                           WHERE cm.id IN ($idsStr)";
+                $qRes = $this->db->query($qQuery);
+                if ($qRes) {
+                    while ($qRow = $qRes->fetch_assoc()) {
+                        // Format date for quoted msg too
+                         if ($qRow['created_at']) {
+                            $qRow['created_at'] = date('Y-m-d\TH:i:s\Z', strtotime($qRow['created_at']));
+                        }
+                        // Handle deleted content
+                        if ($qRow['is_deleted']) {
+                             $qRow['message'] = '<em style="color:#999;">Сообщение удалено</em>';
+                             $qRow['deleted'] = true;
+                        }
+                        $quotedDetails[$qRow['id']] = $qRow;
+                    }
+                }
+            }
+        }
+
         foreach ($messages as &$msg) {
             // Форматируем дату в ISO 8601 UTC (добавляем Z)
             if ($msg['created_at']) {
@@ -152,6 +208,19 @@ class ChatManager {
                 $msg['message'] = '<em style="color:#999;">Сообщение удалено</em>';
                 // Можно добавить флаг, чтобы фронтенд знал
                 $msg['deleted'] = true;
+            }
+
+            // Attach Quoted Messages
+            $msg['quotes'] = [];
+            if (!empty($msg['quoted_msg_ids'])) {
+                $ids = json_decode($msg['quoted_msg_ids'], true);
+                if (is_array($ids)) {
+                    foreach ($ids as $qid) {
+                        if (isset($quotedDetails[$qid])) {
+                            $msg['quotes'][] = $quotedDetails[$qid];
+                        }
+                    }
+                }
             }
         }
         return $messages;
