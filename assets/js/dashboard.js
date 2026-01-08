@@ -179,27 +179,51 @@ $(document).ready(function() {
 
     $('#create-pack-form').on('submit', function(e) {
         e.preventDefault();
-        $.post('api.php', $(this).serialize(), function(res) {
-            if (res.success) {
-                window.showFlashMessage(res.message, 'success');
-                $('#create-pack-form')[0].reset();
-                loadPacks();
-            } else {
-                window.showFlashMessage(res.message, 'error');
-            }
-        }, 'json');
+        var formData = new FormData(this);
+        var btn = $(this).find('button');
+        btn.prop('disabled', true);
+        
+        $.ajax({
+            url: 'api.php',
+            type: 'POST',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function(res) {
+                if (res.success) {
+                    window.showFlashMessage(res.message, 'success');
+                    $('#create-pack-form')[0].reset();
+                    loadPacks();
+                } else {
+                    window.showFlashMessage(res.message, 'error');
+                }
+            },
+            complete: function() { btn.prop('disabled', false); }
+        });
     });
 
     // --- Обработка формы редактирования пака ---
     $('#edit-pack-form').on('submit', function(e) {
         e.preventDefault();
-        $.post('api.php', $(this).serialize(), function(res) {
-            window.showFlashMessage(res.message, res.success ? 'success' : 'error');
-            if (res.success) {
-                closeModal('#pack-modal');
-                loadPacks();
-            }
-        }, 'json');
+        var formData = new FormData(this);
+        var btn = $(this).find('button');
+        btn.prop('disabled', true);
+        
+        $.ajax({
+            url: 'api.php',
+            type: 'POST',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function(res) {
+                window.showFlashMessage(res.message, res.success ? 'success' : 'error');
+                if (res.success) {
+                    closeModal('#pack-modal');
+                    loadPacks();
+                }
+            },
+            complete: function() { btn.prop('disabled', false); }
+        });
     });
 
     $('#zip-import-form').on('submit', function(e) {
@@ -567,8 +591,13 @@ function loadPacks() {
             
             res.data.packs.forEach(function(p) {
                 // List Item
+                var iconHtml = p.icon_url 
+                    ? `<img src="${escapeHtml(p.icon_url)}" style="width:20px; height:20px; margin-right:5px; vertical-align:middle; border-radius:3px;">` 
+                    : '';
+                    
                 var item = $(`<li class="pack-item">
                     <div class="pack-info">
+                        ${iconHtml}
                         <span>${escapeHtml(p.name)} <small style="color:#999;">(${p.code})</small></span>
                     </div>
                     <div class="pack-actions">

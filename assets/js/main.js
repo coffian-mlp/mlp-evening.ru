@@ -3,7 +3,8 @@
 // --- Global Lightbox ---
 $(document).ready(function() {
     // Click on Chat Images & Stickers
-    $(document).on('click', '.chat-message img:not(.emoji), .sticker-preview-img', function(e) {
+    // Targets: Chat images (excluding emojis and stickers) AND Dashboard sticker previews
+    $(document).on('click', '.chat-message img:not(.emoji):not(.chat-sticker), .sticker-preview-img', function(e) {
         // Prevent default link navigation if wrapped in <a>
         e.preventDefault();
         

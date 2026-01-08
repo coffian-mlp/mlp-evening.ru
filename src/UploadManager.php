@@ -45,6 +45,16 @@ class UploadManager {
                 'image/gif' => 'gif',
                 'image/webp' => 'webp'
             ];
+        } elseif ($context === 'icon') {
+             $this->uploadDir = __DIR__ . '/../upload/icons/';
+             $this->maxSize = 1 * 1024 * 1024; // 1 MB max for icons
+             $this->allowedTypes = [
+                'image/jpeg' => 'jpg',
+                'image/pjpeg' => 'jpg',
+                'image/png' => 'png',
+                'image/gif' => 'gif',
+                'image/webp' => 'webp'
+            ];
         } else {
              // Default Avatar
              $this->uploadDir = __DIR__ . '/../upload/avatars/';
@@ -123,6 +133,7 @@ class UploadManager {
         // Return relative path
         if ($this->context === 'chat') $relDir = '/upload/chat/';
         elseif ($this->context === 'sticker') $relDir = '/upload/stickers/';
+        elseif ($this->context === 'icon') $relDir = '/upload/icons/';
         else $relDir = '/upload/avatars/';
         
         return $relDir . $filename;
@@ -171,6 +182,7 @@ class UploadManager {
         
         if ($this->context === 'chat') $prefix = 'chat_url_';
         elseif ($this->context === 'sticker') $prefix = 'st_url_';
+        elseif ($this->context === 'icon') $prefix = 'icon_url_';
         else $prefix = 'av_url_';
 
         $filename = uniqid($prefix) . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
@@ -182,6 +194,7 @@ class UploadManager {
 
         if ($this->context === 'chat') $relDir = '/upload/chat/';
         elseif ($this->context === 'sticker') $relDir = '/upload/stickers/';
+        elseif ($this->context === 'icon') $relDir = '/upload/icons/';
         else $relDir = '/upload/avatars/';
         
         return $relDir . $filename;

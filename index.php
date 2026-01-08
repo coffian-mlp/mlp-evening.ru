@@ -26,8 +26,27 @@ Auth::check(); // Init session
     // Получаем стикеры для фронтенда
     require_once __DIR__ . '/src/StickerManager.php';
     $stickerManager = new StickerManager();
-    // Получаем плоский список code => url
-    $stickerMap = $stickerManager->getAllStickers(true); 
+    
+    // 1. Full list for Picker (Grouped by Pack)
+    // We'll fetch flat list and group in PHP or JS. PHP is easier to keep JS clean.
+    // Let's fetch packs and stickers separately.
+    $packs = $stickerManager->getAllPacks();
+    $allStickers = $stickerManager->getAllStickers(true); // Flat list
+    
+    // Group stickers by pack_id
+    $stickersByPack = [];
+    $stickerMap = []; // For fast lookup in chat
+    
+    foreach ($allStickers as $s) {
+        $stickersByPack[$s['pack_id']][] = $s;
+        $stickerMap[$s['code']] = $s['image_url'];
+    }
+    
+    // Combine into a structure for Frontend
+    $frontendStickerData = [
+        'packs' => $packs,
+        'stickers' => $stickersByPack
+    ]; 
 
 $config = ConfigManager::getInstance();
 // Получаем ссылку, или ставим дефолтную, если в базе пусто
@@ -151,6 +170,7 @@ require_once __DIR__ . '/src/templates/header.php';
                         window.userOptions = <?= json_encode($userOptions) ?>;
                         // Inject Stickers
                         window.stickerMap = <?= json_encode($stickerMap) ?>;
+                        window.stickerData = <?= json_encode($frontendStickerData) ?>;
                     </script>
                     <div id="quote-preview-area" class="hidden"></div>
                     <!-- Toolbar -->
@@ -161,7 +181,14 @@ require_once __DIR__ . '/src/templates/header.php';
                         <button type="button" class="chat-format-btn" data-format="quote" title="Цитата (> text)">❞</button>
                         <button type="button" class="chat-format-btn" data-format="code" title="Код (`text`)">&lt;/&gt;</button>
                         <button type="button" class="chat-format-btn" data-format="spoiler" title="Спойлер (||text||)">👁</button>
+                        <div class="toolbar-separator"></div>
+                        <button type="button" class="chat-format-btn" id="sticker-btn" title="Стикеры">😊</button>
                         <button type="button" class="chat-format-btn" id="chat-upload-btn" title="Загрузить файл (Картинка/Док)">📎</button>
+                    </div>
+                    <!-- Sticker Picker Container -->
+                    <div id="sticker-picker" class="sticker-picker" style="display: none;">
+                        <div class="sticker-tabs" id="sticker-tabs"></div>
+                        <div class="sticker-grid" id="sticker-grid"></div>
                     </div>
                     <form id="chat-form">
                         <input type="file" id="chat-file-input" hidden>

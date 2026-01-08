@@ -361,6 +361,28 @@ $(document).ready(function() {
         const div = createMessageElement(data);
         chatMessages.appendChild(div);
         scrollToBottom();
+        
+        // Wait for images to load then scroll again
+        const images = div.querySelectorAll('img');
+        if (images.length > 0) {
+            let loaded = 0;
+            const total = images.length;
+            const onImgLoad = () => {
+                loaded++;
+                // Scroll on every image load or just at end? 
+                // Better on every load to smooth out if multiple large images
+                scrollToBottom(); 
+            };
+            
+            images.forEach(img => {
+                if (img.complete) {
+                    onImgLoad();
+                } else {
+                    img.addEventListener('load', onImgLoad);
+                    img.addEventListener('error', onImgLoad); // Handle error too so we don't hang
+                }
+            });
+        }
     }
 
     function escapeHtml(text) {
@@ -1056,7 +1078,126 @@ $(document).ready(function() {
     }
 
     // 5. Chat Toolbar Logic
+    
+    // --- Sticker Picker Logic 🦄 ---
+    const stickerBtn = $('#sticker-btn');
+    const stickerPicker = $('#sticker-picker');
+    const stickerTabs = $('#sticker-tabs');
+    const stickerGrid = $('#sticker-grid');
+    let stickersInitialized = false;
+
+    function initStickerPicker() {
+        if (stickersInitialized) return;
+        
+        const data = window.stickerData || { packs: [], stickers: {} };
+        const packs = data.packs;
+        const stickersByPack = data.stickers;
+
+        if (!packs || packs.length === 0) {
+            stickerGrid.html('<div style="padding:10px; color:#999; text-align:center;">Нет стикеров :(</div>');
+            return;
+        }
+
+        // Render Tabs
+        stickerTabs.empty();
+        packs.forEach((pack, index) => {
+            const isActive = index === 0 ? 'active' : '';
+            const iconUrl = pack.icon_url || '/assets/img/default-pack.png'; // Fallback?
+            // Use name as fallback for icon text if no icon?
+            const tabContent = pack.icon_url 
+                ? `<img src="${escapeHtml(pack.icon_url)}" title="${escapeHtml(pack.name)}">`
+                : `<span style="font-size:12px;">${escapeHtml(pack.name.substring(0, 3))}</span>`;
+                
+            const btn = $(`<button class="sticker-tab-btn ${isActive}" data-pack-id="${pack.id}">${tabContent}</button>`);
+            
+            btn.on('click', function(e) {
+                e.preventDefault();
+                $('.sticker-tab-btn').removeClass('active');
+                $(this).addClass('active');
+                renderStickerGrid(pack.id);
+            });
+            
+            stickerTabs.append(btn);
+        });
+
+        // Render Initial Grid (First Pack)
+        if (packs.length > 0) {
+            renderStickerGrid(packs[0].id);
+        }
+
+        stickersInitialized = true;
+    }
+
+    function renderStickerGrid(packId) {
+        stickerGrid.empty();
+        const stickers = (window.stickerData.stickers[packId] || []);
+        
+        if (stickers.length === 0) {
+            stickerGrid.html('<div style="padding:10px; color:#999; text-align:center;">Пусто...</div>');
+            return;
+        }
+
+        stickers.forEach(s => {
+            const img = $(`<img src="${escapeHtml(s.image_url)}" class="picker-sticker" title=":${escapeHtml(s.code)}:">`);
+            img.on('click', function() {
+                insertSticker(s.code);
+            });
+            stickerGrid.append(img);
+        });
+    }
+
+    function insertSticker(code) {
+        const input = document.getElementById('chat-input');
+        if (!input) return;
+        
+        const codeStr = `:${code}: `; // Add space after
+        
+        // Insert at cursor
+        const start = input.selectionStart;
+        const end = input.selectionEnd;
+        const text = input.value;
+        
+        // Add space before if needed
+        const prefix = (start > 0 && text[start-1] !== ' ') ? ' ' : '';
+        
+        input.value = text.substring(0, start) + prefix + codeStr + text.substring(end);
+        
+        input.focus();
+        const newPos = start + prefix.length + codeStr.length;
+        input.selectionStart = newPos;
+        input.selectionEnd = newPos;
+        
+        // Hide picker on mobile? Or keep open for multi-select?
+        // Let's keep open on desktop, maybe close on mobile? 
+        // For now, keep open.
+    }
+
+    // Toggle Picker
+    if (stickerBtn.length) {
+        stickerBtn.on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (stickerPicker.is(':visible')) {
+                stickerPicker.fadeOut(200);
+            } else {
+                if (!stickersInitialized) initStickerPicker();
+                stickerPicker.fadeIn(200).css('display', 'flex'); // Flex for layout
+            }
+        });
+    }
+
+    // Close on click outside
+    $(window).on('click', function(e) {
+        if (stickerPicker.is(':visible')) {
+            if (!$(e.target).closest('#sticker-picker').length && !$(e.target).closest('#sticker-btn').length) {
+                stickerPicker.fadeOut(200);
+            }
+        }
+    });
+
     $('.chat-format-btn').on('click', function(e) {
+        if ($(this).attr('id') === 'sticker-btn') return; // Skip sticker btn handled above
         e.preventDefault();
         const format = $(this).data('format');
         const input = document.getElementById('chat-input'); 

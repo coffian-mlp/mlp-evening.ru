@@ -70,18 +70,23 @@ class StickerManager {
         return $packs;
     }
 
-    public function createPack($code, $name) {
-        $stmt = $this->db->prepare("INSERT INTO sticker_packs (code, name) VALUES (?, ?)");
-        $stmt->bind_param("ss", $code, $name);
+    public function createPack($code, $name, $iconUrl = null) {
+        $stmt = $this->db->prepare("INSERT INTO sticker_packs (code, name, icon_url) VALUES (?, ?, ?)");
+        $stmt->bind_param("sss", $code, $name, $iconUrl);
         if ($stmt->execute()) {
             return $stmt->insert_id;
         }
         return false;
     }
 
-    public function updatePack($id, $code, $name) {
-        $stmt = $this->db->prepare("UPDATE sticker_packs SET code = ?, name = ? WHERE id = ?");
-        $stmt->bind_param("ssi", $code, $name, $id);
+    public function updatePack($id, $code, $name, $iconUrl = null) {
+        if ($iconUrl !== null) {
+            $stmt = $this->db->prepare("UPDATE sticker_packs SET code = ?, name = ?, icon_url = ? WHERE id = ?");
+            $stmt->bind_param("sssi", $code, $name, $iconUrl, $id);
+        } else {
+            $stmt = $this->db->prepare("UPDATE sticker_packs SET code = ?, name = ? WHERE id = ?");
+            $stmt->bind_param("ssi", $code, $name, $id);
+        }
         return $stmt->execute();
     }
 

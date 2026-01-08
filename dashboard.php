@@ -247,10 +247,14 @@ require_once __DIR__ . '/src/templates/header.php';
             <div style="flex: 1; max-width: 300px;">
                 <div class="card">
                     <h3 class="dashboard-title">📦 Паки</h3>
-                    <form id="create-pack-form" action="api.php" method="post" style="margin-bottom: 15px;">
+                    <form id="create-pack-form" action="api.php" method="post" enctype="multipart/form-data" style="margin-bottom: 15px;">
                         <input type="hidden" name="action" value="create_pack">
                         <input type="text" name="code" placeholder="Код (mane6)" class="form-input" style="margin-bottom: 5px; width: 100%;" required>
                         <input type="text" name="name" placeholder="Название (Mane 6)" class="form-input" style="margin-bottom: 5px; width: 100%;" required>
+                        <div style="display:flex; align-items:center; gap:5px; margin-bottom:5px;">
+                            <label style="font-size:0.8em; color:#666;">Иконка:</label>
+                            <input type="file" name="icon_file" accept="image/*" class="form-input" style="padding:5px; font-size:0.8em;">
+                        </div>
                         <button type="submit" class="btn-primary" style="width: 100%;">Создать Пак</button>
                     </form>
                     
@@ -370,7 +374,7 @@ require_once __DIR__ . '/src/templates/header.php';
         <div class="modal-content">
             <span class="close-modal" onclick="closeModal('#pack-modal')">&times;</span>
             <h3>📦 Редактировать Пак</h3>
-            <form id="edit-pack-form" action="api.php" method="post">
+            <form id="edit-pack-form" action="api.php" method="post" enctype="multipart/form-data">
                 <input type="hidden" name="action" value="update_pack">
                 <input type="hidden" name="id" id="edit_pack_id">
                 
@@ -382,6 +386,11 @@ require_once __DIR__ . '/src/templates/header.php';
                 <div class="form-group">
                     <label class="form-label">Код (системный)</label>
                     <input type="text" name="code" id="edit_pack_code" class="form-input" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Иконка (оставьте пустым, если не меняете)</label>
+                    <input type="file" name="icon_file" class="form-input" accept="image/*">
                 </div>
                 
                 <button type="submit" class="btn-primary" style="width:100%">Сохранить</button>

@@ -590,12 +590,19 @@ try {
             if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
             $code = trim($_POST['code'] ?? '');
             $name = trim($_POST['name'] ?? '');
+            $iconUrl = null;
             
             if (empty($code) || empty($name)) sendResponse(false, "Код и имя обязательны", 'error');
             
-            $sm = new StickerManager();
             try {
-                if ($sm->createPack($code, $name)) {
+                // Upload Icon if provided
+                if (isset($_FILES['icon_file']) && $_FILES['icon_file']['error'] !== UPLOAD_ERR_NO_FILE) {
+                    $uploadManager = new UploadManager('icon');
+                    $iconUrl = $uploadManager->uploadFromPost($_FILES['icon_file']);
+                }
+
+                $sm = new StickerManager();
+                if ($sm->createPack($code, $name, $iconUrl)) {
                     sendResponse(true, "Пак создан! 🎉");
                 } else {
                     sendResponse(false, "Ошибка (возможно, такой код уже есть)", 'error');
@@ -610,14 +617,25 @@ try {
             $id = (int)($_POST['id'] ?? 0);
             $code = trim($_POST['code'] ?? '');
             $name = trim($_POST['name'] ?? '');
+            $iconUrl = null;
             
             if (!$id || empty($code) || empty($name)) sendResponse(false, "Данные неполные", 'error');
             
-            $sm = new StickerManager();
-            if ($sm->updatePack($id, $code, $name)) {
-                sendResponse(true, "Пак обновлен!");
-            } else {
-                sendResponse(false, "Ошибка обновления", 'error');
+            try {
+                // Upload Icon if provided
+                if (isset($_FILES['icon_file']) && $_FILES['icon_file']['error'] !== UPLOAD_ERR_NO_FILE) {
+                    $uploadManager = new UploadManager('icon');
+                    $iconUrl = $uploadManager->uploadFromPost($_FILES['icon_file']);
+                }
+
+                $sm = new StickerManager();
+                if ($sm->updatePack($id, $code, $name, $iconUrl)) {
+                    sendResponse(true, "Пак обновлен!");
+                } else {
+                    sendResponse(false, "Ошибка обновления", 'error');
+                }
+            } catch (Exception $e) {
+                sendResponse(false, $e->getMessage(), 'error');
             }
             break;
 
