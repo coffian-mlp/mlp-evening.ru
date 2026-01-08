@@ -10,10 +10,19 @@ class UserManager {
     }
 
     public function getAllUsers() {
-        $result = $this->db->query("SELECT id, login, nickname, role, created_at, avatar_url, chat_color FROM users ORDER BY id ASC");
+        // Fetch moderation status too
+        $result = $this->db->query("SELECT id, login, nickname, role, created_at, avatar_url, chat_color, is_banned, muted_until, ban_reason FROM users ORDER BY id ASC");
         $users = [];
         if ($result) {
             while ($row = $result->fetch_assoc()) {
+                // Determine active status
+                $row['is_muted'] = false;
+                if (!empty($row['muted_until'])) {
+                    $muteTime = strtotime($row['muted_until'] . ' UTC');
+                    if ($muteTime > time()) {
+                        $row['is_muted'] = true;
+                    }
+                }
                 $users[] = $row;
             }
         }
@@ -127,6 +136,90 @@ class UserManager {
         $stmt = $this->db->prepare("DELETE FROM users WHERE id = ?");
         $stmt->bind_param("i", $id);
         return $stmt->execute();
+    }
+
+    // --- Moderation Methods ---
+
+    public function getBanStatus($userId) {
+        $stmt = $this->db->prepare("SELECT is_banned, muted_until, ban_reason FROM users WHERE id = ?");
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        return $res ? $res->fetch_assoc() : null;
+    }
+
+    public function banUser($userId, $reason = null, $moderatorId = null) {
+        $stmt = $this->db->prepare("UPDATE users SET is_banned = 1, ban_reason = ? WHERE id = ?");
+        $stmt->bind_param("si", $reason, $userId);
+        $res = $stmt->execute();
+        
+        if ($res && $moderatorId) {
+             $this->logAction($moderatorId, 'ban', $userId, "Reason: $reason");
+        }
+        return $res;
+    }
+
+    public function unbanUser($userId, $moderatorId = null) {
+        $stmt = $this->db->prepare("UPDATE users SET is_banned = 0, ban_reason = NULL WHERE id = ?");
+        $stmt->bind_param("i", $userId);
+        $res = $stmt->execute();
+
+        if ($res && $moderatorId) {
+            $this->logAction($moderatorId, 'unban', $userId);
+        }
+        return $res;
+    }
+
+    public function muteUser($userId, $minutes, $moderatorId = null, $reason = null) {
+        // Use UTC_TIMESTAMP + interval
+        $stmt = $this->db->prepare("UPDATE users SET muted_until = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE), ban_reason = ? WHERE id = ?");
+        $stmt->bind_param("isi", $minutes, $reason, $userId);
+        $res = $stmt->execute();
+
+        if ($res && $moderatorId) {
+            $this->logAction($moderatorId, 'mute', $userId, "Duration: $minutes min. Reason: $reason");
+        }
+        return $res;
+    }
+
+    public function unmuteUser($userId, $moderatorId = null) {
+        $stmt = $this->db->prepare("UPDATE users SET muted_until = NULL WHERE id = ?");
+        $stmt->bind_param("i", $userId);
+        $res = $stmt->execute();
+
+        if ($res && $moderatorId) {
+            $this->logAction($moderatorId, 'unmute', $userId);
+        }
+        return $res;
+    }
+
+    public function logAction($moderatorId, $action, $targetId, $details = null) {
+        $stmt = $this->db->prepare("INSERT INTO audit_logs (user_id, action, target_id, details) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("isis", $moderatorId, $action, $targetId, $details);
+        return $stmt->execute();
+    }
+
+    public function getAuditLogs($limit = 100) {
+        $query = "SELECT al.*, 
+                         u_mod.login as mod_login, u_mod.nickname as mod_nickname,
+                         u_target.login as target_login, u_target.nickname as target_nickname
+                  FROM audit_logs al
+                  LEFT JOIN users u_mod ON al.user_id = u_mod.id
+                  LEFT JOIN users u_target ON al.target_id = u_target.id
+                  ORDER BY al.created_at DESC LIMIT ?";
+        
+        $stmt = $this->db->prepare($query);
+        $stmt->bind_param("i", $limit);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        
+        $logs = [];
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $logs[] = $row;
+            }
+        }
+        return $logs;
     }
 }
 

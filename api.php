@@ -265,6 +265,22 @@ try {
             sendResponse(true, "Список получен", 'success', ['users' => $users]);
             break;
 
+        case 'get_audit_logs':
+            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            
+            $userManager = new UserManager();
+            $logs = $userManager->getAuditLogs();
+            
+            // Format dates for JS
+            foreach ($logs as &$log) {
+                 if ($log['created_at']) {
+                    $log['created_at'] = date('Y-m-d H:i:s', strtotime($log['created_at']));
+                }
+            }
+            
+            sendResponse(true, "Логи получены", 'success', ['logs' => $logs]);
+            break;
+
         case 'save_user':
             if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
             
@@ -353,6 +369,89 @@ try {
             } else {
                 sendResponse(false, "Ошибка удаления", 'error');
             }
+            break;
+
+        // --- Moderation Actions ---
+        
+        case 'ban_user':
+            if (!Auth::isModerator()) sendResponse(false, "Недостаточно прав!", 'error');
+            
+            $targetId = (int)($_POST['user_id'] ?? 0);
+            $reason = trim($_POST['reason'] ?? 'Нарушение правил');
+            
+            if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
+            if ($targetId == $_SESSION['user_id']) sendResponse(false, "Себя банить нельзя!", 'error');
+            
+            $userManager = new UserManager();
+            if ($userManager->banUser($targetId, $reason, $_SESSION['user_id'])) {
+                sendResponse(true, "Пользователь забанен! 🔨");
+            } else {
+                sendResponse(false, "Ошибка при бане пользователя.", 'error');
+            }
+            break;
+
+        case 'unban_user':
+            if (!Auth::isModerator()) sendResponse(false, "Недостаточно прав!", 'error');
+            
+            $targetId = (int)($_POST['user_id'] ?? 0);
+            if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
+
+            $userManager = new UserManager();
+            if ($userManager->unbanUser($targetId, $_SESSION['user_id'])) {
+                sendResponse(true, "Пользователь разбанен! 🕊️");
+            } else {
+                sendResponse(false, "Ошибка при разбане.", 'error');
+            }
+            break;
+
+        case 'mute_user':
+            if (!Auth::isModerator()) sendResponse(false, "Недостаточно прав!", 'error');
+            
+            $targetId = (int)($_POST['user_id'] ?? 0);
+            $minutes = (int)($_POST['minutes'] ?? 15);
+            $reason = trim($_POST['reason'] ?? 'Нарушение правил');
+            
+            if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
+            if ($minutes < 1) $minutes = 15;
+            
+            $userManager = new UserManager();
+            if ($userManager->muteUser($targetId, $minutes, $_SESSION['user_id'], $reason)) {
+                sendResponse(true, "Пользователь заглушен на $minutes мин. 🤐");
+            } else {
+                sendResponse(false, "Ошибка при муте.", 'error');
+            }
+            break;
+            
+        case 'unmute_user':
+             if (!Auth::isModerator()) sendResponse(false, "Недостаточно прав!", 'error');
+            
+            $targetId = (int)($_POST['user_id'] ?? 0);
+            if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
+
+            $userManager = new UserManager();
+            if ($userManager->unmuteUser($targetId, $_SESSION['user_id'])) {
+                sendResponse(true, "Голос возвращен! 🗣️");
+            } else {
+                sendResponse(false, "Ошибка при снятии мута.", 'error');
+            }
+            break;
+
+        case 'purge_messages':
+            if (!Auth::isModerator()) sendResponse(false, "Недостаточно прав!", 'error');
+            
+            $targetId = (int)($_POST['user_id'] ?? 0);
+            $count = (int)($_POST['count'] ?? 50);
+            if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
+            if ($count > 100) $count = 100;
+            if ($count < 1) $count = 1;
+            
+            $chat = new ChatManager();
+            $deletedCount = $chat->purgeMessages($targetId, $count);
+            
+            $userManager = new UserManager();
+            $userManager->logAction($_SESSION['user_id'], 'purge', $targetId, "Deleted $deletedCount messages");
+            
+            sendResponse(true, "Удалено $deletedCount сообщений! 🧹");
             break;
 
         case 'send_message':

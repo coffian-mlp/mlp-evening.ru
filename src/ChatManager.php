@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/Database.php';
+require_once __DIR__ . '/UserManager.php';
 
 class ChatManager {
     private $db;
@@ -28,6 +29,26 @@ class ChatManager {
     }
 
     public function addMessage($userId, $username, $message, $quotedMsgIds = []) {
+        // --- Moderation Check ---
+        $userManager = new UserManager();
+        $status = $userManager->getBanStatus($userId);
+        
+        if ($status) {
+            if (!empty($status['is_banned'])) {
+                 throw new Exception("Вы забанены! 🚫 Причина: " . ($status['ban_reason'] ?? 'Нарушение правил'));
+            }
+            
+            if (!empty($status['muted_until'])) {
+                // Assuming DB returns Y-m-d H:i:s in UTC
+                $muteUntil = strtotime($status['muted_until'] . ' UTC');
+                if ($muteUntil > time()) {
+                    $minutesLeft = ceil(($muteUntil - time()) / 60);
+                    throw new Exception("Вы заглушены 🤐 Осталось: $minutesLeft мин. Причина: " . ($status['ban_reason'] ?? ''));
+                }
+            }
+        }
+        // ------------------------
+
         $message = trim($message);
         if (empty($message)) {
             return false;
@@ -143,6 +164,30 @@ class ChatManager {
         $updateStmt = $this->db->prepare("UPDATE chat_messages SET is_deleted = 0, deleted_at = NULL, edited_at = UTC_TIMESTAMP() WHERE id = ?");
         $updateStmt->bind_param("i", $messageId);
         return $updateStmt->execute();
+    }
+
+    public function purgeMessages($targetUserId, $limit = 50) {
+        // 1. Находим последние N не удаленных сообщений
+        $stmt = $this->db->prepare("SELECT id FROM chat_messages WHERE user_id = ? AND is_deleted = 0 ORDER BY id DESC LIMIT ?");
+        $stmt->bind_param("ii", $targetUserId, $limit);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        
+        $ids = [];
+        while ($row = $res->fetch_assoc()) {
+            $ids[] = $row['id'];
+        }
+        
+        if (empty($ids)) return 0;
+        
+        // 2. Массово удаляем (помечаем)
+        $idsList = implode(',', $ids);
+        // Обновляем edited_at, чтобы клиенты увидели изменение
+        $updateSql = "UPDATE chat_messages SET is_deleted = 1, deleted_at = UTC_TIMESTAMP(), edited_at = UTC_TIMESTAMP() WHERE id IN ($idsList)";
+        if ($this->db->query($updateSql)) {
+            return count($ids);
+        }
+        return 0;
     }
 
     // ✨ Parse Markdown and Mentions (Safe after htmlspecialchars)

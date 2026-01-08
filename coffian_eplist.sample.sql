@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS `users` (
   `avatar_url` varchar(255) DEFAULT NULL,
   `chat_color` varchar(7) DEFAULT '#6d2f8e',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `is_banned` tinyint(1) DEFAULT 0,
+  `muted_until` datetime DEFAULT NULL,
+  `ban_reason` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -86,6 +89,24 @@ CREATE TABLE IF NOT EXISTS `chat_messages` (
     `quoted_msg_ids` JSON DEFAULT NULL,
     INDEX (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `audit_logs`
+--
+
+CREATE TABLE IF NOT EXISTS `audit_logs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) DEFAULT NULL, -- Moderator ID
+  `action` varchar(50) NOT NULL,
+  `target_id` int(11) DEFAULT NULL, -- Target User ID or Message ID
+  `details` text,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX (`user_id`),
+  INDEX (`action`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- --------------------------------------------------------
 

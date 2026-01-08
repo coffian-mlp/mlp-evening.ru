@@ -67,6 +67,10 @@ require_once __DIR__ . '/src/templates/header.php';
             <div class="icon">👥</div>
             <div class="label">Пользователи</div>
         </div>
+        <div class="nav-tile" data-target="#tab-moderation">
+            <div class="icon">🛡️</div>
+            <div class="label">Модерация</div>
+        </div>
         <div class="nav-tile" data-target="#tab-controls">
             <div class="icon">⚙️</div>
             <div class="label">Управление</div>
@@ -205,6 +209,10 @@ require_once __DIR__ . '/src/templates/header.php';
                 <button class="btn-primary" onclick="openUserModal()">➕ Добавить пони</button>
             </div>
             
+            <div class="search-bar">
+                <input type='text' id='userSearchInput' placeholder='🔍 Поиск пони...' class="search-input">
+            </div>
+
             <table class="dashboard-table" id="users-table">
                 <thead>
                     <tr>
@@ -212,12 +220,53 @@ require_once __DIR__ . '/src/templates/header.php';
                         <th>Логин</th>
                         <th>Никнейм</th>
                         <th>Роль</th>
+                        <th>Статус</th> <!-- New Column -->
                         <th>Дата регистрации</th>
                         <th style="text-align: right;">Действия</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td colspan="4" style="text-align:center;">Загрузка...</td></tr>
+                    <tr><td colspan="7" style="text-align:center;">Загрузка...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Вкладка 4: Модерация -->
+    <div id="tab-moderation" class="tab-content">
+        <div class="card">
+            <h3 class="dashboard-title">🚫 Список нарушителей (Ban/Mute)</h3>
+             <table class="dashboard-table" id="punished-users-table">
+                <thead>
+                    <tr>
+                        <th>Пользователь</th>
+                        <th>Наказание</th>
+                        <th>Причина</th>
+                        <th>Истекает</th>
+                        <th style="text-align: right;">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="5" style="text-align:center;">Загрузка...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h3 class="dashboard-title">📜 Журнал действий (Audit Logs)</h3>
+            <table class="dashboard-table" id="audit-logs-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Модератор</th>
+                        <th>Действие</th>
+                        <th>Цель (ID)</th>
+                        <th>Детали</th>
+                        <th>Время</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="6" style="text-align:center;">Загрузка...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -272,6 +321,61 @@ require_once __DIR__ . '/src/templates/header.php';
                 </div>
                 
                 <button type="submit" class="btn-primary" style="width:100%">💾 Сохранить</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Ban Modal -->
+    <div id="ban-modal" class="modal-overlay">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal('#ban-modal')">&times;</span>
+            <h3 style="color:#c0392b">🔨 Бан пользователя</h3>
+            <form id="ban-form" action="api.php" method="post">
+                <input type="hidden" name="action" value="ban_user">
+                <input type="hidden" name="user_id" id="ban_user_id">
+                
+                <p>Вы собираетесь забанить: <strong id="ban_username_display"></strong></p>
+                <p style="font-size:0.9em; color:#666; margin-bottom:15px;">Пользователь потеряет доступ к сайту.</p>
+                
+                <div class="form-group">
+                    <label class="form-label">Причина</label>
+                    <input type="text" name="reason" class="form-input" placeholder="Например: Спам, Грубость..." required>
+                </div>
+                
+                <button type="submit" class="btn-danger" style="width:100%">ЗАБАНИТЬ НАВСЕГДА</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Mute Modal -->
+    <div id="mute-modal" class="modal-overlay">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal('#mute-modal')">&times;</span>
+            <h3 style="color:#f39c12">🤐 Мут пользователя</h3>
+            <form id="mute-form" action="api.php" method="post">
+                <input type="hidden" name="action" value="mute_user">
+                <input type="hidden" name="user_id" id="mute_user_id">
+                
+                <p>Вы собираетесь заглушить: <strong id="mute_username_display"></strong></p>
+                <p style="font-size:0.9em; color:#666; margin-bottom:15px;">Пользователь не сможет писать в чат.</p>
+                
+                <div class="form-group">
+                    <label class="form-label">Длительность</label>
+                    <select name="minutes" class="form-input">
+                        <option value="15">15 минут</option>
+                        <option value="60">1 час</option>
+                        <option value="180">3 часа</option>
+                        <option value="1440">24 часа (Сутки)</option>
+                        <option value="10080">7 дней (Неделя)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Причина (опционально)</label>
+                    <input type="text" name="reason" class="form-input" placeholder="Например: Флуд...">
+                </div>
+                
+                <button type="submit" class="btn-warning" style="width:100%">Заглушить</button>
             </form>
         </div>
     </div>

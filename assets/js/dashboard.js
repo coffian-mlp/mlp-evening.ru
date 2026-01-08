@@ -18,6 +18,10 @@ $(document).ready(function() {
         if (target === '#tab-users') {
             loadUsers();
         }
+        if (target === '#tab-moderation') {
+            loadPunishedUsers();
+            loadAuditLogs();
+        }
     });
 
     // --- Проверка хеша при загрузке ---
@@ -32,10 +36,18 @@ $(document).ready(function() {
         }
     }
 
-    // --- Логика поиска по таблице ---
+    // --- Логика поиска по таблице серий ---
     $("#searchInput").on("keyup", function() {
         var value = $(this).val().toLowerCase();
         $("#fulltable tbody tr").filter(function() {
+            $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
+        });
+    });
+
+    // --- Логика поиска по таблице пользователей ---
+    $("#userSearchInput").on("keyup", function() {
+        var value = $(this).val().toLowerCase();
+        $("#users-table tbody tr").filter(function() {
             $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
         });
     });
@@ -58,7 +70,7 @@ $(document).ready(function() {
 
     function getCellValue(row, index){ return $(row).children('td').eq(index).text() }
 
-    // --- AJAX обработка форм (Dashboard + User Modal) ---
+    // --- AJAX обработка форм (Dashboard + User Modal + Mod Modals) ---
     $("form").not('#profile-form').on("submit", function(e) {
         e.preventDefault(); 
         
@@ -97,6 +109,8 @@ $(document).ready(function() {
                 
                 if (response.success) {
                     $form.find("input[type='text'], input[type='number'], input[type='password'], input[type='url'], input[type='file']").val("");
+                    // Reset selects if any
+                    $form.find("select").prop('selectedIndex', 0);
                     
                     var action = $form.find("input[name='action']").val();
                     if (action === 'clear_watching_log') {
@@ -107,6 +121,14 @@ $(document).ready(function() {
                     if (action === 'save_user') {
                         closeUserModal();
                         loadUsers();
+                    }
+                    if (action === 'ban_user' || action === 'mute_user') {
+                        closeModal('#ban-modal');
+                        closeModal('#mute-modal');
+                        // Refresh both tables
+                        loadUsers();
+                        loadPunishedUsers();
+                        loadAuditLogs();
                     }
                 }
             },
@@ -153,7 +175,7 @@ $(document).ready(function() {
 
 function loadUsers() {
     var $tbody = $('#users-table tbody');
-    $tbody.html('<tr><td colspan="4" style="text-align:center;">Загрузка...</td></tr>');
+    $tbody.html('<tr><td colspan="7" style="text-align:center;">Загрузка...</td></tr>');
     
     $.ajax({
         url: 'api.php',
@@ -164,7 +186,7 @@ function loadUsers() {
             if (res.success) {
                 $tbody.empty();
                 if (res.data.users.length === 0) {
-                    $tbody.html('<tr><td colspan="4" style="text-align:center;">Нет пользователей</td></tr>');
+                    $tbody.html('<tr><td colspan="7" style="text-align:center;">Нет пользователей</td></tr>');
                     return;
                 }
                 
@@ -174,16 +196,31 @@ function loadUsers() {
                         : '';
                     var nameDisplay = `<span style="color:${escapeHtml(u.chat_color || '#333')}; font-weight:bold;">${escapeHtml(u.nickname)}</span>`;
 
+                    // Status
+                    var status = '';
+                    if (u.is_banned == 1) status += '<span class="status-badge old" title="'+escapeHtml(u.ban_reason)+'">BANNED</span> ';
+                    if (u.is_muted) status += '<span class="status-badge" style="background:orange;color:white;" title="Until: '+u.muted_until+'">MUTED</span>';
+                    if (!status) status = '<span style="color:#aaa;">OK</span>';
+
                     var row = `
                         <tr>
                             <td>${u.id}</td>
                             <td>${escapeHtml(u.login)}</td>
                             <td>${avatar}${nameDisplay}</td>
                             <td><span class="status-badge ${u.role === 'admin' ? 'old' : 'fresh'}">${u.role}</span></td>
+                            <td>${status}</td>
                             <td>${u.created_at ? u.created_at : '-'}</td>
                             <td style="text-align: right;">
                                 <button class="btn-warning" onclick='editUser(${JSON.stringify(u)})' style="padding: 5px 10px; font-size: 0.9em;">✏️</button>
-                                <button class="btn-danger" onclick="deleteUser(${u.id})" style="padding: 5px 10px; font-size: 0.9em;">🗑️</button>
+                                <button class="btn-danger" onclick="deleteUser(${u.id})" style="padding: 5px 10px; font-size: 0.9em;" title="Удалить">🗑️</button>
+                                ${u.is_banned == 1 
+                                    ? `<button class="btn-primary" onclick="unbanUser(${u.id})" style="padding: 5px 10px; font-size: 0.9em;" title="Разбанить">🕊️</button>`
+                                    : `<button class="btn-danger" onclick='openBanModal(${u.id}, "${escapeHtml(u.nickname)}")' style="padding: 5px 10px; font-size: 0.9em;" title="Бан">🔨</button>`
+                                }
+                                ${u.is_muted 
+                                    ? `<button class="btn-primary" onclick="unmuteUser(${u.id})" style="padding: 5px 10px; font-size: 0.9em;" title="Размутить">🗣️</button>`
+                                    : `<button class="btn-warning" onclick='openMuteModal(${u.id}, "${escapeHtml(u.nickname)}")' style="padding: 5px 10px; font-size: 0.9em;" title="Мут">🤐</button>`
+                                }
                             </td>
                         </tr>
                     `;
@@ -191,14 +228,97 @@ function loadUsers() {
                 });
             } else {
                 var errorMsg = res.message || 'Неизвестная ошибка';
-                $tbody.html('<tr><td colspan="4" style="text-align:center; color:red;">Ошибка: ' + escapeHtml(errorMsg) + '</td></tr>');
+                $tbody.html('<tr><td colspan="7" style="text-align:center; color:red;">Ошибка: ' + escapeHtml(errorMsg) + '</td></tr>');
             }
         },
         error: function(xhr, status, error) {
-             $tbody.html('<tr><td colspan="4" style="text-align:center; color:red;">Сбой сети: ' + escapeHtml(error) + ' <br> ' + xhr.responseText + '</td></tr>');
+             $tbody.html('<tr><td colspan="7" style="text-align:center; color:red;">Сбой сети: ' + escapeHtml(error) + ' <br> ' + xhr.responseText + '</td></tr>');
         }
     });
 }
+
+function loadPunishedUsers() {
+    var $tbody = $('#punished-users-table tbody');
+    $tbody.html('<tr><td colspan="5" style="text-align:center;">Загрузка...</td></tr>');
+    
+    $.ajax({
+        url: 'api.php',
+        method: 'POST',
+        data: { action: 'get_users' }, // Reuse get_users and filter client-side
+        dataType: 'json',
+        success: function(res) {
+            if (res.success) {
+                $tbody.empty();
+                
+                var punished = res.data.users.filter(u => u.is_banned == 1 || u.is_muted);
+                
+                if (punished.length === 0) {
+                    $tbody.html('<tr><td colspan="5" style="text-align:center;">В Понивилле все спокойно 😇</td></tr>');
+                    return;
+                }
+                
+                punished.forEach(function(u) {
+                    var type = '';
+                    if (u.is_banned == 1) type += 'BAN ';
+                    if (u.is_muted) type += 'MUTE ';
+                    
+                    var expires = u.is_banned == 1 ? 'Навсегда' : (u.muted_until || '-');
+
+                    var row = `
+                        <tr>
+                            <td>${escapeHtml(u.nickname)} (${escapeHtml(u.login)})</td>
+                            <td><span class="status-badge old">${type}</span></td>
+                            <td>${escapeHtml(u.ban_reason || '-')}</td>
+                            <td>${expires}</td>
+                            <td style="text-align: right;">
+                                ${u.is_banned == 1 ? `<button class="btn-primary" onclick="unbanUser(${u.id})">Разбанить</button>` : ''}
+                                ${u.is_muted ? `<button class="btn-primary" onclick="unmuteUser(${u.id})">Размутить</button>` : ''}
+                            </td>
+                        </tr>
+                    `;
+                    $tbody.append(row);
+                });
+            }
+        }
+    });
+}
+
+function loadAuditLogs() {
+    var $tbody = $('#audit-logs-table tbody');
+    $tbody.html('<tr><td colspan="6" style="text-align:center;">Загрузка...</td></tr>');
+    
+    $.ajax({
+        url: 'api.php',
+        method: 'POST',
+        data: { action: 'get_audit_logs' },
+        dataType: 'json',
+        success: function(res) {
+            if (res.success) {
+                $tbody.empty();
+                if (res.data.logs.length === 0) {
+                    $tbody.html('<tr><td colspan="6" style="text-align:center;">В Понивилле все спокойно 📜</td></tr>');
+                    return;
+                }
+                
+                res.data.logs.forEach(function(log) {
+                    var row = `
+                        <tr>
+                            <td>${log.id}</td>
+                            <td>${escapeHtml(log.mod_nickname || log.mod_login || 'System')}</td>
+                            <td><b>${escapeHtml(log.action)}</b></td>
+                            <td>${log.target_id} (${escapeHtml(log.target_nickname || log.target_login || '?')})</td>
+                            <td>${escapeHtml(log.details || '')}</td>
+                            <td>${log.created_at}</td>
+                        </tr>
+                    `;
+                    $tbody.append(row);
+                });
+            }
+        }
+    });
+}
+
+// --- Modals ---
 
 function openUserModal() {
     $('#user-modal').css('display', 'flex').hide().fadeIn(200);
@@ -215,6 +335,10 @@ function openUserModal() {
 
 function closeUserModal() {
     $('#user-modal').fadeOut(200);
+}
+
+function closeModal(selector) {
+    $(selector).fadeOut(200);
 }
 
 function editUser(user) {
@@ -248,6 +372,36 @@ function deleteUser(id) {
             window.showFlashMessage("Ошибка сети: " + error, 'error');
         }
     });
+}
+
+// --- Moderation Actions ---
+
+function openBanModal(id, name) {
+    $('#ban_user_id').val(id);
+    $('#ban_username_display').text(name);
+    $('#ban-modal').css('display', 'flex').hide().fadeIn(200);
+}
+
+function openMuteModal(id, name) {
+    $('#mute_user_id').val(id);
+    $('#mute_username_display').text(name);
+    $('#mute-modal').css('display', 'flex').hide().fadeIn(200);
+}
+
+function unbanUser(id) {
+    if (!confirm('Разбанить пользователя?')) return;
+    $.post('api.php', { action: 'unban_user', user_id: id }, function(res) {
+        showFlashMessage(res.message, res.success ? 'success' : 'error');
+        if(res.success) { loadUsers(); loadPunishedUsers(); loadAuditLogs(); }
+    }, 'json');
+}
+
+function unmuteUser(id) {
+    if (!confirm('Снять мут?')) return;
+    $.post('api.php', { action: 'unmute_user', user_id: id }, function(res) {
+        showFlashMessage(res.message, res.success ? 'success' : 'error');
+        if(res.success) { loadUsers(); loadPunishedUsers(); loadAuditLogs(); }
+    }, 'json');
 }
 
 function escapeHtml(text) {
