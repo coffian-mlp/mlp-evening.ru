@@ -798,4 +798,136 @@ $(document).ready(function() {
             chatInput.focus();
         }
     });
+
+    // 10. File Upload Logic
+    const fileInput = document.getElementById('chat-file-input');
+    const uploadBtn = document.getElementById('chat-upload-btn');
+    // chatTextarea is defined above in section 9
+
+    function uploadFile(file) {
+        // Basic validation
+        if (file.size > 30 * 1024 * 1024) {
+             showChatNotification("Файл слишком большой (макс 30 МБ)", 'error');
+             return;
+        }
+
+        const formData = new FormData();
+        formData.append('action', 'upload_file');
+        formData.append('file', file);
+        
+        // Show loading state?
+        const originalPlaceholder = chatTextarea ? chatTextarea.placeholder : '';
+        if (chatTextarea) chatTextarea.placeholder = "Загрузка файла...";
+        if (uploadBtn) {
+            uploadBtn.textContent = '⏳';
+            uploadBtn.disabled = true;
+        }
+
+        $.ajax({
+            url: 'api.php',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(res) {
+                if (res.success) {
+                    const name = res.data.name;
+                    const url = res.data.url;
+                    let markdown = '';
+                    if (res.data.is_image) {
+                        markdown = `![${name}](${url})`;
+                    } else {
+                        markdown = `[${name}](${url})`;
+                    }
+                    
+                    if (chatTextarea) {
+                        // Insert at cursor
+                        const start = chatTextarea.selectionStart;
+                        const end = chatTextarea.selectionEnd;
+                        const text = chatTextarea.value;
+                        
+                        // Add newline if needed (not at start and not after newline)
+                        const prefix = (start > 0 && text[start-1] !== '\n') ? ' ' : '';
+                        
+                        chatTextarea.value = text.substring(0, start) + prefix + markdown + text.substring(end);
+                        
+                        chatTextarea.focus();
+                        // Move cursor after
+                        const newPos = start + prefix.length + markdown.length;
+                        chatTextarea.selectionStart = newPos;
+                        chatTextarea.selectionEnd = newPos;
+                        
+                        // Trigger resize
+                        chatTextarea.dispatchEvent(new Event('input'));
+                    }
+                } else {
+                    showChatNotification(res.message, 'error');
+                }
+            },
+            error: function() {
+                showChatNotification("Ошибка загрузки файла.", 'error');
+            },
+            complete: function() {
+                if (chatTextarea) chatTextarea.placeholder = originalPlaceholder;
+                if (uploadBtn) {
+                    uploadBtn.textContent = '📎';
+                    uploadBtn.disabled = false;
+                }
+            }
+        });
+    }
+
+    if (uploadBtn && fileInput) {
+        uploadBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                uploadFile(this.files[0]);
+                this.value = ''; // Reset
+            }
+        });
+    }
+
+    // Paste Handler
+    if (chatTextarea) {
+        chatTextarea.addEventListener('paste', function(e) {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].kind === 'file') {
+                    e.preventDefault();
+                    const file = items[i].getAsFile();
+                    uploadFile(file);
+                    return; // Upload first found file
+                }
+            }
+        });
+        
+        // Drag & Drop
+        const dropZone = document.querySelector('.chat-input-area');
+        if (dropZone) {
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            dropZone.addEventListener('dragenter', () => dropZone.classList.add('highlight-drop'), false);
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('highlight-drop'), false);
+            
+            dropZone.addEventListener('drop', function(e) {
+                dropZone.classList.remove('highlight-drop');
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files && files[0]) {
+                    uploadFile(files[0]);
+                }
+            }, false);
+        }
+    }
 });

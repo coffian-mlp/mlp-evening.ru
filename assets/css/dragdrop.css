@@ -1,0 +1,7 @@
+/* === Drag & Drop Highlight === */
+.chat-input-area.highlight-drop {
+    background-color: #e8f5e9 !important; /* Light Green */
+    border-top: 2px dashed #4caf50;
+    transition: background-color 0.2s;
+}
+

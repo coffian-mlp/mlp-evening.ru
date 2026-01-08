@@ -180,6 +180,13 @@ class ChatManager {
         // Pattern: @ followed by word characters (letters, numbers, underscores)
         $text = preg_replace('/@([\wа-яА-ЯёЁ0-9_]+)/u', '<span class="md-mention">@$1</span>', $text);
 
+        // 7. Images: ![alt](url)
+        // Basic check for http/https/relative url to prevent javascript:
+        $text = preg_replace('/!\[(.*?)\]\(((https?:\/\/|\/)[^\s\)]+)\)/', '<img src="$2" alt="$1" class="chat-img" onclick="window.open(this.src, \'_blank\')">', $text);
+
+        // 8. Links: [text](url)
+        $text = preg_replace('/\[(.*?)\]\(((https?:\/\/|\/)[^\s\)]+)\)/', '<a href="$2" target="_blank" rel="noopener noreferrer" class="chat-link">$1</a>', $text);
+
         return $text;
     }
 

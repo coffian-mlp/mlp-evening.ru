@@ -434,6 +434,28 @@ try {
                 sendResponse(false, "Не удалось восстановить (время вышло или нет прав).", 'error');
             }
             break;
+
+        case 'upload_file':
+            if (!isset($_FILES['file'])) {
+                sendResponse(false, "Файл не найден.", 'error');
+            }
+            
+            try {
+                $uploadManager = new UploadManager('chat');
+                $url = $uploadManager->uploadFromPost($_FILES['file']);
+                
+                // Determine if image for frontend convenience
+                $isImage = preg_match('/\.(jpg|jpeg|png|gif|webp)$/i', $url);
+                
+                sendResponse(true, "Файл загружен!", 'success', [
+                    'url' => $url,
+                    'name' => $_FILES['file']['name'], // Original name
+                    'is_image' => (bool)$isImage
+                ]);
+            } catch (Exception $e) {
+                sendResponse(false, $e->getMessage(), 'error');
+            }
+            break;
             
         default:
             sendResponse(false, "❌ Неизвестное действие: $action", 'error');

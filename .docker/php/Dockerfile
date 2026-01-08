@@ -18,6 +18,9 @@ RUN { \
         echo 'opcache.enable=1'; \
     } > /usr/local/etc/php/conf.d/opcache-recommended.ini
 
+# Копируем кастомный конфиг загрузок
+COPY .docker/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+
 # Устанавливаем Composer (официальный способ)
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 

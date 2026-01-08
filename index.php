@@ -104,8 +104,10 @@ require_once __DIR__ . '/src/templates/header.php';
                         <button type="button" class="chat-format-btn" data-format="quote" title="Цитата (> text)">❞</button>
                         <button type="button" class="chat-format-btn" data-format="code" title="Код (`text`)">&lt;/&gt;</button>
                         <button type="button" class="chat-format-btn" data-format="spoiler" title="Спойлер (||text||)">👁</button>
+                        <button type="button" class="chat-format-btn" id="chat-upload-btn" title="Загрузить файл (Картинка/Док)">📎</button>
                     </div>
                     <form id="chat-form">
+                        <input type="file" id="chat-file-input" hidden>
                         <textarea id="chat-input" placeholder="Напиши что-нибудь..." rows="1"></textarea>
                         <button type="submit">Отправить</button>
                     </form>
