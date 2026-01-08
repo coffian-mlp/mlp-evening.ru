@@ -180,12 +180,38 @@ class ChatManager {
         // Pattern: @ followed by word characters (letters, numbers, underscores)
         $text = preg_replace('/@([\wа-яА-ЯёЁ0-9_]+)/u', '<span class="md-mention">@$1</span>', $text);
 
-        // 7. Images: ![alt](url)
+        // 7. Auto-Embeds (Raw URLs)
+        
+        // 7.1 Images (Ends with extension)
+        // Matches http(s)://... .jpg/png/gif/webp NOT inside quotes/attributes
+        $text = preg_replace('/(?<!href="|src="|\[|!\[)(https?:\/\/[^\s<]+\.(?:jpg|jpeg|png|gif|webp))(?![^<]*>|\])/i', '<img src="$1" class="chat-img" onclick="window.open(this.src, \'_blank\')">', $text);
+
+        // 7.2 YouTube (Standard & Short)
+        // Revert to standard embed without fancy policies for now, as localhost is tricky
+        $text = preg_replace('/(?<!href="|src="|\[|!\[)(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11}))(?![^<]*>|\])/', '<div class="video-embed"><iframe src="https://www.youtube.com/embed/$2?mute=1" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>', $text);
+
+        // 7.3 Rutube
+        // https://rutube.ru/video/123456.../
+        $text = preg_replace('/(?<!href="|src="|\[|!\[)(https?:\/\/rutube\.ru\/video\/([a-zA-Z0-9]+)\/?)(?![^<]*>|\])/', '<div class="video-embed"><iframe src="https://rutube.ru/play/embed/$2?muted=1" frameborder="0" allowfullscreen></iframe></div>', $text);
+
+        // 7.4 HTML5 Video (Direct MP4/WebM)
+        $text = preg_replace('/(?<!href="|src="|\[|!\[)(https?:\/\/[^\s<]+\.(?:mp4|webm))(?![^<]*>|\])/i', '<div class="video-embed" style="max-width:300px;"><video controls muted src="$1" style="width:100%; max-height:300px;"></video></div>', $text);
+
+        // 8. Explicit Markdown Images: ![alt](url)
         // Basic check for http/https/relative url to prevent javascript:
         $text = preg_replace('/!\[(.*?)\]\(((https?:\/\/|\/)[^\s\)]+)\)/', '<img src="$2" alt="$1" class="chat-img" onclick="window.open(this.src, \'_blank\')">', $text);
 
-        // 8. Links: [text](url)
+        // 9. Explicit Markdown Links: [text](url)
         $text = preg_replace('/\[(.*?)\]\(((https?:\/\/|\/)[^\s\)]+)\)/', '<a href="$2" target="_blank" rel="noopener noreferrer" class="chat-link">$1</a>', $text);
+
+        // 10. Auto-Linkify remaining URLs (that are not already links/imgs/iframes)
+        // We need to be careful not to linkify URLs inside the tags we just created.
+        // A simple way is difficult with regex alone without complex lookarounds.
+        // But since we wrapped our embeds in tags, we can try to match URLs that are NOT preceded by specific chars?
+        // Or simpler: We just let users use Markdown for links if auto-fail.
+        // But let's try a safe auto-link for plain text.
+        // Use a negative lookbehind to ensure we aren't in a tag attribute like src="..." or href="..."
+        $text = preg_replace('/(?<!href="|src=")(?<!>)(https?:\/\/[^\s<]+)(?![^<]*>)/', '<a href="$1" target="_blank" rel="noopener noreferrer" class="chat-link">$1</a>', $text);
 
         return $text;
     }
