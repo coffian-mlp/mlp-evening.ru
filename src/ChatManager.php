@@ -282,13 +282,20 @@ class ChatManager {
             
             if ($idsStr) {
                 // Fetch minimal details for quoting
-                $qQuery = "SELECT cm.id, cm.username, cm.message, cm.created_at, cm.is_deleted, u.chat_color, u.avatar_url 
+                $qQuery = "SELECT cm.id, cm.username, cm.message, cm.created_at, cm.is_deleted, 
+                                  uo_color.option_value as chat_color, 
+                                  uo_avatar.option_value as avatar_url 
                            FROM chat_messages cm
                            LEFT JOIN users u ON cm.user_id = u.id
+                           LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
+                           LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
                            WHERE cm.id IN ($idsStr)";
                 $qRes = $this->db->query($qQuery);
                 if ($qRes) {
                     while ($qRow = $qRes->fetch_assoc()) {
+                        // Default color
+                        if (empty($qRow['chat_color'])) $qRow['chat_color'] = '#6d2f8e';
+
                         // Format date for quoted msg too
                          if ($qRow['created_at']) {
                             $qRow['created_at'] = date('Y-m-d\TH:i:s\Z', strtotime($qRow['created_at']));
@@ -353,9 +360,13 @@ class ChatManager {
         $limit = (int)$limit;
         // Join with users to get current color and avatar and ROLE
         // Сортируем по ID DESC, чтобы получить последние $limit сообщений
-        $query = "SELECT cm.*, u.chat_color, u.avatar_url, u.role 
+        $query = "SELECT cm.*, u.role, 
+                         uo_color.option_value as chat_color,
+                         uo_avatar.option_value as avatar_url
                   FROM chat_messages cm 
                   LEFT JOIN users u ON cm.user_id = u.id 
+                  LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
+                  LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
                   ORDER BY cm.id DESC LIMIT $limit";
         
         $result = $this->db->query($query);
@@ -363,6 +374,7 @@ class ChatManager {
         $messages = [];
         if ($result) {
             while ($row = $result->fetch_assoc()) {
+                if (empty($row['chat_color'])) $row['chat_color'] = '#6d2f8e';
                 $messages[] = $row;
             }
         }
@@ -375,9 +387,13 @@ class ChatManager {
         $params = [$lastId];
         $types = "i";
         
-        $sql = "SELECT cm.*, u.chat_color, u.avatar_url, u.role 
+        $sql = "SELECT cm.*, u.role, 
+                       uo_color.option_value as chat_color,
+                       uo_avatar.option_value as avatar_url
                 FROM chat_messages cm 
                 LEFT JOIN users u ON cm.user_id = u.id 
+                LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
+                LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
                 WHERE cm.id > ?";
         
         // Добавляем условие для измененных сообщений
@@ -400,6 +416,7 @@ class ChatManager {
         $messages = [];
         if ($res) {
             while ($row = $res->fetch_assoc()) {
+                if (empty($row['chat_color'])) $row['chat_color'] = '#6d2f8e';
                 $messages[] = $row;
             }
         }

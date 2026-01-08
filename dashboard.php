@@ -306,13 +306,16 @@ require_once __DIR__ . '/src/templates/header.php';
                     <input type="text" name="avatar_url" id="user_avatar_url" class="form-input" placeholder="Или ссылка..." style="margin-top: 5px;">
                 </div>
 
-                <div class="form-group">
-                    <label class="form-label">Цвет ника</label>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <input type="color" name="chat_color" id="user_chat_color" value="#6d2f8e" style="height: 38px; width: 60px; border: none; padding: 0; cursor: pointer;">
-                        <span style="font-size: 0.9em; color: #666;">Цвет в чате</span>
+            <div class="form-group">
+                <label class="form-label">Цвет ника</label>
+                <div class="color-picker-ui">
+                    <input type="hidden" name="chat_color" id="user_chat_color" value="#6d2f8e">
+                    <div class="manual-input-wrapper">
+                        <span style="font-size: 0.9em; color: #666;">HEX:</span>
+                        <input type="text" class="color-manual-input" placeholder="#HEX..." maxlength="7">
                     </div>
                 </div>
+            </div>
 
                 <div class="form-group">
                     <label class="form-label">Пароль</label>

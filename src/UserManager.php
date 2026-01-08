@@ -10,8 +10,16 @@ class UserManager {
     }
 
     public function getAllUsers() {
-        // Fetch moderation status too
-        $result = $this->db->query("SELECT id, login, nickname, role, created_at, avatar_url, chat_color, is_banned, muted_until, ban_reason FROM users ORDER BY id ASC");
+        // Fetch users with options via JOINs
+        $sql = "SELECT u.id, u.login, u.nickname, u.role, u.created_at, u.is_banned, u.muted_until, u.ban_reason,
+                       uo_color.option_value as chat_color,
+                       uo_avatar.option_value as avatar_url
+                FROM users u
+                LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
+                LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
+                ORDER BY u.id ASC";
+                
+        $result = $this->db->query($sql);
         $users = [];
         if ($result) {
             while ($row = $result->fetch_assoc()) {
@@ -23,6 +31,9 @@ class UserManager {
                         $row['is_muted'] = true;
                     }
                 }
+                // Set defaults if null
+                if (empty($row['chat_color'])) $row['chat_color'] = '#6d2f8e';
+                
                 $users[] = $row;
             }
         }
@@ -30,11 +41,25 @@ class UserManager {
     }
 
     public function getUserById($id) {
-        $stmt = $this->db->prepare("SELECT id, login, nickname, role, avatar_url, chat_color FROM users WHERE id = ?");
+        $stmt = $this->db->prepare("
+            SELECT u.id, u.login, u.nickname, u.role, 
+                   uo_color.option_value as chat_color,
+                   uo_avatar.option_value as avatar_url
+            FROM users u
+            LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
+            LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
+            WHERE u.id = ?
+        ");
         $stmt->bind_param("i", $id);
         $stmt->execute();
         $res = $stmt->get_result();
-        return $res ? $res->fetch_assoc() : null;
+        $user = $res ? $res->fetch_assoc() : null;
+        
+        if ($user && empty($user['chat_color'])) {
+            $user['chat_color'] = '#6d2f8e';
+        }
+        
+        return $user;
     }
 
     // Универсальный метод обновления
@@ -43,22 +68,22 @@ class UserManager {
         $types = "";
         $params = [];
 
+        // 1. Separate options from main table fields
+        $optionFields = ['chat_color', 'avatar_url'];
+        
+        foreach ($optionFields as $field) {
+            if (isset($data[$field])) {
+                $this->setUserOption($id, $field, $data[$field]);
+                // Remove from data to avoid SQL error in main update
+                unset($data[$field]); 
+            }
+        }
+
+        // 2. Update main table
         if (isset($data['nickname'])) {
             $updates[] = "nickname = ?";
             $types .= "s";
             $params[] = $data['nickname'];
-        }
-
-        if (isset($data['chat_color'])) {
-            $updates[] = "chat_color = ?";
-            $types .= "s";
-            $params[] = $data['chat_color'];
-        }
-
-        if (isset($data['avatar_url'])) {
-            $updates[] = "avatar_url = ?";
-            $types .= "s";
-            $params[] = $data['avatar_url'];
         }
 
         if (isset($data['role'])) {
@@ -126,7 +151,10 @@ class UserManager {
         $stmt->bind_param("ssss", $login, $nickname, $hash, $role);
         
         if ($stmt->execute()) {
-            return $stmt->insert_id;
+            $newUserId = $stmt->insert_id;
+            // Set default options
+            $this->setUserOption($newUserId, 'chat_color', '#6d2f8e');
+            return $newUserId;
         } else {
             throw new Exception("Ошибка при создании пользователя: " . $stmt->error);
         }

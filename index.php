@@ -258,9 +258,12 @@ require_once __DIR__ . '/src/templates/header.php';
 
             <div class="form-group" style="margin-bottom: 15px;">
                 <label class="form-label">Цвет имени</label>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <input type="color" name="chat_color" value="<?= htmlspecialchars($currentUser['chat_color'] ?? '#6d2f8e') ?>" style="height: 38px; width: 60px; border: none; padding: 0; cursor: pointer;">
-                    <span style="font-size: 0.9em; color: #666;">Твой цвет</span>
+                <div class="color-picker-ui">
+                    <input type="hidden" name="chat_color" value="<?= htmlspecialchars($currentUser['chat_color'] ?? '#6d2f8e') ?>">
+                    <div class="manual-input-wrapper">
+                        <span style="font-size: 0.9em; color: #666;">Свой цвет:</span>
+                        <input type="text" class="color-manual-input" placeholder="#HEX..." maxlength="7">
+                    </div>
                 </div>
             </div>
 

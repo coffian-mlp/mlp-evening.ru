@@ -48,6 +48,123 @@ $(document).ready(function() {
         $('.nav-menu').toggleClass('open');
     });
     */
+
+    // --- 4. Кастомный Color Picker ---
+    window.initColorPickers = function() {
+        $('.color-picker-ui').each(function() {
+            var $container = $(this);
+            // Check if already initialized to avoid duplicates
+            if ($container.data('initialized')) return;
+            $container.data('initialized', true);
+
+            var $hiddenInput = $container.find('input[type="hidden"]');
+            var $manualInput = $container.find('.color-manual-input'); // Text input for HEX
+            if ($hiddenInput.length === 0) return; 
+
+            // Пони-палитра 🦄
+            var colors = [
+                { color: '#6d2f8e', name: 'Twilight Sparkle' },
+                { color: '#e91e63', name: 'Pinkie Pie' },
+                { color: '#2196f3', name: 'Rainbow Dash' },
+                { color: '#ff9800', name: 'Applejack' },
+                { color: '#f1c40f', name: 'Fluttershy' },
+                { color: '#9c27b0', name: 'Rarity' },
+                { color: '#3f51b5', name: 'Princess Luna' },
+                { color: '#ffeb3b', name: 'Princess Celestia' }, // Goldish
+                { color: '#8bc34a', name: 'Spike' },
+                { color: '#ba68c8', name: 'Starlight Glimmer' },
+                { color: '#ff5722', name: 'Sunset Shimmer' },
+                { color: '#009688', name: 'Chrysalis' },
+                { color: '#795548', name: 'Discord' },
+                { color: '#607d8b', name: 'Background Pony' }
+            ];
+
+            // Create swatches container
+            var $swatches = $('<div class="color-swatches"></div>');
+            
+            colors.forEach(function(item) {
+                var $swatch = $('<div class="color-swatch"></div>');
+                $swatch.css('background-color', item.color);
+                $swatch.attr('data-color', item.color);
+                $swatch.attr('title', item.name);
+                
+                // Active state check
+                if ($hiddenInput.val().toLowerCase() === item.color.toLowerCase()) {
+                    $swatch.addClass('active');
+                }
+
+                $swatch.click(function() {
+                    var c = item.color;
+                    // Update inputs
+                    $hiddenInput.val(c);
+                    if ($manualInput.length) {
+                        $manualInput.val(c);
+                        $container.find('.color-manual-preview').css('background-color', c);
+                    }
+                    
+                    // Update visual
+                    $container.find('.color-swatch').removeClass('active');
+                    $(this).addClass('active');
+                });
+
+                $swatches.append($swatch);
+            });
+
+            // Prepend swatches before the manual input wrapper (if any) or just append
+            if ($container.find('.manual-input-wrapper').length) {
+                $container.find('.manual-input-wrapper').before($swatches);
+            } else {
+                $container.append($swatches);
+            }
+
+            // Manual Input Logic
+            if ($manualInput.length) {
+                // Create Preview Swatch dynamically
+                var $preview = $('<div class="color-manual-preview" title="Предпросмотр"></div>');
+                $container.find('.manual-input-wrapper').append($preview);
+
+                // Init value
+                var initialColor = $hiddenInput.val();
+                $manualInput.val(initialColor);
+                $preview.css('background-color', initialColor);
+
+                $manualInput.on('input', function() {
+                    var val = $(this).val();
+                    if (!val.startsWith('#') && val.length > 0) {
+                        val = '#' + val;
+                    }
+                    
+                    // Live Preview (accepts 3 or 6 chars for UX)
+                    if (/^#([0-9A-Fa-f]{3}){1,2}$/.test(val)) {
+                         $preview.css('background-color', val);
+                    } else if (val === '') {
+                         $preview.css('background-color', 'transparent');
+                    }
+
+                    // Validate HEX (strictly 6 chars for saving)
+                    if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                        $hiddenInput.val(val);
+                        
+                        // Check if matches any swatch
+                        $container.find('.color-swatch').removeClass('active');
+                        $container.find(`.color-swatch[data-color="${val.toLowerCase()}"]`).addClass('active');
+                    }
+                });
+                
+                // Sync on blur to ensure # format
+                $manualInput.on('blur', function() {
+                    var val = $(this).val();
+                    if (val.length > 0 && !val.startsWith('#')) {
+                        $(this).val('#' + val);
+                    }
+                });
+            }
+        });
+    };
+
+    // Auto-init on page load if any exist
+    initColorPickers();
+
 });
 
 //Пасхалка в консоли - не удалять!

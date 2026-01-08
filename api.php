@@ -261,7 +261,7 @@ try {
             if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
             
             $userManager = new UserManager();
-            $users = $userManager->getAllUsers();
+            $users = $userManager->getAllUsers(); // Now returns users with chat_color and avatar_url joined
             sendResponse(true, "Список получен", 'success', ['users' => $users]);
             break;
 
@@ -332,20 +332,22 @@ try {
             if (empty($nickname)) $nickname = $login; 
             
             try {
+                $data = [
+                    'login' => $login,
+                    'nickname' => $nickname,
+                    'role' => $role,
+                    'avatar_url' => $avatar_url,
+                    'chat_color' => $chat_color
+                ];
+
                 if (!empty($id)) {
                     // Update
-                    $data = [
-                        'login' => $login,
-                        'nickname' => $nickname,
-                        'role' => $role,
-                        'avatar_url' => $avatar_url,
-                        'chat_color' => $chat_color
-                    ];
                     if (!empty($password)) {
                         if (mb_strlen($password) < 6) sendResponse(false, "Пароль слишком короткий", 'error');
                         $data['password'] = $password;
                     }
                     
+                    // UserManager::updateUser will handle option splitting internally!
                     $userManager->updateUser($id, $data);
                     sendResponse(true, "Пользователь обновлен");
                 } else {
@@ -355,13 +357,12 @@ try {
                     
                     $newId = $userManager->createUser($login, $password, $role, $nickname);
                     
-                    // Update extra fields
-                    if (!empty($avatar_url) || !empty($chat_color)) {
-                        $userManager->updateUser($newId, [
-                            'avatar_url' => $avatar_url,
-                            'chat_color' => $chat_color
-                        ]);
-                    }
+                    // Update extra fields (options)
+                    // We can reuse updateUser logic or just call it directly for options
+                    $userManager->updateUser($newId, [
+                        'avatar_url' => $avatar_url,
+                        'chat_color' => $chat_color
+                    ]);
                     
                     sendResponse(true, "Пользователь создан");
                 }

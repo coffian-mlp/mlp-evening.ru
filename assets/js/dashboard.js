@@ -336,6 +336,12 @@ function openUserModal() {
     $('#user_password').val('');
     $('#user_role').val('user');
     $('#user-modal-title').text('Новый пони');
+    
+    // Init Pickers
+    if (window.initColorPickers) window.initColorPickers();
+    // Update active swatch manually for default
+    $('.color-picker-ui .color-swatch').removeClass('active');
+    $(`.color-picker-ui .color-swatch[data-color="#6d2f8e"]`).addClass('active');
 }
 
 function closeUserModal() {
@@ -371,6 +377,13 @@ function editUser(user) {
     $('#user_password').val('');
     $('#user_role').val(user.role);
     $('#user-modal-title').text('Редактировать пони');
+    
+    // Init Pickers
+    if (window.initColorPickers) window.initColorPickers();
+    // Update active swatch
+    const color = user.chat_color || '#6d2f8e';
+    $('.color-picker-ui .color-swatch').removeClass('active');
+    $(`.color-picker-ui .color-swatch[data-color="${color}"]`).addClass('active');
 }
 
 function deleteUser(id) {
