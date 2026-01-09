@@ -1,256 +1,17 @@
-// main.js - Глобальные скрипты для всего сайта
-
-// --- Global Lightbox ---
-$(document).ready(function() {
-    // Click on Chat Images & Stickers
-    // Targets: Chat images (excluding emojis and stickers) AND Dashboard sticker previews
-    $(document).on('click', '.chat-message img:not(.emoji):not(.chat-sticker), .sticker-preview-img', function(e) {
-        // Prevent default link navigation if wrapped in <a>
-        e.preventDefault();
-        
-        var src = $(this).attr('src');
-        // Check if wrapped in link to high-res image
-        var parentLink = $(this).closest('a');
-        if (parentLink.length) {
-            var href = parentLink.attr('href');
-            if (href && href.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i)) {
-                src = href;
-            }
-        }
-        
-        $('#global-lightbox-img').attr('src', src);
-        $('#global-lightbox').addClass('active').fadeIn(200);
-    });
-
-    // Close on click
-    $('#global-lightbox').click(function(e) {
-        $(this).removeClass('active').fadeOut(200);
-    });
-});
-
-$(document).ready(function() {
-    
-    // --- 1. CSRF Protection Setup ---
-    // Автоматически добавляем токен во все AJAX запросы
-    $.ajaxSetup({
-        headers: {
-            'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content')
-        }
-    });
-
-    // --- 2. Глобальная функция уведомлений ---
-    // Делаем её доступной глобально (через window)
-    window.showFlashMessage = function(message, type) {
-        // Удаляем старые сообщения
-        $('.flash-message').remove();
-
-        var alertClass = (type === 'error') ? 'alert-danger' : 'alert-success';
-        
-        // Создаем элемент уведомления
-        // Стили для .flash-message должны быть описаны в CSS (например, main.css)
-        var $msg = $('<div class="flash-message ' + alertClass + '">' + message + '</div>');
-        
-        // Добавляем в body
-        $('body').append($msg);
-
-        // Автоскрытие через 3 секунды (можно настроить)
-        // Ошибки тоже скрываем, но чуть позже? Или оставляем висеть?
-        // Пусть ошибки висят 5 сек.
-        var timeout = (type === 'error') ? 5000 : 3000;
-
-        setTimeout(function() {
-            $msg.fadeOut(500, function() {
-                $(this).remove();
-            });
-        }, timeout);
-        
-        // Закрытие по клику
-        $msg.click(function() {
-            $(this).remove();
-        });
-    };
-
-    // --- 3. Мобильное меню (если есть) ---
-    /*
-    $('.mobile-menu-toggle').click(function() {
-        $('.nav-menu').toggleClass('open');
-    });
-    */
-
-    // --- 4. Кастомный Color Picker ---
-    window.initColorPickers = function() {
-        $('.color-picker-ui').each(function() {
-            var $container = $(this);
-            // Check if already initialized to avoid duplicates
-            if ($container.data('initialized')) return;
-            $container.data('initialized', true);
-
-            var $hiddenInput = $container.find('input[type="hidden"]');
-            var $manualInput = $container.find('.color-manual-input'); // Text input for HEX
-            if ($hiddenInput.length === 0) return; 
-
-            // Пони-палитра 🦄
-            var colors = [
-                { color: '#6d2f8e', name: 'Twilight Sparkle' },
-                { color: '#e91e63', name: 'Pinkie Pie' },
-                { color: '#2196f3', name: 'Rainbow Dash' },
-                { color: '#ff9800', name: 'Applejack' },
-                { color: '#f1c40f', name: 'Fluttershy' },
-                { color: '#9c27b0', name: 'Rarity' },
-                { color: '#3f51b5', name: 'Princess Luna' },
-                { color: '#ffeb3b', name: 'Princess Celestia' }, // Goldish
-                { color: '#8bc34a', name: 'Spike' },
-                { color: '#ba68c8', name: 'Starlight Glimmer' },
-                { color: '#ff5722', name: 'Sunset Shimmer' },
-                { color: '#009688', name: 'Chrysalis' },
-                { color: '#795548', name: 'Discord' },
-                { color: '#607d8b', name: 'Background Pony' }
-            ];
-
-            // Create swatches container
-            var $swatches = $('<div class="color-swatches"></div>');
-            
-            colors.forEach(function(item) {
-                var $swatch = $('<div class="color-swatch"></div>');
-                $swatch.css('background-color', item.color);
-                $swatch.attr('data-color', item.color);
-                $swatch.attr('title', item.name);
-                
-                // Active state check
-                if ($hiddenInput.val().toLowerCase() === item.color.toLowerCase()) {
-                    $swatch.addClass('active');
-                }
-
-                $swatch.click(function() {
-                    var c = item.color;
-                    // Update inputs
-                    $hiddenInput.val(c);
-                    if ($manualInput.length) {
-                        $manualInput.val(c);
-                        $container.find('.color-manual-preview').css('background-color', c);
-                    }
-                    
-                    // Update visual
-                    $container.find('.color-swatch').removeClass('active');
-                    $(this).addClass('active');
-                });
-
-                $swatches.append($swatch);
-            });
-
-            // Prepend swatches before the manual input wrapper (if any) or just append
-            if ($container.find('.manual-input-wrapper').length) {
-                $container.find('.manual-input-wrapper').before($swatches);
-            } else {
-                $container.append($swatches);
-            }
-
-            // Manual Input Logic
-            if ($manualInput.length) {
-                // Create Preview Swatch dynamically
-                var $preview = $('<div class="color-manual-preview" title="Предпросмотр"></div>');
-                $container.find('.manual-input-wrapper').append($preview);
-
-                // Init value
-                var initialColor = $hiddenInput.val();
-                $manualInput.val(initialColor);
-                $preview.css('background-color', initialColor);
-
-                $manualInput.on('input', function() {
-                    var val = $(this).val();
-                    if (!val.startsWith('#') && val.length > 0) {
-                        val = '#' + val;
-                    }
-                    
-                    // Live Preview (accepts 3 or 6 chars for UX)
-                    if (/^#([0-9A-Fa-f]{3}){1,2}$/.test(val)) {
-                         $preview.css('background-color', val);
-                    } else if (val === '') {
-                         $preview.css('background-color', 'transparent');
-                    }
-
-                    // Validate HEX (strictly 6 chars for saving)
-                    if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
-                        $hiddenInput.val(val);
-                        
-                        // Check if matches any swatch
-                        $container.find('.color-swatch').removeClass('active');
-                        $container.find(`.color-swatch[data-color="${val.toLowerCase()}"]`).addClass('active');
-                    }
-                });
-                
-                // Sync on blur to ensure # format
-                $manualInput.on('blur', function() {
-                    var val = $(this).val();
-                    if (val.length > 0 && !val.startsWith('#')) {
-                        $(this).val('#' + val);
-                    }
-                });
-            }
-        });
-    };
-
-    // Auto-init on page load if any exist
-    initColorPickers();
-
-    // --- 5. Telegram Auth Callback ---
-    window.onTelegramAuth = function(user) {
-        // user = {id: ..., first_name: ..., username: ..., hash: ...}
-        
-        // Отправляем данные на сервер для проверки и входа
-        $.ajax({
-            url: 'api.php',
-            method: 'POST',
-            data: {
-                action: 'social_login',
-                provider: 'telegram',
-                data: user,
-                // Для публичного входа CSRF токен может отсутствовать, 
-                // если мы не залогинены. На бэкенде проверим.
-                csrf_token: $('meta[name="csrf-token"]').attr('content')
-            },
-            success: function(response) {
-                if (response.success) {
-                    showFlashMessage(response.message, 'success');
-                    // Если есть редирект (или reload)
-                    if (response.data && response.data.redirect) {
-                        window.location.href = response.data.redirect;
-                    } else {
-                        location.reload();
-                    }
-                } else {
-                    showFlashMessage(response.message, 'error');
-                }
-            },
-            error: function() {
-                showFlashMessage('Ошибка соединения с сервером', 'error');
-            }
-        });
-    };
-
-}); // End of $(document).ready
-
 // --- 6. Загрузка списка соцсетей в профиле (ВЫНЕСЕНО) ---
 window.openProfileModal = function(e) {
     if(e) e.preventDefault();
-    $('#profile-modal').fadeIn(200);
     
-    console.log('Profile opened (Global). Calling loadUserSocials...');
-    // Загружаем список привязок
-    loadUserSocials();
+    // Используем callback, чтобы грузить виджет только когда модалка ВИДИМА
+    $('#profile-modal').css('display', 'flex').hide().fadeIn(200, function() {
+        // console.log('Profile Modal visible. Loading socials...');
+        loadUserSocials();
+    });
 };
 
 function loadUserSocials() {
     var $container = $('#telegram-bind-container');
-    console.log('loadUserSocials called. Container found:', $container.length);
-    
-    if (!$container.length) {
-        console.warn('Container #telegram-bind-container not found!');
-        return; 
-    }
-
-    // Пока грузим - можно показать спиннер или ничего
-    // $container.html('...');
+    if (!$container.length) return;
 
     $.ajax({
         url: 'api.php',
@@ -259,30 +20,50 @@ function loadUserSocials() {
             action: 'get_user_socials',
             csrf_token: $('meta[name="csrf-token"]').attr('content')
         },
-            success: function(resp) {
-                console.log('AJAX Success:', resp);
-                if (resp.success) {
-                    var telegram = resp.data.socials.find(s => s.provider === 'telegram');
+        success: function(resp) {
+            // console.log('AJAX Success:', resp);
+            if (resp.success) {
+                var telegram = resp.data.socials.find(s => s.provider === 'telegram');
+                
+                // Скрываем лоадер
+                $container.find('.loading-text').hide();
+
+                var $widget = $('#telegram-widget-wrapper');
+                var $status = $('#telegram-status-text');
+
+                if (telegram) {
+                    // Уже привязан -> Скрываем виджет, показываем статус
+                    // Мы не удаляем виджет (.remove()), чтобы он не сломался, если пользователь выйдет
+                    // Но можно и удалить, если не планируем отвязку "на лету" без перезагрузки
+                    $widget.hide();
+                    $status.text('✓ ' + (telegram.username || telegram.first_name)).show();
+                } else {
+                    // Не привязан -> Вставляем виджет, если его нет
+                    $status.hide();
                     
-                    // Скрываем лоадер
-                    $container.find('.loading-text').hide();
-
-                    var $widget = $('#telegram-widget-wrapper');
-                    var $status = $('#telegram-status-text');
-
-                    if (telegram) {
-                        // Уже привязан
-                        // Убиваем виджет
-                        $widget.remove(); 
-                        $status.text('✓ ' + (telegram.username || telegram.first_name)).show();
-                    } else {
-                        // Не привязан -> Виджет уже видим, ничего не делаем
-                        $status.hide();
+                    // Если виджета нет (первый раз или был удален), вставляем его
+                    if ($widget.find('iframe').length === 0 && $widget.find('script').length === 0) {
+                        if (window.telegramBotUsername) {
+                             var widgetHtml = '<script async src="https://telegram.org/js/telegram-widget.js?22" ' +
+                                             'data-telegram-login="' + window.telegramBotUsername + '" ' +
+                                             'data-size="medium" ' +
+                                             'data-userpic="false" ' +
+                                             'data-radius="5" ' +
+                                             'data-onauth="onTelegramAuth(user)" ' +
+                                             'data-request-access="write"></script>';
+                            
+                            $widget.html(widgetHtml);
+                        } else {
+                             $container.html('<small style="color:red">Ошибка конфига</small>');
+                        }
                     }
+                    $widget.show();
                 }
-            },
+            }
+        },
         error: function(xhr, status, error) {
             console.error('AJAX Error:', error);
+            $container.find('.loading-text').text('Ошибка сети');
         }
     });
 }
