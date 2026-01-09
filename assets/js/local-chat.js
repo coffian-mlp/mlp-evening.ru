@@ -1047,10 +1047,7 @@ $(document).ready(function() {
     const profileForm = $('#ajax-profile-form');
     const profileError = $('#profile-error');
 
-    window.openProfileModal = function(e) {
-        if (e) e.preventDefault();
-        profileModal.css('display', 'flex').hide().fadeIn(200);
-    };
+    // window.openProfileModal удален отсюда, так как он теперь в main.js
 
     $('.close-modal-profile').on('click', function() {
         profileModal.fadeOut(200);
