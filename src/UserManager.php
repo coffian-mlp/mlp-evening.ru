@@ -42,7 +42,7 @@ class UserManager {
 
     public function getUserById($id) {
         $stmt = $this->db->prepare("
-            SELECT u.id, u.login, u.nickname, u.role, 
+            SELECT u.id, u.login, u.nickname, u.role, u.is_banned, u.ban_reason,
                    uo_color.option_value as chat_color,
                    uo_avatar.option_value as avatar_url
             FROM users u
