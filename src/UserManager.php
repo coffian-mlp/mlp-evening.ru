@@ -62,6 +62,14 @@ class UserManager {
         return $user;
     }
 
+    public function getUserByLogin($login) {
+        $stmt = $this->db->prepare("SELECT id, login, nickname, role, password_hash, is_banned, ban_reason FROM users WHERE login = ?");
+        $stmt->bind_param("s", $login);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        return $res ? $res->fetch_assoc() : null;
+    }
+
     // Универсальный метод обновления
     public function updateUser($id, $data) {
         $updates = [];
