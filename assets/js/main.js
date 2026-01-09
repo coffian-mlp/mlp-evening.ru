@@ -321,19 +321,23 @@ function loadUserSocials() {
                     $statusContainer.hide().empty();
                     $widgetContainer.show();
                     
-                    // Проверяем, есть ли уже скрипт виджета, чтобы не дублировать
-                    if ($widgetContainer.find('script').length === 0 && window.telegramBotUsername) {
-                        // Вставляем виджет динамически, так как модалка уже видима (loadUserSocials вызывается в callback fadeIn)
-                        var script = document.createElement('script');
-                        script.async = true;
-                        script.src = "https://telegram.org/js/telegram-widget.js?22";
-                        script.setAttribute('data-telegram-login', window.telegramBotUsername);
-                        script.setAttribute('data-size', 'medium');
-                        script.setAttribute('data-radius', '5');
-                        script.setAttribute('data-onauth', 'onTelegramBind(user)');
-                        script.setAttribute('data-request-access', 'write');
-                        
-                        $widgetContainer[0].appendChild(script);
+                    // Очищаем контейнер перед вставкой, чтобы убрать старые/зависшие скрипты
+                    $widgetContainer.empty();
+
+                    if (window.telegramBotUsername) {
+                        // Небольшой тайм-аут, чтобы убедиться, что DOM обновился и контейнер виден
+                        setTimeout(function() {
+                            var script = document.createElement('script');
+                            script.async = true;
+                            script.src = "https://telegram.org/js/telegram-widget.js?22";
+                            script.setAttribute('data-telegram-login', window.telegramBotUsername);
+                            script.setAttribute('data-size', 'medium');
+                            script.setAttribute('data-radius', '5');
+                            script.setAttribute('data-onauth', 'onTelegramBind(user)');
+                            script.setAttribute('data-request-access', 'write');
+                            
+                            $widgetContainer[0].appendChild(script);
+                        }, 10);
                     }
                 }
             }
