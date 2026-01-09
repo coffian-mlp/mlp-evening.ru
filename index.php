@@ -354,9 +354,17 @@ require_once __DIR__ . '/src/templates/header.php';
                         <span style="display: flex; align-items: center; gap: 5px;">
                             <img src="https://telegram.org/favicon.ico" width="20"> Telegram
                         </span>
-                        <div id="telegram-bind-container">
-                            <!-- Сюда вставится виджет или кнопка отвязки -->
-                            <small class="loading-text">Загрузка...</small>
+                        <div id="telegram-bind-container" style="min-height: 40px; display: flex; align-items: center;">
+                            <!-- Виджет загружается сразу, JS скроет его, если аккаунт уже привязан -->
+                            <div id="telegram-widget-wrapper">
+                                <script async src="https://telegram.org/js/telegram-widget.js?22" 
+                                        data-telegram-login="<?= htmlspecialchars($telegramBotUsername) ?>" 
+                                        data-size="small" 
+                                        data-radius="5" 
+                                        data-onauth="onTelegramAuth(user)" 
+                                        data-request-access="write"></script>
+                            </div>
+                            <span id="telegram-status-text" style="display:none; color: green; font-weight: bold;"></span>
                         </div>
                     </div>
                 </div>

@@ -125,17 +125,34 @@ CREATE TABLE IF NOT EXISTS `user_options` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `sticker_packs`
+--
+
+CREATE TABLE IF NOT EXISTS `sticker_packs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `code` varchar(50) NOT NULL COMMENT 'Уникальный код пака',
+  `name` varchar(100) NOT NULL COMMENT 'Название пака',
+  `icon_url` varchar(255) DEFAULT NULL,
+  `sort_order` int(11) DEFAULT '0',
+  `is_active` tinyint(1) DEFAULT '1',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
 -- Table structure for table `chat_stickers`
 --
 
 CREATE TABLE IF NOT EXISTS `chat_stickers` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
+  `pack_id` int(11) DEFAULT NULL,
   `code` varchar(50) NOT NULL COMMENT 'Код стикера без двоеточий',
   `image_url` varchar(255) NOT NULL,
   `collection` varchar(50) DEFAULT 'default',
   `sort_order` int(11) DEFAULT '0',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `code` (`code`)
+  UNIQUE KEY `code` (`code`),
+  KEY `pack_id` (`pack_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- --------------------------------------------------------

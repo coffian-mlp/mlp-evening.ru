@@ -241,7 +241,38 @@ $(document).ready(function() {
         var $container = $('#telegram-bind-container');
         if (!$container.length) return; // Если блок отключен в конфиге
 
-        $container.html('<small>Проверка...</small>');
+        // Не очищаем контейнер сразу, чтобы не убить виджет, если он там есть
+        
+        // --- Вставка виджета (если его там еще нет) ---
+        // Делаем это ДО ajax, чтобы он начал грузиться сразу
+        if ($container.find('iframe').length === 0 && $container.find('script[data-telegram-login]').length === 0) {
+            if (window.telegramBotUsername) {
+                // Создаем обертку
+                var $wrapper = $('<div id="telegram-widget-wrapper"></div>');
+                // Скрываем её по умолчанию, пока не узнаем статус привязки (чтобы не мигало)
+                $wrapper.hide();
+                
+                // Текст статуса (тоже скрыт)
+                var $status = $('<span id="telegram-status-text" style="display:none; color: green; font-weight: bold; font-size: 0.9em;"></span>');
+                
+                $container.empty().append($wrapper).append($status);
+
+                var script = document.createElement('script');
+                script.async = true;
+                script.src = "https://telegram.org/js/telegram-widget.js?22";
+                script.setAttribute('data-telegram-login', window.telegramBotUsername);
+                script.setAttribute('data-size', 'medium');
+                script.setAttribute('data-userpic', 'false'); // Без картинки бота
+                script.setAttribute('data-radius', '5');
+                script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+                script.setAttribute('data-request-access', 'write');
+                
+                // Вставляем скрипт в обертку
+                document.getElementById('telegram-widget-wrapper').appendChild(script);
+            } else {
+                $container.html('<small style="color:red">Ошибка конфига</small>');
+            }
+        }
 
         $.ajax({
             url: 'api.php',
@@ -254,45 +285,17 @@ $(document).ready(function() {
                 if (resp.success) {
                     var telegram = resp.data.socials.find(s => s.provider === 'telegram');
                     
+                    var $widget = $('#telegram-widget-wrapper');
+                    var $status = $('#telegram-status-text');
+
                     if (telegram) {
-                        // Уже привязан
-                        $container.html(`
-                            <span style="color: green; font-weight: bold; font-size: 0.9em;">
-                                ✓ ${telegram.first_name} (${telegram.username || 'Без ника'})
-                            </span>
-                            <!-- <button type="button" class="btn-xs btn-danger" onclick="unlinkSocial('telegram')">×</button> -->
-                        `);
+                        // Уже привязан -> Скрываем виджет, показываем текст
+                        $widget.hide();
+                        $status.text('✓ ' + (telegram.username || telegram.first_name)).show();
                     } else {
                         // Не привязан -> Показываем виджет
-                        // Важно: Виджет Telegram вставляется скриптом.
-                        // Нам нужно создать скрипт динамически.
-                        
-                        // Получаем имя бота из глобальной переменной (нужно передать из PHP)
-                        // Но пока захардкодим или получим через атрибут
-                        // Лучше всего вставить контейнер в HTML и использовать TelegramLoginWidget
-                        
-                        // Простой вариант: Вставить скрипт
-                        // Но виджет может не сработать при динамической вставке.
-                        // Решение: Скрытый контейнер с уже загруженным виджетом?
-                        // Или использование data-auth-url для редиректа?
-                        // Попробуем вставить скрипт:
-                        
-                        // Проблема: нам нужен bot_username.
-                        // Передадим его через window.telegramBotUsername (добавим в index.php)
-                        
-                        if (window.telegramBotUsername) {
-                            $container.empty();
-                            var script = document.createElement('script');
-                            script.async = true;
-                            script.src = "https://telegram.org/js/telegram-widget.js?22";
-                            script.setAttribute('data-telegram-login', window.telegramBotUsername);
-                            script.setAttribute('data-size', 'small');
-                            script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-                            script.setAttribute('data-request-access', 'write');
-                            $container.append(script);
-                        } else {
-                            $container.html('<small style="color:red">Ошибка конфига</small>');
-                        }
+                        $widget.show();
+                        $status.hide();
                     }
                 }
             }
