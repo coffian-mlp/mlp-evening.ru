@@ -228,76 +228,80 @@ $(document).ready(function() {
         });
     };
 
-    // --- 6. Загрузка списка соцсетей в профиле ---
-    window.openProfileModal = function(e) {
-        if(e) e.preventDefault();
-        $('#profile-modal').fadeIn(200);
-        
-        console.log('Profile opened. Calling loadUserSocials...');
-        // Загружаем список привязок
-        loadUserSocials();
-    };
+}); // End of $(document).ready
 
-    function loadUserSocials() {
-        var $container = $('#telegram-bind-container');
-        console.log('loadUserSocials called. Container found:', $container.length);
-        
-        if (!$container.length) {
-            console.warn('Container #telegram-bind-container not found!');
-            return; 
-        }
+// --- 6. Загрузка списка соцсетей в профиле (ВЫНЕСЕНО) ---
+window.openProfileModal = function(e) {
+    if(e) e.preventDefault();
+    $('#profile-modal').fadeIn(200);
+    
+    console.log('Profile opened (Global). Calling loadUserSocials...');
+    // Загружаем список привязок
+    loadUserSocials();
+};
 
-        // Пока грузим - можно показать спиннер или ничего
-        // $container.html('...');
+function loadUserSocials() {
+    var $container = $('#telegram-bind-container');
+    console.log('loadUserSocials called. Container found:', $container.length);
+    
+    if (!$container.length) {
+        console.warn('Container #telegram-bind-container not found!');
+        return; 
+    }
 
-        $.ajax({
-            url: 'api.php',
-            method: 'POST',
-            data: { 
-                action: 'get_user_socials',
-                csrf_token: $('meta[name="csrf-token"]').attr('content')
-            },
-            success: function(resp) {
-                if (resp.success) {
-                    var telegram = resp.data.socials.find(s => s.provider === 'telegram');
+    // Пока грузим - можно показать спиннер или ничего
+    // $container.html('...');
 
-                    $container.empty(); // Очищаем всё старое
+    $.ajax({
+        url: 'api.php',
+        method: 'POST',
+        data: { 
+            action: 'get_user_socials',
+            csrf_token: $('meta[name="csrf-token"]').attr('content')
+        },
+        success: function(resp) {
+            console.log('AJAX Success:', resp);
+            if (resp.success) {
+                var telegram = resp.data.socials.find(s => s.provider === 'telegram');
 
-                    if (telegram) {
-                        // Уже привязан
-                        $container.html('<span style="color: green; font-weight: bold; font-size: 0.9em;">✓ ' + (telegram.username || telegram.first_name) + '</span>');
+                $container.empty(); // Очищаем всё старое
+
+                if (telegram) {
+                    // Уже привязан
+                    $container.html('<span style="color: green; font-weight: bold; font-size: 0.9em;">✓ ' + (telegram.username || telegram.first_name) + '</span>');
+                } else {
+                    // Не привязан -> Вставляем виджет
+                    if (window.telegramBotUsername) {
+                        var script = document.createElement('script');
+                        script.async = true;
+                        script.src = "https://telegram.org/js/telegram-widget.js?22";
+                        script.setAttribute('data-telegram-login', window.telegramBotUsername);
+                        script.setAttribute('data-size', 'medium');
+                        script.setAttribute('data-userpic', 'false');
+                        script.setAttribute('data-radius', '5');
+                        script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+                        script.setAttribute('data-request-access', 'write');
+                        
+                        // Вставляем прямо в контейнер. Он уже видим (модалка открыта).
+                        // И используем нативный JS для вставки скрипта, так надежнее.
+                        $container[0].appendChild(script);
                     } else {
-                        // Не привязан -> Вставляем виджет
-                        if (window.telegramBotUsername) {
-                            var script = document.createElement('script');
-                            script.async = true;
-                            script.src = "https://telegram.org/js/telegram-widget.js?22";
-                            script.setAttribute('data-telegram-login', window.telegramBotUsername);
-                            script.setAttribute('data-size', 'medium');
-                            script.setAttribute('data-userpic', 'false');
-                            script.setAttribute('data-radius', '5');
-                            script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-                            script.setAttribute('data-request-access', 'write');
-                            
-                            // Вставляем прямо в контейнер. Он уже видим (модалка открыта).
-                            // И используем нативный JS для вставки скрипта, так надежнее.
-                            $container[0].appendChild(script);
-                        } else {
-                            $container.html('<small style="color:red">Ошибка конфига</small>');
-                        }
+                        $container.html('<small style="color:red">Ошибка конфига</small>');
                     }
                 }
             }
-        });
-    }
+        },
+        error: function(xhr, status, error) {
+            console.error('AJAX Error:', error);
+        }
+    });
+}
 
-    // Обработчик открытия модалки логина
-    window.openLoginModal = function(e) {
-        if(e) e.preventDefault();
-        $('#login-modal').fadeIn(200);
-    };
-
-});
+// Обработчик открытия модалки логина
+window.openLoginModal = function(e) {
+    if(e) e.preventDefault();
+    $('#login-modal').fadeIn(200);
+};
 
 //Пасхалка в консоли - не удалять!
 console.log(`
