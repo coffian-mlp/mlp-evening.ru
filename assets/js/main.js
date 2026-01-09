@@ -239,40 +239,10 @@ $(document).ready(function() {
 
     function loadUserSocials() {
         var $container = $('#telegram-bind-container');
-        if (!$container.length) return; // Если блок отключен в конфиге
+        if (!$container.length) return; 
 
-        // Не очищаем контейнер сразу, чтобы не убить виджет, если он там есть
-        
-        // --- Вставка виджета (если его там еще нет) ---
-        // Делаем это ДО ajax, чтобы он начал грузиться сразу
-        if ($container.find('iframe').length === 0 && $container.find('script[data-telegram-login]').length === 0) {
-            if (window.telegramBotUsername) {
-                // Создаем обертку
-                var $wrapper = $('<div id="telegram-widget-wrapper"></div>');
-                // Скрываем её по умолчанию, пока не узнаем статус привязки (чтобы не мигало)
-                $wrapper.hide();
-                
-                // Текст статуса (тоже скрыт)
-                var $status = $('<span id="telegram-status-text" style="display:none; color: green; font-weight: bold; font-size: 0.9em;"></span>');
-                
-                $container.empty().append($wrapper).append($status);
-
-                var script = document.createElement('script');
-                script.async = true;
-                script.src = "https://telegram.org/js/telegram-widget.js?22";
-                script.setAttribute('data-telegram-login', window.telegramBotUsername);
-                script.setAttribute('data-size', 'medium');
-                script.setAttribute('data-userpic', 'false'); // Без картинки бота
-                script.setAttribute('data-radius', '5');
-                script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-                script.setAttribute('data-request-access', 'write');
-                
-                // Вставляем скрипт в обертку
-                document.getElementById('telegram-widget-wrapper').appendChild(script);
-            } else {
-                $container.html('<small style="color:red">Ошибка конфига</small>');
-            }
-        }
+        // Пока грузим - можно показать спиннер или ничего
+        // $container.html('...');
 
         $.ajax({
             url: 'api.php',
@@ -284,18 +254,31 @@ $(document).ready(function() {
             success: function(resp) {
                 if (resp.success) {
                     var telegram = resp.data.socials.find(s => s.provider === 'telegram');
-                    
-                    var $widget = $('#telegram-widget-wrapper');
-                    var $status = $('#telegram-status-text');
+
+                    $container.empty(); // Очищаем всё старое
 
                     if (telegram) {
-                        // Уже привязан -> Скрываем виджет, показываем текст
-                        $widget.hide();
-                        $status.text('✓ ' + (telegram.username || telegram.first_name)).show();
+                        // Уже привязан
+                        $container.html('<span style="color: green; font-weight: bold; font-size: 0.9em;">✓ ' + (telegram.username || telegram.first_name) + '</span>');
                     } else {
-                        // Не привязан -> Показываем виджет
-                        $widget.show();
-                        $status.hide();
+                        // Не привязан -> Вставляем виджет
+                        if (window.telegramBotUsername) {
+                            var script = document.createElement('script');
+                            script.async = true;
+                            script.src = "https://telegram.org/js/telegram-widget.js?22";
+                            script.setAttribute('data-telegram-login', window.telegramBotUsername);
+                            script.setAttribute('data-size', 'medium');
+                            script.setAttribute('data-userpic', 'false');
+                            script.setAttribute('data-radius', '5');
+                            script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+                            script.setAttribute('data-request-access', 'write');
+                            
+                            // Вставляем прямо в контейнер. Он уже видим (модалка открыта).
+                            // И используем нативный JS для вставки скрипта, так надежнее.
+                            $container[0].appendChild(script);
+                        } else {
+                            $container.html('<small style="color:red">Ошибка конфига</small>');
+                        }
                     }
                 }
             }
