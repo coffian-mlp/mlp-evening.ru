@@ -386,17 +386,8 @@ try {
 
         case 'get_user_socials':
             $userId = $_SESSION['user_id'];
-            $db = Database::getInstance()->getConnection();
-            
-            $stmt = $db->prepare("SELECT provider, username, first_name, last_name FROM user_socials WHERE user_id = ?");
-            $stmt->bind_param("i", $userId);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            
-            $socials = [];
-            while ($row = $result->fetch_assoc()) {
-                $socials[] = $row;
-            }
+            $userManager = new UserManager();
+            $socials = $userManager->getUserSocials($userId);
             
             sendResponse(true, "Список соцсетей получен", 'success', ['socials' => $socials]);
             break;
@@ -411,12 +402,8 @@ try {
             // Защита: Нельзя отвязать единственную соцсеть, если нет пароля? 
             // Пока оставим простую логику.
             
-            $db = Database::getInstance()->getConnection();
-            $stmt = $db->prepare("DELETE FROM user_socials WHERE user_id = ? AND provider = ?");
-            $stmt->bind_param("is", $userId, $provider);
-            $stmt->execute();
-            
-            if ($stmt->affected_rows > 0) {
+            $userManager = new UserManager();
+            if ($userManager->unlinkSocial($userId, $provider)) {
                 sendResponse(true, "Аккаунт отвязан!");
             } else {
                 sendResponse(false, "Привязка не найдена.", 'error');

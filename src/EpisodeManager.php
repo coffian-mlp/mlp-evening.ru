@@ -198,9 +198,9 @@ class EpisodeManager {
     }
 
     public function getAllEpisodes() {
-        // 1. Try Cache (TTL 60 sec)
+        // 1. Try Cache (TTL 30 days)
         if (file_exists($this->cacheFile)) {
-            if (time() - filemtime($this->cacheFile) < 60) {
+            if (time() - filemtime($this->cacheFile) < 2592000) { // 30 * 24 * 60 * 60
                 $json = file_get_contents($this->cacheFile);
                 if ($json) {
                     $data = json_decode($json, true);

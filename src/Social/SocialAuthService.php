@@ -68,7 +68,8 @@ class SocialAuthService {
             }
             
             // Обновляем инфо в user_socials (вдруг сменил ник/аву)
-            $this->updateSocialInfo($linkedAccount['id'], $socialUser);
+            // Используем метод UserManager для сброса кеша
+            $this->userManager->updateSocialInfo($linkedAccount['id'], $socialUser);
 
             return ['success' => true, 'message' => 'Вход выполнен!', 'redirect' => '/'];
         }
@@ -77,7 +78,7 @@ class SocialAuthService {
         
         // А. Пользователь уже залогинен -> Привязываем к текущему
         if (Auth::check()) {
-            $this->linkAccount($_SESSION['user_id'], $providerName, $socialUser);
+            $this->userManager->linkSocial($_SESSION['user_id'], $providerName, $socialUser);
             return ['success' => true, 'message' => 'Аккаунт успешно привязан!', 'redirect' => '/dashboard.php#tab-profile']; // Предполагаемый редирект
         }
 
@@ -96,39 +97,6 @@ class SocialAuthService {
         } catch (Exception $e) {
             return ['success' => false, 'message' => 'Ошибка регистрации: ' . $e->getMessage()];
         }
-    }
-
-    private function linkAccount($userId, $provider, $data) {
-        $stmt = $this->db->prepare("
-            INSERT INTO user_socials (user_id, provider, provider_uid, username, first_name, last_name, avatar_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ");
-        $stmt->bind_param("issssss", 
-            $userId, 
-            $provider, 
-            $data['id'], 
-            $data['username'], 
-            $data['first_name'], 
-            $data['last_name'], 
-            $data['photo_url']
-        );
-        $stmt->execute();
-    }
-
-    private function updateSocialInfo($id, $data) {
-        $stmt = $this->db->prepare("
-            UPDATE user_socials 
-            SET username = ?, first_name = ?, last_name = ?, avatar_url = ?
-            WHERE id = ?
-        ");
-        $stmt->bind_param("ssssi", 
-            $data['username'], 
-            $data['first_name'], 
-            $data['last_name'], 
-            $data['photo_url'],
-            $id
-        );
-        $stmt->execute();
     }
 
     private function registerNewUser($provider, $data): int {
@@ -153,29 +121,19 @@ class SocialAuthService {
 
         // Генерируем надежный случайный пароль (пользователь его не знает, но он нужен базе)
         $randomPassword = bin2hex(random_bytes(16));
-        $passwordHash = password_hash($randomPassword, PASSWORD_DEFAULT);
 
-        // Создаем пользователя в основной таблице
-        $stmt = $this->db->prepare("INSERT INTO users (login, nickname, password_hash, role) VALUES (?, ?, ?, 'user')");
-        // Nickname берем красивый (First Name), а login - технический уникальный
+        // Создаем пользователя через UserManager (он же и кеш сбросит)
         $nickname = $data['first_name'] ?: $login;
-        $stmt->bind_param("sss", $login, $nickname, $passwordHash);
         
-        if (!$stmt->execute()) {
-            throw new Exception("Не удалось создать пользователя: " . $this->db->error);
-        }
-
-        $newUserId = $this->db->insert_id;
+        $newUserId = $this->userManager->createUser($login, $randomPassword, 'user', $nickname);
 
         // Если есть аватарка, сохраняем её в user_options (или профиль)
-        // В текущей реализации аватарка хранится в user_options['avatar_url'] или users
-        // UserManager->updateUser умеет распределять это.
         if (!empty($data['photo_url'])) {
             $this->userManager->updateUser($newUserId, ['avatar_url' => $data['photo_url']]);
         }
 
         // Привязываем соцсеть
-        $this->linkAccount($newUserId, $provider, $data);
+        $this->userManager->linkSocial($newUserId, $provider, $data);
 
         return $newUserId;
     }

@@ -4,12 +4,54 @@ require_once __DIR__ . '/Database.php';
 
 class UserManager {
     private $db;
+    private $cacheDir;
 
     public function __construct() {
         $this->db = Database::getInstance()->getConnection();
+        $this->cacheDir = __DIR__ . '/../cache/users/';
     }
 
+    // --- Caching Helpers ---
+
+    private function getCache($key, $ttl = 2592000) { // Default 30 days
+        $file = $this->cacheDir . $key . '.json';
+        if (file_exists($file)) {
+            if (time() - filemtime($file) < $ttl) {
+                $content = file_get_contents($file);
+                return $content ? json_decode($content, true) : null;
+            }
+        }
+        return null;
+    }
+
+    private function setCache($key, $data) {
+        if (!is_dir($this->cacheDir)) {
+            mkdir($this->cacheDir, 0777, true);
+        }
+        file_put_contents($this->cacheDir . $key . '.json', json_encode($data));
+    }
+
+    private function clearCache($key) {
+         $file = $this->cacheDir . $key . '.json';
+         if (file_exists($file)) unlink($file);
+    }
+
+    private function clearAllUsersCache() {
+        $this->clearCache('all_users');
+    }
+
+    private function clearUserCache($userId) {
+        $this->clearCache('options_' . $userId);
+        $this->clearCache('socials_' . $userId);
+        $this->clearAllUsersCache(); // Changing user might affect the global list
+    }
+
+    // --- Main Methods ---
+
     public function getAllUsers() {
+        $cached = $this->getCache('all_users', 300); // 5 minutes TTL for list
+        if ($cached) return $cached;
+
         // Fetch users with options via JOINs
         $sql = "SELECT u.id, u.login, u.nickname, u.role, u.created_at, u.is_banned, u.muted_until, u.ban_reason,
                        uo_color.option_value as chat_color,
@@ -37,10 +79,14 @@ class UserManager {
                 $users[] = $row;
             }
         }
+
+        $this->setCache('all_users', $users);
         return $users;
     }
 
     public function getUserById($id) {
+        // Keeping live DB call for critical auth/session checks
+        // But we could add short cache here if needed.
         $stmt = $this->db->prepare("
             SELECT u.id, u.login, u.nickname, u.role, u.is_banned, u.ban_reason,
                    uo_color.option_value as chat_color,
@@ -121,19 +167,25 @@ class UserManager {
             $params[] = password_hash($data['password'], PASSWORD_DEFAULT);
         }
 
-        if (empty($updates)) return true; 
+        $success = true;
+        if (!empty($updates)) {
+            $sql = "UPDATE users SET " . implode(", ", $updates) . " WHERE id = ?";
+            $types .= "i";
+            $params[] = $id;
 
-        $sql = "UPDATE users SET " . implode(", ", $updates) . " WHERE id = ?";
-        $types .= "i";
-        $params[] = $id;
-
-        $stmt = $this->db->prepare($sql);
-        $stmt->bind_param($types, ...$params);
-        
-        if (!$stmt->execute()) {
-            throw new Exception("Ошибка обновления: " . $stmt->error);
+            $stmt = $this->db->prepare($sql);
+            $stmt->bind_param($types, ...$params);
+            
+            if (!$stmt->execute()) {
+                throw new Exception("Ошибка обновления: " . $stmt->error);
+            }
+            $success = true;
         }
-        return true;
+
+        if ($success) {
+            $this->clearUserCache($id);
+        }
+        return $success;
     }
 
     // Алиас для профиля
@@ -144,7 +196,8 @@ class UserManager {
 
     public function createUser($login, $password, $role = 'user', $nickname = null) {
         if (empty($nickname)) $nickname = $login; 
-
+        
+        // ... (check login) ...
         $stmt = $this->db->prepare("SELECT id FROM users WHERE login = ?");
         $stmt->bind_param("s", $login);
         $stmt->execute();
@@ -162,6 +215,8 @@ class UserManager {
             $newUserId = $stmt->insert_id;
             // Set default options
             $this->setUserOption($newUserId, 'chat_color', '#6d2f8e');
+            
+            $this->clearAllUsersCache(); // Add to list
             return $newUserId;
         } else {
             throw new Exception("Ошибка при создании пользователя: " . $stmt->error);
@@ -171,10 +226,14 @@ class UserManager {
     public function deleteUser($id) {
         $stmt = $this->db->prepare("DELETE FROM users WHERE id = ?");
         $stmt->bind_param("i", $id);
-        return $stmt->execute();
+        if ($stmt->execute()) {
+            $this->clearUserCache($id);
+            return true;
+        }
+        return false;
     }
 
-    // --- Options Methods (New) ---
+    // --- Options Methods ---
 
     public function setUserOption($userId, $key, $value) {
         // ON DUPLICATE KEY UPDATE logic
@@ -182,19 +241,20 @@ class UserManager {
                 ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)";
         $stmt = $this->db->prepare($sql);
         $stmt->bind_param("iss", $userId, $key, $value);
-        return $stmt->execute();
+        if ($stmt->execute()) {
+            $this->clearUserCache($userId);
+            return true;
+        }
+        return false;
     }
 
     public function getUserOptions($userId, $optionKey = null) {
-        if ($optionKey) {
-            $stmt = $this->db->prepare("SELECT option_value FROM user_options WHERE user_id = ? AND option_key = ?");
-            $stmt->bind_param("is", $userId, $optionKey);
-            $stmt->execute();
-            $res = $stmt->get_result();
-            if ($res && $row = $res->fetch_assoc()) {
-                return $row['option_value'];
-            }
-            return null;
+        // Try cache for full options
+        $cached = $this->getCache('options_' . $userId);
+        
+        if ($cached) {
+            if ($optionKey) return $cached[$optionKey] ?? null;
+            return $cached;
         }
 
         $stmt = $this->db->prepare("SELECT option_key, option_value FROM user_options WHERE user_id = ?");
@@ -208,8 +268,101 @@ class UserManager {
                 $options[$row['option_key']] = $row['option_value'];
             }
         }
+        
+        $this->setCache('options_' . $userId, $options);
+        
+        if ($optionKey) return $options[$optionKey] ?? null;
         return $options;
     }
+
+    // --- Socials Methods (New) ---
+
+    public function getUserSocials($userId) {
+        $cached = $this->getCache('socials_' . $userId);
+        if ($cached) return $cached;
+
+        $stmt = $this->db->prepare("SELECT id, provider, provider_uid, username, first_name, last_name, avatar_url FROM user_socials WHERE user_id = ?");
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $socials = [];
+        while ($row = $result->fetch_assoc()) {
+            $socials[] = $row;
+        }
+
+        $this->setCache('socials_' . $userId, $socials);
+        return $socials;
+    }
+
+    public function linkSocial($userId, $provider, $data) {
+         // Using data format from SocialProvider logic
+         // data: id, username, first_name, last_name, photo_url
+         $stmt = $this->db->prepare("
+            INSERT INTO user_socials (user_id, provider, provider_uid, username, first_name, last_name, avatar_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->bind_param("issssss", 
+            $userId, 
+            $provider, 
+            $data['id'], 
+            $data['username'], 
+            $data['first_name'], 
+            $data['last_name'], 
+            $data['photo_url']
+        );
+        if ($stmt->execute()) {
+            $this->clearCache('socials_' . $userId);
+            return true;
+        }
+        return false;
+    }
+
+    public function unlinkSocial($userId, $provider) {
+        $stmt = $this->db->prepare("DELETE FROM user_socials WHERE user_id = ? AND provider = ?");
+        $stmt->bind_param("is", $userId, $provider);
+        $stmt->execute();
+        if ($stmt->affected_rows > 0) {
+            $this->clearCache('socials_' . $userId);
+            return true;
+        }
+        return false;
+    }
+    
+    // For SocialAuthService usage mostly
+    public function updateSocialInfo($id, $data) {
+        $stmt = $this->db->prepare("
+            UPDATE user_socials 
+            SET username = ?, first_name = ?, last_name = ?, avatar_url = ?
+            WHERE id = ?
+        ");
+        $stmt->bind_param("ssssi", 
+            $data['username'], 
+            $data['first_name'], 
+            $data['last_name'], 
+            $data['photo_url'],
+            $id
+        );
+        if ($stmt->execute()) {
+            // Need to find user_id for this social to clear cache
+            // But this query doesn't have it.
+            // Let's assume the caller knows or we fetch it.
+            // Or just invalidate loosely?
+            // Actually, updateSocialInfo is called after finding the linkedAccount which has user_id.
+            // But here we only have ID of user_socials row.
+            // We can fetch user_id first.
+            $check = $this->db->prepare("SELECT user_id FROM user_socials WHERE id = ?");
+            $check->bind_param("i", $id);
+            $check->execute();
+            $res = $check->get_result()->fetch_assoc();
+            if ($res) {
+                 $this->clearCache('socials_' . $res['user_id']);
+            }
+            return true;
+        }
+        return false;
+    }
+
 
     // --- Moderation Methods ---
 
@@ -226,8 +379,11 @@ class UserManager {
         $stmt->bind_param("si", $reason, $userId);
         $res = $stmt->execute();
         
-        if ($res && $moderatorId) {
-             $this->logAction($moderatorId, 'ban', $userId, "Reason: $reason");
+        if ($res) {
+             $this->clearUserCache($userId); // Banned status changed
+             if ($moderatorId) {
+                $this->logAction($moderatorId, 'ban', $userId, "Reason: $reason");
+             }
         }
         return $res;
     }
@@ -237,8 +393,11 @@ class UserManager {
         $stmt->bind_param("i", $userId);
         $res = $stmt->execute();
 
-        if ($res && $moderatorId) {
-            $this->logAction($moderatorId, 'unban', $userId);
+        if ($res) {
+            $this->clearUserCache($userId);
+            if ($moderatorId) {
+                $this->logAction($moderatorId, 'unban', $userId);
+            }
         }
         return $res;
     }
@@ -252,8 +411,11 @@ class UserManager {
         $stmt->bind_param("ssi", $muteUntil, $reason, $userId);
         $res = $stmt->execute();
 
-        if ($res && $moderatorId) {
-            $this->logAction($moderatorId, 'mute', $userId, "Duration: $minutes min. Reason: $reason");
+        if ($res) {
+            $this->clearUserCache($userId);
+            if ($moderatorId) {
+                $this->logAction($moderatorId, 'mute', $userId, "Duration: $minutes min. Reason: $reason");
+            }
         }
         return $res;
     }
@@ -263,8 +425,11 @@ class UserManager {
         $stmt->bind_param("i", $userId);
         $res = $stmt->execute();
 
-        if ($res && $moderatorId) {
-            $this->logAction($moderatorId, 'unmute', $userId);
+        if ($res) {
+            $this->clearUserCache($userId);
+            if ($moderatorId) {
+                $this->logAction($moderatorId, 'unmute', $userId);
+            }
         }
         return $res;
     }
@@ -305,6 +470,14 @@ class UserManager {
         $now = gmdate('Y-m-d H:i:s');
         $stmt = $this->db->prepare("UPDATE users SET last_seen = ? WHERE id = ?");
         $stmt->bind_param("si", $now, $userId);
+        // This is updated frequently, maybe we don't want to clear cache every time?
+        // Last seen is not in getAllUsers result usually (except for logic?).
+        // getAllUsers selects created_at, but not last_seen in my previous code.
+        // Wait, getOnlineUsers uses it.
+        // But getOnlineUsers is not cached yet. 
+        // If we cache getOnlineUsers, we need to clear it here.
+        // For now, let's leave it without clearing "all_users" cache, 
+        // as "all_users" list doesn't show last_seen.
         return $stmt->execute();
     }
 
