@@ -296,8 +296,8 @@ require_once __DIR__ . '/src/templates/header.php';
     </div>
 </div>
 
-<!-- Profile Modal -->
-<div id="profile-modal" class="modal-overlay" style="display: none;">
+<!-- Profile Modal (ТЕСТ: display:flex) -->
+<div id="profile-modal" class="modal-overlay" style="display: flex;">
     <div class="modal-content" style="max-width: 450px; text-align: left;">
         <span class="close-modal-profile" style="position: absolute; top: 10px; right: 15px; font-size: 28px; cursor: pointer; color: #aaa;">&times;</span>
         
