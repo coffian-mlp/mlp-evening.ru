@@ -235,15 +235,20 @@ window.openProfileModal = function(e) {
     if(e) e.preventDefault();
     
     // Используем callback, чтобы грузить виджет только когда модалка ВИДИМА
+    console.log('Starting fadeIn...');
     $('#profile-modal').css('display', 'flex').hide().fadeIn(200, function() {
-        // console.log('Profile Modal visible. Loading socials...');
+        console.log('fadeIn complete! Calling loadUserSocials...');
         loadUserSocials();
     });
 };
 
 function loadUserSocials() {
+    console.log('loadUserSocials STARTED');
     var $container = $('#telegram-bind-container');
-    if (!$container.length) return;
+    if (!$container.length) {
+        console.error('Container not found!');
+        return;
+    }
 
     $.ajax({
         url: 'api.php',
