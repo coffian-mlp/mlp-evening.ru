@@ -355,12 +355,11 @@ require_once __DIR__ . '/src/templates/header.php';
                             <img src="https://telegram.org/favicon.ico" width="20"> Telegram
                         </span>
                         <div id="telegram-bind-container" style="min-height: 40px; display: flex; align-items: center; position: relative;">
-                            <!-- Виджет грузится сразу. Используем opacity, чтобы iframe инициализировался -->
-                            <div id="telegram-widget-wrapper" style="opacity: 0; position: absolute; pointer-events: none; z-index: -1;">
+                            <!-- ТЕСТ: Полностью видимый виджет -->
+                            <div id="telegram-widget-wrapper">
                                 <script async src="https://telegram.org/js/telegram-widget.js?22" 
                                         data-telegram-login="<?= htmlspecialchars($telegramBotUsername) ?>" 
                                         data-size="medium" 
-                                        data-userpic="false" 
                                         data-radius="5" 
                                         data-onauth="onTelegramAuth(user)" 
                                         data-request-access="write"></script>

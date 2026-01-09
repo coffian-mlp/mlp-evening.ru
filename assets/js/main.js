@@ -272,18 +272,11 @@ function loadUserSocials() {
 
                     if (telegram) {
                         // Уже привязан
-                        // Убиваем виджет, чтобы не мешал
+                        // Убиваем виджет
                         $widget.remove(); 
                         $status.text('✓ ' + (telegram.username || telegram.first_name)).show();
                     } else {
-                        // Не привязан -> Показываем виджет
-                        // Делаем его видимым и возвращаем в поток
-                        $widget.css({
-                            opacity: 1, 
-                            position: 'static', 
-                            pointerEvents: 'auto', 
-                            zIndex: 'auto'
-                        });
+                        // Не привязан -> Виджет уже видим, ничего не делаем
                         $status.hide();
                     }
                 }
