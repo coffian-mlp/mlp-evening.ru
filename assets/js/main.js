@@ -265,18 +265,27 @@ function loadUserSocials() {
                     $container.html('<span style="color: green; font-weight: bold; font-size: 0.9em;">✓ ' + (telegram.username || telegram.first_name) + '</span>');
                 } else {
                     // Не привязан -> Вставляем виджет, если его еще нет
-                    // Важно: вставка через html() (innerHTML)
-                    if ($container.find('script[data-telegram-login]').length === 0) {
+                    if ($widget.find('iframe').length === 0 && $widget.find('script').length === 0) {
                          if (window.telegramBotUsername) {
-                            var widgetHtml = '<script async src="https://telegram.org/js/telegram-widget.js?22" ' +
-                                             'data-telegram-login="' + window.telegramBotUsername + '" ' +
-                                             'data-size="medium" ' +
-                                             'data-userpic="false" ' +
-                                             'data-radius="5" ' +
-                                             'data-onauth="onTelegramAuth(user)" ' +
-                                             'data-request-access="write"></script>';
-                            
-                            $container.html(widgetHtml);
+                            // Небольшая задержка для гарантии рендеринга
+                            setTimeout(function() {
+                                var script = document.createElement('script');
+                                script.async = true;
+                                script.src = "https://telegram.org/js/telegram-widget.js?22";
+                                script.setAttribute('data-telegram-login', window.telegramBotUsername);
+                                script.setAttribute('data-size', 'medium');
+                                script.setAttribute('data-userpic', 'false');
+                                script.setAttribute('data-radius', '5');
+                                script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+                                script.setAttribute('data-request-access', 'write');
+                                
+                                // Вставляем в DOM
+                                var wrapper = document.getElementById('telegram-widget-wrapper');
+                                if (wrapper) {
+                                    wrapper.innerHTML = ''; // Чистим на всякий случай
+                                    wrapper.appendChild(script);
+                                }
+                            }, 50);
                         } else {
                              $container.html('<small style="color:red">Ошибка конфига</small>');
                         }
