@@ -352,14 +352,23 @@ require_once __DIR__ . '/src/templates/header.php';
                 <label class="form-label">Социальные сети</label>
                 
                 <div id="profile-socials-list">
-                    <!-- Заполняется через JS -->
+                    <!-- Telegram Item -->
                     <div class="social-item telegram-item" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <span style="display: flex; align-items: center; gap: 5px;">
                             <img src="https://telegram.org/favicon.ico" width="20"> Telegram
                         </span>
-                        <div id="telegram-bind-container" style="min-height: 40px; display: flex; align-items: center; position: relative;">
-                            <!-- Пустой контейнер для динамической вставки -->
-                            <small class="loading-text">Загрузка...</small>
+                        
+                        <!-- Контейнер для статуса (Привязан/Отвязать) -->
+                        <div id="telegram-status-container" style="display: none;"></div>
+
+                        <!-- Контейнер для виджета (Скрываем JS-ом если привязан) -->
+                        <div id="telegram-widget-container">
+                             <script async src="https://telegram.org/js/telegram-widget.js?22" 
+                                    data-telegram-login="<?= htmlspecialchars($telegramBotUsername) ?>" 
+                                    data-size="medium" 
+                                    data-radius="5" 
+                                    data-onauth="onTelegramBind(user)" 
+                                    data-request-access="write"></script>
                         </div>
                     </div>
                 </div>

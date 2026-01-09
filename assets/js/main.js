@@ -271,12 +271,9 @@ window.openProfileModal = function(e) {
 };
 
 function loadUserSocials() {
-    // console.log('loadUserSocials STARTED');
-    var $container = $('#telegram-bind-container');
-    if (!$container.length) {
-        console.error('Container not found!');
-        return;
-    }
+    // Контейнеры
+    var $statusContainer = $('#telegram-status-container');
+    var $widgetContainer = $('#telegram-widget-container');
 
     $.ajax({
         url: 'api.php',
@@ -286,18 +283,18 @@ function loadUserSocials() {
             csrf_token: $('meta[name="csrf-token"]').attr('content')
         },
         success: function(resp) {
-            console.log('User Socials:', resp); // DEBUG
             if (resp.success) {
                 var telegram = resp.data.socials.find(s => s.provider === 'telegram');
                 
-                // Скрываем лоадер
-                $container.find('.loading-text').hide();
-
                 if (telegram) {
-                    // Уже привязан -> Показываем статус
-                    $container.html('<span style="color: green; font-weight: bold; font-size: 0.9em;">✓ ' + (telegram.username || telegram.first_name) + '</span>');
+                    // ПРИВЯЗАН: Показываем статус, скрываем виджет
+                    $widgetContainer.hide();
+                    $statusContainer.show().html('');
+
+                    // Статус
+                    $statusContainer.append('<span style="color: green; font-weight: bold; font-size: 0.9em;">✓ ' + (telegram.username || telegram.first_name) + '</span>');
                     
-                    // Добавляем кнопку отвязки
+                    // Кнопка отвязки
                     var $unbindBtn = $('<a href="#" style="color: #999; font-size: 0.8em; margin-left: 10px; text-decoration: underline;">(отвязать)</a>');
                     $unbindBtn.click(function(e) {
                         e.preventDefault();
@@ -310,51 +307,29 @@ function loadUserSocials() {
                         }, function(res) {
                             if (res.success) {
                                 showFlashMessage(res.message, 'success');
-                                loadUserSocials();
+                                loadUserSocials(); // Перезагружаем состояние
                             } else {
                                 showFlashMessage(res.message, 'error');
                             }
                         }, 'json');
                     });
                     
-                    $container.append($unbindBtn);
+                    $statusContainer.append($unbindBtn);
 
                 } else {
-                    // Не привязан -> Вставляем виджет динамически
-                    console.log('Bot Username:', window.telegramBotUsername); // DEBUG
-                    
-                    // Проверяем, чтобы не дублировать
-                    // Очищаем контейнер принудительно перед вставкой, если скрипта еще нет
-                    if ($container.find('script').length === 0) {
-                         if (window.telegramBotUsername) {
-                            $container.empty(); // Убираем loading text
-                            
-                            // Создаем элемент скрипта
-                            var script = document.createElement('script');
-                            script.async = true;
-                            script.src = "https://telegram.org/js/telegram-widget.js?22";
-                            script.setAttribute('data-telegram-login', window.telegramBotUsername);
-                            script.setAttribute('data-size', 'medium');
-                            script.setAttribute('data-radius', '5');
-                            script.setAttribute('data-onauth', 'onTelegramBind(user)');
-                            script.setAttribute('data-request-access', 'write');
-                            
-                            // Вставляем через нативный DOM для надежности
-                            $container[0].appendChild(script);
-                            console.log('Telegram script appended'); // DEBUG
-                        } else {
-                             console.warn('Telegram Bot Username is missing!');
-                             $container.html('<small style="color:red">Bot Name Not Set</small>');
-                        }
-                    }
+                    // НЕ ПРИВЯЗАН: Скрываем статус, показываем виджет
+                    $statusContainer.hide().empty();
+                    $widgetContainer.show();
+                    // Виджет уже загружен статически в index.php, нам не нужно его создавать
                 }
             }
         },
         error: function(xhr, status, error) {
             console.error('AJAX Error:', error);
-            $container.find('.loading-text').text('Ошибка сети');
+            $statusContainer.show().html('<small style="color:red">Ошибка сети</small>');
         }
     });
+}
 }
 
 // Обработчик открытия модалки логина
