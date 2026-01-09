@@ -272,19 +272,15 @@ function loadUserSocials() {
                 } else {
                     // Не привязан -> Вставляем виджет
                     if (window.telegramBotUsername) {
-                        var script = document.createElement('script');
-                        script.async = true;
-                        script.src = "https://telegram.org/js/telegram-widget.js?22";
-                        script.setAttribute('data-telegram-login', window.telegramBotUsername);
-                        script.setAttribute('data-size', 'medium');
-                        script.setAttribute('data-userpic', 'false');
-                        script.setAttribute('data-radius', '5');
-                        script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-                        script.setAttribute('data-request-access', 'write');
-                        
-                        // Вставляем прямо в контейнер. Он уже видим (модалка открыта).
-                        // И используем нативный JS для вставки скрипта, так надежнее.
-                        $container[0].appendChild(script);
+                        // Используем .html() для вставки скрипта - jQuery корректно обработает его выполнение
+                        var widgetHtml = '<script async src="https://telegram.org/js/telegram-widget.js?22" ' +
+                                         'data-telegram-login="' + window.telegramBotUsername + '" ' +
+                                         'data-size="medium" ' +
+                                         'data-userpic="false" ' +
+                                         'data-radius="5" ' +
+                                         'data-onauth="onTelegramAuth(user)" ' +
+                                         'data-request-access="write"></script>';
+                        $container.html(widgetHtml);
                     } else {
                         $container.html('<small style="color:red">Ошибка конфига</small>');
                     }
