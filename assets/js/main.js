@@ -236,7 +236,7 @@ window.openProfileModal = function(e) {
     
     // Используем callback, чтобы грузить виджет только когда модалка ВИДИМА
     $('#profile-modal').css('display', 'flex').hide().fadeIn(200, function() {
-        console.log('Profile Modal visible. Loading socials...');
+        // console.log('Profile Modal visible. Loading socials...');
         loadUserSocials();
     });
 };
@@ -253,49 +253,34 @@ function loadUserSocials() {
             csrf_token: $('meta[name="csrf-token"]').attr('content')
         },
         success: function(resp) {
-            console.log('AJAX Success:', resp);
+            // console.log('AJAX Success:', resp);
             if (resp.success) {
                 var telegram = resp.data.socials.find(s => s.provider === 'telegram');
                 
                 // Скрываем лоадер
                 $container.find('.loading-text').hide();
 
+                // Ищем наш уникальный wrapper
+                var $widget = $('#telegram-widget-profile-wrapper');
+                var $status = $('#telegram-status-text');
+
                 if (telegram) {
-                    // Уже привязан -> Показываем статус
-                    $container.html('<span style="color: green; font-weight: bold; font-size: 0.9em;">✓ ' + (telegram.username || telegram.first_name) + '</span>');
+                    // Уже привязан -> Скрываем виджет
+                    $widget.hide();
+                    $status.text('✓ ' + (telegram.username || telegram.first_name)).show();
                 } else {
-                    // Не привязан -> Вставляем виджет, если его еще нет
-                    if ($widget.find('iframe').length === 0 && $widget.find('script').length === 0) {
-                         if (window.telegramBotUsername) {
-                            // Небольшая задержка для гарантии рендеринга
-                            setTimeout(function() {
-                                var script = document.createElement('script');
-                                script.async = true;
-                                script.src = "https://telegram.org/js/telegram-widget.js?22";
-                                script.setAttribute('data-telegram-login', window.telegramBotUsername);
-                                script.setAttribute('data-size', 'medium');
-                                script.setAttribute('data-userpic', 'false');
-                                script.setAttribute('data-radius', '5');
-                                script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-                                script.setAttribute('data-request-access', 'write');
-                                
-                                // Вставляем в DOM
-                                var wrapper = document.getElementById('telegram-widget-wrapper');
-                                if (wrapper) {
-                                    wrapper.innerHTML = ''; // Чистим на всякий случай
-                                    wrapper.appendChild(script);
-                                }
-                            }, 50);
-                        } else {
-                             $container.html('<small style="color:red">Ошибка конфига</small>');
-                        }
-                    }
+                    // Не привязан -> Показываем виджет (он там уже есть статически)
+                    $widget.show();
+                    $status.hide();
+                    
+                    // Если виджета все-таки нет (например, не загрузился), можно попробовать реинсерт
+                    // Но пока надеемся на статику.
                 }
             }
         },
         error: function(xhr, status, error) {
             console.error('AJAX Error:', error);
-            $container.html('<small style="color:red">Ошибка сети</small>');
+            $container.find('.loading-text').text('Ошибка сети');
         }
     });
 }
