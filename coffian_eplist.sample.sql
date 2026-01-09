@@ -141,6 +141,26 @@ CREATE TABLE IF NOT EXISTS `chat_stickers` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `user_socials`
+--
+
+CREATE TABLE IF NOT EXISTS `user_socials` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `user_id` INT NOT NULL,
+    `provider` VARCHAR(32) NOT NULL COMMENT 'telegram, discord, vk',
+    `provider_uid` VARCHAR(255) NOT NULL COMMENT 'ID пользователя в соцсети',
+    `username` VARCHAR(255) NULL COMMENT 'Никнейм в соцсети',
+    `first_name` VARCHAR(255) NULL,
+    `last_name` VARCHAR(255) NULL,
+    `avatar_url` VARCHAR(255) NULL,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+    UNIQUE KEY `unique_provider_user` (`provider`, `provider_uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `episode_list`
 --
 

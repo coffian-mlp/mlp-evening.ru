@@ -53,6 +53,10 @@ $config = ConfigManager::getInstance();
 $streamUrl = $config->getOption('stream_url', 'https://goodgame.ru/player?161438#autoplay');
 $chatMode = $config->getOption('chat_mode', 'local');
 
+// Telegram Auth Config
+$telegramAuthEnabled = (bool)$config->getOption('telegram_auth_enabled', 0);
+$telegramBotUsername = $config->getOption('telegram_bot_username', '');
+
 // Конфигурируем флаги для шаблонов
 $enableLocalChat = ($chatMode === 'local');
 $showChatBro = ($chatMode === 'chatbro');
@@ -166,6 +170,7 @@ require_once __DIR__ . '/src/templates/header.php';
                         window.currentUsername = <?= json_encode($_SESSION['username']) ?>;
                         window.currentUserNickname = <?= json_encode($currentUser['nickname'] ?? $_SESSION['username']) ?>;
                         window.csrfToken = <?= json_encode(Auth::generateCsrfToken()) ?>;
+                        window.telegramBotUsername = <?= json_encode($telegramBotUsername) ?>; // Для профиля
                         // Inject DB Options
                         window.userOptions = <?= json_encode($userOptions) ?>;
                         // Inject Stickers
@@ -243,6 +248,19 @@ require_once __DIR__ . '/src/templates/header.php';
         <!-- REGISTER -->
         <div id="register-form-wrapper" style="display: none;">
             <h3>✨ Присоединиться</h3>
+            
+            <?php if ($telegramAuthEnabled && !empty($telegramBotUsername)): ?>
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <script async src="https://telegram.org/js/telegram-widget.js?22" 
+                            data-telegram-login="<?= htmlspecialchars($telegramBotUsername) ?>" 
+                            data-size="large" 
+                            data-radius="5" 
+                            data-onauth="onTelegramAuth(user)" 
+                            data-request-access="write"></script>
+                    <div style="font-size: 0.8em; color: #999; margin: 10px 0;">— ИЛИ —</div>
+                </div>
+            <?php endif; ?>
+
             <form id="ajax-register-form">
                 <input type="hidden" name="action" value="register">
                 
@@ -324,6 +342,26 @@ require_once __DIR__ . '/src/templates/header.php';
                     </label>
                 </div>
             </div>
+
+            <!-- Social Accounts Binding -->
+            <?php if ($telegramAuthEnabled && !empty($telegramBotUsername)): ?>
+            <div class="form-group" style="margin-bottom: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                <label class="form-label">Социальные сети</label>
+                
+                <div id="profile-socials-list">
+                    <!-- Заполняется через JS -->
+                    <div class="social-item telegram-item" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="display: flex; align-items: center; gap: 5px;">
+                            <img src="https://telegram.org/favicon.ico" width="20"> Telegram
+                        </span>
+                        <div id="telegram-bind-container">
+                            <!-- Сюда вставится виджет или кнопка отвязки -->
+                            <small class="loading-text">Загрузка...</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
 
             <button type="submit" class="btn-primary btn-block">Сохранить</button>
             <div id="profile-error" class="error-msg" style="display:none; color: red; margin-top: 10px; text-align: center;"></div>

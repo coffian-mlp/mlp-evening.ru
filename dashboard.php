@@ -542,6 +542,32 @@ require_once __DIR__ . '/src/templates/header.php';
         </div>
 
         <div class="card">
+            <h3 class="dashboard-title">🔗 Социальная Авторизация</h3>
+            <form method="post" action="api.php">
+                <input type="hidden" name="action" value="update_settings">
+                
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" name="telegram_auth_enabled" value="1" <?= $config->getOption('telegram_auth_enabled', 0) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                        Включить вход через Telegram
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Telegram Bot Token (от @BotFather)</label>
+                    <input type="password" name="telegram_bot_token" value="<?= htmlspecialchars($config->getOption('telegram_bot_token', '')) ?>" class="form-input" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Telegram Bot Username (без @)</label>
+                    <input type="text" name="telegram_bot_username" value="<?= htmlspecialchars($config->getOption('telegram_bot_username', '')) ?>" class="form-input" placeholder="MyPonyBot">
+                </div>
+
+                <button type="submit" class="btn-primary">Сохранить ключи</button>
+            </form>
+        </div>
+
+        <div class="card">
             <h3 class="dashboard-title">📺 Настройки Плеера</h3>
             <form method="post" action="api.php">
                 <input type="hidden" name="action" value="update_settings">

@@ -68,6 +68,29 @@ try {
     }
 
     // Public Actions
+    if ($action === 'social_login') {
+        require_once __DIR__ . '/src/Social/SocialAuthService.php';
+        require_once __DIR__ . '/src/Social/TelegramProvider.php';
+
+        $providerName = $_POST['provider'] ?? '';
+        $data = $_POST['data'] ?? [];
+
+        if ($providerName === 'telegram') {
+            $provider = new TelegramProvider();
+        } else {
+            sendResponse(false, "Неизвестный провайдер авторизации", 'error');
+        }
+
+        $service = new SocialAuthService();
+        $result = $service->handleLogin($provider, $data);
+
+        if ($result['success']) {
+            sendResponse(true, $result['message'], 'success', ['redirect' => $result['redirect']]);
+        } else {
+            sendResponse(false, $result['message'], 'error');
+        }
+    }
+
     if ($action === 'login') {
          $username = $_POST['username'] ?? '';
          $password = $_POST['password'] ?? '';
@@ -206,6 +229,16 @@ try {
                 $config->setOption('chat_rate_limit', $limit);
             }
             
+            // Telegram Settings
+            $config->setOption('telegram_auth_enabled', isset($_POST['telegram_auth_enabled']) ? 1 : 0);
+            
+            if (isset($_POST['telegram_bot_token'])) {
+                $config->setOption('telegram_bot_token', trim($_POST['telegram_bot_token']));
+            }
+            if (isset($_POST['telegram_bot_username'])) {
+                $config->setOption('telegram_bot_username', trim($_POST['telegram_bot_username']));
+            }
+            
             sendResponse(true, "✅ Настройки обновлены!");
             break;
 
@@ -283,6 +316,45 @@ try {
             }
             
             sendResponse(true, "Логи получены", 'success', ['logs' => $logs]);
+            break;
+
+        case 'get_user_socials':
+            $userId = $_SESSION['user_id'];
+            $db = Database::getInstance()->getConnection();
+            
+            $stmt = $db->prepare("SELECT provider, username, first_name, last_name FROM user_socials WHERE user_id = ?");
+            $stmt->bind_param("i", $userId);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            $socials = [];
+            while ($row = $result->fetch_assoc()) {
+                $socials[] = $row;
+            }
+            
+            sendResponse(true, "Список соцсетей получен", 'success', ['socials' => $socials]);
+            break;
+
+        case 'unlink_social':
+            // Опционально: отвязка аккаунта
+            $provider = $_POST['provider'] ?? '';
+            $userId = $_SESSION['user_id'];
+            
+            if (empty($provider)) sendResponse(false, "Провайдер не указан", 'error');
+            
+            // Защита: Нельзя отвязать единственную соцсеть, если нет пароля? 
+            // Пока оставим простую логику.
+            
+            $db = Database::getInstance()->getConnection();
+            $stmt = $db->prepare("DELETE FROM user_socials WHERE user_id = ? AND provider = ?");
+            $stmt->bind_param("is", $userId, $provider);
+            $stmt->execute();
+            
+            if ($stmt->affected_rows > 0) {
+                sendResponse(true, "Аккаунт отвязан!");
+            } else {
+                sendResponse(false, "Привязка не найдена.", 'error');
+            }
             break;
 
         case 'save_user_option':
