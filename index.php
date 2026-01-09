@@ -363,12 +363,7 @@ require_once __DIR__ . '/src/templates/header.php';
 
                         <!-- Контейнер для виджета (Скрываем JS-ом если привязан) -->
                         <div id="telegram-widget-container">
-                             <script async src="https://telegram.org/js/telegram-widget.js?22" 
-                                    data-telegram-login="<?= htmlspecialchars($telegramBotUsername) ?>" 
-                                    data-size="medium" 
-                                    data-radius="5" 
-                                    data-onauth="onTelegramBind(user)" 
-                                    data-request-access="write"></script>
+                             <!-- Сюда JS вставит виджет, когда модалка откроется -->
                         </div>
                     </div>
                 </div>
