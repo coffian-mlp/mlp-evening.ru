@@ -90,6 +90,67 @@ try {
             sendResponse(false, $result['message'], 'error');
         }
     }
+    
+    // --- BIND SOCIAL ACTION ---
+    if ($action === 'bind_social') {
+        if (!Auth::check()) {
+            sendResponse(false, "Сначала нужно войти на сайт!", 'error');
+        }
+
+        require_once __DIR__ . '/src/Social/TelegramProvider.php';
+        
+        $providerName = $_POST['provider'] ?? '';
+        $data = $_POST['data'] ?? [];
+        $userId = $_SESSION['user_id'];
+
+        if ($providerName === 'telegram') {
+            $provider = new TelegramProvider();
+            
+            // 1. Проверяем валидность данных от Telegram (Hash check)
+            // Используем публичный метод validateCallback из TelegramProvider
+            
+            try {
+                $tgUser = $provider->validateCallback($data); 
+                
+                if (!$tgUser) {
+                    sendResponse(false, "Ошибка проверки подписи Telegram. Данные подделаны или устарели.", 'error');
+                }
+
+                // 2. Сохраняем в БД
+                $db = Database::getInstance()->getConnection();
+                
+                // Проверяем, не занят ли этот Telegram ID другим пони
+                $stmt = $db->prepare("SELECT user_id FROM user_socials WHERE provider = 'telegram' AND provider_uid = ?");
+                $stmt->bind_param("s", $tgUser['id']);
+                $stmt->execute();
+                if ($stmt->get_result()->num_rows > 0) {
+                     sendResponse(false, "Этот аккаунт Telegram уже привязан к кому-то другому!", 'error');
+                }
+                
+                // Привязываем!
+                $stmt = $db->prepare("INSERT INTO user_socials (user_id, provider, provider_uid, username, first_name, last_name, photo_url) VALUES (?, 'telegram', ?, ?, ?, ?, ?)");
+                $stmt->bind_param("issssss", 
+                    $userId, 
+                    $tgUser['id'], 
+                    $tgUser['username'], 
+                    $tgUser['first_name'], 
+                    $tgUser['last_name'], 
+                    $tgUser['photo_url']
+                );
+                
+                if ($stmt->execute()) {
+                    sendResponse(true, "Связь установлена!");
+                } else {
+                    sendResponse(false, "Ошибка базы данных.", 'error');
+                }
+
+            } catch (Exception $e) {
+                sendResponse(false, "Ошибка провайдера: " . $e->getMessage(), 'error');
+            }
+        } else {
+            sendResponse(false, "Неизвестный провайдер", 'error');
+        }
+    }
 
     if ($action === 'login') {
          $username = $_POST['username'] ?? '';

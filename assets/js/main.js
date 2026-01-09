@@ -193,7 +193,9 @@ $(document).ready(function() {
     // Auto-init on page load if any exist
     initColorPickers();
 
-    // --- 5. Telegram Auth Callback ---
+    // --- 5. Telegram Auth Callbacks ---
+    
+    // Callback для ВХОДА (Login)
     window.onTelegramAuth = function(user) {
         // user = {id: ..., first_name: ..., username: ..., hash: ...}
         
@@ -218,6 +220,32 @@ $(document).ready(function() {
                     } else {
                         location.reload();
                     }
+                } else {
+                    showFlashMessage(response.message, 'error');
+                }
+            },
+            error: function() {
+                showFlashMessage('Ошибка соединения с сервером', 'error');
+            }
+        });
+    };
+
+    // Callback для ПРИВЯЗКИ (Bind) в профиле
+    window.onTelegramBind = function(user) {
+        $.ajax({
+            url: 'api.php',
+            method: 'POST',
+            data: {
+                action: 'bind_social',
+                provider: 'telegram',
+                data: user,
+                csrf_token: $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(response) {
+                if (response.success) {
+                    showFlashMessage("Telegram успешно привязан! 🦄", 'success');
+                    // Перезагружаем список соцсетей, чтобы показать галочку
+                    loadUserSocials(); 
                 } else {
                     showFlashMessage(response.message, 'error');
                 }
@@ -268,22 +296,48 @@ function loadUserSocials() {
                 if (telegram) {
                     // Уже привязан -> Показываем статус
                     $container.html('<span style="color: green; font-weight: bold; font-size: 0.9em;">✓ ' + (telegram.username || telegram.first_name) + '</span>');
+                    
+                    // Добавляем кнопку отвязки
+                    var $unbindBtn = $('<a href="#" style="color: #999; font-size: 0.8em; margin-left: 10px; text-decoration: underline;">(отвязать)</a>');
+                    $unbindBtn.click(function(e) {
+                        e.preventDefault();
+                        if(!confirm('Точно отвязать Telegram?')) return;
+                        
+                        $.post('api.php', {
+                            action: 'unlink_social',
+                            provider: 'telegram',
+                            csrf_token: $('meta[name="csrf-token"]').attr('content')
+                        }, function(res) {
+                            if (res.success) {
+                                showFlashMessage(res.message, 'success');
+                                loadUserSocials();
+                            } else {
+                                showFlashMessage(res.message, 'error');
+                            }
+                        }, 'json');
+                    });
+                    
+                    $container.append($unbindBtn);
+
                 } else {
                     // Не привязан -> Вставляем виджет динамически
                     // Проверяем, чтобы не дублировать
-                    if ($container.find('iframe').length === 0) {
+                    if ($container.find('script').length === 0) {
                          if (window.telegramBotUsername) {
                             $container.empty();
-                            // Используем jQuery .html() для вставки скрипта
-                            // Это часто работает надежнее для виджетов, чем append(element)
-                            var widgetCode = '<script async src="https://telegram.org/js/telegram-widget.js?22" ' +
-                                             'data-telegram-login="' + window.telegramBotUsername + '" ' +
-                                             'data-size="medium" ' +
-                                             'data-radius="5" ' +
-                                             'data-onauth="onTelegramAuth(user)" ' +
-                                             'data-request-access="write"></script>';
                             
-                            $container.html(widgetCode);
+                            // Создаем элемент скрипта "по-научному" для надежной загрузки
+                            var script = document.createElement('script');
+                            script.async = true;
+                            script.src = "https://telegram.org/js/telegram-widget.js?22";
+                            script.setAttribute('data-telegram-login', window.telegramBotUsername);
+                            script.setAttribute('data-size', 'medium');
+                            script.setAttribute('data-radius', '5');
+                            script.setAttribute('data-onauth', 'onTelegramBind(user)'); // ВАЖНО: Bind callback
+                            script.setAttribute('data-request-access', 'write');
+                            
+                            // Добавляем в контейнер
+                            $container.append(script);
                         } else {
                              $container.html('<small style="color:red">Ошибка конфига (JS)</small>');
                         }
