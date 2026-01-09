@@ -355,6 +355,17 @@ require_once __DIR__ . '/src/templates/header.php';
                             <img src="https://telegram.org/favicon.ico" width="20"> Telegram
                         </span>
                         <div id="telegram-bind-container" style="min-height: 40px; display: flex; align-items: center;">
+                            <!-- Виджет грузится сразу, но скрыт -->
+                            <div id="telegram-widget-wrapper" style="display:none;">
+                                <script async src="https://telegram.org/js/telegram-widget.js?22" 
+                                        data-telegram-login="<?= htmlspecialchars($telegramBotUsername) ?>" 
+                                        data-size="medium" 
+                                        data-userpic="false" 
+                                        data-radius="5" 
+                                        data-onauth="onTelegramAuth(user)" 
+                                        data-request-access="write"></script>
+                            </div>
+                            <span id="telegram-status-text" style="display:none; color: green; font-weight: bold; font-size: 0.9em;"></span>
                             <small class="loading-text">Загрузка...</small>
                         </div>
                     </div>

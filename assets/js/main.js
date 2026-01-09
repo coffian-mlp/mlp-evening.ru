@@ -259,34 +259,30 @@ function loadUserSocials() {
             action: 'get_user_socials',
             csrf_token: $('meta[name="csrf-token"]').attr('content')
         },
-        success: function(resp) {
-            console.log('AJAX Success:', resp);
-            if (resp.success) {
-                var telegram = resp.data.socials.find(s => s.provider === 'telegram');
+            success: function(resp) {
+                console.log('AJAX Success:', resp);
+                if (resp.success) {
+                    var telegram = resp.data.socials.find(s => s.provider === 'telegram');
+                    
+                    // Скрываем лоадер
+                    $container.find('.loading-text').hide();
 
-                $container.empty(); // Очищаем всё старое
+                    var $widget = $('#telegram-widget-wrapper');
+                    var $status = $('#telegram-status-text');
 
-                if (telegram) {
-                    // Уже привязан
-                    $container.html('<span style="color: green; font-weight: bold; font-size: 0.9em;">✓ ' + (telegram.username || telegram.first_name) + '</span>');
-                } else {
-                    // Не привязан -> Вставляем виджет
-                    if (window.telegramBotUsername) {
-                        // Используем .html() для вставки скрипта - jQuery корректно обработает его выполнение
-                        var widgetHtml = '<script async src="https://telegram.org/js/telegram-widget.js?22" ' +
-                                         'data-telegram-login="' + window.telegramBotUsername + '" ' +
-                                         'data-size="medium" ' +
-                                         'data-userpic="false" ' +
-                                         'data-radius="5" ' +
-                                         'data-onauth="onTelegramAuth(user)" ' +
-                                         'data-request-access="write"></script>';
-                        $container.html(widgetHtml);
+                    if (telegram) {
+                        // Уже привязан
+                        // Если виджет успел загрузиться, скрываем его
+                        $widget.hide();
+                        $status.text('✓ ' + (telegram.username || telegram.first_name)).show();
                     } else {
-                        $container.html('<small style="color:red">Ошибка конфига</small>');
+                        // Не привязан -> Показываем виджет
+                        // Он уже есть в DOM, просто делаем visible
+                        $widget.show();
+                        $status.hide();
                     }
                 }
-            }
-        },
+            },
         error: function(xhr, status, error) {
             console.error('AJAX Error:', error);
         }
