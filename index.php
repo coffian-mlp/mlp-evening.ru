@@ -254,13 +254,15 @@ require_once __DIR__ . '/src/templates/header.php';
             
             <?php if ($telegramAuthEnabled && !empty($telegramBotUsername)): ?>
                 <div style="text-align: center; margin-bottom: 20px;">
+                    <!-- 
                     <script async src="https://telegram.org/js/telegram-widget.js?22" 
                             data-telegram-login="<?= htmlspecialchars($telegramBotUsername) ?>" 
                             data-size="large" 
                             data-radius="5" 
                             data-onauth="onTelegramAuth(user)" 
                             data-request-access="write"></script>
-                    <div style="font-size: 0.8em; color: #999; margin: 10px 0;">— ИЛИ —</div>
+                    -->
+                    <div style="font-size: 0.8em; color: #999; margin: 10px 0;">(Виджет временно отключен для теста)</div>
                 </div>
             <?php endif; ?>
 
