@@ -376,7 +376,29 @@ function loadUserSocials() {
 // Обработчик открытия модалки логина
 window.openLoginModal = function(e) {
     if(e) e.preventDefault();
-    $('#login-modal').fadeIn(200);
+    // Сброс к экрану входа
+    $('#register-form-wrapper, #social-auth-wrapper').hide();
+    $('#login-form-wrapper').show();
+    $('#login-modal').css('display', 'flex').hide().fadeIn(200);
+};
+
+// Навигация внутри модалки
+window.showLoginForm = function(e) {
+    if(e) e.preventDefault();
+    $('#register-form-wrapper, #social-auth-wrapper').hide();
+    $('#login-form-wrapper').fadeIn(200);
+};
+
+window.showRegisterForm = function(e) {
+    if(e) e.preventDefault();
+    $('#login-form-wrapper, #social-auth-wrapper').hide();
+    $('#register-form-wrapper').fadeIn(200);
+};
+
+window.showSocialAuth = function(e) {
+    if(e) e.preventDefault();
+    $('#login-form-wrapper, #register-form-wrapper').hide();
+    $('#social-auth-wrapper').fadeIn(200);
 };
 
 //Пасхалка в консоли - не удалять!

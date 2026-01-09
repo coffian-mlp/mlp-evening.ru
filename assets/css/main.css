@@ -154,6 +154,17 @@ body.dashboard-layout {
 .btn-primary { background: #6d2f8e; color: white; }
 .btn-primary:hover { background: #562473; }
 
+.btn-outline-primary {
+    background: transparent;
+    color: #6d2f8e;
+    border: 2px solid #6d2f8e;
+}
+.btn-outline-primary:hover {
+    background: #f3e5f5;
+    color: #562473;
+    border-color: #562473;
+}
+
 .btn-danger { background: #e74c3c; color: white; }
 .btn-danger:hover { background: #c0392b; }
 
@@ -286,6 +297,27 @@ body.dashboard-layout {
     margin-top: 0;
     margin-bottom: 20px;
     color: #6d2f8e;
+}
+
+.auth-switch-link {
+    display: block;
+    color: #6d2f8e;
+    text-decoration: none;
+    font-weight: bold;
+    margin-top: 15px;
+    font-size: 0.95em;
+    transition: color 0.2s;
+}
+.auth-switch-link:hover {
+    color: #562473;
+    text-decoration: underline;
+}
+.auth-switch-link.secondary {
+    color: #999;
+    font-weight: normal;
+}
+.auth-switch-link.secondary:hover {
+    color: #666;
 }
 
 /* === 9. Global Lightbox === */

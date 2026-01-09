@@ -228,14 +228,9 @@ require_once __DIR__ . '/src/templates/header.php';
     <div class="modal-content" style="max-width: 400px;">
         <span class="close-modal">&times;</span>
         
-        <div class="auth-tabs" style="display: flex; justify-content: center; gap: 20px; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
-            <a href="#" class="auth-tab-link active" data-target="#login-form-wrapper" style="text-decoration: none; color: #6d2f8e; font-weight: bold; border-bottom: 2px solid #6d2f8e;">Зайти</a>
-            <a href="#" class="auth-tab-link" data-target="#register-form-wrapper" style="text-decoration: none; color: #999;">Присоединиться</a>
-        </div>
-
-        <!-- LOGIN -->
+        <!-- 1. LOGIN SCREEN -->
         <div id="login-form-wrapper">
-            <h3>🔐 Зайти на сайтик</h3>
+            <h3 style="text-align: center; color: #6d2f8e; margin-bottom: 20px;">🔐 Вход</h3>
             <form id="ajax-login-form">
                 <div class="form-group">
                     <input type="text" name="username" class="form-input" placeholder="Логин" required>
@@ -243,27 +238,55 @@ require_once __DIR__ . '/src/templates/header.php';
                 <div class="form-group">
                     <input type="password" name="password" class="form-input" placeholder="Пароль" required>
                 </div>
-                <button type="submit" class="btn-primary btn-block">Зайти</button>
+                <button type="submit" class="btn-primary btn-block">Войти</button>
                 <div id="login-error" class="error-msg" style="display:none; color: red; margin-top: 10px;"></div>
             </form>
+
+            <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px; text-align: center;">
+                <div style="font-size: 0.9em; color: #666; margin-bottom: 10px;">— или —</div>
+                
+                <?php if ($telegramAuthEnabled && !empty($telegramBotUsername)): ?>
+                    <button type="button" class="btn btn-outline-primary btn-block" onclick="showSocialAuth()">
+                        🌐 Войти через соцсети
+                    </button>
+                <?php endif; ?>
+                
+                <a href="#" onclick="showRegisterForm(event)" class="auth-switch-link">
+                    Нет аккаунта? Присоединиться
+                </a>
+            </div>
         </div>
 
-        <!-- REGISTER -->
-        <div id="register-form-wrapper" style="display: none;">
-            <h3>✨ Присоединиться</h3>
+        <!-- 2. SOCIAL AUTH SCREEN -->
+        <div id="social-auth-wrapper" style="display: none;">
+            <h3 style="text-align: center; color: #6d2f8e;">🌐 Быстрый вход</h3>
+            <p style="text-align: center; color: #666; font-size: 0.9em; margin-bottom: 20px;">
+                Используй свой аккаунт для входа.<br>Если ты новенький, мы создадим профиль автоматически!
+            </p>
             
-            <?php if ($telegramAuthEnabled && !empty($telegramBotUsername)): ?>
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <script async src="https://telegram.org/js/telegram-widget.js?22" 
-                            data-telegram-login="<?= htmlspecialchars($telegramBotUsername) ?>" 
-                            data-size="large" 
-                            data-radius="5" 
-                            data-onauth="onTelegramAuth(user)" 
-                            data-request-access="write"></script>
-                    <div style="font-size: 0.8em; color: #999; margin: 10px 0;">— ИЛИ —</div>
-                </div>
-            <?php endif; ?>
+            <div style="display: flex; flex-direction: column; gap: 15px; align-items: center; margin-bottom: 20px;">
+                <?php if ($telegramAuthEnabled && !empty($telegramBotUsername)): ?>
+                    <div style="text-align: center;">
+                        <script async src="https://telegram.org/js/telegram-widget.js?22" 
+                                data-telegram-login="<?= htmlspecialchars($telegramBotUsername) ?>" 
+                                data-size="large" 
+                                data-radius="5" 
+                                data-onauth="onTelegramAuth(user)" 
+                                data-request-access="write"></script>
+                    </div>
+                <?php endif; ?>
+                <!-- Место для Discord/VK -->
+            </div>
 
+            <div style="border-top: 1px solid #eee; padding-top: 15px; text-align: center;">
+                <a href="#" onclick="showLoginForm(event)" class="auth-switch-link secondary">← Вернуться к логину</a>
+            </div>
+        </div>
+
+        <!-- 3. REGISTER SCREEN -->
+        <div id="register-form-wrapper" style="display: none;">
+            <h3 style="text-align: center; color: #6d2f8e;">✨ Присоединиться</h3>
+            
             <form id="ajax-register-form">
                 <input type="hidden" name="action" value="register">
                 
@@ -288,9 +311,13 @@ require_once __DIR__ . '/src/templates/header.php';
                     <input type="text" name="captcha" class="form-input" placeholder="Ответ..." required>
                 </div>
 
-                <button type="submit" class="btn-primary btn-block">Присоединиться</button>
+                <button type="submit" class="btn-primary btn-block">Создать аккаунт</button>
                 <div id="register-error" class="error-msg" style="display:none; color: red; margin-top: 10px;"></div>
             </form>
+
+            <div style="margin-top: 15px; text-align: center;">
+                <a href="#" onclick="showLoginForm(event)" class="auth-switch-link">Уже есть аккаунт? Войти</a>
+            </div>
         </div>
 
     </div>
