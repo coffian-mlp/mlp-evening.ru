@@ -233,13 +233,19 @@ $(document).ready(function() {
         if(e) e.preventDefault();
         $('#profile-modal').fadeIn(200);
         
+        console.log('Profile opened. Calling loadUserSocials...');
         // Загружаем список привязок
         loadUserSocials();
     };
 
     function loadUserSocials() {
         var $container = $('#telegram-bind-container');
-        if (!$container.length) return; 
+        console.log('loadUserSocials called. Container found:', $container.length);
+        
+        if (!$container.length) {
+            console.warn('Container #telegram-bind-container not found!');
+            return; 
+        }
 
         // Пока грузим - можно показать спиннер или ничего
         // $container.html('...');
