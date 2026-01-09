@@ -128,7 +128,7 @@ try {
                 }
                 
                 // Привязываем!
-                $stmt = $db->prepare("INSERT INTO user_socials (user_id, provider, provider_uid, username, first_name, last_name, photo_url) VALUES (?, 'telegram', ?, ?, ?, ?, ?)");
+                $stmt = $db->prepare("INSERT INTO user_socials (user_id, provider, provider_uid, username, first_name, last_name, avatar_url) VALUES (?, 'telegram', ?, ?, ?, ?, ?)");
                 $stmt->bind_param("issssss", 
                     $userId, 
                     $tgUser['id'], 
