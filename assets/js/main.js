@@ -286,7 +286,7 @@ function loadUserSocials() {
             csrf_token: $('meta[name="csrf-token"]').attr('content')
         },
         success: function(resp) {
-            // console.log('AJAX Success:', resp);
+            console.log('User Socials:', resp); // DEBUG
             if (resp.success) {
                 var telegram = resp.data.socials.find(s => s.provider === 'telegram');
                 
@@ -321,25 +321,30 @@ function loadUserSocials() {
 
                 } else {
                     // Не привязан -> Вставляем виджет динамически
+                    console.log('Bot Username:', window.telegramBotUsername); // DEBUG
+                    
                     // Проверяем, чтобы не дублировать
+                    // Очищаем контейнер принудительно перед вставкой, если скрипта еще нет
                     if ($container.find('script').length === 0) {
                          if (window.telegramBotUsername) {
-                            $container.empty();
+                            $container.empty(); // Убираем loading text
                             
-                            // Создаем элемент скрипта "по-научному" для надежной загрузки
+                            // Создаем элемент скрипта
                             var script = document.createElement('script');
                             script.async = true;
                             script.src = "https://telegram.org/js/telegram-widget.js?22";
                             script.setAttribute('data-telegram-login', window.telegramBotUsername);
                             script.setAttribute('data-size', 'medium');
                             script.setAttribute('data-radius', '5');
-                            script.setAttribute('data-onauth', 'onTelegramBind(user)'); // ВАЖНО: Bind callback
+                            script.setAttribute('data-onauth', 'onTelegramBind(user)');
                             script.setAttribute('data-request-access', 'write');
                             
-                            // Добавляем в контейнер
-                            $container.append(script);
+                            // Вставляем через нативный DOM для надежности
+                            $container[0].appendChild(script);
+                            console.log('Telegram script appended'); // DEBUG
                         } else {
-                             $container.html('<small style="color:red">Ошибка конфига (JS)</small>');
+                             console.warn('Telegram Bot Username is missing!');
+                             $container.html('<small style="color:red">Bot Name Not Set</small>');
                         }
                     }
                 }
