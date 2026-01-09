@@ -321,23 +321,47 @@ function loadUserSocials() {
                     $statusContainer.hide().empty();
                     $widgetContainer.show();
                     
-                    // Очищаем контейнер перед вставкой, чтобы убрать старые/зависшие скрипты
+                    // ЯДЕРНЫЙ ВАРИАНТ: Вставляем IFRAME вручную ☢️
                     $widgetContainer.empty();
 
                     if (window.telegramBotUsername) {
-                        // Небольшой тайм-аут, чтобы убедиться, что DOM обновился и контейнер виден
-                        setTimeout(function() {
-                            var script = document.createElement('script');
-                            script.async = true;
-                            script.src = "https://telegram.org/js/telegram-widget.js?22";
-                            script.setAttribute('data-telegram-login', window.telegramBotUsername);
-                            script.setAttribute('data-size', 'medium');
-                            script.setAttribute('data-radius', '5');
-                            script.setAttribute('data-onauth', 'onTelegramBind(user)');
-                            script.setAttribute('data-request-access', 'write');
-                            
-                            $widgetContainer[0].appendChild(script);
-                        }, 10);
+                        // Формируем URL для iframe
+                        var botName = window.telegramBotUsername;
+                        var origin = window.location.origin; // Например, https://v4.mlp-evening.ru
+                        var src = 'https://oauth.telegram.org/embed/' + botName + '?origin=' + encodeURIComponent(origin) + '&request_access=write&size=medium';
+                        
+                        var iframe = document.createElement('iframe');
+                        iframe.src = src;
+                        iframe.id = 'telegram-login-' + botName;
+                        iframe.style.width = '100%'; // Или фиксированную, например '186px'
+                        iframe.style.height = '28px'; // Высота medium виджета
+                        iframe.style.border = 'none';
+                        iframe.style.overflow = 'hidden';
+                        iframe.setAttribute('scrolling', 'no');
+                        iframe.setAttribute('frameborder', '0');
+                        
+                        $widgetContainer.append(iframe);
+                        
+                        // Слушаем ответ от Iframe (один раз, чтобы не плодить слушателей)
+                        if (!window.telegramMessageListenerAdded) {
+                            window.telegramMessageListenerAdded = true;
+                            window.addEventListener('message', function(event) {
+                                // Проверяем источник (на всякий случай, хотя telegram шлет с oauth.telegram.org)
+                                // if (event.origin !== 'https://oauth.telegram.org') return; 
+                                
+                                try {
+                                    var data = JSON.parse(event.data);
+                                    if (data.event === 'auth_user') {
+                                        // Ура! Пользователь авторизовался
+                                        console.log('Telegram Auth Data received:', data.auth_data);
+                                        // Вызываем нашу функцию привязки
+                                        window.onTelegramBind(data.auth_data);
+                                    }
+                                } catch(e) {
+                                    // Игнорируем не-JSON сообщения
+                                }
+                            });
+                        }
                     }
                 }
             }
