@@ -5,9 +5,17 @@ require_once __DIR__ . '/ConfigManager.php';
 
 class EpisodeManager {
     private $db;
+    private $cacheFile;
 
     public function __construct() {
         $this->db = Database::getInstance()->getConnection();
+        $this->cacheFile = __DIR__ . '/../cache/episodes.json';
+    }
+
+    private function clearCache() {
+        if (file_exists($this->cacheFile)) {
+            unlink($this->cacheFile);
+        }
     }
 
     public function getEveningPlaylist($limit = 8) {
@@ -190,6 +198,18 @@ class EpisodeManager {
     }
 
     public function getAllEpisodes() {
+        // 1. Try Cache (TTL 60 sec)
+        if (file_exists($this->cacheFile)) {
+            if (time() - filemtime($this->cacheFile) < 60) {
+                $json = file_get_contents($this->cacheFile);
+                if ($json) {
+                    $data = json_decode($json, true);
+                    if (is_array($data)) return $data;
+                }
+            }
+        }
+
+        // 2. DB Query
         $query = "SELECT * FROM episode_list";
         $result = $this->db->query($query);
         $episodes = [];
@@ -198,11 +218,18 @@ class EpisodeManager {
                 $episodes[] = $row;
             }
         }
+
+        // 3. Save Cache
+        if (!is_dir(dirname($this->cacheFile))) {
+            mkdir(dirname($this->cacheFile), 0777, true);
+        }
+        file_put_contents($this->cacheFile, json_encode($episodes));
+
         return $episodes;
     }
 
-    public function getWatchHistory() {
-        $query = "SELECT ID, EPNUM, TITLE FROM watching_now ORDER BY ID DESC";
+    public function getWatchHistory($limit = 100) {
+        $query = "SELECT ID, EPNUM, TITLE FROM watching_now ORDER BY ID DESC LIMIT " . (int)$limit;
         $result = $this->db->query($query);
         $history = [];
         if ($result) {
@@ -214,6 +241,7 @@ class EpisodeManager {
     }
 
     public function voteForEpisode($id) {
+        $this->clearCache();
         $id = (int)$id;
         $stmt = $this->db->prepare("UPDATE episode_list SET WANNA_WATCH = WANNA_WATCH + 1 WHERE ID = ?");
         $stmt->bind_param("i", $id);
@@ -239,6 +267,7 @@ class EpisodeManager {
     }
 
     public function markAsWatched(array $ids) {
+        $this->clearCache();
         $stmtUpdate = $this->db->prepare("UPDATE episode_list SET TIMES_WATCHED = TIMES_WATCHED + 1 WHERE ID = ?");
         $stmtSelect = $this->db->prepare("SELECT TITLE FROM episode_list WHERE ID = ?");
         $stmtInsert = $this->db->prepare("INSERT INTO watching_now (EPNUM, TITLE) VALUES (?, ?)");
@@ -264,10 +293,12 @@ class EpisodeManager {
     }
     
     public function clearWannaWatch() {
+         $this->clearCache();
          return $this->db->query("UPDATE episode_list SET WANNA_WATCH = 0");
     }
 
     public function resetTimesWatched() {
+         $this->clearCache();
          return $this->db->query("UPDATE episode_list SET TIMES_WATCHED = 0");
     }
 
