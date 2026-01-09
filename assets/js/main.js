@@ -330,7 +330,6 @@ function loadUserSocials() {
         }
     });
 }
-}
 
 // Обработчик открытия модалки логина
 window.openLoginModal = function(e) {
