@@ -21,13 +21,9 @@
     <link rel="stylesheet" href="/assets/css/fonts.css">
 
     <link rel="stylesheet" href="/assets/css/main.css">
-    <link rel="stylesheet" href="/assets/css/quotes.css">
-    <link rel="stylesheet" href="/assets/css/markdown.css">
-    <link rel="stylesheet" href="/assets/css/dragdrop.css">
-    <link rel="stylesheet" href="/assets/css/chat-media.css">
-    <link rel="stylesheet" href="/assets/css/context-menu.css">
-    <link rel="stylesheet" href="/assets/css/stickers.css">
-    <link rel="stylesheet" href="/assets/css/lightbox.css">
+    <?php if (isset($enableLocalChat) && $enableLocalChat): ?>
+        <link rel="stylesheet" href="/assets/css/chat.css">
+    <?php endif; ?>
     <?php if (isset($extraCss)) echo $extraCss; ?>
     
     <?php if (isset($_SESSION['user_id'])): ?>

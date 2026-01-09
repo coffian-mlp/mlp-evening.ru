@@ -1,6 +1,6 @@
-@import 'chat-header.css';
+/* === MLP Evening: Main Styles === */
 
-/* === Общие стили === */
+/* === 1. Base Reset & Layout === */
 *, *::before, *::after {
     box-sizing: border-box;
 }
@@ -9,49 +9,46 @@ body, html {
     margin: 0;
     padding: 0;
     height: 100%;
-    font-family: 'Open Sans', 'Segoe UI', Tahoma, sans-serif; /* Основной шрифт */
+    font-family: 'Open Sans', 'Segoe UI', Tahoma, sans-serif;
     background: url(/assets/img/bg.jpg) no-repeat center center fixed #2B1F43;
     background-size: cover;
     color: #333;
 }
 
-/* Заголовки с магическим шрифтом */
+/* Headings with Magic Font */
 h1, h2, h3, h4, h5, h6, .logo-font {
     font-family: 'Philosopher', sans-serif;
 }
 
-/* Класс для главной страницы (плеера), где не нужен скролл */
+/* Layout: Player (No Scroll) */
 body.player-layout {
     overflow: hidden;
 }
 
-/* Класс для дашборда, где скролл нужен */
+/* Layout: Dashboard (Scroll) */
 body.dashboard-layout {
     overflow-y: auto;
-    /* Убрали background: #f0f2f5; чтобы осталась картинка */
     padding: 20px;
 }
 
-/* === Стили Плеера (Index) === */
-/* Old .chat-container removed/merged above */
+/* === 2. Player Structure === */
 .player-container {
     display: flex;
-    height: 100vh; /* Фоллбек для старых браузеров */
-    height: 100dvh; /* Dynamic Viewport Height для мобилок */
+    height: 100vh;
+    height: 100dvh;
 }
 
 .video-container {
-    flex: 3; /* Видео занимает 3 части (75%) */
+    flex: 3;
     display: flex;
     flex-direction: column;
     padding: 6px;
     min-width: 0;
 }
 
-/* Специфичные стили для чата внутри плеера */
 .player-container .chat-container {
-    flex: 1; /* Чат занимает 1 часть (25%) */
-    min-width: 300px; /* Минимальный разумный предел */
+    flex: 1;
+    min-width: 300px;
     border-left: 1px solid rgba(0,0,0,0.1);
 }
 
@@ -89,85 +86,25 @@ body.dashboard-layout {
     width: 100%;
 }
 
-    .video-content iframe {
+.video-content iframe {
     width: 100%;
     height: 100%;
     border: none;
 }
 
-/* Chat container styles are now global (see above) */
-
 @media (max-width: 768px) {
-    .player-container {
-        flex-direction: column;
-    }
-
-    .header {
-        height: auto;
-        padding: 10px 20px;
-        flex-shrink: 0;
-    }
-    
-    .header .logo {
-        height: 40px;
-        width: auto;
-    }
-
-    .video-container {
-        flex: 0 0 auto;
-        padding: 0;
-        width: 100%;
-    }
-    
-    .video-content {
-        width: 100%;
-        aspect-ratio: 16/9;
-    }
-
-    .chat-container {
-        flex: 1;
-        height: auto;
-        min-height: 0;
-    }
+    .player-container { flex-direction: column; }
+    .header { height: auto; padding: 10px 20px; flex-shrink: 0; }
+    .header .logo { height: 40px; width: auto; }
+    .video-container { flex: 0 0 auto; padding: 0; width: 100%; }
+    .video-content { width: 100%; aspect-ratio: 16/9; }
+    .chat-container { flex: 1; height: auto; min-height: 0; }
 }
 
-/* === Утилиты === */
+/* === 3. Utilities === */
 .hidden { display: none; }
 
-/* === Чат иконки === */
-/* Имена пользователей и заголовок чата - магическим шрифтом */
-/* Добавляем 'a', чтобы ссылки тоже окрашивались, и '*' для вложенных элементов */
-.chatbro_header_title,
-.chatbro_message_name,
-.chatbro_message_name a,
-.chatbro_chat_name {
-    font-family: 'Philosopher', sans-serif !important;
-    max-width: unset !important;
-}
-
-.chatbro_message_attachment_reply .chatbro_message_name,
-.chatbro_message_attachment_reply .chatbro_message_name a {
-    max-width: 45% !important;
-}
-
-/* Сам текст сообщений - обычным шрифтом (наследуется от body, но на всякий случай) */
-.chatbro_message_block, 
-.chatbro_message_content {
-    font-family: 'Open Sans', sans-serif !important;
-}
-.chatbro_messages .chatbro_message_admin, .chatbro_fake_messages .chatbro_message_admin {
-  border: none !important;
-  background: none !important;
-}
-.chatbro_messages .chatbro_message_moder, .chatbro_fake_messages .chatbro_message_moder {
-  border: none !important;
-  background: none !important;
-}
-.chatbro_messages .chatbro_message_admin::after, .chatbro_fake_messages .chatbro_message_admin::after, .chatbro_messages .chatbro_message_moder::after, .chatbro_fake_messages .chatbro_message_moder::after {
-  display: none;
-}
-
-/* === Стили уведомлений (Flash Messages) === */
+/* === 4. Flash Messages (System Notifications) === */
 .flash-message {
     position: fixed;
     top: 20px;
@@ -191,16 +128,16 @@ body.dashboard-layout {
 }
 
 .flash-message.alert-success {
-    background-color: #4caf50; /* Green */
+    background-color: #4caf50;
     background: linear-gradient(135deg, #4caf50, #8bc34a);
 }
 
 .flash-message.alert-danger {
-    background-color: #f44336; /* Red */
+    background-color: #f44336;
     background: linear-gradient(135deg, #f44336, #e91e63);
 }
 
-/* === Общие кнопки === */
+/* === 5. Buttons === */
 .btn, .btn-primary, .btn-danger, .btn-warning, .btn-return, .btn-home {
     display: inline-block;
     padding: 10px 20px;
@@ -214,30 +151,20 @@ body.dashboard-layout {
     font-size: 14px;
 }
 
-.btn-primary {
-    background: #6d2f8e;
-    color: white;
-}
+.btn-primary { background: #6d2f8e; color: white; }
 .btn-primary:hover { background: #562473; }
 
-.btn-danger {
-    background: #e74c3c;
-    color: white;
-}
+.btn-danger { background: #e74c3c; color: white; }
 .btn-danger:hover { background: #c0392b; }
 
-.btn-warning {
-    background: #f1c40f;
-    color: #333;
-}
+.btn-warning { background: #f1c40f; color: #333; }
 .btn-warning:hover { background: #f39c12; }
 
-/* Кнопка "Вернуться" (используется в 404/403) */
 .btn-return, .btn-home {
     background-color: #6d2f8e;
     color: white;
     padding: 12px 25px;
-    border-radius: 25px !important; /* Force rounded specifically for these */
+    border-radius: 25px !important;
     margin-top: 20px;
 }
 .btn-return:hover, .btn-home:hover {
@@ -245,24 +172,11 @@ body.dashboard-layout {
     transform: translateY(-2px);
 }
 
-.btn-block {
-    display: block;
-    width: 100%;
-}
+.btn-block { display: block; width: 100%; }
 
-/* === Формы и Инпуты === */
-.form-group {
-    margin-bottom: 20px; 
-    text-align: left;
-}
-
-.form-label {
-    display: block; 
-    margin-bottom: 5px; 
-    color: #555;
-    font-weight: 600;
-}
-
+/* === 6. Forms === */
+.form-group { margin-bottom: 20px; text-align: left; }
+.form-label { display: block; margin-bottom: 5px; color: #555; font-weight: 600; }
 .form-input, input[type="text"], input[type="number"], input[type="password"] {
     width: 100%; 
     padding: 10px 12px; 
@@ -277,7 +191,7 @@ body.dashboard-layout {
     border-color: #9c27b0;
 }
 
-/* === Кастомный селектор цвета === */
+/* === 7. Color Picker UI === */
 .color-picker-ui {
     display: flex;
     flex-direction: column;
@@ -287,13 +201,7 @@ body.dashboard-layout {
     border-radius: 8px;
     border: 1px solid #eee;
 }
-
-.color-swatches {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
+.color-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
 .color-swatch {
     width: 32px;
     height: 32px;
@@ -303,18 +211,12 @@ body.dashboard-layout {
     transition: transform 0.2s, box-shadow 0.2s;
     position: relative;
 }
-
 .color-swatch:hover {
     transform: scale(1.1);
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     z-index: 2;
 }
-
-.color-swatch.active {
-    border-color: #333;
-    transform: scale(1.1);
-}
-
+.color-swatch.active { border-color: #333; transform: scale(1.1); }
 .color-swatch.active::after {
     content: '✓';
     position: absolute;
@@ -326,13 +228,7 @@ body.dashboard-layout {
     font-weight: bold;
     text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
-
-.manual-input-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
+.manual-input-wrapper { display: flex; align-items: center; gap: 10px; }
 .color-manual-input {
     width: 100px;
     padding: 5px;
@@ -341,7 +237,6 @@ body.dashboard-layout {
     font-family: monospace;
     font-size: 14px;
 }
-
 .color-manual-preview {
     width: 28px;
     height: 28px;
@@ -353,281 +248,7 @@ body.dashboard-layout {
     box-shadow: inset 0 0 2px rgba(0,0,0,0.1);
 }
 
-/* === Local Chat Styles (Merged) === */
-.chat-container {
-    display: flex;
-    flex-direction: column;
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 10px;
-    overflow: hidden;
-    height: 100%;
-    position: relative; /* For notifications */
-}
-
-.chat-notification {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    right: 10px;
-    padding: 10px;
-    border-radius: 5px;
-    color: white;
-    text-align: center;
-    font-size: 14px;
-    font-weight: bold;
-    z-index: 100;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    display: none;
-    cursor: pointer;
-}
-
-.chat-notification.success {
-    background-color: #4caf50;
-    background: linear-gradient(135deg, #4caf50, #8bc34a);
-}
-
-.chat-notification.error {
-    background-color: #f44336;
-    background: linear-gradient(135deg, #f44336, #e91e63);
-}
-
-/* === Confirmation Overlay === */
-.chat-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.6);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 200;
-    border-radius: 10px; /* Match container radius */
-}
-
-.chat-confirm-box {
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    text-align: center;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    max-width: 85%;
-    animation: popIn 0.2s ease-out;
-}
-
-@keyframes popIn {
-    from { transform: scale(0.8); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-}
-
-.chat-confirm-box p {
-    margin: 0 0 15px 0;
-    font-weight: bold;
-    color: #333;
-}
-
-.chat-confirm-buttons {
-    display: flex;
-    gap: 10px;
-    justify-content: center;
-}
-
-.btn-sm {
-    padding: 6px 15px;
-    font-size: 13px;
-    min-width: 60px;
-}
-
-/* === Chat Messages === */
-.chat-messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    font-size: 14px;
-}
-
-.chat-message {
-    display: flex;
-    align-items: flex-start;
-    padding: 5px 0;
-    word-wrap: break-word;
-    line-height: 1.4;
-}
-
-.chat-avatar-wrapper {
-    flex-shrink: 0;
-    margin-right: 10px;
-}
-
-/* === Chat Avatars (Old class removed, handled in .chat-message block) === */
-.chat-avatar {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 1px solid rgba(0,0,0,0.1);
-}
-
-.chat-content {
-    flex-grow: 1;
-    min-width: 0; /* Fix flex child overflow */
-}
-
-.chat-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 2px;
-}
-
-.chat-message .user-info {
-    display: flex;
-    align-items: center;
-    gap: 8px; /* Отступ между именем и кнопками */
-}
-
-.chat-message .username {
-    font-family: 'Philosopher', sans-serif;
-    font-weight: bold;
-    font-size: 16px;
-    color: #673ab7; /* Twilight Sparkle color */
-    cursor: pointer;
-}
-
-.chat-message .meta-info {
-    display: flex;
-    align-items: center;
-}
-
-.chat-message .timestamp {
-    font-family: 'Philosopher', sans-serif;
-    font-size: 12px;
-    color: #999;
-}
-
-.chat-text {
-    font-family: 'Open Sans', sans-serif;
-    font-size: 16px;
-    color: #333;
-}
-
-.chat-quote {
-    border-left: 3px solid #6d2f8e;
-    background: #f9f9f9;
-    padding: 5px 10px;
-    margin: 5px 0;
-    color: #555;
-    font-size: 0.9em;
-    font-style: italic;
-    white-space: pre-wrap;
-}
-
-.chat-actions {
-    opacity: 0;
-    transition: opacity 0.2s;
-    display: flex;
-    gap: 4px;
-}
-
-.chat-message:hover .chat-actions {
-    opacity: 1;
-}
-
-.chat-action-btn {
-    background: none;
-    border: none;
-    color: #999;
-    cursor: pointer;
-    font-size: 14px; /* Чуть крупнее (было 12px) */
-    padding: 0 4px;
-    line-height: 1;
-}
-
-.chat-action-btn:hover {
-    color: #6d2f8e;
-}
-
-.chat-action-btn.delete-btn:hover {
-    color: #e74c3c;
-}
-
-.chat-action-btn.restore-btn:hover {
-    color: #2ecc71; /* Зеленый для восстановления */
-}
-
-.edited-mark {
-    font-size: 0.75em;
-    color: #999;
-    font-style: italic;
-    margin-left: 5px;
-    cursor: help;
-}
-
-.chat-input-area {
-    padding: 10px;
-    border-top: 1px solid #eee;
-    background: #fafafa;
-    position: relative; /* For sticker picker positioning */
-}
-
-#chat-form {
-    display: flex;
-    gap: 10px;
-    align-items: flex-end; /* Align to bottom for textarea growth */
-}
-
-#chat-input {
-    flex: 1;
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    outline: none;
-    font-family: inherit;
-    font-size: 14px;
-    resize: none; /* Auto-resize via JS instead */
-    min-height: 40px; /* Match standard input height ~ish */
-    max-height: 150px;
-    overflow-y: auto;
-    line-height: 1.4;
-}
-
-#chat-input:focus {
-    border-color: #6d2f8e;
-}
-
-#chat-form button {
-    padding: 0 20px;
-    background: #6d2f8e;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
-    height: 40px; /* Fixed height for button */
-    transition: background 0.2s;
-    flex-shrink: 0;
-}
-
-#chat-form button:hover {
-    background: #7b1fa2;
-}
-
-.chat-login-prompt {
-    text-align: center;
-    font-size: 0.9em;
-    color: #666;
-}
-
-.chat-login-prompt a {
-    color: #9c27b0;
-    font-weight: bold;
-}
-
-/* === Modal Styles (Merged) === */
+/* === 8. Modals (Generic) === */
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -639,9 +260,8 @@ body.dashboard-layout {
     display: flex;
     justify-content: center;
     align-items: center;
-    display: none; /* Hidden by default */
+    display: none;
 }
-
 .modal-content {
     background: white;
     padding: 30px;
@@ -652,7 +272,6 @@ body.dashboard-layout {
     position: relative;
     text-align: center;
 }
-
 .close-modal {
     position: absolute;
     top: 10px;
@@ -662,13 +281,89 @@ body.dashboard-layout {
     cursor: pointer;
     color: #aaa;
 }
-
-.close-modal:hover {
-    color: #000;
-}
-
+.close-modal:hover { color: #000; }
 .modal-content h3 {
     margin-top: 0;
     margin-bottom: 20px;
     color: #6d2f8e;
+}
+
+/* === 9. Global Lightbox === */
+.lightbox {
+    display: none;
+    position: fixed;
+    z-index: 10000;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    justify-content: center;
+    align-items: center;
+    cursor: zoom-out;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.lightbox.active { display: flex; opacity: 1; }
+.lightbox img {
+    max-width: 95%;
+    max-height: 95%;
+    border-radius: 4px;
+    box-shadow: 0 0 30px rgba(0,0,0,0.8);
+    object-fit: contain;
+}
+
+/* === 10. Error Pages (404/403) === */
+.error-page { overflow: auto; }
+.error-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 80vh;
+    text-align: center;
+    padding: 20px;
+}
+.error-content {
+    background: rgba(255, 255, 255, 0.9);
+    padding: 40px;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    max-width: 600px;
+    width: 100%;
+}
+.error-image {
+    max-width: 100%;
+    height: auto;
+    margin-bottom: 20px;
+    animation: float 3s ease-in-out infinite;
+}
+@keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+    100% { transform: translateY(0px); }
+}
+.error-content h1 { color: #6d2f8e; margin-bottom: 15px; }
+.error-content p { font-size: 1.1em; margin-bottom: 25px; color: #555; }
+
+/* === 11. ChatBro Support (Legacy) === */
+.chatbro_header_title, .chatbro_message_name, .chatbro_message_name a, .chatbro_chat_name {
+    font-family: 'Philosopher', sans-serif !important;
+    max-width: unset !important;
+}
+.chatbro_message_attachment_reply .chatbro_message_name, .chatbro_message_attachment_reply .chatbro_message_name a {
+    max-width: 45% !important;
+}
+.chatbro_message_block, .chatbro_message_content {
+    font-family: 'Open Sans', sans-serif !important;
+}
+.chatbro_messages .chatbro_message_admin, .chatbro_fake_messages .chatbro_message_admin {
+  border: none !important;
+  background: none !important;
+}
+.chatbro_messages .chatbro_message_moder, .chatbro_fake_messages .chatbro_message_moder {
+  border: none !important;
+  background: none !important;
+}
+.chatbro_messages .chatbro_message_admin::after, .chatbro_fake_messages .chatbro_message_admin::after, .chatbro_messages .chatbro_message_moder::after, .chatbro_fake_messages .chatbro_message_moder::after {
+  display: none;
 }
