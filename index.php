@@ -157,26 +157,7 @@ require_once __DIR__ . '/src/templates/header.php';
                 <div class="chat-welcome">Добро пожаловать в Поняшный чат! 🦄<br>Не стесняйся, пиши!</div>
             </div>
             <div class="chat-input-area">
-                <script>
-                    // Global Config
-                    window.serverTime = <?= time() ?>;
-                </script>
                  <?php if (isset($_SESSION['user_id'])): ?>
-                    <script>
-                        // Global User Info for JS
-                        window.currentUserId = <?= json_encode($_SESSION['user_id']) ?>;
-                        window.currentUserRole = <?= json_encode($_SESSION['role'] ?? 'user') ?>;
-                        window.isModerator = <?= json_encode(Auth::isModerator()) ?>; // Add this flag
-                        window.currentUsername = <?= json_encode($_SESSION['username']) ?>;
-                        window.currentUserNickname = <?= json_encode($currentUser['nickname'] ?? $_SESSION['username']) ?>;
-                        window.csrfToken = <?= json_encode(Auth::generateCsrfToken()) ?>;
-                        window.telegramBotUsername = <?= json_encode($telegramBotUsername) ?>; // Для профиля
-                        // Inject DB Options
-                        window.userOptions = <?= json_encode($userOptions) ?>;
-                        // Inject Stickers
-                        window.stickerMap = <?= json_encode($stickerMap) ?>;
-                        window.stickerData = <?= json_encode($frontendStickerData) ?>;
-                    </script>
                     <div id="quote-preview-area" class="hidden"></div>
                     <!-- Toolbar -->
                     <div class="chat-toolbar">
@@ -218,6 +199,28 @@ require_once __DIR__ . '/src/templates/header.php';
         <?php endif; ?>
     </div>
 </div>
+
+<!-- Global Config Scripts (Moved outside chat container to work always) -->
+<script>
+    window.serverTime = <?= time() ?>;
+</script>
+<?php if (isset($_SESSION['user_id'])): ?>
+    <script>
+        // Global User Info for JS
+        window.currentUserId = <?= json_encode($_SESSION['user_id']) ?>;
+        window.currentUserRole = <?= json_encode($_SESSION['role'] ?? 'user') ?>;
+        window.isModerator = <?= json_encode(Auth::isModerator()) ?>;
+        window.currentUsername = <?= json_encode($_SESSION['username']) ?>;
+        window.currentUserNickname = <?= json_encode($currentUser['nickname'] ?? $_SESSION['username']) ?>;
+        window.csrfToken = <?= json_encode(Auth::generateCsrfToken()) ?>;
+        window.telegramBotUsername = <?= json_encode($telegramBotUsername) ?>; // Для профиля
+        // Inject DB Options
+        window.userOptions = <?= json_encode($userOptions) ?>;
+        // Inject Stickers
+        window.stickerMap = <?= json_encode($stickerMap) ?>;
+        window.stickerData = <?= json_encode($frontendStickerData) ?>;
+    </script>
+<?php endif; ?>
 
 
 <!-- Auth Modal -->
