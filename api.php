@@ -292,7 +292,11 @@ try {
             }
             
             // Telegram Settings
-            $config->setOption('telegram_auth_enabled', isset($_POST['telegram_auth_enabled']) ? 1 : 0);
+            // В форме есть hidden input, так что ключ всегда придет, если это форма Telegram.
+            // Если сохраняем другую форму, ключа не будет, и настройку не трогаем.
+            if (isset($_POST['telegram_auth_enabled'])) {
+                $config->setOption('telegram_auth_enabled', (int)$_POST['telegram_auth_enabled']);
+            }
             
             if (isset($_POST['telegram_bot_token'])) {
                 $config->setOption('telegram_bot_token', trim($_POST['telegram_bot_token']));
