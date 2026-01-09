@@ -548,6 +548,7 @@ require_once __DIR__ . '/src/templates/header.php';
                 
                 <div class="form-group">
                     <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="hidden" name="telegram_auth_enabled" value="0">
                         <input type="checkbox" name="telegram_auth_enabled" value="1" <?= $config->getOption('telegram_auth_enabled', 0) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
                         Включить вход через Telegram
                     </label>

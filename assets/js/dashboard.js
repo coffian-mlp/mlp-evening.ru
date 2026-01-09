@@ -75,7 +75,7 @@ $(document).ready(function() {
 
     // --- AJAX обработка форм (Dashboard + User Modal + Mod Modals) ---
     // Исключаем специальные формы, у которых есть свои обработчики
-    $("form").not('#profile-form, #add-sticker-form, #create-pack-form, #zip-import-form').on("submit", function(e) {
+    $("form").not('#profile-form, #add-sticker-form, #create-pack-form, #zip-import-form, #edit-pack-form').on("submit", function(e) {
         e.preventDefault(); 
         
         var $form = $(this);
