@@ -88,6 +88,27 @@ try {
         }
     }
 
+    if ($action === 'heartbeat') {
+        $sessionId = session_id(); // Ensure session is started (usually is in global init)
+        $userId = $_SESSION['user_id'] ?? null;
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+        $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        
+        require_once __DIR__ . '/src/OnlineManager.php';
+        $online = new OnlineManager();
+        $online->beat($sessionId, $userId, $ip, $ua);
+        
+        // Return detailed stats (active in last 5 mins)
+        $stats = $online->getOnlineStats(5);
+        
+        // 1% chance to cleanup old sessions (> 1 hour)
+        if (rand(1, 100) === 1) {
+            $online->cleanup(60);
+        }
+        
+        sendResponse(true, "Beat", 'success', ['online_stats' => $stats]);
+    }
+
     if ($action === 'social_login') {
         require_once __DIR__ . '/src/Social/SocialAuthService.php';
         require_once __DIR__ . '/src/Social/TelegramProvider.php';

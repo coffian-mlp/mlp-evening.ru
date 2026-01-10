@@ -402,6 +402,48 @@ $(document).ready(function() {
         });
     };
 
+    // --- 6. Online Heartbeat ---
+    function sendHeartbeat() {
+        $.post('api.php', { 
+            action: 'heartbeat',
+            csrf_token: $('meta[name="csrf-token"]').attr('content') 
+        }, function(response) {
+            if (response.success && response.data.online_stats) {
+                var stats = response.data.online_stats;
+                
+                // Formulate Text: "(5 п, 2 г)" or just "(7)" if simple
+                // Let's go with "(7)" but rich tooltip
+                
+                var total = stats.total;
+                var guests = stats.guests_count;
+                var users = stats.users; // Array
+                
+                // Update Text
+                $('#online-counter').text('(' + total + ')');
+                
+                // Build Tooltip Title
+                var titleParts = [];
+                if (users.length > 0) {
+                    var userNames = users.map(function(u) { return u.nickname; }).join(', ');
+                    titleParts.push("В сети: " + userNames);
+                } else {
+                    titleParts.push("В сети: никого из своих");
+                }
+                
+                if (guests > 0) {
+                    titleParts.push("Гостей: " + guests);
+                }
+                
+                $('#online-counter').attr('title', titleParts.join('\n'));
+            }
+        }, 'json');
+    }
+
+    // Run every 60 seconds
+    setInterval(sendHeartbeat, 60000);
+    // Run immediately on load
+    sendHeartbeat();
+
 }); // End of $(document).ready
 
 // --- 6. Загрузка списка соцсетей в профиле (ВЫНЕСЕНО) ---
