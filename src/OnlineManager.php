@@ -28,11 +28,24 @@ class OnlineManager {
     }
 
     /**
+     * Removes a session immediately (e.g. on window close).
+     */
+    public function removeSession($sessionId) {
+        $stmt = $this->db->prepare("DELETE FROM online_sessions WHERE session_id = ?");
+        $stmt->bind_param("s", $sessionId);
+        return $stmt->execute();
+    }
+
+    /**
      * Returns detailed online stats: list of users and count of guests.
      */
-    public function getOnlineStats($window = 5) {
-        // 1. Get Guests Count (unauthenticated sessions)
-        // Note: We count distinct session_ids just in case, though session_id is unique key
+    public function getOnlineStats($window = 3) {
+        // Мы всегда используем базу данных как источник истины.
+        // Механизм heartbeat (AJAX) работает для всех клиентов, независимо от драйвера чата.
+        // Это надежнее (стиль Земнопони 🌿), чем полагаться только на API Centrifugo,
+        // который может быть недоступен для PHP или не учитывать гостей без WS.
+
+        // 1. Guests Count (unauthenticated sessions)
         $stmtGuest = $this->db->prepare("
             SELECT COUNT(*) 
             FROM online_sessions 
@@ -44,14 +57,15 @@ class OnlineManager {
         $resGuest = $stmtGuest->get_result();
         $guestsCount = (int)$resGuest->fetch_row()[0];
 
-        // 2. Get Users List (authenticated sessions)
-        // We group by user_id to handle multiple sessions for same user (e.g. phone + desktop)
-        // We also need to join user_options to get chat_color
+        // 2. Users List (authenticated sessions)
+        // We group by user_id to handle multiple sessions for same user
+        // We fetch avatar from user_options (key: avatar_url)
         $stmtUsers = $this->db->prepare("
-            SELECT u.id, u.nickname, uo.option_value as chat_color 
+            SELECT u.id, u.nickname, uo_avatar.option_value as avatar, uo.option_value as chat_color 
             FROM online_sessions os
             JOIN users u ON os.user_id = u.id
             LEFT JOIN user_options uo ON u.id = uo.user_id AND uo.option_key = 'chat_color'
+            LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
             WHERE os.last_seen > NOW() - INTERVAL ? MINUTE
             GROUP BY u.id
             ORDER BY u.nickname ASC
@@ -63,6 +77,7 @@ class OnlineManager {
         $users = [];
         while ($row = $resUsers->fetch_assoc()) {
             if (empty($row['chat_color'])) $row['chat_color'] = '#6d2f8e'; // Default color
+            if (empty($row['avatar'])) $row['avatar'] = 'default-avatar.png'; 
             $users[] = $row;
         }
 

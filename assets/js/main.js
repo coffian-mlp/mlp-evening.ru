@@ -1,5 +1,18 @@
 // main.js - Глобальные скрипты для всего сайта
 
+// Utility: Escape HTML to prevent XSS
+function escapeHtml(text) {
+  if (text == null) return text;
+  var map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return text.toString().replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
 // --- Global Lightbox ---
 $(document).ready(function() {
     // Click on Chat Images & Stickers
@@ -403,6 +416,76 @@ $(document).ready(function() {
     };
 
     // --- 6. Online Heartbeat ---
+    // Create Tooltip Element dynamically
+    const tooltip = $('<div id="online-tooltip" class="online-tooltip"></div>');
+    $('body').append(tooltip); // Append to body for safe absolute positioning
+
+    let hideTooltipTimeout;
+
+    function updateTooltipPosition() {
+        var $target = $('#online-counter');
+        if($target.length === 0) return;
+        
+        // Measure tooltip if hidden (display:none results in width 0)
+        var tooltipWasHidden = tooltip.css('display') === 'none';
+        if(tooltipWasHidden) {
+            tooltip.css({ visibility: 'hidden', display: 'block' });
+        }
+        var tooltipWidth = tooltip.outerWidth();
+        var tooltipHeight = tooltip.outerHeight(); // Not used currently but good to have
+        
+        if(tooltipWasHidden) {
+            tooltip.css({ visibility: '', display: 'none' });
+        }
+        
+        var offset = $target.offset();
+        var width = $target.outerWidth();
+        var height = $target.outerHeight();
+        
+        // Default: Centered below the target
+        var top = offset.top + height + 10;
+        var left = offset.left + (width / 2) - (tooltipWidth / 2);
+        
+        // Boundary Check
+        var winWidth = $(window).width();
+        
+        // Right Edge
+        if (left + tooltipWidth > winWidth - 10) {
+            left = winWidth - tooltipWidth - 10;
+        }
+        // Left Edge
+        if (left < 10) {
+            left = 10;
+        }
+        
+        tooltip.css({
+            top: top,
+            left: left,
+            right: 'auto',     // Reset potential CSS
+            bottom: 'auto',    // Reset potential CSS
+            transform: 'none'  // Reset potential CSS
+        });
+    }
+
+    $('#online-counter').hover(function() {
+        clearTimeout(hideTooltipTimeout);
+        updateTooltipPosition();
+        tooltip.fadeIn(200);
+    }, function() {
+        hideTooltipTimeout = setTimeout(() => {
+            tooltip.fadeOut(200);
+        }, 300);
+    });
+    
+    // Also keep open if hovering the tooltip itself
+    tooltip.hover(function() {
+        clearTimeout(hideTooltipTimeout);
+    }, function() {
+        hideTooltipTimeout = setTimeout(() => {
+            tooltip.fadeOut(200);
+        }, 300);
+    });
+
     function sendHeartbeat() {
         $.post('api.php', { 
             action: 'heartbeat',
@@ -410,10 +493,6 @@ $(document).ready(function() {
         }, function(response) {
             if (response.success && response.data.online_stats) {
                 var stats = response.data.online_stats;
-                
-                // Formulate Text: "(5 п, 2 г)" or just "(7)" if simple
-                // Let's go with "(7)" but rich tooltip
-                
                 var total = stats.total;
                 var guests = stats.guests_count;
                 var users = stats.users; // Array
@@ -421,28 +500,78 @@ $(document).ready(function() {
                 // Update Text
                 $('#online-counter').text('(' + total + ')');
                 
-                // Build Tooltip Title
-                var titleParts = [];
+                // Remove native title
+                $('#online-counter').removeAttr('title');
+
+                // Build Custom Tooltip Content
+                var html = '<div class="online-tooltip-header">В сети сейчас</div><div class="online-user-list">';
+                
                 if (users.length > 0) {
-                    var userNames = users.map(function(u) { return u.nickname; }).join(', ');
-                    titleParts.push("В сети: " + userNames);
+                    users.forEach(function(u) {
+                        // Avatar handling
+                        var avatarUrl;
+                        if (u.avatar && u.avatar !== 'default-avatar.png' && u.avatar !== 'default.png') {
+                            // If it's a full URL (external) or absolute path (from UploadManager), use it as is
+                            if (u.avatar.startsWith('http') || u.avatar.startsWith('/')) {
+                                avatarUrl = u.avatar;
+                            } else {
+                                // If it's just a filename, assume /upload/avatars/
+                                avatarUrl = '/upload/avatars/' + u.avatar;
+                            }
+                        } else {
+                            avatarUrl = '/assets/img/default-avatar.png';
+                        }
+                        
+                        var color = u.chat_color || '#6d2f8e';
+                        var name = u.nickname;
+                        
+                        html += `
+                            <div class="online-user-item">
+                                <img src="${avatarUrl}" class="online-user-avatar" alt="${escapeHtml(name)}">
+                                <span style="color:${color}; font-weight:600;">${escapeHtml(name)}</span>
+                            </div>
+                        `;
+                    });
                 } else {
-                    titleParts.push("В сети: никого из своих");
+                    html += '<div style="color:#999; font-style:italic; padding:5px;">Никого из своих...</div>';
                 }
+                
+                html += '</div>';
                 
                 if (guests > 0) {
-                    titleParts.push("Гостей: " + guests);
+                    html += `<div class="online-guest-count">Гостей: ${guests}</div>`;
                 }
                 
-                $('#online-counter').attr('title', titleParts.join('\n'));
+                tooltip.html(html);
             }
         }, 'json');
     }
 
-    // Run every 60 seconds
-    setInterval(sendHeartbeat, 60000);
+    // Run every 42 seconds (The Answer to the Ultimate Question of Life, the Universe, and Everything)
+    setInterval(sendHeartbeat, 42000);
     // Run immediately on load
     sendHeartbeat();
+
+    // Handle Window Close (Leave)
+    window.addEventListener('beforeunload', function() {
+        // Use sendBeacon if available for reliability
+        const data = new FormData();
+        data.append('action', 'leave');
+        // Beacon doesn't support custom headers nicely for CSRF, but api.php checks it.
+        // Wait, beacon sends POST but we need CSRF token.
+        // Our api.php checks csrf_token in POST or Header.
+        // We can append it to FormData.
+        data.append('csrf_token', window.csrfToken || ''); // Handle if not set (public)
+
+        if (navigator.sendBeacon) {
+            navigator.sendBeacon('api.php', data);
+        } else {
+            // Fallback (Blocking XHR - deprecated but works)
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', 'api.php', false); // false = synchronous
+            xhr.send(data);
+        }
+    });
 
 }); // End of $(document).ready
 

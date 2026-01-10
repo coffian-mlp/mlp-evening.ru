@@ -98,8 +98,8 @@ try {
         $online = new OnlineManager();
         $online->beat($sessionId, $userId, $ip, $ua);
         
-        // Return detailed stats (active in last 5 mins)
-        $stats = $online->getOnlineStats(5);
+        // Return detailed stats (default window 3 mins)
+        $stats = $online->getOnlineStats(3);
         
         // 1% chance to cleanup old sessions (> 1 hour)
         if (rand(1, 100) === 1) {
@@ -107,6 +107,16 @@ try {
         }
         
         sendResponse(true, "Beat", 'success', ['online_stats' => $stats]);
+    }
+
+    if ($action === 'leave') {
+        $sessionId = session_id();
+        require_once __DIR__ . '/src/OnlineManager.php';
+        $online = new OnlineManager();
+        $online->removeSession($sessionId);
+        // No response needed usually for beacon, but we output valid JSON just in case
+        echo json_encode(['success' => true]);
+        exit();
     }
 
     if ($action === 'social_login') {

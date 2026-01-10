@@ -55,6 +55,26 @@ class CentrifugoService {
         return $this->send($commands);
     }
 
+    public function presence($channel) {
+        if (empty($this->apiKey)) return null;
+
+        $commands = [
+            [
+                'method' => 'presence',
+                'params' => [
+                    'channel' => $channel
+                ]
+            ]
+        ];
+
+        // Send expects array of commands
+        // Response will be object or array of responses?
+        // My send method returns boolean usually, but I need data now.
+        // I need to refactor send() or create a new internal method that returns data.
+        
+        return $this->sendAndGetData($commands);
+    }
+
     public function generateToken($userId, $exp = 0) {
         $header = ['typ' => 'JWT', 'alg' => 'HS256'];
         $payload = ['sub' => (string)$userId];
@@ -84,24 +104,11 @@ class CentrifugoService {
     }
 
     private function send($commands) {
-        // Use streaming ndjson format for Centrifugo v5 HTTP API
-        // Or standard JSON. Let's use standard JSON single command or batch.
-        // Actually v5 API endpoint accepts standard JSON body.
-        
-        // IMPORTANT: Authorization header is "apikey <KEY>"
-        
-        $payload = json_encode($commands); // Note: v5 API expects direct command object or array of commands?
-        // Wait, v5 API is simpler: POST /api/publish
-        // But for batching we can use just POST /api with array of commands? No.
-        // The unified endpoint is /api.
-        // But Centrifugo v5 usually prefers specific endpoints like /api/publish.
-        // However, for simplicity let's stick to the main endpoint if it supports batching via JSON-RPC style or similar?
-        // Documentation says: POST /api/publish {"channel": "...", "data": ...}
-        // Let's use specific methods to be safe.
-        
-        // Refactoring to use single command per method for simplicity in v5
-        // Actually, let's just implement 'publish' logic directly.
-        
+        $result = $this->sendAndGetData($commands);
+        return $result !== null;
+    }
+
+    private function sendAndGetData($commands) {
         $cmd = $commands[0];
         $method = $cmd['method'];
         $params = $cmd['params'];
@@ -114,7 +121,7 @@ class CentrifugoService {
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($params));
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/json',
-            'X-API-Key: ' . $this->apiKey // Header for v5
+            'X-API-Key: ' . $this->apiKey
         ]);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         
@@ -123,12 +130,17 @@ class CentrifugoService {
         
         if ($response === false) {
             error_log("Centrifugo cURL Error: " . curl_error($ch));
-        } else {
-            error_log("Centrifugo API [$url] ($httpCode): " . $response);
-        }
-
+            curl_close($ch);
+            return null;
+        } 
+        
         curl_close($ch);
 
-        return $httpCode === 200;
+        if ($httpCode !== 200) {
+            error_log("Centrifugo API [$url] ($httpCode): " . $response);
+            return null;
+        }
+
+        return json_decode($response, true);
     }
 }

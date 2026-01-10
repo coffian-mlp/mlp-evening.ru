@@ -377,3 +377,63 @@ body.dashboard-layout {
 .error-content h1 { color: #6d2f8e; margin-bottom: 15px; }
 .error-content p { font-size: 1.1em; margin-bottom: 25px; color: #555; }
 
+/* === 11. Online Users Tooltip === */
+.online-tooltip {
+    position: absolute;
+    /* Top/Left set by JS */
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 10px;
+    width: 200px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    z-index: 9000;
+    display: none;
+    cursor: default;
+}
+.online-tooltip::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-bottom: 6px solid white;
+}
+.online-tooltip-header {
+    font-size: 0.85em;
+    font-weight: bold;
+    color: #666;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+    margin-bottom: 5px;
+}
+.online-user-list {
+    max-height: 200px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.online-user-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9em;
+}
+.online-user-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid #eee;
+}
+.online-guest-count {
+    margin-top: 8px;
+    padding-top: 5px;
+    border-top: 1px solid #eee;
+    font-size: 0.85em;
+    color: #888;
+    text-align: center;
+}
