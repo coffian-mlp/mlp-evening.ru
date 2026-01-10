@@ -171,9 +171,10 @@ try {
         $captcha = mb_strtolower(trim($_POST['captcha'] ?? ''), 'UTF-8');
         
         // 1. Валидация Капчи
-        $validAnswers = ['спайк', 'spike', 'дракончик спайк', 'спайк дракончик'];
+        // Вопрос: Как зовут принцессу Солнца?
+        $validAnswers = ['селестия', 'celestia', 'принцесса селестия', 'princess celestia', 'тиа', 'tia'];
         if (!in_array($captcha, $validAnswers)) {
-            sendResponse(false, "Неверный ответ на вопрос про дракончика! Попробуй еще раз.", 'error');
+            sendResponse(false, "Неверный ответ! Вспоминай, кто поднимает солнце каждое утро?", 'error');
         }
 
         // 2. Валидация данных
@@ -279,7 +280,7 @@ try {
             
             if (isset($_POST['chat_mode'])) {
                 $mode = $_POST['chat_mode'];
-                $validModes = ['local', 'chatbro', 'none'];
+                $validModes = ['local', 'none'];
                 if (in_array($mode, $validModes)) {
                     $config->setOption('chat_mode', $mode);
                 }

@@ -523,10 +523,6 @@ require_once __DIR__ . '/src/templates/header.php';
                         🦄 Локальный чат (Новый)
                     </label>
                     <label style="cursor: pointer;">
-                        <input type="radio" name="chat_mode" value="chatbro" <?= $currentChatMode === 'chatbro' ? 'checked' : '' ?>>
-                        🤖 ChatBro (Старый)
-                    </label>
-                    <label style="cursor: pointer;">
                         <input type="radio" name="chat_mode" value="none" <?= $currentChatMode === 'none' ? 'checked' : '' ?>>
                         🚫 Без чата
                     </label>

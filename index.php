@@ -79,7 +79,6 @@ $telegramBotUsername = $config->getOption('telegram_bot_username', '');
 
 // Конфигурируем флаги для шаблонов
 $enableLocalChat = ($chatMode === 'local');
-$showChatBro = ($chatMode === 'chatbro');
 
 require_once __DIR__ . '/src/templates/header.php';
 ?>
@@ -327,7 +326,7 @@ require_once __DIR__ . '/src/templates/header.php';
                 </div>
 
                 <div class="form-group" style="margin-bottom: 15px;">
-                    <label style="font-size: 0.85em; color: #666; display: block; margin-bottom: 3px;">Как зовут дракончика?*</label>
+                    <label style="font-size: 0.85em; color: #666; display: block; margin-bottom: 3px;">Как зовут принцессу Солнца?*</label>
                     <input type="text" name="captcha" class="form-input" placeholder="Ответ..." required>
                 </div>
 

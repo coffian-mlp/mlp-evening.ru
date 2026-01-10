@@ -377,25 +377,3 @@ body.dashboard-layout {
 .error-content h1 { color: #6d2f8e; margin-bottom: 15px; }
 .error-content p { font-size: 1.1em; margin-bottom: 25px; color: #555; }
 
-/* === 11. ChatBro Support (Legacy) === */
-.chatbro_header_title, .chatbro_message_name, .chatbro_message_name a, .chatbro_chat_name {
-    font-family: 'Philosopher', sans-serif !important;
-    max-width: unset !important;
-}
-.chatbro_message_attachment_reply .chatbro_message_name, .chatbro_message_attachment_reply .chatbro_message_name a {
-    max-width: 45% !important;
-}
-.chatbro_message_block, .chatbro_message_content {
-    font-family: 'Open Sans', sans-serif !important;
-}
-.chatbro_messages .chatbro_message_admin, .chatbro_fake_messages .chatbro_message_admin {
-  border: none !important;
-  background: none !important;
-}
-.chatbro_messages .chatbro_message_moder, .chatbro_fake_messages .chatbro_message_moder {
-  border: none !important;
-  background: none !important;
-}
-.chatbro_messages .chatbro_message_admin::after, .chatbro_fake_messages .chatbro_message_admin::after, .chatbro_messages .chatbro_message_moder::after, .chatbro_fake_messages .chatbro_message_moder::after {
-  display: none;
-}
