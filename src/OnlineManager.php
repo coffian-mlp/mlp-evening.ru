@@ -46,10 +46,12 @@ class OnlineManager {
 
         // 2. Get Users List (authenticated sessions)
         // We group by user_id to handle multiple sessions for same user (e.g. phone + desktop)
+        // We also need to join user_options to get chat_color
         $stmtUsers = $this->db->prepare("
-            SELECT u.id, u.nickname, u.chat_color 
+            SELECT u.id, u.nickname, uo.option_value as chat_color 
             FROM online_sessions os
             JOIN users u ON os.user_id = u.id
+            LEFT JOIN user_options uo ON u.id = uo.user_id AND uo.option_key = 'chat_color'
             WHERE os.last_seen > NOW() - INTERVAL ? MINUTE
             GROUP BY u.id
             ORDER BY u.nickname ASC
@@ -60,6 +62,7 @@ class OnlineManager {
         
         $users = [];
         while ($row = $resUsers->fetch_assoc()) {
+            if (empty($row['chat_color'])) $row['chat_color'] = '#6d2f8e'; // Default color
             $users[] = $row;
         }
 
