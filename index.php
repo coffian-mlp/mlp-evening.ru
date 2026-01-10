@@ -48,6 +48,25 @@ Auth::check(); // Init session
         'stickers' => $stickersByPack
     ]; 
 
+    // --- Chat Driver Config (Centrifugo vs SSE) ---
+    $appConfig = require __DIR__ . '/config.php';
+    $chatConfig = $appConfig['chat'] ?? [];
+    $chatDriver = $chatConfig['driver'] ?? 'sse'; 
+
+    $centrifugoToken = '';
+    $centrifugoUrl = '/connection/websocket'; // Relative path via Nginx proxy
+
+    if ($chatDriver === 'centrifugo') {
+        require_once __DIR__ . '/src/CentrifugoService.php';
+        $centrifugoService = new CentrifugoService();
+        
+        // Subject: User ID or empty string for anonymous
+        $sub = Auth::check() ? (string)$_SESSION['user_id'] : "";
+        
+        // Token valid for 24 hours
+        $centrifugoToken = $centrifugoService->generateToken($sub, time() + 86400);
+    }
+
 $config = ConfigManager::getInstance();
 // Получаем ссылку, или ставим дефолтную, если в базе пусто
 $streamUrl = $config->getOption('stream_url', 'https://goodgame.ru/player?161438#autoplay');

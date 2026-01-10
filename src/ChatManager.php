@@ -2,12 +2,37 @@
 
 require_once __DIR__ . '/Database.php';
 require_once __DIR__ . '/UserManager.php';
+require_once __DIR__ . '/ConfigManager.php';
+require_once __DIR__ . '/CentrifugoService.php';
 
 class ChatManager {
     private $db;
+    private $centrifugo;
 
     public function __construct() {
         $this->db = Database::getInstance()->getConnection();
+        // Initialize Centrifugo Service (lazy or direct)
+        // Only if configured? The service handles empty config gracefully.
+        $this->centrifugo = new CentrifugoService();
+    }
+
+    // --- Helper to broadcast via Centrifugo ---
+    private function broadcast($data) {
+        // Check config if enabled? Or let service decide.
+        // We only broadcast if driver is centrifugo OR just always (hybrid mode).
+        // Let's broadcast always if configured, client will decide whether to listen.
+        // But better check config to avoid useless curl calls if not needed.
+        
+        $config = ConfigManager::getInstance(); 
+        // We can check 'chat_driver' from config.php, but ConfigManager is for DB options.
+        // Let's rely on config.php loaded in CentrifugoService.
+        
+        try {
+            $this->centrifugo->publish('public:chat', $data);
+        } catch (Exception $e) {
+            // Silently fail or log?
+            // error_log("Centrifugo Error: " . $e->getMessage());
+        }
     }
 
     public function checkRateLimit($userId, $limitSeconds) {
@@ -75,7 +100,19 @@ class ChatManager {
         $stmt = $this->db->prepare("INSERT INTO chat_messages (user_id, username, message, created_at, quoted_msg_ids) VALUES (?, ?, ?, UTC_TIMESTAMP(), ?)");
         $stmt->bind_param("isss", $userId, $username, $message, $quotedJson);
         $result = $stmt->execute();
+        $newId = $stmt->insert_id;
         $stmt->close();
+        
+        if ($result && $newId) {
+            // Fetch full message to broadcast
+            $fullMsg = $this->getMessageById($newId);
+            if ($fullMsg) {
+                // Add type 'message' for frontend router
+                $fullMsg['type'] = 'message';
+                $this->broadcast($fullMsg);
+            }
+        }
+        
         return $result;
     }
 
@@ -109,7 +146,20 @@ class ChatManager {
         
         $updateStmt = $this->db->prepare("UPDATE chat_messages SET message = ?, edited_at = UTC_TIMESTAMP() WHERE id = ?");
         $updateStmt->bind_param("si", $newMessage, $messageId);
-        return $updateStmt->execute();
+        $res = $updateStmt->execute();
+        
+        if ($res) {
+            // Broadcast Update
+            // We need to send parsed markdown!
+            // But getMessageById does parsing.
+            $fullMsg = $this->getMessageById($messageId);
+            if ($fullMsg) {
+                $fullMsg['type'] = 'update'; // Event type
+                $this->broadcast($fullMsg);
+            }
+        }
+        
+        return $res;
     }
 
     public function deleteMessage($messageId, $userId, $isAdmin = false) {
@@ -130,7 +180,17 @@ class ChatManager {
         // Также обновляем edited_at, чтобы стрим заметил изменение!
         $updateStmt = $this->db->prepare("UPDATE chat_messages SET is_deleted = 1, deleted_at = UTC_TIMESTAMP(), edited_at = UTC_TIMESTAMP() WHERE id = ?");
         $updateStmt->bind_param("i", $messageId);
-        return $updateStmt->execute();
+        $res = $updateStmt->execute();
+        
+        if ($res) {
+            // Broadcast Delete
+            $this->broadcast([
+                'type' => 'delete',
+                'id' => $messageId
+            ]);
+        }
+        
+        return $res;
     }
 
     public function restoreMessage($messageId, $userId, $isAdmin = false) {
@@ -163,7 +223,18 @@ class ChatManager {
         // edited_at обновляется принудительно, чтобы стрим подхватил изменение статуса
         $updateStmt = $this->db->prepare("UPDATE chat_messages SET is_deleted = 0, deleted_at = NULL, edited_at = UTC_TIMESTAMP() WHERE id = ?");
         $updateStmt->bind_param("i", $messageId);
-        return $updateStmt->execute();
+        $res = $updateStmt->execute();
+        
+        if ($res) {
+            // Broadcast Restore (send full message again)
+            $fullMsg = $this->getMessageById($messageId);
+            if ($fullMsg) {
+                $fullMsg['type'] = 'message'; // Treat as new/update
+                $this->broadcast($fullMsg);
+            }
+        }
+        
+        return $res;
     }
 
     public function purgeMessages($targetUserId, $limit = 50) {
@@ -185,9 +256,38 @@ class ChatManager {
         // Обновляем edited_at, чтобы клиенты увидели изменение
         $updateSql = "UPDATE chat_messages SET is_deleted = 1, deleted_at = UTC_TIMESTAMP(), edited_at = UTC_TIMESTAMP() WHERE id IN ($idsList)";
         if ($this->db->query($updateSql)) {
+            // Broadcast Purge (send list of IDs)
+            $this->broadcast([
+                'type' => 'purge',
+                'ids' => $ids
+            ]);
             return count($ids);
         }
         return 0;
+    }
+
+    // --- Helper to fetch single full message ---
+    private function getMessageById($id) {
+        $query = "SELECT cm.*, u.role, 
+                         uo_color.option_value as chat_color,
+                         uo_avatar.option_value as avatar_url
+                  FROM chat_messages cm 
+                  LEFT JOIN users u ON cm.user_id = u.id 
+                  LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
+                  LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
+                  WHERE cm.id = ?";
+        
+        $stmt = $this->db->prepare($query);
+        $stmt->bind_param("i", $id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        
+        if ($res && $row = $res->fetch_assoc()) {
+            if (empty($row['chat_color'])) $row['chat_color'] = '#6d2f8e';
+            $processed = $this->processMessages([$row]);
+            return $processed[0] ?? null;
+        }
+        return null;
     }
 
     // ✨ Parse Markdown and Mentions (Safe after htmlspecialchars)
@@ -295,11 +395,12 @@ class ChatManager {
                     while ($qRow = $qRes->fetch_assoc()) {
                         // Default color
                         if (empty($qRow['chat_color'])) $qRow['chat_color'] = '#6d2f8e';
-
+                        
                         // Format date for quoted msg too
                          if ($qRow['created_at']) {
                             $qRow['created_at'] = date('Y-m-d\TH:i:s\Z', strtotime($qRow['created_at']));
                         }
+                        
                         // Handle deleted content
                         if ($qRow['is_deleted']) {
                              $qRow['message'] = '<em style="color:#999;">Сообщение удалено</em>';
@@ -356,20 +457,36 @@ class ChatManager {
         return $messages;
     }
 
-    public function getMessages($limit = 50) {
+    public function getMessages($limit = 50, $beforeId = null) {
         $limit = (int)$limit;
-        // Join with users to get current color and avatar and ROLE
-        // Сортируем по ID DESC, чтобы получить последние $limit сообщений
-        $query = "SELECT cm.*, u.role, 
-                         uo_color.option_value as chat_color,
-                         uo_avatar.option_value as avatar_url
-                  FROM chat_messages cm 
-                  LEFT JOIN users u ON cm.user_id = u.id 
-                  LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
-                  LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
-                  ORDER BY cm.id DESC LIMIT $limit";
         
-        $result = $this->db->query($query);
+        $sql = "SELECT cm.*, u.role, 
+                 uo_color.option_value as chat_color,
+                 uo_avatar.option_value as avatar_url
+          FROM chat_messages cm 
+          LEFT JOIN users u ON cm.user_id = u.id 
+          LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
+          LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'";
+
+        $params = [];
+        $types = "";
+
+        if ($beforeId) {
+            $sql .= " WHERE cm.id < ?";
+            $params[] = $beforeId;
+            $types .= "i";
+        }
+
+        $sql .= " ORDER BY cm.id DESC LIMIT ?";
+        $params[] = $limit;
+        $types .= "i";
+        
+        $stmt = $this->db->prepare($sql);
+        if ($types) {
+             $stmt->bind_param($types, ...$params);
+        }
+        $stmt->execute();
+        $result = $stmt->get_result();
         
         $messages = [];
         if ($result) {

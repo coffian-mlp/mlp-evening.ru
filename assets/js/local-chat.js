@@ -669,77 +669,240 @@ $(document).ready(function() {
         });
     }
 
-    // 1. Initialize SSE connection
-    // We use Last-Event-ID automatically handled by browser/EventSource
-    const evtSource = new EventSource('/chat_stream.php');
-
-    // Handle Online Count Event
-    evtSource.addEventListener('online_count', function(e) {
-        try {
-            const data = JSON.parse(e.data);
-            const count = data.count;
-            const users = data.users;
-            
-            const counterEl = document.getElementById('online-counter');
-            if (counterEl) {
-                counterEl.textContent = `(${count})`;
-                
-                // Tooltip with names
-                if (users && users.length > 0) {
-                    const names = users.map(u => u.nickname).join(', ');
-                    counterEl.title = "Онлайн: " + names;
-                } else {
-                    counterEl.title = "Никого нет... 👻";
-                }
-            }
-        } catch (err) {
-            console.error("Online parse error", err);
-        }
-    });
-
-    evtSource.onmessage = function(e) {
-        try {
-            // Keepalive check
-            if (e.data === 'keepalive') return;
-            
-            const data = JSON.parse(e.data);
-            
-            // Check if this message already exists in UI (for updates/edits)
-            // Fix: Use a safer check. Some elements might be missing if we are not careful.
-            const existingMsg = document.querySelector(`.chat-message[data-id="${data.id}"]`);
-            if (existingMsg) {
-                // Completely replace the element to handle state changes (Active <-> Deleted)
-                // We must ensure newMsg is created successfully
-                const newMsg = createMessageElement(data);
-                // Check if existingMsg is still child of chatMessages (it should be, but let's be safe)
-                if (chatMessages.contains(existingMsg)) {
-                    chatMessages.replaceChild(newMsg, existingMsg);
-                } else {
-                    // Fallback: just append if it somehow got detached (unlikely)
-                    chatMessages.appendChild(newMsg);
-                }
+    // === Chat Connection Logic (Centrifugo / SSE) ===
+    
+    // Helper to update online counter UI
+    function updateOnlineCounter(count, users) {
+        const counterEl = document.getElementById('online-counter');
+        if (counterEl) {
+            counterEl.textContent = `(${count})`;
+            if (users && users.length > 0) {
+                const names = users.map(u => u.nickname).join(', ');
+                counterEl.title = "Онлайн: " + names;
             } else {
-                appendMessage(data);
-
-                // Notification Logic
-                // Only notify if message is NEW (newer than page load) and NOT from me
-                const msgDate = new Date(data.created_at);
-                const msgTime = msgDate.getTime() / 1000;
-                
-                // Compare with startServerTime
-                if (msgTime > window.chatStartServerTime && data.user_id != currentUserId) {
-                    blinkTitle();
-                }
+                counterEl.title = "Никого нет... 👻";
             }
-        } catch (err) {
-            console.error("Chat parse error", err);
         }
-    };
+    }
 
-    evtSource.onerror = function(e) {
-        console.log("EventSource failed. Reconnecting...", e);
-        // Browser handles reconnection automatically, but we can update UI state if needed
-    };
+    // Unified Message Handler
+    function processIncomingData(data) {
+        // Handle specialized events
+        if (data.type === 'delete') {
+             const existingMsg = document.querySelector(`.chat-message[data-id="${data.id}"]`);
+             if (existingMsg) {
+                 existingMsg.classList.add('deleted');
+                 const content = existingMsg.querySelector('.chat-content');
+                 if(content) content.innerHTML = '<em style="color:#999;">Сообщение удалено</em>';
+             }
+             return;
+        }
+        
+        if (data.type === 'purge') {
+            if (data.ids && Array.isArray(data.ids)) {
+                data.ids.forEach(id => {
+                    const el = document.querySelector(`.chat-message[data-id="${id}"]`);
+                    if (el) {
+                        el.classList.add('deleted');
+                        const content = el.querySelector('.chat-content');
+                        if(content) content.innerHTML = '<em style="color:#999;">Сообщение удалено</em>';
+                    }
+                });
+            }
+            return;
+        }
+
+        // Standard Message Object (New or Update)
+        const existingMsg = document.querySelector(`.chat-message[data-id="${data.id}"]`);
+        
+        if (existingMsg) {
+            const newMsg = createMessageElement(data);
+            if (chatMessages.contains(existingMsg)) {
+                chatMessages.replaceChild(newMsg, existingMsg);
+            } else {
+                chatMessages.appendChild(newMsg);
+            }
+        } else {
+            appendMessage(data);
+
+            // Notification Logic
+            const msgDate = new Date(data.created_at);
+            const msgTime = msgDate.getTime() / 1000;
+            if (msgTime > window.chatStartServerTime && data.user_id != currentUserId) {
+                blinkTitle();
+            }
+        }
+    }
+
+    // Helper to fetch initial history (needed for Centrifugo)
+    let oldestMessageId = null;
+    let isLoadingHistory = false;
+
+    function addLoadMoreButton() {
+        if ($('#load-more-btn').length === 0) {
+            const btn = $('<button id="load-more-btn" class="chat-load-more-btn" style="width:100%; padding:8px; background:none; border:none; color:#6d2f8e; cursor:pointer; font-size:0.9em;">⬆ Загрузить еще...</button>');
+            btn.on('click', loadMoreHistory);
+            $(chatMessages).prepend(btn);
+        }
+    }
+
+    function loadMoreHistory() {
+        if (isLoadingHistory || !oldestMessageId) return;
+        isLoadingHistory = true;
+        const btn = $('#load-more-btn');
+        const originalText = btn.text();
+        btn.text('Загрузка...');
+
+        // Save scroll height before insert
+        const oldScrollHeight = chatMessages.scrollHeight;
+        const oldScrollTop = chatMessages.scrollTop;
+
+        $.post('api.php', { action: 'get_messages', limit: 20, before_id: oldestMessageId }, function(res) {
+            isLoadingHistory = false;
+            btn.text(originalText);
+            
+            if (res.success && res.data && res.data.messages && res.data.messages.length > 0) {
+                // Messages come oldest -> newest in the batch.
+                // Example: Batch [100, 101... 119], Current Top is 120.
+                // We want: [Button] -> 100 -> 101 ... -> 119 -> 120
+                
+                // We need to insert them after the button, in order.
+                // So we iterate and insertAfter(btn) but in REVERSE order?
+                // No. If we insert 100 after btn -> [Btn, 100]
+                // Then insert 101 after btn -> [Btn, 101, 100] - WRONG order.
+                // So we should iterate normal order and insertBefore the *first message*.
+                
+                const firstMsg = $(chatMessages).find('.chat-message').first();
+                
+                // We must handle the batch so that the order is preserved.
+                // Batch is [Oldest ... Newest]
+                // We insert the Batch before FirstMsg.
+                
+                // Let's create a fragment
+                const fragment = document.createDocumentFragment();
+                res.data.messages.forEach(msg => {
+                     if (!msg.type) msg.type = 'message';
+                     const div = createMessageElement(msg);
+                     fragment.appendChild(div);
+                });
+                
+                if (firstMsg.length) {
+                    firstMsg[0].parentNode.insertBefore(fragment, firstMsg[0]);
+                } else {
+                    // No messages yet? Append after button
+                     chatMessages.appendChild(fragment);
+                }
+
+                // Update oldest ID (from the first message in the batch, which is the oldest)
+                oldestMessageId = res.data.messages[0].id;
+
+                // Restore scroll position
+                // New height - Old height = delta
+                const newScrollHeight = chatMessages.scrollHeight;
+                chatMessages.scrollTop = newScrollHeight - oldScrollHeight + oldScrollTop;
+                
+                if (res.data.messages.length < 20) {
+                    btn.hide();
+                }
+                
+            } else {
+                btn.hide();
+                showChatNotification("Больше сообщений нет", 'info');
+            }
+        }, 'json').fail(() => {
+            isLoadingHistory = false;
+            btn.text(originalText);
+        });
+    }
+
+    function fetchHistory() {
+        $.post('api.php', { action: 'get_messages', limit: 20 }, function(res) {
+            if (res.success && res.data && res.data.messages) {
+                addLoadMoreButton();
+                
+                res.data.messages.forEach(msg => {
+                    // Add type 'message' if missing
+                    if (!msg.type) msg.type = 'message';
+                    processIncomingData(msg);
+                });
+                
+                if (res.data.messages.length > 0) {
+                    oldestMessageId = res.data.messages[0].id;
+                }
+                
+                // If we got fewer than limit, hide button
+                if (res.data.messages.length < 20) {
+                    $('#load-more-btn').hide();
+                }
+                
+                // Adjust scroll after history load
+                scrollToBottom();
+
+                // Infinite Scroll Handler
+                chatMessages.addEventListener('scroll', function() {
+                    // Если скролл меньше 50px от верха, и мы не грузимся, и есть кнопка (значит есть история)
+                    if (this.scrollTop < 50 && !isLoadingHistory && $('#load-more-btn').is(':visible')) {
+                        loadMoreHistory();
+                    }
+                });
+            }
+        }, 'json');
+    }
+
+    // Initialize Connection
+    const chatConfig = window.chatConfig || { driver: 'sse' };
+    console.log("🦄 Chat Driver:", chatConfig.driver);
+
+    if (chatConfig.driver === 'centrifugo') {
+        // Load history first
+        fetchHistory();
+
+        if (window.Centrifuge) {
+                const centrifuge = new Centrifuge(chatConfig.centrifugo.url, {
+                    token: chatConfig.centrifugo.token
+                });
+
+                const sub = centrifuge.newSubscription("public:chat");
+
+                sub.on('publication', function(ctx) {
+                // Centrifugo sends data in ctx.data
+                processIncomingData(ctx.data);
+            });
+
+            sub.subscribe();
+            centrifuge.connect();
+            console.log("✅ Centrifugo connected");
+        } else {
+            console.error("❌ Centrifuge library is missing!");
+        }
+    } else {
+        // SSE Fallback (Default)
+        console.log("🔌 Connecting via SSE...");
+        const evtSource = new EventSource('/chat_stream.php');
+
+        evtSource.addEventListener('online_count', function(e) {
+            try {
+                const data = JSON.parse(e.data);
+                updateOnlineCounter(data.count, data.users);
+            } catch (err) {
+                console.error("Online parse error", err);
+            }
+        });
+
+        evtSource.onmessage = function(e) {
+            try {
+                if (e.data === 'keepalive') return;
+                const data = JSON.parse(e.data);
+                processIncomingData(data);
+            } catch (err) {
+                console.error("Chat parse error", err);
+            }
+        };
+
+        evtSource.onerror = function(e) {
+            console.log("EventSource failed. Reconnecting...", e);
+        };
+    }
 
     // State for quoting
     let pendingQuotes = [];

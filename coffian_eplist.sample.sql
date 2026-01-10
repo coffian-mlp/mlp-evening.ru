@@ -3,13 +3,11 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost
--- Generation Time: Jan 06, 2026 at 10:00 PM
 -- Server version: 5.7.35-38
 -- PHP Version: 8.3
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 SET time_zone = "+00:00";
-
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -56,7 +54,9 @@ CREATE TABLE IF NOT EXISTS `users` (
   `is_banned` tinyint(1) DEFAULT 0,
   `muted_until` datetime DEFAULT NULL,
   `ban_reason` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`)
+  `last_seen` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_last_seen` (`last_seen`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
@@ -199,9 +199,7 @@ INSERT INTO `episode_list` (`ID`, `TITLE`, `TIMES_WATCHED`, `WANNA_WATCH`, `TWOP
 (1, 'My Little Pony Friendship is Magic - Season 1 Episode 01 - Friendship Is Magic, Part 01', 0, 0, 2, 2),
 (2, 'My Little Pony Friendship is Magic - Season 1 Episode 02 - Friendship Is Magic, Part 02', 0, 0, 1, 2),
 (3, 'My Little Pony Friendship is Magic - Season 1 Episode 03 - The Ticket Master', 0, 0, NULL, 1);
--- ... (truncated for sample, in real usage users would import full list or we can include full list if needed) ...
--- For this sample, I will include just a few to keep file size small, or I can include all if you prefer.
--- Let's include the full structure but empty watching_now to be clean.
+-- ... (truncated for sample) ...
 
 -- --------------------------------------------------------
 

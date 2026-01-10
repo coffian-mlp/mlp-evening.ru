@@ -199,7 +199,7 @@ try {
     }
 
     // Protected Actions
-    if (!$isLoggedIn && $action !== 'login' && $action !== 'register') { 
+    if (!$isLoggedIn && !in_array($action, ['login', 'register', 'social_login', 'get_messages', 'get_stickers', 'get_packs'])) { 
          Auth::requireApiLogin(); 
     }
 
@@ -600,6 +600,19 @@ try {
             $userManager->logAction($_SESSION['user_id'], 'purge', $targetId, "Deleted $deletedCount messages");
             
             sendResponse(true, "Удалено $deletedCount сообщений! 🧹");
+            break;
+
+        case 'get_messages':
+            $limit = (int)($_POST['limit'] ?? 50);
+            $beforeId = isset($_POST['before_id']) ? (int)$_POST['before_id'] : null;
+            
+            if ($limit > 100) $limit = 100;
+            if ($limit < 1) $limit = 1;
+            
+            $chat = new ChatManager();
+            $messages = $chat->getMessages($limit, $beforeId);
+            
+            sendResponse(true, "Сообщения получены", 'success', ['messages' => $messages]);
             break;
 
         case 'send_message':

@@ -10,6 +10,7 @@ services:
     depends_on:
       - php
       - db
+      - centrifugo
     networks:
       - mlp-net
 
@@ -36,6 +37,19 @@ services:
       # Магия! Этот файл автоматически выполнится при первом запуске контейнера,
       # создав структуру таблиц и наполнив их данными.
       - ./coffian_eplist.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - mlp-net
+
+  # Centrifugo (Real-time Server)
+  centrifugo:
+    image: centrifugo/centrifugo:v5
+    volumes:
+      - ./centrifugo_config.json:/centrifugo/config.json
+    command: centrifugo -c config.json
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     networks:
       - mlp-net
 

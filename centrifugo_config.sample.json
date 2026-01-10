@@ -1,0 +1,21 @@
+{
+  "token_hmac_secret_key": "secret",
+  "admin_password": "admin",
+  "admin_secret": "admin_secret",
+  "api_key": "api_key",
+  "allowed_origins": [
+    "http://localhost:8080",
+    "http://127.0.0.1:8080"
+  ],
+  "namespaces": [
+    {
+      "name": "public",
+      "history_size": 50,
+      "history_ttl": "300s",
+      "allow_history_for_subscriber": true,
+      "allow_history_for_client": true,
+      "allow_presence_for_subscriber": true,
+      "allow_subscribe_for_client": true
+    }
+  ]
+}
