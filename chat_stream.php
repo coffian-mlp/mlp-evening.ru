@@ -15,8 +15,16 @@ header('Connection: keep-alive');
 header('X-Accel-Buffering: no'); // Nginx specific: disable buffering
 
 // 🔒 Optional: Restrict access to logged in users
-if (!Auth::check()) {
+$isLoggedIn = Auth::check();
+$currentUserId = null;
+
+if ($isLoggedIn) {
+    $currentUserId = $_SESSION['user_id'];
+} else {
     // Если мы хотим разрешить чтение всем, то просто убираем этот блок или комментируем.
+    // Если доступ только для авторизованных:
+    // echo ": access denied\n\n";
+    // exit(); 
 }
 
 // ⚡ ВАЖНО: Закрываем сессию, чтобы не блокировать другие запросы (AJAX отправку сообщений)!
@@ -56,12 +64,9 @@ $maxExecTime = 50; // Restart every 50 seconds to avoid timeouts on shared hosti
 $lastOnlineUpdate = 0; // Throttling
 
 // Identify current user for last_seen
-$currentUserId = null;
-// Auth check was done above, but session closed. Auth::check() relies on session.
-// Wait, session_write_close() saves data but keeps $_SESSION array available in memory for read?
-// Yes, usually.
-if (Auth::check()) {
-    $currentUserId = $_SESSION['user_id'];
+// Auth check was done above, but session closed.
+// We use cached $currentUserId from before session close.
+if ($currentUserId) {
     try {
         $userManager->updateLastSeen($currentUserId);
     } catch (Exception $e) { /* Ignore DB error if col missing */ }
