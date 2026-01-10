@@ -8,11 +8,20 @@ require_once __DIR__ . '/src/UserManager.php';
 // Disable time limit for long-running script (or set to reasonable value like 60s for shared hosting)
 set_time_limit(0); 
 
+// 🛑 Disable Compression / Buffering for SSE
+@ini_set('zlib.output_compression', 0);
+@ini_set('implicit_flush', 1);
+ob_implicit_flush(1);
+
 // Headers for SSE
 header('Content-Type: text/event-stream');
 header('Cache-Control: no-cache');
 header('Connection: keep-alive');
 header('X-Accel-Buffering: no'); // Nginx specific: disable buffering
+
+// 🚀 Padding to flush initial buffer (helps with some browsers/proxies)
+echo ":" . str_repeat(" ", 2048) . "\n\n";
+flush();
 
 // 🔒 Optional: Restrict access to logged in users
 $isLoggedIn = Auth::check();
