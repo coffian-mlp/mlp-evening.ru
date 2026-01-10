@@ -68,6 +68,26 @@ try {
     }
 
     // Public Actions
+    if ($action === 'captcha_start') {
+        require_once __DIR__ . '/src/CaptchaManager.php';
+        $captcha = new CaptchaManager();
+        $data = $captcha->start();
+        sendResponse(true, "Капча начата", 'success', $data);
+    }
+
+    if ($action === 'captcha_check') {
+        require_once __DIR__ . '/src/CaptchaManager.php';
+        $captcha = new CaptchaManager();
+        $answer = $_POST['answer'] ?? '';
+        $result = $captcha->checkAnswer($answer);
+        
+        if ($result['success']) {
+            sendResponse(true, "Верно!", 'success', $result);
+        } else {
+            sendResponse(false, $result['message'], 'error');
+        }
+    }
+
     if ($action === 'social_login') {
         require_once __DIR__ . '/src/Social/SocialAuthService.php';
         require_once __DIR__ . '/src/Social/TelegramProvider.php';
@@ -168,13 +188,13 @@ try {
         $login = trim($_POST['login'] ?? '');
         $nickname = trim($_POST['nickname'] ?? '');
         $password = $_POST['password'] ?? '';
-        $captcha = mb_strtolower(trim($_POST['captcha'] ?? ''), 'UTF-8');
         
-        // 1. Валидация Капчи
-        // Вопрос: Как зовут принцессу Солнца?
-        $validAnswers = ['селестия', 'celestia', 'принцесса селестия', 'princess celestia', 'тиа', 'tia'];
-        if (!in_array($captcha, $validAnswers)) {
-            sendResponse(false, "Неверный ответ! Вспоминай, кто поднимает солнце каждое утро?", 'error');
+        // 1. Проверка Капчи
+        require_once __DIR__ . '/src/CaptchaManager.php';
+        $captcha = new CaptchaManager();
+        
+        if (!$captcha->isCompleted()) {
+             sendResponse(false, "Сначала нужно пройти испытание Гармонии!", 'error');
         }
 
         // 2. Валидация данных

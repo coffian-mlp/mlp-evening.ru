@@ -325,12 +325,7 @@ require_once __DIR__ . '/src/templates/header.php';
                     <input type="password" name="password_confirm" id="reg_pass_conf" class="form-input" placeholder="Повтори пароль*" required>
                 </div>
 
-                <div class="form-group" style="margin-bottom: 15px;">
-                    <label style="font-size: 0.85em; color: #666; display: block; margin-bottom: 3px;">Как зовут принцессу Солнца?*</label>
-                    <input type="text" name="captcha" class="form-input" placeholder="Ответ..." required>
-                </div>
-
-                <button type="submit" class="btn-primary btn-block">Создать аккаунт</button>
+                <button type="button" class="btn-primary btn-block" onclick="startCaptchaRegistration()">Далее →</button>
                 <div id="register-error" class="error-msg" style="display:none; color: red; margin-top: 10px;"></div>
             </form>
 
@@ -338,6 +333,25 @@ require_once __DIR__ . '/src/templates/header.php';
                 <a href="#" onclick="showLoginForm(event)" class="auth-switch-link">Уже есть аккаунт? Войти</a>
             </div>
         </div>
+
+        <!-- 4. CAPTCHA SCREEN -->
+        <div id="captcha-form-wrapper" style="display: none;">
+            <h3 style="text-align: center; color: #6d2f8e; margin-bottom: 15px;">🦄 Испытание Гармонии</h3>
+            <p id="captcha-question-text" style="text-align: center; color: #555; margin-bottom: 20px; font-weight: bold;">
+                Загрузка вопроса...
+            </p>
+            
+            <div id="captcha-image-container" style="text-align: center; margin-bottom: 20px; display: none;">
+                <img id="captcha-image" src="" alt="Mystery Pony" style="max-height: 150px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+            </div>
+
+            <div id="captcha-options-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                <!-- Options will be injected here -->
+            </div>
+
+            <div id="captcha-error" class="error-msg" style="display:none; color: red; margin-top: 10px; text-align: center;"></div>
+        </div>
+
 
     </div>
 </div>

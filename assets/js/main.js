@@ -193,6 +193,152 @@ $(document).ready(function() {
     // Auto-init on page load if any exist
     initColorPickers();
 
+
+    // --- 4.5 CAPTCHA GAME LOGIC ---
+    window.startCaptchaRegistration = function() {
+        // Validate Password Match first
+        var p1 = $('#reg_pass').val();
+        var p2 = $('#reg_pass_conf').val();
+        
+        if (!p1 || !p2) {
+             $('#register-error').show().text("Введите пароль!");
+             return;
+        }
+        if (p1 !== p2) {
+             $('#register-error').show().text("Пароли не совпадают!");
+             return;
+        }
+        
+        // Hide form, show captcha
+        $('#register-form-wrapper').hide();
+        $('#captcha-form-wrapper').fadeIn(200);
+        
+        // Start Game
+        loadCaptchaStep();
+    };
+
+    function loadCaptchaStep() {
+        $.post('api.php', { action: 'captcha_start', csrf_token: window.csrfToken }, function(response) {
+            if (response.success) {
+                renderCaptchaStep(response.data);
+            } else {
+                $('#captcha-error').show().text(response.message);
+            }
+        }, 'json');
+    }
+
+    function renderCaptchaStep(stepData) {
+        $('#captcha-question-text').text(stepData.question);
+        $('#captcha-error').hide();
+        
+        // Image Handling
+        if (stepData.type === 'image' && stepData.image_url) {
+            $('#captcha-image').attr('src', stepData.image_url).parent().show();
+        } else {
+            $('#captcha-image').parent().hide();
+        }
+
+        // Render Options or Input
+        var $container = $('#captcha-options-container');
+        $container.empty();
+
+        if (stepData.type === 'input') {
+            // Text Input Field
+            // Убираем margin-bottom, так как они будут в сетке рядом
+            var $input = $('<input type="text" class="form-input" placeholder="Имя..." style="height: 100%;">');
+            var $btn = $('<button type="button" class="btn btn-primary btn-block" style="height: 100%;">Ответить</button>');
+            
+            // Сбрасываем/Устанавливаем сетку для 2 элементов
+            $container.css('grid-template-columns', '1fr 1fr');
+
+            // Handle Enter key
+            $input.on('keypress', function(e) {
+                if(e.which === 13) {
+                    e.preventDefault();
+                    $btn.click();
+                }
+            });
+
+            $btn.click(function() {
+                var val = $input.val().trim();
+                if (!val) return;
+                checkCaptchaAnswer(val);
+            });
+
+            $container.append($input).append($btn);
+            // Focus on input
+            setTimeout(function() { $input.focus(); }, 100);
+
+        } else {
+            // Buttons (Options)
+            $container.css('grid-template-columns', '1fr 1fr'); // Restore grid if needed
+            
+            // Object iteration
+            for (var key in stepData.options) {
+                if (stepData.options.hasOwnProperty(key)) {
+                    var label = stepData.options[key];
+                    var $btn = $('<button type="button" class="btn btn-outline-primary">' + label + '</button>');
+                    
+                    // Capture key in closure
+                    (function(answerKey) {
+                        $btn.click(function() {
+                            checkCaptchaAnswer(answerKey);
+                        });
+                    })(key);
+
+                    $container.append($btn);
+                }
+            }
+        }
+    }
+
+    function checkCaptchaAnswer(answer) {
+        $.post('api.php', { 
+            action: 'captcha_check', 
+            answer: answer,
+            csrf_token: window.csrfToken 
+        }, function(response) {
+            if (response.success) {
+                if (response.data.completed) {
+                    // Success! Submit the real registration form
+                    submitRegistration();
+                } else if (response.data.next_step) {
+                    // Next Level
+                    renderCaptchaStep(response.data.next_step);
+                }
+            } else {
+                // Fail
+                $('#captcha-error').show().text(response.message);
+                // Restart after delay?
+                setTimeout(function(){
+                     // Reset to start or just reload first step
+                     loadCaptchaStep();
+                }, 1500);
+            }
+        }, 'json');
+    }
+
+    function submitRegistration() {
+        var formData = $('#ajax-register-form').serialize();
+        
+        $.post('api.php', formData, function(response) {
+             if (response.success) {
+                showFlashMessage(response.message, 'success');
+                if (response.data && response.data.reload) {
+                    setTimeout(function() { location.reload(); }, 1000);
+                } else {
+                    // Show login
+                     showLoginForm();
+                }
+            } else {
+                // Show error on captcha screen or go back?
+                // Let's show on captcha screen for simplicity
+                 $('#captcha-error').show().text(response.message);
+            }
+        }, 'json');
+    }
+
+
     // --- 5. Telegram Auth Callbacks ---
     
     // Callback для ВХОДА (Login)
