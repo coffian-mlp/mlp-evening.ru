@@ -61,7 +61,8 @@ Auth::check(); // Init session
         $centrifugoService = new CentrifugoService();
         
         // Subject: User ID or empty string for anonymous
-        $sub = Auth::check() ? (string)$_SESSION['user_id'] : "";
+        // For guests, we use session_id to identify them uniquely per session
+        $sub = Auth::check() ? (string)$_SESSION['user_id'] : "guest_" . substr(session_id(), 0, 10);
         
         // Token valid for 24 hours
         $centrifugoToken = $centrifugoService->generateToken($sub, time() + 86400);

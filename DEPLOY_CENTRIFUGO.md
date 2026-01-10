@@ -36,7 +36,7 @@ centrifugo genconfig --config /etc/centrifugo/config.json
   "admin_secret": "ВАШ_СЕКРЕТ_ДЛЯ_АДМИН_API",
   "api_key": "ВАШ_API_KEY_ДЛЯ_БЭКЕНДА",
   "allowed_origins": [
-    "https://v4.mlp-evening.ru",
+    "https://my.super.site.ru",
     "http://localhost:8080"
   ],
   "namespaces": [
