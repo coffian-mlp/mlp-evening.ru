@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= $pageTitle ?? 'MLP-evening.ru - Поняшный вечерок' ?></title>
     <link rel="icon" href="/favicon.png">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#2b1f43">
     
     <!-- SEO & Social Media (Open Graph) -->
     <meta name="description" content="MLP-Evening - Поняшный вечерок. Стримы My Little Pony и ламповое общение.">

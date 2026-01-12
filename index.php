@@ -89,24 +89,7 @@ require_once __DIR__ . '/src/templates/header.php';
             <a title="MLP-evening.ru - Поняшный вечерок" href="/">
                 <img src="/assets/img/logo.png" class="logo" alt="MLP Evening Logo" />
             </a>
-            
-            <div class="menu" style="display: flex; gap: 15px; align-items: center;">
-                <?php if (Auth::check()): ?>
-                    <a href="#" onclick="openProfileModal(event)" title="Настройки профиля" style="color: white; text-decoration: none; font-weight: bold;">
-                        👤 <?= htmlspecialchars($_SESSION['username']) ?>
-                    </a>
-                    <?php if (Auth::isAdmin()): ?>
-                         <a href="/dashboard.php" title="Админка" style="color: #f1c40f; text-decoration: none;">🔧</a>
-                    <?php endif; ?>
-                    <form id="logout-form" method="post" action="api.php" style="margin: 0;">
-                        <input type="hidden" name="action" value="logout">
-                        <input type="hidden" name="csrf_token" value="<?= Auth::generateCsrfToken() ?>">
-                        <button type="submit" style="background:none; border:none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 0;">(Выйти)</button>
-                    </form>
-                <?php else: ?>
-                    <a href="#" onclick="openLoginModal(event)" style="color: white; text-decoration: none; font-weight: bold;">Войти / Присоединиться</a>
-                <?php endif; ?>
-            </div>
+            <!-- Меню перенесено в чат -->
         </div>
         <div class="video-content">
 
@@ -167,8 +150,26 @@ require_once __DIR__ . '/src/templates/header.php';
             </div>
 
             <div class="chat-top-bar">
-                <span class="chat-title">Чат <small id="online-counter" style="font-size: 0.7em; color: #aaa; margin-left: 5px; cursor: help;" title="Кто здесь?">(0)</small></span>
+                <!-- User Menu in Chat Header -->
+                <div class="chat-user-menu">
+                    <?php if (Auth::check()): ?>
+                        <div class="user-controls">
+                            <a href="#" onclick="openProfileModal(event)" class="profile-link" title="Настройки профиля">
+                                <span class="avatar-mini">
+                                    <img src="<?= htmlspecialchars($currentUser['avatar_url'] ?: '/assets/img/default-avatar.png') ?>" alt="">
+                                </span>
+                                <span class="username" style="color: <?= htmlspecialchars($currentUser['chat_color'] ?? '#ce93d8') ?>">
+                                    <?= htmlspecialchars($_SESSION['username']) ?>
+                                </span>
+                            </a>
+                        </div>
+                    <?php else: ?>
+                        <a href="#" onclick="openLoginModal(event)" class="login-btn-chat">Войти / Присоединиться</a>
+                    <?php endif; ?>
+                </div>
+
                 <div class="chat-settings">
+                    <span id="online-counter" class="online-badge" title="Онлайн">(0)</span>
                     <button id="toggle-title-alert" class="icon-btn" title="Моргание вкладки">🔔</button>
                 </div>
             </div>
@@ -190,12 +191,18 @@ require_once __DIR__ . '/src/templates/header.php';
                         <button type="button" class="chat-format-btn" id="sticker-btn" title="Стикеры">😊</button>
                         <button type="button" class="chat-format-btn" id="chat-upload-btn" title="Загрузить файл (Картинка/Док)">📎</button>
                     </div>
-                    <!-- Sticker Picker Container -->
-                    <div id="sticker-picker" class="sticker-picker" style="display: none;">
-                        <div class="sticker-tabs" id="sticker-tabs"></div>
-                        <div class="sticker-grid" id="sticker-grid"></div>
-                    </div>
-                    <form id="chat-form">
+            <!-- Sticker Picker Container -->
+            <div id="sticker-picker" class="sticker-picker" style="display: none;">
+                <div class="sticker-tabs" id="sticker-tabs"></div>
+                <div class="sticker-grid" id="sticker-grid"></div>
+            </div>
+            
+            <!-- Sticker Zoom Overlay (On Hold) -->
+            <div id="sticker-zoom-preview" style="display: none;">
+                <img src="" alt="Sticker Preview">
+            </div>
+
+            <form id="chat-form">
                         <input type="file" id="chat-file-input" hidden>
                         <textarea id="chat-input" placeholder="Напиши что-нибудь..." rows="1"></textarea>
                         <button type="submit">Отправить</button>
@@ -249,7 +256,7 @@ require_once __DIR__ . '/src/templates/header.php';
         
         <!-- 1. LOGIN SCREEN -->
         <div id="login-form-wrapper">
-            <h3 style="text-align: center; color: #6d2f8e; margin-bottom: 20px;">🔐 Вход</h3>
+            <h3 class="modal-title">🔐 Вход</h3>
             <form id="ajax-login-form">
                 <div class="form-group">
                     <input type="text" name="username" class="form-input" placeholder="Логин" required>
@@ -261,14 +268,14 @@ require_once __DIR__ . '/src/templates/header.php';
                 </div>
             </div>
                 <div style="text-align: right; margin-bottom: 10px;">
-                    <a href="#" onclick="showForgotForm(event)" style="font-size: 0.8em; color: #666;">Забыли пароль?</a>
+                    <a href="#" onclick="showForgotForm(event)" class="forgot-link">Забыли пароль?</a>
                 </div>
                 <button type="submit" class="btn-primary btn-block">Войти</button>
-                <div id="login-error" class="error-msg" style="display:none; color: red; margin-top: 10px;"></div>
+                <div id="login-error" class="error-msg" style="display:none; color: #ff5252; margin-top: 10px;"></div>
             </form>
 
-            <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px; text-align: center;">
-                <div style="font-size: 0.9em; color: #666; margin-bottom: 10px;">— или —</div>
+            <div class="auth-separator">
+                <div class="auth-separator-text">— или —</div>
                 
                 <?php if ($telegramAuthEnabled && !empty($telegramBotUsername)): ?>
                     <button type="button" class="btn btn-outline-primary btn-block" onclick="showSocialAuth()">
@@ -284,12 +291,12 @@ require_once __DIR__ . '/src/templates/header.php';
 
         <!-- 2. SOCIAL AUTH SCREEN -->
         <div id="social-auth-wrapper" style="display: none;">
-            <h3 style="text-align: center; color: #6d2f8e;">🌐 Быстрый вход</h3>
-            <p style="text-align: center; color: #666; font-size: 0.9em; margin-bottom: 20px;">
+            <h3 class="modal-title">🌐 Быстрый вход</h3>
+            <p class="modal-desc">
                 Используй свой аккаунт для входа.<br>Если ты новенький, мы создадим профиль автоматически!
             </p>
             
-            <div style="display: flex; flex-direction: column; gap: 15px; align-items: center; margin-bottom: 20px;">
+            <div class="social-auth-buttons">
                 <?php if ($telegramAuthEnabled && !empty($telegramBotUsername)): ?>
                     <div style="text-align: center;">
                         <script async src="https://telegram.org/js/telegram-widget.js?22" 
@@ -303,14 +310,14 @@ require_once __DIR__ . '/src/templates/header.php';
                 <!-- Место для Discord/VK -->
             </div>
 
-            <div style="border-top: 1px solid #eee; padding-top: 15px; text-align: center;">
+            <div class="auth-separator">
                 <a href="#" onclick="showLoginForm(event)" class="auth-switch-link secondary">← Вернуться к логину</a>
             </div>
         </div>
 
         <!-- 3. REGISTER SCREEN -->
         <div id="register-form-wrapper" style="display: none;">
-            <h3 style="text-align: center; color: #6d2f8e;">✨ Присоединиться</h3>
+            <h3 class="modal-title">✨ Присоединиться</h3>
             
             <form id="ajax-register-form">
                 <input type="hidden" name="action" value="register">
@@ -336,7 +343,7 @@ require_once __DIR__ . '/src/templates/header.php';
                 </div>
 
                 <button type="button" class="btn-primary btn-block" onclick="startCaptchaRegistration()">Далее →</button>
-                <div id="register-error" class="error-msg" style="display:none; color: red; margin-top: 10px;"></div>
+                <div id="register-error" class="error-msg" style="display:none; color: #ff5252; margin-top: 10px;"></div>
             </form>
 
             <div style="margin-top: 15px; text-align: center;">
@@ -346,26 +353,26 @@ require_once __DIR__ . '/src/templates/header.php';
 
         <!-- 4. CAPTCHA SCREEN -->
         <div id="captcha-form-wrapper" style="display: none;">
-            <h3 style="text-align: center; color: #6d2f8e; margin-bottom: 15px;">🦄 Испытание Гармонии</h3>
-            <p id="captcha-question-text" style="text-align: center; color: #555; margin-bottom: 20px; font-weight: bold;">
+            <h3 class="modal-title">🦄 Испытание Гармонии</h3>
+            <p id="captcha-question-text" class="modal-subtitle">
                 Загрузка вопроса...
             </p>
             
             <div id="captcha-image-container" style="text-align: center; margin-bottom: 20px; display: none;">
-                <img id="captcha-image" src="" alt="Mystery Pony" style="max-height: 150px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+                <img id="captcha-image" src="" alt="Mystery Pony" style="max-height: 150px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.3);">
             </div>
 
             <div id="captcha-options-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
                 <!-- Options will be injected here -->
             </div>
 
-            <div id="captcha-error" class="error-msg" style="display:none; color: red; margin-top: 10px; text-align: center;"></div>
+            <div id="captcha-error" class="error-msg" style="display:none; color: #ff5252; margin-top: 10px; text-align: center;"></div>
         </div>
 
         <!-- 5. FORGOT PASSWORD SCREEN -->
         <div id="forgot-form-wrapper" style="display: none;">
-            <h3 style="text-align: center; color: #6d2f8e;">🆘 Восстановление</h3>
-            <p style="font-size: 0.9em; color: #666; text-align: center; margin-bottom: 15px;">
+            <h3 class="modal-title">🆘 Восстановление</h3>
+            <p class="modal-desc">
                 Введи Email, который ты указывал при регистрации. Мы пришлем ссылку для сброса пароля.
             </p>
             
@@ -378,7 +385,7 @@ require_once __DIR__ . '/src/templates/header.php';
                 <div id="forgot-msg" class="error-msg" style="display:none; margin-top: 10px; text-align: center;"></div>
             </form>
 
-            <div style="border-top: 1px solid #eee; padding-top: 15px; text-align: center; margin-top: 15px;">
+            <div class="auth-separator">
                 <a href="#" onclick="showLoginForm(event)" class="auth-switch-link secondary">← Вернуться к логину</a>
             </div>
         </div>
@@ -391,87 +398,112 @@ require_once __DIR__ . '/src/templates/header.php';
     <div class="modal-content" style="max-width: 450px; text-align: left;">
         <span class="close-modal-profile" style="position: absolute; top: 10px; right: 15px; font-size: 28px; cursor: pointer; color: #aaa;">&times;</span>
         
-        <h3 style="text-align: center; color: #6d2f8e;">🦄 Твой Профиль</h3>
+        <h3 style="text-align: center; color: #6d2f8e; margin-bottom: 15px;">🦄 Твой Профиль</h3>
         
         <?php if ($currentUser): ?>
+        
+        <!-- Profile Tabs Navigation -->
+        <div class="profile-tabs">
+            <button type="button" class="profile-tab-btn active" onclick="switchProfileTab('visual')">🎨 Внешность</button>
+            <button type="button" class="profile-tab-btn" onclick="switchProfileTab('system')">⚙️ Настройки</button>
+        </div>
+
         <form id="ajax-profile-form">
             <input type="hidden" name="action" value="update_profile">
             <input type="hidden" name="csrf_token" value="<?= Auth::generateCsrfToken() ?>">
 
-            <div class="form-group" style="margin-bottom: 15px;">
-                <label class="form-label">Имя в чате</label>
-                <input type="text" name="nickname" value="<?= htmlspecialchars($currentUser['nickname']) ?>" class="form-input" required>
-            </div>
-
-            <div class="form-group" style="margin-bottom: 15px;">
-                <label class="form-label">Email (необязательно)</label>
-                <input type="email" name="email" value="<?= htmlspecialchars($currentUser['email'] ?? '') ?>" class="form-input" placeholder="mail@example.com">
-                <small style="color: #777;">Нужен только для восстановления пароля.</small>
-            </div>
-
-            <div class="form-group" style="margin-bottom: 15px;">
-                <label class="form-label">Цвет имени</label>
-                <div class="color-picker-ui">
-                    <input type="hidden" name="chat_color" value="<?= htmlspecialchars($currentUser['chat_color'] ?? '#6d2f8e') ?>">
-                    <div class="manual-input-wrapper">
-                        <span style="font-size: 0.9em; color: #666;">Свой цвет:</span>
-                        <input type="text" class="color-manual-input" placeholder="#HEX..." maxlength="7">
-                    </div>
+            <!-- TAB 1: VISUAL (Внешность) -->
+            <div id="tab-visual" class="profile-tab-content active">
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label class="form-label">Имя в чате</label>
+                    <input type="text" name="nickname" value="<?= htmlspecialchars($currentUser['nickname']) ?>" class="form-input" required>
                 </div>
-            </div>
 
-            <div class="form-group" style="margin-bottom: 15px;">
-                <label class="form-label">Аватарка</label>
-                <input type="file" name="avatar_file" class="form-input" accept="image/jpeg,image/png,image/gif,image/webp" style="margin-bottom: 5px;">
-                <div style="text-align: center; font-size: 0.8em; color: #999; margin-bottom: 5px;">— ИЛИ —</div>
-                <input type="text" name="avatar_url" value="<?= htmlspecialchars($currentUser['avatar_url'] ?? '') ?>" class="form-input" placeholder="Ссылка (https://...)">
-                <small style="color: #777;">Загрузи файл (до 5МБ) или вставь ссылку.</small>
-            </div>
-
-            <div class="form-group" style="margin-bottom: 15px;">
-                 <label class="form-label">Сменить пароль (если хочешь)</label>
-                 <div class="password-wrapper">
-                     <input type="password" name="password" class="form-input" placeholder="Новый пароль">
-                     <button type="button" class="password-toggle-btn">👁️</button>
-                 </div>
-            </div>
-
-            <div class="form-group" style="margin-bottom: 15px;">
-                <label class="form-label">Уведомления</label>
-                <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-                    <label style="display: flex; align-items: center; cursor: pointer;">
-                        <input type="checkbox" id="profile-title-toggle" style="margin-right: 5px;"> Моргание вкладки
-                    </label>
-                </div>
-            </div>
-
-            <!-- Social Accounts Binding -->
-            <?php if ($telegramAuthEnabled && !empty($telegramBotUsername)): ?>
-            <div class="form-group" style="margin-bottom: 15px; border-top: 1px solid #eee; padding-top: 15px;">
-                <label class="form-label">Социальные сети</label>
-                
-                <div id="profile-socials-list">
-                    <!-- Telegram Item -->
-                    <div class="social-item telegram-item" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <span style="display: flex; align-items: center; gap: 5px;">
-                            <img src="https://telegram.org/favicon.ico" width="20"> Telegram
-                        </span>
-                        
-                        <!-- Контейнер для статуса (Привязан/Отвязать) -->
-                        <div id="telegram-status-container" style="display: none;"></div>
-
-                        <!-- Контейнер для виджета (Скрываем JS-ом если привязан) -->
-                        <div id="telegram-widget-container">
-                             <!-- Сюда JS вставит виджет, когда модалка откроется -->
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label class="form-label">Цвет имени</label>
+                    <div class="color-picker-ui">
+                        <input type="hidden" name="chat_color" value="<?= htmlspecialchars($currentUser['chat_color'] ?? '#6d2f8e') ?>">
+                        <div class="manual-input-wrapper">
+                            <span style="font-size: 0.9em; color: #666;">HEX:</span>
+                            <input type="text" class="color-manual-input" placeholder="#..." maxlength="7">
                         </div>
                     </div>
                 </div>
-            </div>
-            <?php endif; ?>
 
-            <button type="submit" class="btn-primary btn-block">Сохранить</button>
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label class="form-label">Аватарка</label>
+                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
+                        <img src="<?= htmlspecialchars($currentUser['avatar_url'] ?: '/assets/img/default-avatar.png') ?>" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid #ddd;" id="profile-avatar-preview">
+                        <div style="flex: 1;">
+                            <input type="file" name="avatar_file" class="form-input" accept="image/*" style="font-size: 0.9em;">
+                        </div>
+                    </div>
+                    <input type="text" name="avatar_url" value="<?= htmlspecialchars($currentUser['avatar_url'] ?? '') ?>" class="form-input" placeholder="Или ссылка на картинку..." style="font-size: 0.9em;">
+                </div>
+            </div>
+
+            <!-- TAB 2: SYSTEM (Система) -->
+            <div id="tab-system" class="profile-tab-content" style="display: none;">
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label class="form-label">Email</label>
+                    <input type="email" name="email" value="<?= htmlspecialchars($currentUser['email'] ?? '') ?>" class="form-input" placeholder="mail@example.com">
+                    <small style="color: #777; display: block; margin-top: 3px;">Для восстановления доступа.</small>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 15px;">
+                     <label class="form-label">Сменить пароль</label>
+                     <div class="password-wrapper">
+                         <input type="password" name="password" class="form-input" placeholder="Новый пароль (если нужно)">
+                         <button type="button" class="password-toggle-btn">👁️</button>
+                     </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label class="form-label">Уведомления</label>
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" id="profile-title-toggle" style="margin-right: 8px;"> 
+                        Моргание вкладки при упоминании
+                    </label>
+                </div>
+
+                <!-- Social Accounts Binding -->
+                <?php if ($telegramAuthEnabled && !empty($telegramBotUsername)): ?>
+                <div class="form-group" style="margin-bottom: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                    <label class="form-label">Привязка соцсетей</label>
+                    <div id="profile-socials-list">
+                        <div class="social-item telegram-item" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="display: flex; align-items: center; gap: 5px; font-weight: 500;">
+                                <img src="https://telegram.org/favicon.ico" width="16"> Telegram
+                            </span>
+                            <div id="telegram-status-container"></div>
+                            <div id="telegram-widget-container"></div>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
+            </div>
+
+            <button type="submit" class="btn-primary btn-block" style="margin-top: 20px;">Сохранить изменения</button>
             <div id="profile-error" class="error-msg" style="display:none; color: red; margin-top: 10px; text-align: center;"></div>
         </form>
+
+        <!-- Profile Actions Footer -->
+        <div class="profile-actions-footer">
+            <form id="logout-form" method="post" action="api.php" style="margin: 0;">
+                <input type="hidden" name="action" value="logout">
+                <input type="hidden" name="csrf_token" value="<?= Auth::generateCsrfToken() ?>">
+                <button type="submit" class="btn btn-outline-danger">
+                    🚪 Выйти
+                </button>
+            </form>
+            
+            <?php if (Auth::isAdmin()): ?>
+                 <a href="/dashboard.php" class="btn btn-outline-warning">
+                    🔧 Админка
+                 </a>
+            <?php endif; ?>
+        </div>
+        
         <?php else: ?>
             <p style="text-align: center;">Сначала нужно войти!</p>
         <?php endif; ?>

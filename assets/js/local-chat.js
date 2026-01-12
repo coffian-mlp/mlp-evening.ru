@@ -903,16 +903,18 @@ $(document).ready(function() {
     function updateQuotePreview() {
         quotePreviewArea.empty();
         if (pendingQuotes.length === 0) {
-            quotePreviewArea.addClass('hidden');
+            quotePreviewArea.addClass('hidden').hide(); // Добавляем класс и скрываем
             return;
         }
         
-        quotePreviewArea.removeClass('hidden');
+        quotePreviewArea.removeClass('hidden').css('display', 'flex'); // Убираем класс (!) и ставим flex
         pendingQuotes.forEach(q => {
             const item = $(`
                 <div class="quote-preview-item">
-                    <span><b>${escapeHtml(q.username)}</b>: ${escapeHtml(q.text.substring(0, 20))}${q.text.length>20?'...':''}</span>
-                    <span class="quote-preview-remove" data-id="${q.id}">&times;</span>
+                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        <b>${escapeHtml(q.username)}</b>: ${escapeHtml(q.text.substring(0, 50))}${q.text.length>50?'...':''}
+                    </span>
+                    <button class="quote-preview-remove" data-id="${q.id}" title="Убрать">&times;</button>
                 </div>
             `);
             quotePreviewArea.append(item);
@@ -1201,6 +1203,23 @@ $(document).ready(function() {
         stickersInitialized = true;
     }
 
+    // --- Sticker Zoom Preview Helpers ---
+    const zoomPreview = $('#sticker-zoom-preview');
+    const zoomImg = zoomPreview.find('img');
+    let longPressTimer;
+    let isLongPress = false;
+
+    function showZoomPreview(src) {
+        zoomImg.attr('src', src);
+        zoomPreview.fadeIn(100);
+        isLongPress = true;
+    }
+
+    function hideZoomPreview() {
+        zoomPreview.fadeOut(100);
+        // Не сбрасываем isLongPress здесь сразу, чтобы обработчик mouseup мог понять, что произошло
+    }
+
     function renderStickerGrid(packId) {
         stickerGrid.empty();
         const stickers = (window.stickerData.stickers[packId] || []);
@@ -1212,9 +1231,50 @@ $(document).ready(function() {
 
         stickers.forEach(s => {
             const img = $(`<img src="${escapeHtml(s.image_url)}" class="picker-sticker" title=":${escapeHtml(s.code)}:">`);
-            img.on('click', function() {
-                insertSticker(s.code);
+            
+            // --- Smart Click/Hold Logic ---
+            
+            // 1. Mouse/Touch Down: Start Timer
+            img.on('mousedown touchstart', function(e) {
+                // e.preventDefault(); // Don't block scroll!
+                isLongPress = false;
+                longPressTimer = setTimeout(() => {
+                    showZoomPreview(s.image_url);
+                }, 300); // 300ms hold time
             });
+
+            // 2. Mouse/Touch Up: Decide Action
+            img.on('mouseup touchend', function(e) {
+                clearTimeout(longPressTimer); // Cancel timer if fast tap
+                
+                if (isLongPress) {
+                    // It was a long press (preview shown) -> Just hide preview
+                    hideZoomPreview();
+                    isLongPress = false; // Reset
+                    e.preventDefault(); // Prevent ghost clicks
+                } else {
+                    // Fast tap -> Insert Sticker
+                    insertSticker(s.code);
+                    // Mobile: Prevent phantom clicks/zoom
+                    if (e.type === 'touchend') e.preventDefault(); 
+                }
+            });
+
+            // 3. Mouse Leave / Touch Cancel: Abort everything
+            img.on('mouseleave touchcancel', function() {
+                clearTimeout(longPressTimer);
+                if (isLongPress) {
+                    hideZoomPreview();
+                    isLongPress = false;
+                }
+            });
+            
+            // 4. Disable Context Menu on Stickers (to prevent menu on hold)
+            img.on('contextmenu', function(e) {
+                e.preventDefault();
+                return false;
+            });
+
             stickerGrid.append(img);
         });
     }

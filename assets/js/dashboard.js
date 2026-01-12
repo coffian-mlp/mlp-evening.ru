@@ -617,8 +617,8 @@ function loadPacks() {
                     window.currentPackId = p.id;
                     
                     // Highlight active item
-                    $('.pack-item').css('background', '');
-                    item.css('background', '#e8f0fe');
+                    $('.pack-item').removeClass('active');
+                    item.addClass('active');
                     
                     // Filter table (Visual only for now)
                     $('#stickers-table tbody tr').show().filter(function() {

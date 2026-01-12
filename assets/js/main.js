@@ -1,5 +1,18 @@
 // main.js - Глобальные скрипты для всего сайта
 
+// Switch Profile Tabs
+window.switchProfileTab = function(tabName) {
+    // Hide all contents
+    $('.profile-tab-content').hide();
+    // Show target
+    $('#tab-' + tabName).fadeIn(200);
+    
+    // Update buttons
+    $('.profile-tab-btn').removeClass('active');
+    // Находим кнопку по onclick атрибуту, так как у нас нет ID
+    $(`.profile-tab-btn[onclick*="${tabName}"]`).addClass('active');
+};
+
 // Utility: Escape HTML to prevent XSS
 function escapeHtml(text) {
   if (text == null) return text;
@@ -21,8 +34,9 @@ function escapeRegExp(string) {
 // --- Global Lightbox ---
 $(document).ready(function() {
     // Click on Chat Images & Stickers
-    // Targets: Chat images (excluding emojis and stickers) AND Dashboard sticker previews
-    $(document).on('click', '.chat-message img:not(.emoji):not(.chat-sticker), .sticker-preview-img', function(e) {
+    // Targets: Chat images (excluding emojis) AND Dashboard sticker previews
+    // Removed :not(.chat-sticker) so stickers also open in lightbox
+    $(document).on('click', '.chat-message img:not(.emoji), .sticker-preview-img', function(e) {
         // Prevent default link navigation if wrapped in <a>
         e.preventDefault();
         
@@ -47,6 +61,13 @@ $(document).ready(function() {
 });
 
 $(document).ready(function() {
+
+    // --- 0. PWA Service Worker Registration ---
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('Service Worker registered! 🦄', reg.scope))
+            .catch(err => console.log('Service Worker registration failed:', err));
+    }
     
     // --- 1. CSRF Protection Setup ---
     // Автоматически добавляем токен во все AJAX запросы
@@ -822,6 +843,91 @@ $(document).ready(function() {
              // $btn.prop('disabled', false);
              $error.text("Ошибка соединения с Эквестрией...").show();
         });
+    });
+
+    // --- LOGOUT FORM HANDLER ---
+    $('#logout-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        // Show immediate feedback or spinner?
+        // Let's just do it quietly but handle the response
+        
+        $.post('api.php', $(this).serialize(), function(response) {
+            if (response.success) {
+                location.reload();
+            } else {
+                showFlashMessage("Ошибка выхода: " + response.message, 'error');
+            }
+        }, 'json').fail(function() {
+            showFlashMessage("Ошибка сети при выходе", 'error');
+        });
+    });
+
+    // --- 7. Обработчик профиля ---
+    $('#ajax-profile-form').on('submit', function(e) {
+        e.preventDefault();
+        var $form = $(this);
+        var $btn = $form.find('button[type="submit"]');
+        var $error = $('#profile-error');
+        
+        $btn.prop('disabled', true).text('Сохранение...');
+        $error.hide();
+
+        var formData = new FormData(this);
+
+        $.ajax({
+            url: 'api.php',
+            type: 'POST',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function(response) {
+                if (response.success) {
+                    showFlashMessage(response.message, 'success');
+                    
+                    // Обновляем UI без перезагрузки
+                    if (response.data && response.data.user) {
+                        var u = response.data.user;
+                        // Обновляем шапку чата
+                        $('.chat-user-menu .username').text(u.nickname).css('color', u.chat_color);
+                        if (u.avatar_url) {
+                            $('.chat-user-menu .avatar-mini img').attr('src', u.avatar_url);
+                        }
+                        
+                        // Обновляем глобальные переменные
+                        window.currentUserNickname = u.nickname;
+                    }
+                    
+                    setTimeout(function() { $('#profile-modal').fadeOut(200); }, 500);
+                } else {
+                    $error.text(response.message).show();
+                }
+            },
+            error: function() {
+                $error.text('Ошибка сети').show();
+            },
+            complete: function() {
+                $btn.prop('disabled', false).text('Сохранить изменения');
+            }
+        });
+    });
+
+    // Preview Avatar
+    $('input[name="avatar_url"]').on('input', function() {
+        var url = $(this).val();
+        if (url.match(/\.(jpeg|jpg|gif|png|webp)/i)) {
+            $('#profile-avatar-preview').attr('src', url);
+        }
+    });
+    $('input[name="avatar_file"]').change(function() {
+        var input = this;
+        if (input.files && input.files[0]) {
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                $('#profile-avatar-preview').attr('src', e.target.result);
+            }
+            reader.readAsDataURL(input.files[0]);
+        }
     });
 
     // Close Modal Logic (If not already handled globally)

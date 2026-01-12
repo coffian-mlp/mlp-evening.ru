@@ -1,20 +1,31 @@
-/* Dashboard CSS */
+/* Объединенный dashboard.css */
+
+/* === Global Layout === */
+body {
+    /* Фон управляется main.css, но здесь можем подстраховать */
+    background-color: #1a1a1a; /* Темный фоллбэк */
+}
 
 .dashboard-layout {
     overflow-y: auto;
-    /* Убеждаемся, что фон такой же темный и с картинкой, как на главной */
-    /* Стили body уже подтянуты из main.css */
+    min-height: 100vh;
 }
 
-/* === Global Header (как на главной, но адаптированный) === */
+.dashboard-layout .container {
+    max-width: 1200px;
+    margin: 0 auto 50px;
+    padding: 0 20px;
+}
+
+/* === Header === */
 .main-header {
-    background: transparent; /* Прозрачный фон для лого */
+    background: transparent;
     padding: 20px 0;
     margin-bottom: 20px;
 }
 
 .main-header .header-content {
-    max-width: 1200px; /* Совпадает с .container */
+    max-width: 1200px;
     margin: 0 auto;
     padding: 0 20px;
     display: flex;
@@ -23,7 +34,7 @@
 }
 
 .main-header .logo {
-    height: 60px; /* Размер лого */
+    height: 60px;
     width: auto;
 }
 
@@ -31,93 +42,92 @@
     display: flex;
     align-items: center;
     gap: 20px;
-    color: white; /* Текст белый на темном фоне */
-    background: rgba(0, 0, 0, 0.4); /* Полупрозрачная подложка для читаемости */
+    color: white;
+    background: rgba(0, 0, 0, 0.4);
     padding: 10px 20px;
     border-radius: 20px;
     backdrop-filter: blur(5px);
+    border: 1px solid rgba(255,255,255,0.1);
 }
 
 .main-header .username {
     font-weight: 500;
+    color: #ce93d8; /* Твайлайт стайл */
 }
 
 .main-header .btn-logout {
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: rgba(255, 255, 255, 0.1);
     color: white;
-    border: 1px solid rgba(255,255,255,0.4);
+    border: 1px solid rgba(255,255,255,0.2);
     padding: 5px 15px;
     border-radius: 15px;
     font-size: 0.9em;
     cursor: pointer;
-    transition: background 0.3s;
+    transition: all 0.3s;
 }
 
 .main-header .btn-logout:hover {
-    background-color: rgba(231, 76, 60, 0.8); /* Красный при наведении */
+    background-color: rgba(231, 76, 60, 0.3);
     border-color: #e74c3c;
+    color: #ffcccc;
 }
 
-
-/* === Main Container === */
-.dashboard-layout .container {
-    max-width: 1200px;
-    margin: 0 auto 50px; /* Отступ снизу */
-    padding: 0 20px;
-}
-
-/* === Navigation Tiles === */
+/* === Navigation Grid === */
 .nav-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr); /* 4 колонки ровно */
+    grid-template-columns: repeat(4, 1fr);
     gap: 20px;
     margin-bottom: 30px;
 }
 
 .nav-tile {
-    background: rgba(255, 255, 255, 0.15); /* Полупрозрачный белый */
+    background: rgba(255, 255, 255, 0.1);
     padding: 20px;
     border-radius: 12px;
     text-align: center;
     cursor: pointer;
     transition: all 0.3s ease;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    color: white;
+    color: #ccc;
     backdrop-filter: blur(5px);
+    display: block; /* Восстанавливаем блочность для грида */
 }
 
 .nav-tile:hover {
-    background: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.2);
     transform: translateY(-5px);
+    color: #fff;
 }
 
 .nav-tile.active {
-    background: #fff;
-    color: #333; /* Активная плитка белая с темным текстом */
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+    background: rgba(186, 104, 200, 0.2); /* Фиолетовый оттенок */
+    color: #fff;
+    border-color: #ba68c8;
+    box-shadow: 0 0 20px rgba(186, 104, 200, 0.3);
 }
 
 .nav-tile .icon {
     font-size: 2.5em;
     margin-bottom: 10px;
+    display: block; /* Иконка сверху */
 }
 
 .nav-tile .label {
     font-weight: bold;
     font-size: 1.1em;
-    font-family: 'Philosopher', sans-serif; /* Шрифт для меню */
+    font-family: 'Philosopher', sans-serif;
 }
 
 /* === Content Styles === */
-
 .dashboard-title {
     margin-top: 0;
-    color: #444;
-    border-bottom: 2px solid #6d2f8e; /* MLP Purple */
+    color: #e1bee7;
+    border-bottom: 2px solid #ba68c8;
     padding-bottom: 10px;
     margin-bottom: 20px;
-    font-family: 'Philosopher', sans-serif; /* Магический заголовок */
+    font-family: 'Philosopher', sans-serif;
     font-weight: 700;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
 }
 
 /* Playlist Info Block */
@@ -126,14 +136,16 @@
     display: flex; 
     justify-content: space-between; 
     align-items: center; 
-    background: #fff; 
+    background: rgba(30, 20, 50, 0.6); 
     padding: 15px; 
     border-radius: 8px; 
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(5px);
+    color: #eee;
 }
 
 .playlist-date {
-    color: #555;
+    color: #aaa;
 }
 
 .status-badge {
@@ -141,45 +153,31 @@
     padding: 3px 8px; 
     border-radius: 4px; 
     font-weight: bold;
+    font-size: 0.9em;
 }
 
 .status-badge.old {
-    color: #d35400; 
-    background: #fdebd0;
+    color: #ff8a80; 
+    background: rgba(244, 67, 54, 0.2);
+    border: 1px solid rgba(244, 67, 54, 0.3);
 }
 
 .status-badge.fresh {
-    color: #27ae60; 
-    background: #e8f8f5;
-    font-weight: normal;
+    color: #a5d6a7; 
+    background: rgba(76, 175, 80, 0.2);
+    border: 1px solid rgba(76, 175, 80, 0.3);
 }
 
 .playlist-list {
     font-size: 1.1em; 
     line-height: 1.6;
+    color: #eee;
 }
 
 .playlist-list span.meta {
-    color: #777; 
+    color: #999; 
     font-size: 0.9em;
 }
-
-.search-bar {
-    margin-bottom: 20px; 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center;
-}
-
-.search-input {
-    width: 300px;
-}
-
-.search-hint {
-    color: #777; 
-    font-size: 0.9em;
-}
-
 
 /* Tabs Content */
 .tab-content {
@@ -198,51 +196,252 @@
 
 /* Cards */
 .card {
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: 8px;
+    background: rgba(30, 20, 50, 0.7);
+    border-radius: 12px;
     padding: 25px;
     margin-bottom: 25px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(5px);
+    color: #eee;
 }
 
 .card.danger-zone {
-    border-left: 5px solid #e74c3c;
+    border-left: 5px solid #ff8a80;
+}
+
+.card h3 {
+    margin-top: 0;
+    color: #ce93d8;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    padding-bottom: 10px;
+    margin-bottom: 20px;
 }
 
 /* Tables */
 .dashboard-table {
     width: 100%;
     border-collapse: collapse;
-    background: #fff;
-    border-radius: 5px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 8px;
     overflow: hidden;
 }
 
 .dashboard-table th, .dashboard-table td {
     padding: 12px 15px;
     text-align: left;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    color: #ddd;
 }
 
 .dashboard-table th {
-    background-color: #f8f9fa;
+    background-color: rgba(255, 255, 255, 0.05);
     font-weight: 600;
-    color: #555;
+    color: #ce93d8;
     cursor: pointer;
 }
 
 .dashboard-table tr:hover {
-    background-color: #f1f1f1;
+    background-color: rgba(255, 255, 255, 0.05);
 }
 
-/* Buttons */
-/* Using generic .btn classes from main.css */
+.dashboard-table img.avatar-mini {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    vertical-align: middle;
+    margin-right: 10px;
+    border: 1px solid rgba(255,255,255,0.2);
+}
 
-/* Inputs */
-/* Using generic input styles from main.css */
+/* Action Buttons in Tables (New styles) */
+.dashboard-table .btn-primary, 
+.dashboard-table .btn-warning, 
+.dashboard-table .btn-danger {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.2);
+    box-shadow: none;
+    padding: 4px 8px !important;
+    font-size: 0.9em;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
 
-/* Flash Messages */
-/* Using generic flash-message styles from main.css */
+.dashboard-table .btn-primary { color: #ce93d8; border-color: #ce93d8; }
+.dashboard-table .btn-primary:hover { background: rgba(206, 147, 216, 0.15); box-shadow: 0 0 8px rgba(206, 147, 216, 0.3); color: #fff; }
+
+.dashboard-table .btn-warning { color: #ffd54f; border-color: #ffd54f; }
+.dashboard-table .btn-warning:hover { background: rgba(255, 213, 79, 0.15); box-shadow: 0 0 8px rgba(255, 213, 79, 0.3); color: #fff; }
+
+.dashboard-table .btn-danger { color: #ff8a80; border-color: #ff8a80; }
+.dashboard-table .btn-danger:hover { background: rgba(255, 138, 128, 0.15); box-shadow: 0 0 8px rgba(255, 138, 128, 0.3); color: #fff; }
+
+/* Forms & Inputs */
+.form-group { margin-bottom: 15px; }
+.form-label { display: block; margin-bottom: 5px; color: #ccc; font-size: 0.9em; }
+
+.form-input, select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    background: rgba(0,0,0,0.3);
+    color: #fff;
+    transition: border 0.2s;
+}
+.form-input:focus, select:focus {
+    border-color: #ba68c8;
+    background: rgba(0,0,0,0.5);
+    outline: none;
+}
+
+/* Search Bar */
+.search-bar {
+    margin-bottom: 20px; 
+    display: flex; 
+    gap: 10px;
+    align-items: center;
+    background: rgba(0,0,0,0.2);
+    padding: 10px 15px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.search-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 1em;
+}
+.search-input:focus { outline: none; }
+.search-hint { color: #aaa; font-size: 0.9em; }
+
+/* Packs & Stickers */
+.pack-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.pack-item {
+    padding: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.2s;
+    color: #ddd;
+    border-radius: 6px;
+    margin-bottom: 2px;
+}
+
+.pack-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.pack-item.active {
+    background: rgba(186, 104, 200, 0.2);
+    border: 1px solid rgba(186, 104, 200, 0.3);
+}
+
+.pack-info {
+    cursor: pointer;
+    flex: 1;
+    display: flex;
+    align-items: center;
+}
+
+.pack-actions {
+    display: flex;
+    gap: 5px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+.pack-item:hover .pack-actions { opacity: 1; }
+
+.btn-xs {
+    padding: 2px 8px;
+    font-size: 0.8em;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.2);
+    cursor: pointer;
+    margin-left: 5px;
+    background: rgba(0,0,0,0.2);
+    color: #ccc;
+    transition: all 0.2s;
+}
+.btn-xs:hover { background: rgba(255,255,255,0.1); color: #fff; border-color: #fff; }
+.btn-xs.btn-danger { color: #ff8a80; border-color: rgba(255, 138, 128, 0.3); }
+.btn-xs.btn-danger:hover { background: rgba(244, 67, 54, 0.2); border-color: #ff5252; }
+
+.sticker-preview-img {
+    cursor: zoom-in;
+    transition: transform 0.1s;
+    background: rgba(255,255,255,0.05);
+    padding: 2px;
+    border-radius: 4px;
+}
+.sticker-preview-img:hover { transform: scale(1.5); z-index: 10; background: rgba(0,0,0,0.5); }
+
+/* Modals Customization */
+.modal-content h3 { color: #ce93d8; }
+.modal-content p { color: #eee; }
+.modal-content .form-label { color: #bbb; }
+.modal-content small { color: #aaa; }
+.modal-content .color-picker-ui { background: rgba(0,0,0,0.2); border-color: rgba(255,255,255,0.1); }
+.modal-content .color-manual-input { background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.1); color: #fff; }
+.modal-content .manual-input-wrapper span { color: #bbb; }
+
+.modal-content .btn-danger { background: transparent; border: 1px solid #ff8a80; color: #ff8a80; }
+.modal-content .btn-danger:hover { background: rgba(244, 67, 54, 0.2); box-shadow: 0 0 10px rgba(244, 67, 54, 0.2); color: #fff; }
+.modal-content .btn-warning { background: transparent; border: 1px solid #ffd54f; color: #ffd54f; }
+.modal-content .btn-warning:hover { background: rgba(255, 213, 79, 0.2); box-shadow: 0 0 10px rgba(255, 213, 79, 0.2); color: #fff; }
+
+.modal-content .chat-options label { color: #eee; }
+.modal-content .chat-options input[type="radio"] { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+.modal-content .chat-options input[type="radio"]:checked { background: #ba68c8; }
+.modal-content .form-group label strong { color: #eee; }
+.modal-content .form-group input[type="checkbox"] { background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.1); }
+.modal-content .form-group input[type="checkbox"]:checked { background: #ba68c8; border-color: #ba68c8; }
+.modal-content .password-toggle-btn { color: #aaa; }
+.modal-content .password-toggle-btn:hover { color: #fff; }
+.modal-content .search-input { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: #fff; }
+.modal-content .search-input:focus { border-color: #ba68c8; background: rgba(0,0,0,0.4); }
+.modal-content .search-hint { color: #aaa; }
+
+.modal-content #add-sticker-form {
+    background: rgba(0,0,0,0.2);
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 15px;
+    border-radius: 8px;
+}
+
+/* Zip Import Form Special Style */
+.modal-content #zip-upload-card {
+    background: rgba(0,0,0,0.2);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #eee;
+    padding: 15px;
+    border-radius: 8px;
+}
+.modal-content #zip-upload-card h4 { color: #ce93d8; margin-top: 0; }
+.modal-content #zip-upload-card p { color: #aaa; }
+.modal-content #zip-upload-card strong { color: #eee; }
+.modal-content #zip-import-form .btn-warning {
+    background: linear-gradient(135deg, #f1c40f, #f39c12);
+    color: #333;
+    border: none;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+.modal-content #zip-import-form .btn-warning:hover {
+    background: linear-gradient(135deg, #f39c12, #e67e22);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+    color: #000;
+}
 
 /* Responsive */
 @media (max-width: 768px) {
@@ -254,142 +453,4 @@
         flex-direction: column;
         gap: 15px;
     }
-}
-
-/* --- Stickers & Packs New Styles --- */
-
-/* Pack List */
-.pack-item {
-    padding: 10px;
-    border-bottom: 1px solid #eee;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    transition: background 0.2s;
-}
-
-.pack-item:hover {
-    background: rgba(0, 0, 0, 0.05); /* Adaptive for white/transparent bg */
-}
-
-.pack-info {
-    cursor: pointer;
-    flex: 1;
-}
-
-.pack-actions {
-    display: flex;
-    gap: 5px;
-    opacity: 0.3;
-    transition: opacity 0.2s;
-}
-
-.pack-item:hover .pack-actions {
-    opacity: 1;
-}
-
-/* Lightbox styles removed (using global lightbox.css) */
-
-.sticker-preview-img {
-    cursor: zoom-in;
-    transition: transform 0.1s;
-}
-
-.sticker-preview-img:hover {
-    transform: scale(1.1);
-}
-
-/* Small helper for action buttons in packs */
-.btn-xs {
-    padding: 2px 6px;
-    font-size: 0.8em;
-    border-radius: 4px;
-    border: none;
-    cursor: pointer;
-    margin-left: 5px;
-}
-
-/* Modals */
-.modal-overlay {
-    display: none;
-    position: fixed;
-    z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0,0,0,0.5);
-    justify-content: center;
-    align-items: center;
-}
-
-.modal-content {
-    background-color: white;
-    padding: 25px;
-    border-radius: 8px;
-    width: 100%;
-    max-width: 400px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    position: relative;
-}
-
-.close-modal {
-    position: absolute;
-    right: 15px;
-    top: 10px;
-    font-size: 24px;
-    cursor: pointer;
-    color: #aaa;
-}
-
-.close-modal:hover {
-    color: #333;
-}
-
-/* --- Color Picker Custom UI (Restored) --- */
-.color-picker-ui {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    flex-wrap: wrap;
-    margin-top: 5px;
-}
-
-.color-swatch {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    cursor: pointer;
-    border: 2px solid transparent;
-    transition: transform 0.2s, border-color 0.2s;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
-
-.color-swatch:hover {
-    transform: scale(1.1);
-}
-
-.color-swatch.active {
-    border-color: #333;
-    transform: scale(1.1);
-}
-
-.manual-input-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    background: #eee;
-    padding: 2px 8px;
-    border-radius: 15px;
-}
-
-.color-manual-input {
-    border: none;
-    background: transparent;
-    width: 60px;
-    font-family: monospace;
-    font-size: 0.9em;
-    color: #333;
-    outline: none;
-    text-transform: uppercase;
 }
