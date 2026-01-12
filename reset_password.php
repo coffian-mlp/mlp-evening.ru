@@ -75,10 +75,16 @@ $csrfToken = Auth::generateCsrfToken();
             <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
             
             <div class="form-group">
-                <input type="password" name="password" id="pass1" class="form-input" placeholder="Новый пароль (мин. 6)" required minlength="6">
+                <div class="password-wrapper">
+                    <input type="password" name="password" id="pass1" class="form-input" placeholder="Новый пароль (мин. 6)" required minlength="6">
+                    <button type="button" class="password-toggle-btn">👁️</button>
+                </div>
             </div>
             <div class="form-group" style="margin-top: 15px;">
-                <input type="password" name="password_confirm" id="pass2" class="form-input" placeholder="Повторите пароль" required>
+                <div class="password-wrapper">
+                    <input type="password" name="password_confirm" id="pass2" class="form-input" placeholder="Повторите пароль" required>
+                    <button type="button" class="password-toggle-btn">👁️</button>
+                </div>
             </div>
             
             <button type="submit" class="btn-primary">Сохранить</button>
