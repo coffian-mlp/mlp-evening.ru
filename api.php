@@ -209,9 +209,44 @@ try {
          $username = $_POST['username'] ?? '';
          $password = $_POST['password'] ?? '';
          
+         // --- Brute Force Protection ---
+         $ip = Auth::getIp();
+         $status = Auth::checkLoginAttempts($ip);
+         
+         if ($status === 'blocked') {
+             sendResponse(false, "Слишком много неудачных попыток. Доступ закрыт на 24 часа. Отдохни и попей какао.", 'error');
+         }
+         
+         if ($status === 'captcha_needed') {
+             require_once __DIR__ . '/src/CaptchaManager.php';
+             $captcha = new CaptchaManager();
+             
+             if (!$captcha->isCompleted()) {
+                 // Return special error code for JS to handle
+                 echo json_encode([
+                     'success' => false, 
+                     'message' => 'Требуется проверка на робота (или чейнджлинга).', 
+                     'type' => 'error',
+                     'error_code' => 'captcha_required'
+                 ]);
+                 exit();
+             }
+         }
+         // ------------------------------
+
          if (Auth::login($username, $password)) {
+             Auth::resetLoginAttempts($ip); // Reset on success
              sendResponse(true, "Добро пожаловать, $username! Рады тебя видеть!", 'success', ['reload' => true]);
          } else {
+             $newCount = Auth::recordFailedLogin($ip);
+             
+             // Check if we hit a threshold where captcha needs to be reset to force re-verification
+             if ($newCount === 3 || $newCount === 6) {
+                 require_once __DIR__ . '/src/CaptchaManager.php';
+                 $captcha = new CaptchaManager();
+                 $captcha->reset();
+             }
+             
              sendResponse(false, "Упс! Неверное имя или пароль.", 'error');
          }
     }

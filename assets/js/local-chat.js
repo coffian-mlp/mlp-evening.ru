@@ -179,7 +179,10 @@ $(document).ready(function() {
         
         // Color & Avatar
         const colorStyle = data.chat_color ? `style="color: ${escapeHtml(data.chat_color)}"` : '';
-        const avatarUrl = data.avatar_url ? escapeHtml(data.avatar_url) : '/assets/img/default-avatar.png'; // Fallback image?
+        let avatarUrl = data.avatar_url ? escapeHtml(data.avatar_url) : '/assets/img/default-avatar.png';
+        // Fix for old relative paths or just filenames being treated as uploads
+        if (avatarUrl === 'default-avatar.png') avatarUrl = '/assets/img/default-avatar.png';
+        
         const avatarHtml = `<img src="${avatarUrl}" class="chat-avatar" alt="">`;
 
         // Format message (handles quotes and fixes double escaping)
@@ -208,7 +211,9 @@ $(document).ready(function() {
         let quotesHtml = '';
         if (data.quotes && data.quotes.length > 0) {
             data.quotes.forEach(q => {
-                 const qAvatar = q.avatar_url ? escapeHtml(q.avatar_url) : '/assets/img/default-avatar.png';
+                 let qAvatar = q.avatar_url ? escapeHtml(q.avatar_url) : '/assets/img/default-avatar.png';
+                 if (qAvatar === 'default-avatar.png') qAvatar = '/assets/img/default-avatar.png';
+                 
                  const qColor = q.chat_color ? `style="color: ${escapeHtml(q.chat_color)}"` : '';
                  let qContent = escapeHtml(q.message || '');
                  if (q.deleted) {
@@ -1072,110 +1077,8 @@ $(document).ready(function() {
         });
     });
 
-    // 3. Auth Modal Logic (Login + Register)
-    const loginLink = $('#login-link');
-    const modal = $('#login-modal');
-    const closeModal = $('.close-modal');
-    const loginForm = $('#ajax-login-form');
-    const loginError = $('#login-error');
-    const registerForm = $('#ajax-register-form');
-    const registerError = $('#register-error');
+    // 3. Auth Modal Logic moved to main.js
 
-    // Global function to open modal
-    window.openLoginModal = function(e) {
-        if (e) e.preventDefault();
-        modal.css('display', 'flex').hide().fadeIn(200);
-    };
-
-    if (modal.length > 0) {
-        // Bind to existing link if present
-        if (loginLink.length > 0) {
-             loginLink.on('click', window.openLoginModal);
-        }
-
-        closeModal.on('click', function() {
-            modal.hide();
-        });
-        
-        // Close on click outside
-        $(window).on('click', function(e) {
-            if ($(e.target).is(modal)) {
-                modal.hide();
-            }
-        });
-
-        // Tab Switching
-        $('.auth-tab-link').on('click', function(e) {
-            e.preventDefault();
-            
-            // UI Update
-            $('.auth-tab-link').removeClass('active').css({
-                'border-bottom': 'none', 'color': '#999'
-            });
-            $(this).addClass('active').css({
-                'border-bottom': '2px solid #6d2f8e', 'color': '#6d2f8e'
-            });
-
-            // Show Content
-            const targetId = $(this).data('target');
-            $('#login-form-wrapper, #register-form-wrapper').hide();
-            $(targetId).fadeIn(200);
-        });
-
-        // Login Submit
-        loginForm.on('submit', function(e) {
-            e.preventDefault();
-            const formData = $(this).serialize();
-            const data = formData + '&action=login';
-
-            $.ajax({
-                url: 'api.php',
-                method: 'POST',
-                data: data,
-                success: function(res) {
-                    if (res.success) {
-                        location.reload(); 
-                    } else {
-                        loginError.text(res.message).show();
-                    }
-                },
-                error: function() {
-                    loginError.text('Ошибка сервера :(').show();
-                }
-            });
-        });
-
-        // Register Submit
-        registerForm.on('submit', function(e) {
-            e.preventDefault();
-            
-            // Simple Client-side validation
-            const pass = $('#reg_pass').val();
-            const conf = $('#reg_pass_conf').val();
-            if (pass !== conf) {
-                registerError.text('Пароли не совпадают :(').show();
-                return;
-            }
-
-            const formData = $(this).serialize(); // action=register is inside
-            
-            $.ajax({
-                url: 'api.php',
-                method: 'POST',
-                data: formData,
-                success: function(res) {
-                    if (res.success) {
-                        location.reload(); // Reload to update UI state
-                    } else {
-                        registerError.text(res.message).show();
-                    }
-                },
-                error: function() {
-                    registerError.text('Ошибка сервера. Попробуйте позже.').show();
-                }
-            });
-        });
-    }
 
     // Logout Logic
     $('#logout-form').on('submit', function(e) {

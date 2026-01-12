@@ -249,7 +249,7 @@ class UserManager {
             $newUserId = $stmt->insert_id;
             // Set default options
             $this->setUserOption($newUserId, 'chat_color', '#6d2f8e');
-            $this->setUserOption($newUserId, 'avatar_url', 'default-avatar.png');
+            $this->setUserOption($newUserId, 'avatar_url', '/assets/img/default-avatar.png');
             
             $this->clearAllUsersCache(); // Add to list
             return $newUserId;

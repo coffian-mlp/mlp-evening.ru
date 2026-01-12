@@ -77,7 +77,7 @@ class OnlineManager {
         $users = [];
         while ($row = $resUsers->fetch_assoc()) {
             if (empty($row['chat_color'])) $row['chat_color'] = '#6d2f8e'; // Default color
-            if (empty($row['avatar'])) $row['avatar'] = 'default-avatar.png'; 
+            if (empty($row['avatar'])) $row['avatar'] = '/assets/img/default-avatar.png'; 
             $users[] = $row;
         }
 

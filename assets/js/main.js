@@ -212,7 +212,18 @@ $(document).ready(function() {
     initColorPickers();
 
 
-    // --- 4.5 CAPTCHA GAME LOGIC ---
+    // --- 4.5 CAPTCHA GAME LOGIC (Unified) ---
+    
+    // Callback to run when captcha is successfully completed
+    window.onCaptchaSuccess = null;
+
+    // Generic Start Function
+    window.startCaptchaGame = function(onSuccess) {
+        window.onCaptchaSuccess = onSuccess;
+        loadCaptchaStep();
+    };
+
+    // Specific Registration Handler
     window.startCaptchaRegistration = function() {
         // Validate Password Match first
         var p1 = $('#reg_pass').val();
@@ -231,8 +242,8 @@ $(document).ready(function() {
         $('#register-form-wrapper').hide();
         $('#captcha-form-wrapper').fadeIn(200);
         
-        // Start Game
-        loadCaptchaStep();
+        // Start Game with Registration callback
+        window.startCaptchaGame(submitRegistration);
     };
 
     function loadCaptchaStep() {
@@ -318,8 +329,13 @@ $(document).ready(function() {
         }, function(response) {
             if (response.success) {
                 if (response.data.completed) {
-                    // Success! Submit the real registration form
-                    submitRegistration();
+                    // Success! 
+                    if (window.onCaptchaSuccess) {
+                        window.onCaptchaSuccess();
+                    } else {
+                        // Default fallback
+                        showFlashMessage("Испытание пройдено!", 'success');
+                    }
                 } else if (response.data.next_step) {
                     // Next Level
                     renderCaptchaStep(response.data.next_step);
@@ -707,7 +723,7 @@ window.openLoginModal = function(e) {
 // Навигация внутри модалки
 window.showLoginForm = function(e) {
     if(e) e.preventDefault();
-    $('#register-form-wrapper, #social-auth-wrapper, #forgot-form-wrapper').hide();
+    $('#register-form-wrapper, #social-auth-wrapper, #forgot-form-wrapper, #captcha-form-wrapper').hide();
     $('#login-form-wrapper').fadeIn(200);
 };
 
@@ -759,6 +775,67 @@ $(document).ready(function() {
             $msg.addClass('error-msg').text('Ошибка сети').show();
         });
     });
+
+    // --- LOGIN FORM HANDLER (with BruteForce Protection) ---
+    $('#ajax-login-form').on('submit', function(e) {
+        e.preventDefault();
+        var $form = $(this);
+        var $error = $('#login-error');
+        var $btn = $form.find('button[type="submit"]');
+
+        $error.hide();
+        // $btn.prop('disabled', true); // Optional, but good for UI
+
+        var formData = $form.serialize();
+        // action=login should be added if not present in inputs (it is likely missing)
+        if (formData.indexOf('action=') === -1) {
+            formData += '&action=login';
+        }
+
+        $.post('api.php', formData, function(response) {
+             // $btn.prop('disabled', false);
+
+             if (response.success) {
+                 if (response.data && response.data.reload) {
+                     location.reload();
+                 } else {
+                     location.reload(); // Default
+                 }
+             } else {
+                 // Check for CAPTCHA
+                 if (response.error_code === 'captcha_required') {
+                     // Switch to Captcha View
+                     $('#login-form-wrapper').hide();
+                     $('#captcha-form-wrapper').fadeIn(200);
+                     
+                     // Start Captcha Game for Login
+                     window.startCaptchaGame(function() {
+                         // On Success:
+                         showFlashMessage("Отлично! Теперь попробуй войти снова.", "success");
+                         window.showLoginForm(); // Back to login
+                     });
+                 } else {
+                     $error.text(response.message).show();
+                 }
+             }
+        }, 'json').fail(function() {
+             // $btn.prop('disabled', false);
+             $error.text("Ошибка соединения с Эквестрией...").show();
+        });
+    });
+
+    // Close Modal Logic (If not already handled globally)
+    $('.close-modal').click(function() {
+        $('#login-modal').fadeOut(200);
+    });
+
+    // Global click outside to close
+    $(window).click(function(e) {
+        if ($(e.target).is('#login-modal')) {
+            $('#login-modal').fadeOut(200);
+        }
+    });
+
 });
 
 //Пасхалка в консоли - не удалять!
@@ -807,4 +884,3 @@ $(document).on('click', '.password-toggle-btn', function(e) {
         btn.text('👁️');
     }
 });
-
