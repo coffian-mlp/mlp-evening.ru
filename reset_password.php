@@ -75,7 +75,10 @@ $csrfToken = Auth::generateCsrfToken();
             <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
             
             <div class="form-group">
-                <input type="password" name="password" class="form-input" placeholder="Новый пароль (мин. 6)" required minlength="6">
+                <input type="password" name="password" id="pass1" class="form-input" placeholder="Новый пароль (мин. 6)" required minlength="6">
+            </div>
+            <div class="form-group" style="margin-top: 15px;">
+                <input type="password" name="password_confirm" id="pass2" class="form-input" placeholder="Повторите пароль" required>
             </div>
             
             <button type="submit" class="btn-primary">Сохранить</button>
@@ -95,8 +98,23 @@ $(document).ready(function() {
         const btn = $(this).find('button');
         const msg = $('#form-msg');
         
-        btn.prop('disabled', true).text('Сохранение...');
+        const p1 = $('#pass1').val();
+        const p2 = $('#pass2').val();
+
+        // Очистка сообщений
         msg.text('').removeClass('error-msg success-msg');
+
+        // Валидация
+        if (p1.length < 6) {
+            msg.addClass('error-msg').text('Пароль слишком короткий (нужно минимум 6 символов)');
+            return;
+        }
+        if (p1 !== p2) {
+            msg.addClass('error-msg').text('Пароли не совпадают! Проверьте ввод.');
+            return;
+        }
+        
+        btn.prop('disabled', true).text('Сохранение...');
         
         $.post('/api.php', $(this).serialize(), function(res) {
             btn.prop('disabled', false).text('Сохранить');
