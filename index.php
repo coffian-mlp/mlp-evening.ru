@@ -257,6 +257,9 @@ require_once __DIR__ . '/src/templates/header.php';
                 <div class="form-group">
                     <input type="password" name="password" class="form-input" placeholder="Пароль" required>
                 </div>
+                <div style="text-align: right; margin-bottom: 10px;">
+                    <a href="#" onclick="showForgotForm(event)" style="font-size: 0.8em; color: #666;">Забыли пароль?</a>
+                </div>
                 <button type="submit" class="btn-primary btn-block">Войти</button>
                 <div id="login-error" class="error-msg" style="display:none; color: red; margin-top: 10px;"></div>
             </form>
@@ -314,6 +317,10 @@ require_once __DIR__ . '/src/templates/header.php';
                 </div>
                 
                 <div class="form-group" style="margin-bottom: 10px;">
+                    <input type="email" name="email" class="form-input" placeholder="Email (для восстановления пароля)">
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 10px;">
                     <input type="text" name="nickname" class="form-input" placeholder="Имя в чате">
                 </div>
 
@@ -352,6 +359,26 @@ require_once __DIR__ . '/src/templates/header.php';
             <div id="captcha-error" class="error-msg" style="display:none; color: red; margin-top: 10px; text-align: center;"></div>
         </div>
 
+        <!-- 5. FORGOT PASSWORD SCREEN -->
+        <div id="forgot-form-wrapper" style="display: none;">
+            <h3 style="text-align: center; color: #6d2f8e;">🆘 Восстановление</h3>
+            <p style="font-size: 0.9em; color: #666; text-align: center; margin-bottom: 15px;">
+                Введи Email, который ты указывал при регистрации. Мы пришлем ссылку для сброса пароля.
+            </p>
+            
+            <form id="ajax-forgot-form">
+                <input type="hidden" name="action" value="forgot_password">
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <input type="email" name="email" class="form-input" placeholder="Твой Email" required>
+                </div>
+                <button type="submit" class="btn-primary btn-block">Отправить письмо</button>
+                <div id="forgot-msg" class="error-msg" style="display:none; margin-top: 10px; text-align: center;"></div>
+            </form>
+
+            <div style="border-top: 1px solid #eee; padding-top: 15px; text-align: center; margin-top: 15px;">
+                <a href="#" onclick="showLoginForm(event)" class="auth-switch-link secondary">← Вернуться к логину</a>
+            </div>
+        </div>
 
     </div>
 </div>
@@ -371,6 +398,12 @@ require_once __DIR__ . '/src/templates/header.php';
             <div class="form-group" style="margin-bottom: 15px;">
                 <label class="form-label">Имя в чате</label>
                 <input type="text" name="nickname" value="<?= htmlspecialchars($currentUser['nickname']) ?>" class="form-input" required>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label class="form-label">Email (необязательно)</label>
+                <input type="email" name="email" value="<?= htmlspecialchars($currentUser['email'] ?? '') ?>" class="form-input" placeholder="mail@example.com">
+                <small style="color: #777;">Нужен только для восстановления пароля.</small>
             </div>
 
             <div class="form-group" style="margin-bottom: 15px;">

@@ -565,6 +565,52 @@ require_once __DIR__ . '/src/templates/header.php';
         </div>
 
         <div class="card">
+            <h3 class="dashboard-title">📧 Настройки Почты (SMTP)</h3>
+            <p style="font-size: 0.9em; color: #666; margin-bottom: 15px;">
+                Если SMTP выключен, используется стандартная функция <code>mail()</code> (или запись в лог при отладке).
+            </p>
+            <form method="post" action="api.php">
+                <input type="hidden" name="action" value="update_settings">
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="hidden" name="smtp_enabled" value="0">
+                        <input type="checkbox" name="smtp_enabled" value="1" <?= $config->getOption('smtp_enabled', 0) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                        <strong>Включить отправку через SMTP</strong>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">SMTP Хост</label>
+                    <input type="text" name="smtp_host" value="<?= htmlspecialchars($config->getOption('smtp_host', 'smtp.yandex.ru')) ?>" class="form-input" placeholder="smtp.yandex.ru">
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label class="form-label">SMTP Порт</label>
+                        <input type="number" name="smtp_port" value="<?= htmlspecialchars($config->getOption('smtp_port', '465')) ?>" class="form-input" placeholder="465 (SSL) / 587 (TLS)">
+                    </div>
+                    <div class="form-group" style="flex: 2;">
+                        <label class="form-label">Имя отправителя</label>
+                        <input type="text" name="smtp_from_name" value="<?= htmlspecialchars($config->getOption('smtp_from_name', 'MLP Evening')) ?>" class="form-input" placeholder="MLP Evening">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">SMTP Логин (Email)</label>
+                    <input type="text" name="smtp_user" value="<?= htmlspecialchars($config->getOption('smtp_user', '')) ?>" class="form-input" placeholder="noreply@mlp-evening.ru">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">SMTP Пароль (Пароль приложения)</label>
+                    <input type="password" name="smtp_pass" value="<?= htmlspecialchars($config->getOption('smtp_pass', '')) ?>" class="form-input" placeholder="••••••••">
+                </div>
+
+                <button type="submit" class="btn-primary">Сохранить SMTP</button>
+            </form>
+        </div>
+
+        <div class="card">
             <h3 class="dashboard-title">📺 Настройки Плеера</h3>
             <form method="post" action="api.php">
                 <input type="hidden" name="action" value="update_settings">

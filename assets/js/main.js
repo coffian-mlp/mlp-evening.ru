@@ -694,7 +694,7 @@ function loadUserSocials() {
 window.openLoginModal = function(e) {
     if(e) e.preventDefault();
     // Сброс к экрану входа
-    $('#register-form-wrapper, #social-auth-wrapper').hide();
+    $('#register-form-wrapper, #social-auth-wrapper, #forgot-form-wrapper').hide();
     $('#login-form-wrapper').show();
     $('#login-modal').css('display', 'flex').hide().fadeIn(200);
 };
@@ -702,21 +702,59 @@ window.openLoginModal = function(e) {
 // Навигация внутри модалки
 window.showLoginForm = function(e) {
     if(e) e.preventDefault();
-    $('#register-form-wrapper, #social-auth-wrapper').hide();
+    $('#register-form-wrapper, #social-auth-wrapper, #forgot-form-wrapper').hide();
     $('#login-form-wrapper').fadeIn(200);
 };
 
 window.showRegisterForm = function(e) {
     if(e) e.preventDefault();
-    $('#login-form-wrapper, #social-auth-wrapper').hide();
+    $('#login-form-wrapper, #social-auth-wrapper, #forgot-form-wrapper').hide();
     $('#register-form-wrapper').fadeIn(200);
 };
 
 window.showSocialAuth = function(e) {
     if(e) e.preventDefault();
-    $('#login-form-wrapper, #register-form-wrapper').hide();
+    $('#login-form-wrapper, #register-form-wrapper, #forgot-form-wrapper').hide();
     $('#social-auth-wrapper').fadeIn(200);
 };
+
+// New Forgot Password Form
+window.showForgotForm = function(e) {
+    if(e) e.preventDefault();
+    $('#login-form-wrapper, #register-form-wrapper, #social-auth-wrapper').hide();
+    $('#forgot-form-wrapper').fadeIn(200);
+};
+
+// Forgot Password Submit Handler
+$(document).ready(function() {
+    $('#ajax-forgot-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        var $form = $(this);
+        var $btn = $form.find('button[type="submit"]');
+        var $msg = $('#forgot-msg');
+        
+        $btn.prop('disabled', true).text('Отправка...');
+        $msg.hide().removeClass('error-msg success-msg');
+        
+        $.post('api.php', $form.serialize(), function(response) {
+            $btn.prop('disabled', false).text('Отправить письмо');
+            
+            if (response.success) {
+                // Success - hide form content and show message or just replace content?
+                // Let's just show success message and hide form inputs?
+                // Or standard flash message
+                $msg.addClass('success-msg').css('color', 'green').text(response.message).show();
+                $form.find('input').val(''); // Clear input
+            } else {
+                $msg.addClass('error-msg').css('color', 'red').text(response.message).show();
+            }
+        }, 'json').fail(function() {
+            $btn.prop('disabled', false).text('Отправить письмо');
+            $msg.addClass('error-msg').text('Ошибка сети').show();
+        });
+    });
+});
 
 //Пасхалка в консоли - не удалять!
 console.log(`

@@ -11,6 +11,7 @@ require_once __DIR__ . '/src/ChatManager.php';
 require_once __DIR__ . '/src/UserManager.php';
 require_once __DIR__ . '/src/StickerManager.php';
 require_once __DIR__ . '/src/UploadManager.php';
+require_once __DIR__ . '/src/Mailer.php'; // Подключаем Mailer
 
 header('Content-Type: application/json');
 
@@ -215,9 +216,90 @@ try {
          }
     }
 
+    if ($action === 'forgot_password') {
+        $email = trim($_POST['email'] ?? '');
+        if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            sendResponse(false, "Введите корректный Email", 'error');
+        }
+
+        $userManager = new UserManager();
+        $user = $userManager->getUserByEmail($email);
+
+        // DEBUG: Логируем попытку сброса
+        $logDir = __DIR__ . '/logs'; // api.php is in root, logs is in root
+        if (is_dir($logDir) && is_writable($logDir)) {
+             file_put_contents($logDir . '/debug.log', date('Y-m-d H:i:s') . " - Action: forgot_password. Email: '$email'. User Found: " . ($user ? 'YES (ID: '.$user['id'].')' : 'NO') . "\n", FILE_APPEND);
+        }
+
+        if (!$user) {
+            // Security: Don't reveal if user exists.
+            // But for UX friendly ponies, maybe we can say? 
+            // Standard practice: "If this email exists, we sent a link".
+            sendResponse(true, "Если этот Email есть в базе, мы отправили письмо!");
+        }
+
+        try {
+            // 1. Generate Token
+            $token = bin2hex(random_bytes(32));
+            $tokenHash = hash('sha256', $token);
+            $expires = gmdate('Y-m-d H:i:s', time() + 3600); // 1 hour
+
+            // 2. Save to DB
+            if ($userManager->savePasswordResetToken($user['id'], $tokenHash, $expires)) {
+                // 3. Send Email
+                $mailer = new Mailer();
+                $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
+                $domain = $_SERVER['HTTP_HOST'];
+                $link = $protocol . $domain . "/reset_password.php?token=" . $token;
+                
+                if ($mailer->sendPasswordReset($email, $link)) {
+                    sendResponse(true, "Письмо отправлено на $email! Проверь папку Спам, если не придет.");
+                } else {
+                    sendResponse(false, "Ошибка отправки письма. Попробуйте позже.", 'error');
+                }
+            } else {
+                sendResponse(false, "Ошибка БД", 'error');
+            }
+        } catch (Exception $e) {
+            sendResponse(false, "Ошибка: " . $e->getMessage(), 'error');
+        }
+    }
+
+    if ($action === 'reset_password_submit') {
+        $token = $_POST['token'] ?? '';
+        $password = $_POST['password'] ?? '';
+        
+        if (empty($token) || empty($password)) {
+            sendResponse(false, "Неверные данные", 'error');
+        }
+        if (mb_strlen($password) < 6) {
+            sendResponse(false, "Пароль слишком короткий", 'error');
+        }
+
+        $userManager = new UserManager();
+        $tokenHash = hash('sha256', $token);
+        $user = $userManager->getUserByResetToken($tokenHash);
+
+        if (!$user) {
+            sendResponse(false, "Ссылка устарела или недействительна.", 'error');
+        }
+
+        try {
+            // Update password
+            $userManager->updateUser($user['id'], ['password' => $password]);
+            // Clear token
+            $userManager->clearResetToken($user['id']);
+            
+            sendResponse(true, "Пароль успешно изменен! Теперь можно войти.", 'success', ['redirect' => '/']);
+        } catch (Exception $e) {
+            sendResponse(false, "Ошибка смены пароля: " . $e->getMessage(), 'error');
+        }
+    }
+
     if ($action === 'register') {
         $login = trim($_POST['login'] ?? '');
         $nickname = trim($_POST['nickname'] ?? '');
+        $email = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
         
         // 1. Проверка Капчи
@@ -232,11 +314,15 @@ try {
         if (mb_strlen($login) < 3) sendResponse(false, "Логин слишком короткий (нужно хотя бы 3 символа)", 'error');
         if (mb_strlen($password) < 6) sendResponse(false, "Пароль слишком короткий (нужно хотя бы 6 символов)", 'error');
         
+        if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            sendResponse(false, "Некорректный формат Email", 'error');
+        }
+
         // 3. Создание пользователя
         $userManager = new UserManager();
         try {
             // Создаем обычного пользователя (role='user')
-            $userManager->createUser($login, $password, 'user', $nickname);
+            $userManager->createUser($login, $password, 'user', $nickname, $email);
             
             // 4. Автоматический вход
             if (Auth::login($login, $password)) {
@@ -251,7 +337,7 @@ try {
     }
 
     // Protected Actions
-    if (!$isLoggedIn && !in_array($action, ['login', 'register', 'social_login', 'get_messages', 'get_stickers', 'get_packs'])) { 
+    if (!$isLoggedIn && !in_array($action, ['login', 'register', 'forgot_password', 'reset_password_submit', 'social_login', 'get_messages', 'get_stickers', 'get_packs'])) { 
          Auth::requireApiLogin(); 
     }
 
@@ -263,6 +349,14 @@ try {
             $nick = trim($_POST['nickname']);
             if (empty($nick)) sendResponse(false, "Никнейм не может быть пустым", 'error');
             $data['nickname'] = $nick;
+        }
+
+        if (isset($_POST['email'])) {
+            $email = trim($_POST['email']);
+            if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                sendResponse(false, "Некорректный Email", 'error');
+            }
+            $data['email'] = $email; // Empty string is fine if allowed to remove email, but uniqueness check in updateUser handles it.
         }
         
         if (isset($_POST['login'])) {
@@ -355,6 +449,26 @@ try {
             }
             if (isset($_POST['telegram_bot_username'])) {
                 $config->setOption('telegram_bot_username', trim($_POST['telegram_bot_username']));
+            }
+
+            // SMTP Settings
+            if (isset($_POST['smtp_enabled'])) {
+                $config->setOption('smtp_enabled', (int)$_POST['smtp_enabled']);
+            }
+            if (isset($_POST['smtp_host'])) {
+                $config->setOption('smtp_host', trim($_POST['smtp_host']));
+            }
+            if (isset($_POST['smtp_port'])) {
+                $config->setOption('smtp_port', (int)$_POST['smtp_port']);
+            }
+            if (isset($_POST['smtp_user'])) {
+                $config->setOption('smtp_user', trim($_POST['smtp_user']));
+            }
+            if (isset($_POST['smtp_pass'])) {
+                $config->setOption('smtp_pass', trim($_POST['smtp_pass']));
+            }
+            if (isset($_POST['smtp_from_name'])) {
+                $config->setOption('smtp_from_name', trim($_POST['smtp_from_name']));
             }
             
             sendResponse(true, "✅ Настройки обновлены!");

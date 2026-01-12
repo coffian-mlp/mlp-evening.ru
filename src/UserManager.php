@@ -53,7 +53,7 @@ class UserManager {
         if ($cached) return $cached;
 
         // Fetch users with options via JOINs
-        $sql = "SELECT u.id, u.login, u.nickname, u.role, u.created_at, u.is_banned, u.muted_until, u.ban_reason,
+        $sql = "SELECT u.id, u.login, u.nickname, u.email, u.role, u.created_at, u.is_banned, u.muted_until, u.ban_reason,
                        uo_color.option_value as chat_color,
                        uo_avatar.option_value as avatar_url
                 FROM users u
@@ -88,7 +88,7 @@ class UserManager {
         // Keeping live DB call for critical auth/session checks
         // But we could add short cache here if needed.
         $stmt = $this->db->prepare("
-            SELECT u.id, u.login, u.nickname, u.role, u.is_banned, u.ban_reason,
+            SELECT u.id, u.login, u.nickname, u.email, u.role, u.is_banned, u.ban_reason,
                    uo_color.option_value as chat_color,
                    uo_avatar.option_value as avatar_url
             FROM users u
@@ -109,8 +109,16 @@ class UserManager {
     }
 
     public function getUserByLogin($login) {
-        $stmt = $this->db->prepare("SELECT id, login, nickname, role, password_hash, is_banned, ban_reason FROM users WHERE login = ?");
+        $stmt = $this->db->prepare("SELECT id, login, nickname, email, role, password_hash, is_banned, ban_reason FROM users WHERE login = ?");
         $stmt->bind_param("s", $login);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        return $res ? $res->fetch_assoc() : null;
+    }
+
+    public function getUserByEmail($email) {
+        $stmt = $this->db->prepare("SELECT id, login, nickname, email, role FROM users WHERE email = ?");
+        $stmt->bind_param("s", $email);
         $stmt->execute();
         $res = $stmt->get_result();
         return $res ? $res->fetch_assoc() : null;
@@ -138,6 +146,21 @@ class UserManager {
             $updates[] = "nickname = ?";
             $types .= "s";
             $params[] = $data['nickname'];
+        }
+
+        if (isset($data['email'])) {
+            // Check uniqueness
+            $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
+            $stmt->bind_param("si", $data['email'], $id);
+            $stmt->execute();
+            if ($stmt->get_result()->num_rows > 0) {
+                throw new Exception("Этот Email уже используется другой пони.");
+            }
+            $stmt->close();
+
+            $updates[] = "email = ?";
+            $types .= "s";
+            $params[] = $data['email'];
         }
 
         if (isset($data['role'])) {
@@ -194,7 +217,7 @@ class UserManager {
         return $this->updateUser($userId, $data);
     }
 
-    public function createUser($login, $password, $role = 'user', $nickname = null) {
+    public function createUser($login, $password, $role = 'user', $nickname = null, $email = null) {
         if (empty($nickname)) $nickname = $login; 
         
         // ... (check login) ...
@@ -206,10 +229,21 @@ class UserManager {
         }
         $stmt->close();
 
+        if (!empty($email)) {
+             $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ?");
+             $stmt->bind_param("s", $email);
+             $stmt->execute();
+             if ($stmt->get_result()->num_rows > 0) {
+                 throw new Exception("Пользователь с таким Email уже существует.");
+             }
+             $stmt->close();
+        }
+
         $hash = password_hash($password, PASSWORD_DEFAULT);
         
-        $stmt = $this->db->prepare("INSERT INTO users (login, nickname, password_hash, role) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("ssss", $login, $nickname, $hash, $role);
+        $sql = "INSERT INTO users (login, nickname, password_hash, role, email) VALUES (?, ?, ?, ?, ?)";
+        $stmt = $this->db->prepare($sql);
+        $stmt->bind_param("sssss", $login, $nickname, $hash, $role, $email);
         
         if ($stmt->execute()) {
             $newUserId = $stmt->insert_id;
@@ -232,6 +266,30 @@ class UserManager {
             return true;
         }
         return false;
+    }
+
+    // --- Password Reset Methods ---
+
+    public function savePasswordResetToken($userId, $tokenHash, $expiresAt) {
+        $stmt = $this->db->prepare("UPDATE users SET reset_token_hash = ?, reset_token_expires = ? WHERE id = ?");
+        $stmt->bind_param("ssi", $tokenHash, $expiresAt, $userId);
+        return $stmt->execute();
+    }
+
+    public function getUserByResetToken($tokenHash) {
+        // Check for token match AND not expired
+        $now = gmdate('Y-m-d H:i:s');
+        $stmt = $this->db->prepare("SELECT id, login, email FROM users WHERE reset_token_hash = ? AND reset_token_expires > ?");
+        $stmt->bind_param("ss", $tokenHash, $now);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        return $res ? $res->fetch_assoc() : null;
+    }
+
+    public function clearResetToken($userId) {
+        $stmt = $this->db->prepare("UPDATE users SET reset_token_hash = NULL, reset_token_expires = NULL WHERE id = ?");
+        $stmt->bind_param("i", $userId);
+        return $stmt->execute();
     }
 
     // --- Options Methods ---
