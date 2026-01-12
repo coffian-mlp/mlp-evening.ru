@@ -802,11 +802,4 @@ $(document).on('click', '.password-toggle-btn', function(e) {
         btn.text('👁️');
     }
 });
-        // Usually: Eye = Show. Slashed Eye = Hide. 
-        // Let's assume default icon is 👁️ (Show). When showing, switch to 🙈 (Hide).
-    } else {
-        input.attr('type', 'password');
-        btn.text('👁️');
-    }
-});
 
