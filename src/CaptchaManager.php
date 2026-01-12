@@ -137,6 +137,15 @@ class CaptchaManager {
     }
 
     /**
+     * Resets the captcha state (e.g. after failed login attempts)
+     */
+    public function reset() {
+        if (isset($_SESSION[self::SESSION_KEY])) {
+            unset($_SESSION[self::SESSION_KEY]);
+        }
+    }
+
+    /**
      * Helper to shuffle options preserving keys
      */
     private function getRandomOptions() {

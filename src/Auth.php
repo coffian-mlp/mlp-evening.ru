@@ -99,4 +99,87 @@ class Auth {
         }
         return hash_equals($_SESSION['csrf_token'], $token);
     }
+
+    // --- Brute Force Protection ---
+
+    public static function getIp() {
+        return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    }
+
+    public static function checkLoginAttempts($ip) {
+        $db = Database::getInstance()->getConnection();
+        
+        // Cleanup old blocked entries (optional, but good for hygiene)
+        // Or we just check timestamps.
+        
+        $stmt = $db->prepare("SELECT attempts_count, last_attempt_at, blocked_until FROM login_attempts WHERE ip_address = ?");
+        $stmt->bind_param("s", $ip);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $row = $res->fetch_assoc();
+        
+        if (!$row) return 'ok'; // No record
+        
+        // 1. Check if blocked
+        if (!empty($row['blocked_until'])) {
+            $blockedUntil = strtotime($row['blocked_until'] . ' UTC');
+            if (time() < $blockedUntil) {
+                return 'blocked';
+            }
+        }
+        
+        // 2. Check thresholds
+        $count = $row['attempts_count'];
+        
+        if ($count >= 9) return 'blocked'; // Should have been set in blocked_until, but double check
+        
+        if ($count >= 3 && $count < 6) return 'captcha_needed';
+        if ($count >= 6) return 'captcha_needed';
+        
+        return 'ok';
+    }
+
+    public static function recordFailedLogin($ip) {
+        $db = Database::getInstance()->getConnection();
+        
+        // Insert or Update
+        // MySQL ON DUPLICATE KEY UPDATE increments count
+        // Also check logic for 9th attempt
+        
+        // First get current state to decide on blocking
+        $stmt = $db->prepare("SELECT attempts_count FROM login_attempts WHERE ip_address = ?");
+        $stmt->bind_param("s", $ip);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $row = $res->fetch_assoc();
+        
+        $newCount = ($row['attempts_count'] ?? 0) + 1;
+        $blockedUntil = null;
+        
+        if ($newCount >= 9) {
+            $blockedUntil = gmdate('Y-m-d H:i:s', time() + 86400); // 24 hours
+        }
+        
+        $now = gmdate('Y-m-d H:i:s');
+        
+        $sql = "INSERT INTO login_attempts (ip_address, attempts_count, last_attempt_at, blocked_until) 
+                VALUES (?, 1, ?, ?) 
+                ON DUPLICATE KEY UPDATE 
+                attempts_count = attempts_count + 1, 
+                last_attempt_at = VALUES(last_attempt_at),
+                blocked_until = VALUES(blocked_until)";
+                
+        $stmt = $db->prepare($sql);
+        $stmt->bind_param("sss", $ip, $now, $blockedUntil);
+        $stmt->execute();
+        
+        return $newCount;
+    }
+
+    public static function resetLoginAttempts($ip) {
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->prepare("DELETE FROM login_attempts WHERE ip_address = ?");
+        $stmt->bind_param("s", $ip);
+        $stmt->execute();
+    }
 }
