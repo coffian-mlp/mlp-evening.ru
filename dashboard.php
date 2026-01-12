@@ -280,9 +280,9 @@ require_once __DIR__ . '/src/templates/header.php';
             <!-- Правая колонка: Стикеры -->
             <div style="flex: 3;">
                 <div class="card">
-                    <h3 class="dashboard-title">✨ Стикеры <span id="current-pack-label" style="font-size: 0.7em; color: #888;">(Все)</span></h3>
+                    <h3 class="dashboard-title">✨ Стикеры <span id="current-pack-label" style="font-size: 0.7em; color: #aaa;">(Все)</span></h3>
                     
-                    <form id="add-sticker-form" action="api.php" method="post" enctype="multipart/form-data" style="margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px;">
+                    <form id="add-sticker-form" action="api.php" method="post" enctype="multipart/form-data" style="margin-bottom: 20px; padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
                         <input type="hidden" name="action" value="add_sticker">
                         
                         <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
