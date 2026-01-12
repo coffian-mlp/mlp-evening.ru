@@ -23,6 +23,9 @@ if (empty($token)) {
     }
 }
 
+// Генерация CSRF токена
+$csrfToken = Auth::getCsrfToken();
+
 // Minimal header
 ?>
 <!DOCTYPE html>
@@ -69,6 +72,7 @@ if (empty($token)) {
         <form id="reset-form">
             <input type="hidden" name="action" value="reset_password_submit">
             <input type="hidden" name="token" value="<?= htmlspecialchars($token) ?>">
+            <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
             
             <div class="form-group">
                 <input type="password" name="password" class="form-input" placeholder="Новый пароль (мин. 6)" required minlength="6">
