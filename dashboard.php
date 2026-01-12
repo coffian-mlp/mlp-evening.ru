@@ -445,7 +445,10 @@ require_once __DIR__ . '/src/templates/header.php';
 
                 <div class="form-group">
                     <label class="form-label">Пароль</label>
-                    <input type="password" name="password" id="user_password" class="form-input" placeholder="Пусто = не менять">
+                    <div class="password-wrapper">
+                        <input type="password" name="password" id="user_password" class="form-input" placeholder="Пусто = не менять">
+                        <button type="button" class="password-toggle-btn">👁️</button>
+                    </div>
                     <small style="color: #777;">Заполните только если хотите сменить.</small>
                 </div>
                 
@@ -603,7 +606,10 @@ require_once __DIR__ . '/src/templates/header.php';
 
                 <div class="form-group">
                     <label class="form-label">SMTP Пароль (Пароль приложения)</label>
-                    <input type="password" name="smtp_pass" value="<?= htmlspecialchars($config->getOption('smtp_pass', '')) ?>" class="form-input" placeholder="••••••••">
+                    <div class="password-wrapper">
+                        <input type="password" name="smtp_pass" value="<?= htmlspecialchars($config->getOption('smtp_pass', '')) ?>" class="form-input" placeholder="••••••••">
+                        <button type="button" class="password-toggle-btn">👁️</button>
+                    </div>
                 </div>
 
                 <button type="submit" class="btn-primary">Сохранить SMTP</button>

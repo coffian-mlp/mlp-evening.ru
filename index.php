@@ -254,9 +254,12 @@ require_once __DIR__ . '/src/templates/header.php';
                 <div class="form-group">
                     <input type="text" name="username" class="form-input" placeholder="Логин" required>
                 </div>
-                <div class="form-group">
+            <div class="form-group">
+                <div class="password-wrapper">
                     <input type="password" name="password" class="form-input" placeholder="Пароль" required>
+                    <button type="button" class="password-toggle-btn">👁️</button>
                 </div>
+            </div>
                 <div style="text-align: right; margin-bottom: 10px;">
                     <a href="#" onclick="showForgotForm(event)" style="font-size: 0.8em; color: #666;">Забыли пароль?</a>
                 </div>
@@ -427,7 +430,10 @@ require_once __DIR__ . '/src/templates/header.php';
 
             <div class="form-group" style="margin-bottom: 15px;">
                  <label class="form-label">Сменить пароль (если хочешь)</label>
-                 <input type="password" name="password" class="form-input" placeholder="Новый пароль">
+                 <div class="password-wrapper">
+                     <input type="password" name="password" class="form-input" placeholder="Новый пароль">
+                     <button type="button" class="password-toggle-btn">👁️</button>
+                 </div>
             </div>
 
             <div class="form-group" style="margin-bottom: 15px;">

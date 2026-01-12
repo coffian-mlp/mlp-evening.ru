@@ -787,3 +787,26 @@ console.log(`
     ⣿⠀⢸⡇⠀⠀⣾⣻⠁⠀⠀⠀⠀⢸⡏⠀⠀⠀⠀⠀⠀⣷⢤⣄⠀⠀⠀⠀⠀⠀⣰⡟⠀⠀⢸⢽⣇⠀⣿⡇⠀⠀⠀⠻⣦⣸⡿
     ⣿⣦⣼⣧⣤⣴⣿⣇⣀⣀⣀⣀⣀⣿⣁⠀⠀⠀⠀⠀⠀⣸⣆⣙⣻⣶⣤⣤⣤⣾⣋⣀⣀⣀⣸⣿⣿⣶⣿⣷⣤⣤⣤⣤⣬⣿⡇
     `);
+
+// --- Global Password Toggle Logic ---
+$(document).on('click', '.password-toggle-btn', function(e) {
+    e.preventDefault();
+    const btn = $(this);
+    const input = btn.siblings('input');
+    
+    if (input.attr('type') === 'password') {
+        input.attr('type', 'text');
+        btn.text('🙈');
+    } else {
+        input.attr('type', 'password');
+        btn.text('👁️');
+    }
+});
+        // Usually: Eye = Show. Slashed Eye = Hide. 
+        // Let's assume default icon is 👁️ (Show). When showing, switch to 🙈 (Hide).
+    } else {
+        input.attr('type', 'password');
+        btn.text('👁️');
+    }
+});
+

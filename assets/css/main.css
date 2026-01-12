@@ -202,6 +202,33 @@ body.dashboard-layout {
     border-color: #9c27b0;
 }
 
+/* Password Toggle Wrapper */
+.password-wrapper {
+    position: relative;
+    display: block;
+}
+.password-wrapper input {
+    padding-right: 40px !important; /* Make space for eye icon */
+}
+.password-toggle-btn {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2em;
+    padding: 5px;
+    color: #888;
+    z-index: 2;
+    transition: color 0.2s;
+}
+.password-toggle-btn:hover {
+    color: #6d2f8e;
+}
+.password-toggle-btn:focus { outline: none; }
+
 /* === 7. Color Picker UI === */
 .color-picker-ui {
     display: flex;
