@@ -93,6 +93,21 @@ $csrfToken = Auth::generateCsrfToken();
 
 <script>
 $(document).ready(function() {
+    // Password Toggle Logic
+    $(document).on('click', '.password-toggle-btn', function(e) {
+        e.preventDefault();
+        const btn = $(this);
+        const input = btn.siblings('input');
+        
+        if (input.attr('type') === 'password') {
+            input.attr('type', 'text');
+            btn.text('🙈');
+        } else {
+            input.attr('type', 'password');
+            btn.text('👁️');
+        }
+    });
+
     $('#reset-form').on('submit', function(e) {
         e.preventDefault();
         const btn = $(this).find('button');
