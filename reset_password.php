@@ -24,7 +24,7 @@ if (empty($token)) {
 }
 
 // Генерация CSRF токена
-$csrfToken = Auth::getCsrfToken();
+$csrfToken = Auth::generateCsrfToken();
 
 // Minimal header
 ?>
