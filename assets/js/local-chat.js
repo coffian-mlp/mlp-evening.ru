@@ -246,7 +246,10 @@ $(document).ready(function() {
         
         if (canModerate && !isMyMessage) {
             if (currentUserRole === 'admin') {
-                canPunish = true; // Admin can punish anyone (except self, handled by !isMyMessage)
+                // Admin can punish anyone EXCEPT other admins
+                if (targetRole !== 'admin') {
+                    canPunish = true; 
+                }
             } else if (currentUserRole === 'moderator') {
                 // Moderator can punish only normal users
                 canPunish = (targetRole === 'user');
