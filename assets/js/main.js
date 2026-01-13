@@ -935,6 +935,11 @@ $(document).ready(function() {
         $('#login-modal').fadeOut(200);
     });
 
+    // Обработчик для ссылки "Войди" в чате
+    $('#login-link').click(function(e) {
+        window.openLoginModal(e);
+    });
+
     // Global click outside to close
     $(window).click(function(e) {
         if ($(e.target).is('#login-modal')) {
