@@ -505,7 +505,16 @@ $(document).ready(function() {
 
             // --- User Actions (Edit/Delete) ---
             const canEdit = (isMyMessage && isRecent);
-            const canDelete = (isMyMessage) || currentUserRole === 'admin' || currentUserRole === 'moderator';
+            
+            // Hierarchy Check for Delete
+            let canDelete = isMyMessage; // Owner always can (if logic permits, e.g. recent?) - backend checks owner rights separately
+            if (!isMyMessage) {
+                if (currentUserRole === 'admin') {
+                     if (targetRole !== 'admin') canDelete = true;
+                } else if (currentUserRole === 'moderator') {
+                     if (targetRole === 'user') canDelete = true;
+                }
+            }
             
             if (canEdit) {
                 contextMenu.find('[data-action="edit"]').show();
@@ -522,8 +531,11 @@ $(document).ready(function() {
             // --- Moderation Actions ---
             let canPunish = false;
             if (!isSelf) {
-                if (currentUserRole === 'admin') canPunish = true;
-                if (currentUserRole === 'moderator' && targetRole === 'user') canPunish = true;
+                if (currentUserRole === 'admin') {
+                    if (targetRole !== 'admin') canPunish = true;
+                } else if (currentUserRole === 'moderator') {
+                    if (targetRole === 'user') canPunish = true;
+                }
             }
             
             if (canPunish) {
