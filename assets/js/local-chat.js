@@ -1345,6 +1345,7 @@ $(document).ready(function() {
             // --- Smart Click/Hold Logic ---
             let startX = 0;
             let startY = 0;
+            let startScrollTop = 0;
             let isDragging = false;
             
             // 1. Mouse/Touch Down: Start Timer
@@ -1356,6 +1357,7 @@ $(document).ready(function() {
                     const touch = e.originalEvent.touches[0];
                     startX = touch.clientX;
                     startY = touch.clientY;
+                    startScrollTop = stickerGrid.scrollTop();
                 }
                 
                 longPressTimer = setTimeout(() => {
@@ -1376,15 +1378,22 @@ $(document).ready(function() {
             img.on('mouseup touchend', function(e) {
                 clearTimeout(longPressTimer); // Cancel timer if fast tap
                 
-                // Double check drag for touchend (sometimes touchmove doesn't fire for quick swipes?)
+                // Double check drag for touchend
                 if (e.type === 'touchend') {
                     const touch = e.originalEvent.changedTouches[0];
-                    if (Math.abs(touch.clientX - startX) > 10 || Math.abs(touch.clientY - startY) > 10) {
+                    const currentScrollTop = stickerGrid.scrollTop();
+                    
+                    if (Math.abs(touch.clientX - startX) > 10 || 
+                        Math.abs(touch.clientY - startY) > 10 ||
+                        Math.abs(currentScrollTop - startScrollTop) > 5) {
                         isDragging = true;
                     }
                 }
 
-                if (isDragging) return; // Ignore if dragged/scrolled
+                if (isDragging) {
+                     if (e.cancelable) e.preventDefault(); // Stop mouse emulation
+                     return; 
+                }
 
                 if (isLongPress) {
                     // It was a long press (preview shown) -> Just hide preview
