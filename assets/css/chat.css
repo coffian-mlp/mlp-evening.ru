@@ -264,6 +264,7 @@
     box-shadow: 0 -5px 20px rgba(0,0,0,0.5);
     border-top: 1px solid rgba(255,255,255,0.1);
     animation: slideUp 0.2s ease-out;
+    position: relative; /* Fix for absolute children (stickers) */
 }
 @keyframes slideUp {
     from { transform: translateY(100%); }
@@ -615,6 +616,32 @@
     box-shadow: 0 -5px 20px rgba(0,0,0,0.5);
     border-radius: 6px 6px 0 0;
     border: 1px solid rgba(255,255,255,0.15);
+}
+
+/* Mobile Picker Override (Inside Mobile Box) */
+.chat-mobile-input-box .sticker-picker {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%; /* Cover input area */
+    border-radius: 16px 16px 0 0;
+    border-top: none;
+    z-index: 100;
+}
+
+.sticker-close-btn {
+    display: none; /* Hidden on desktop */
+}
+.chat-mobile-input-box .sticker-close-btn {
+    display: block;
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: 24px;
+    padding: 0 15px;
+    cursor: pointer;
+    margin-left: auto;
 }
 .sticker-tabs {
     display: flex;

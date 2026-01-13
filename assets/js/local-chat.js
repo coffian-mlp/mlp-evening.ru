@@ -1033,12 +1033,17 @@ $(document).ready(function() {
             const picker = $('#sticker-picker');
             
             if (picker.is(':visible') && picker.parent().is('.chat-mobile-input-box')) {
-                picker.slideUp(100);
+                picker.fadeOut(100);
             } else {
                 if (!stickersInitialized) initStickerPicker();
                 // Move picker to mobile modal
-                picker.hide().appendTo('.chat-mobile-input-box').slideDown(200);
+                picker.hide().appendTo('.chat-mobile-input-box').fadeIn(200);
             }
+        });
+
+        // Close sticker picker in mobile
+        $('.sticker-close-btn').click(function() {
+            $('#sticker-picker').fadeOut(100);
         });
 
         // Mobile Upload Button
