@@ -222,11 +222,6 @@ require_once __DIR__ . '/src/templates/header.php';
                 <div class="sticker-tabs" id="sticker-tabs"></div>
                 <div class="sticker-grid" id="sticker-grid"></div>
             </div>
-            
-            <!-- Sticker Zoom Overlay (On Hold) -->
-            <div id="sticker-zoom-preview" style="display: none;">
-                <img src="" alt="Sticker Preview">
-            </div>
 
             <form id="chat-form">
                         <input type="file" id="chat-file-input" hidden>
@@ -549,5 +544,10 @@ require_once __DIR__ . '/src/templates/header.php';
         <li data-action="ban" class="danger mod-only">🔨 Бан (Навсегда)</li>
     <?php endif; ?>
 </ul>
+
+<!-- Sticker Zoom Overlay (Moved to root for Z-Index safety) -->
+<div id="sticker-zoom-preview" style="display: none;">
+    <img src="" alt="Sticker Preview">
+</div>
 
 <?php require_once __DIR__ . '/src/templates/footer.php'; ?>
