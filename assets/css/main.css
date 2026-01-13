@@ -39,7 +39,7 @@ body.dashboard-layout {
     height: 100dvh;
     padding: 12px; 
     gap: 12px;
-    background: radial-gradient(circle at center, rgba(43, 31, 67, 0.4) 0%, rgba(20, 15, 30, 0.8) 100%);
+    /* background: radial-gradient(circle at center, rgba(43, 31, 67, 0.4) 0%, rgba(20, 15, 30, 0.8) 100%);*//* убрано, чтобы сделать фон чуть-чуть светлее */
 }
 
 .video-container {
