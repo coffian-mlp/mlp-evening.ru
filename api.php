@@ -68,6 +68,34 @@ try {
         exit();
     }
 
+    // --- Moderation Hierarchy Helper ---
+    function checkHierarchy($targetUserId) {
+        // Self-check
+        if ($targetUserId == $_SESSION['user_id']) {
+            return "Нельзя применять санкции к самому себе!";
+        }
+
+        $um = new UserManager();
+        $target = $um->getUserById($targetUserId);
+        if (!$target) return "Пользователь не найден.";
+
+        $actorRole = $_SESSION['role'] ?? 'user';
+        $targetRole = $target['role'];
+
+        if ($actorRole === 'admin') {
+            if ($targetRole === 'admin') return "Администратор неприкосновенен!";
+            return true; // Admin can moderate everyone else
+        }
+
+        if ($actorRole === 'moderator') {
+            if ($targetRole === 'admin') return "Это Администратор. Не шали!";
+            if ($targetRole === 'moderator') return "Модераторы не могут трогать своих коллег.";
+            return true; // Can moderate users
+        }
+
+        return "У вас нет прав модератора.";
+    }
+
     // Public Actions
     if ($action === 'captcha_start') {
         require_once __DIR__ . '/src/CaptchaManager.php';
@@ -729,7 +757,10 @@ try {
             $reason = trim($_POST['reason'] ?? 'Нарушение правил');
             
             if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
-            if ($targetId == $_SESSION['user_id']) sendResponse(false, "Себя банить нельзя!", 'error');
+            
+            // Hierarchy Check
+            $check = checkHierarchy($targetId);
+            if ($check !== true) sendResponse(false, $check, 'error');
             
             $userManager = new UserManager();
             if ($userManager->banUser($targetId, $reason, $_SESSION['user_id'])) {
@@ -744,6 +775,10 @@ try {
             
             $targetId = (int)($_POST['user_id'] ?? 0);
             if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
+
+            // Hierarchy Check
+            $check = checkHierarchy($targetId);
+            if ($check !== true) sendResponse(false, $check, 'error');
 
             $userManager = new UserManager();
             if ($userManager->unbanUser($targetId, $_SESSION['user_id'])) {
@@ -761,6 +796,11 @@ try {
             $reason = trim($_POST['reason'] ?? 'Нарушение правил');
             
             if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
+            
+            // Hierarchy Check
+            $check = checkHierarchy($targetId);
+            if ($check !== true) sendResponse(false, $check, 'error');
+            
             if ($minutes < 1) $minutes = 15;
             
             $userManager = new UserManager();
@@ -777,6 +817,10 @@ try {
             $targetId = (int)($_POST['user_id'] ?? 0);
             if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
 
+            // Hierarchy Check
+            $check = checkHierarchy($targetId);
+            if ($check !== true) sendResponse(false, $check, 'error');
+
             $userManager = new UserManager();
             if ($userManager->unmuteUser($targetId, $_SESSION['user_id'])) {
                 sendResponse(true, "Голос возвращен! 🗣️");
@@ -791,6 +835,11 @@ try {
             $targetId = (int)($_POST['user_id'] ?? 0);
             $count = (int)($_POST['count'] ?? 50);
             if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
+            
+            // Hierarchy Check
+            $check = checkHierarchy($targetId);
+            if ($check !== true) sendResponse(false, $check, 'error');
+
             if ($count > 100) $count = 100;
             if ($count < 1) $count = 1;
             
@@ -870,9 +919,10 @@ try {
 
             $chat = new ChatManager();
             // Check if admin or moderator
-            $canModerate = Auth::isModerator();
+            // Now we pass the role to allow hierarchy check inside ChatManager
+            $actorRole = Auth::isModerator() ? $_SESSION['role'] : null;
             
-            if ($chat->deleteMessage($messageId, $_SESSION['user_id'], $canModerate)) {
+            if ($chat->deleteMessage($messageId, $_SESSION['user_id'], $actorRole)) {
                 sendResponse(true, "Сообщение удалено.");
             } else {
                 sendResponse(false, "Не удалось удалить сообщение.", 'error');
@@ -886,9 +936,9 @@ try {
             }
 
             $chat = new ChatManager();
-            $canModerate = Auth::isModerator();
+            $actorRole = Auth::isModerator() ? $_SESSION['role'] : null;
             
-            if ($chat->restoreMessage($messageId, $_SESSION['user_id'], $canModerate)) {
+            if ($chat->restoreMessage($messageId, $_SESSION['user_id'], $actorRole)) {
                 sendResponse(true, "Сообщение восстановлено! ✨");
             } else {
                 sendResponse(false, "Не удалось восстановить (время вышло или нет прав).", 'error');

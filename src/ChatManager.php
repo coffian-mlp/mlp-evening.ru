@@ -162,8 +162,14 @@ class ChatManager {
         return $res;
     }
 
-    public function deleteMessage($messageId, $userId, $isAdmin = false) {
-        $stmt = $this->db->prepare("SELECT user_id FROM chat_messages WHERE id = ?");
+    public function deleteMessage($messageId, $userId, $actorRole = null) {
+        // Fetch message AND user role to check hierarchy
+        $stmt = $this->db->prepare("
+            SELECT cm.user_id, u.role as owner_role 
+            FROM chat_messages cm
+            LEFT JOIN users u ON cm.user_id = u.id
+            WHERE cm.id = ?
+        ");
         $stmt->bind_param("i", $messageId);
         $stmt->execute();
         $res = $stmt->get_result();
@@ -172,8 +178,21 @@ class ChatManager {
             return false; 
         }
 
-        if (!$isAdmin && $row['user_id'] != $userId) {
-            return false; // Нет прав
+        $isOwner = ($row['user_id'] == $userId);
+        $ownerRole = $row['owner_role'] ?? 'user';
+
+        if (!$isOwner) {
+            // Not owner -> Check moderation rights
+            if (!$actorRole) return false; // Not a moderator
+
+            // Hierarchy Check
+            if ($actorRole === 'moderator') {
+                if ($ownerRole === 'admin' || $ownerRole === 'moderator') return false; // Mod vs Mod/Admin
+            }
+            if ($actorRole === 'admin') {
+                if ($ownerRole === 'admin') return false; // Admin vs Admin
+            }
+            // If passed these checks, proceed
         }
 
         // Удаление с установкой времени deleted_at
@@ -193,8 +212,13 @@ class ChatManager {
         return $res;
     }
 
-    public function restoreMessage($messageId, $userId, $isAdmin = false) {
-        $stmt = $this->db->prepare("SELECT user_id, deleted_at FROM chat_messages WHERE id = ?");
+    public function restoreMessage($messageId, $userId, $actorRole = null) {
+        $stmt = $this->db->prepare("
+            SELECT cm.user_id, cm.deleted_at, u.role as owner_role
+            FROM chat_messages cm
+            LEFT JOIN users u ON cm.user_id = u.id
+            WHERE cm.id = ?
+        ");
         $stmt->bind_param("i", $messageId);
         $stmt->execute();
         $res = $stmt->get_result();
@@ -203,8 +227,12 @@ class ChatManager {
             return false;
         }
 
-        if (!$isAdmin) {
-            if ($row['user_id'] != $userId) return false; // Чужое сообщение
+        $isOwner = ($row['user_id'] == $userId);
+        $ownerRole = $row['owner_role'] ?? 'user';
+
+        if (!$actorRole) {
+            // Not a moderator, must be owner
+            if (!$isOwner) return false; 
 
             // Проверка времени на восстановление (10 минут)
             if ($row['deleted_at']) {
@@ -216,6 +244,15 @@ class ChatManager {
             } else {
                 // Если deleted_at нет, но оно удалено - странно, но запретим
                 return false;
+            }
+        } else {
+            // Moderator/Admin trying to restore
+            // Hierarchy Check
+            if ($actorRole === 'moderator') {
+                if ($ownerRole === 'admin' || $ownerRole === 'moderator') return false; 
+            }
+            if ($actorRole === 'admin') {
+                if ($ownerRole === 'admin') return false;
             }
         }
 
