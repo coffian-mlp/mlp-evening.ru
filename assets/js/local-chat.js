@@ -973,6 +973,45 @@ $(document).ready(function() {
         }
     });
 
+    // --- Mobile Compact Mode Logic ---
+    const mobileFab = $('#chat-mobile-fab');
+    const mobileOverlay = $('#chat-mobile-input-overlay');
+    const mobileInput = $('#chat-mobile-input');
+    const mobileClose = $('#chat-mobile-close');
+    const mobileForm = $('#chat-mobile-form');
+
+    if (mobileFab.length) {
+        mobileFab.click(function() {
+            mobileOverlay.css('display', 'flex').hide().fadeIn(200);
+            mobileInput.focus();
+        });
+
+        mobileClose.click(function() {
+            mobileOverlay.fadeOut(200);
+        });
+
+        mobileOverlay.click(function(e) {
+            if (e.target === this) {
+                $(this).fadeOut(200);
+            }
+        });
+
+        // Sync Mobile Send
+        mobileForm.on('submit', function(e) {
+            e.preventDefault();
+            const text = mobileInput.val().trim();
+            if (text && chatInput) {
+                // Transfer to main input and submit
+                chatInput.value = text;
+                const event = new Event('submit', { cancelable: true });
+                document.getElementById('chat-form').dispatchEvent(event);
+                
+                mobileInput.val('');
+                mobileOverlay.fadeOut(200);
+            }
+        });
+    }
+
     // 2. Handle Send Message
     if (chatForm) {
         chatForm.addEventListener('submit', function(e) {

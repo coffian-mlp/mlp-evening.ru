@@ -176,6 +176,28 @@ require_once __DIR__ . '/src/templates/header.php';
             <div class="chat-messages" id="chat-messages">
                 <div class="chat-welcome">Добро пожаловать в Поняшный чат! 🦄<br>Не стесняйся, пиши!</div>
             </div>
+            <!-- Compact Mode Trigger (Mobile) -->
+            <?php if (isset($_SESSION['user_id'])): ?>
+                <button id="chat-mobile-fab" class="chat-mobile-fab" title="Написать">✎</button>
+            <?php endif; ?>
+
+            <!-- Compact Input Modal -->
+            <div id="chat-mobile-input-overlay" class="chat-overlay" style="display: none; align-items: flex-end;">
+                <div class="chat-mobile-input-box">
+                    <div class="chat-mobile-header">
+                        <span>Сообщение</span>
+                        <button id="chat-mobile-close" class="chat-mobile-close">&times;</button>
+                    </div>
+                    <form id="chat-mobile-form">
+                        <textarea id="chat-mobile-input" placeholder="Напиши что-нибудь..." rows="3"></textarea>
+                        <div class="chat-mobile-actions">
+                            <!-- Duplicate toolbar buttons if needed or keep minimal -->
+                            <button type="submit" class="btn-primary" style="padding: 8px 20px;">➤</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
             <div class="chat-input-area">
                  <?php if (isset($_SESSION['user_id'])): ?>
                     <div id="quote-preview-area" class="hidden"></div>

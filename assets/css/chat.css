@@ -234,7 +234,82 @@
 }
 .message-mentioned:hover { background-color: rgba(255, 235, 59, 0.2); }
 
-/* --- 5. Chat Input Area --- */
+/* --- Mobile Compact Mode --- */
+.chat-mobile-fab {
+    display: none;
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7b1fa2, #4a148c);
+    color: white;
+    font-size: 24px;
+    border: none;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    cursor: pointer;
+    z-index: 90;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s;
+}
+.chat-mobile-fab:active { transform: scale(0.95); }
+
+.chat-mobile-input-box {
+    background: #2b2b3b;
+    width: 100%;
+    padding: 15px;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -5px 20px rgba(0,0,0,0.5);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    animation: slideUp 0.2s ease-out;
+}
+@keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+.chat-mobile-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    color: #ce93d8;
+    font-weight: bold;
+}
+.chat-mobile-close {
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: 24px;
+    padding: 0 10px;
+    cursor: pointer;
+}
+
+#chat-mobile-input {
+    width: 100%;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: white;
+    padding: 10px;
+    resize: none;
+    font-family: inherit;
+    margin-bottom: 10px;
+}
+.chat-mobile-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Responsive Trigger */
+@media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
+    .chat-input-area { display: none; } /* Hide standard input */
+    .chat-mobile-fab { display: flex; } /* Show FAB */
+    .chat-messages { padding-bottom: 80px; } /* Space for FAB */
+}
+
 .chat-input-area {
     padding: 15px;
     background: rgba(30, 20, 50, 0.4);
