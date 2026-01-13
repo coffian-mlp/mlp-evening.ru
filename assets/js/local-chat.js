@@ -979,6 +979,16 @@ $(document).ready(function() {
     const mobileInput = $('#chat-mobile-input');
     const mobileClose = $('#chat-mobile-close');
     const mobileForm = $('#chat-mobile-form');
+    const mobileStickerBtn = $('#mobile-sticker-btn');
+    const mobileUploadBtn = $('#mobile-upload-btn');
+
+    // Helper to get active input
+    function getActiveInput() {
+        if (mobileOverlay.is(':visible')) {
+            return document.getElementById('chat-mobile-input');
+        }
+        return document.getElementById('chat-input');
+    }
 
     if (mobileFab.length) {
         mobileFab.click(function() {
@@ -986,13 +996,19 @@ $(document).ready(function() {
             mobileInput.focus();
         });
 
-        mobileClose.click(function() {
+        function closeMobileModal() {
             mobileOverlay.fadeOut(200);
-        });
+            // Move picker back to desktop if needed
+            if ($('#sticker-picker').parent().is('.chat-mobile-input-box')) {
+                $('#sticker-picker').hide().appendTo('.chat-input-area');
+            }
+        }
+
+        mobileClose.click(closeMobileModal);
 
         mobileOverlay.click(function(e) {
             if (e.target === this) {
-                $(this).fadeOut(200);
+                closeMobileModal();
             }
         });
 
@@ -1007,8 +1023,28 @@ $(document).ready(function() {
                 document.getElementById('chat-form').dispatchEvent(event);
                 
                 mobileInput.val('');
-                mobileOverlay.fadeOut(200);
+                closeMobileModal();
             }
+        });
+
+        // Mobile Sticker Button
+        mobileStickerBtn.click(function(e) {
+            e.stopPropagation();
+            const picker = $('#sticker-picker');
+            
+            if (picker.is(':visible') && picker.parent().is('.chat-mobile-input-box')) {
+                picker.slideUp(100);
+            } else {
+                if (!stickersInitialized) initStickerPicker();
+                // Move picker to mobile modal
+                picker.hide().appendTo('.chat-mobile-input-box').slideDown(200);
+            }
+        });
+
+        // Mobile Upload Button
+        mobileUploadBtn.click(function(e) {
+            e.preventDefault();
+            if (fileInput) fileInput.click();
         });
     }
 
@@ -1319,7 +1355,7 @@ $(document).ready(function() {
     }
 
     function insertSticker(code) {
-        const input = document.getElementById('chat-input');
+        const input = getActiveInput();
         if (!input) return;
         
         const codeStr = `:${code}: `; // Add space after
@@ -1500,8 +1536,9 @@ $(document).ready(function() {
         formData.append('file', file);
         
         // Show loading state?
-        const originalPlaceholder = chatTextarea ? chatTextarea.placeholder : '';
-        if (chatTextarea) chatTextarea.placeholder = "Загрузка файла...";
+        const activeInput = getActiveInput();
+        const originalPlaceholder = activeInput ? activeInput.placeholder : '';
+        if (activeInput) activeInput.placeholder = "Загрузка файла...";
         if (uploadBtn) {
             uploadBtn.textContent = '⏳';
             uploadBtn.disabled = true;
@@ -1524,25 +1561,27 @@ $(document).ready(function() {
                         markdown = `[${name}](${url})`;
                     }
                     
-                    if (chatTextarea) {
+                    if (activeInput) {
                         // Insert at cursor
-                        const start = chatTextarea.selectionStart;
-                        const end = chatTextarea.selectionEnd;
-                        const text = chatTextarea.value;
+                        const start = activeInput.selectionStart;
+                        const end = activeInput.selectionEnd;
+                        const text = activeInput.value;
                         
                         // Add newline if needed (not at start and not after newline)
                         const prefix = (start > 0 && text[start-1] !== '\n') ? ' ' : '';
                         
-                        chatTextarea.value = text.substring(0, start) + prefix + markdown + text.substring(end);
+                        activeInput.value = text.substring(0, start) + prefix + markdown + text.substring(end);
                         
-                        chatTextarea.focus();
+                        activeInput.focus();
                         // Move cursor after
                         const newPos = start + prefix.length + markdown.length;
-                        chatTextarea.selectionStart = newPos;
-                        chatTextarea.selectionEnd = newPos;
+                        activeInput.selectionStart = newPos;
+                        activeInput.selectionEnd = newPos;
                         
-                        // Trigger resize
-                        chatTextarea.dispatchEvent(new Event('input'));
+                        // Trigger resize if it's the main textarea
+                        if(activeInput.id === 'chat-input') {
+                             activeInput.dispatchEvent(new Event('input'));
+                        }
                     }
                 } else {
                     showChatNotification(res.message, 'error');
@@ -1552,7 +1591,7 @@ $(document).ready(function() {
                 showChatNotification("Ошибка загрузки файла.", 'error');
             },
             complete: function() {
-                if (chatTextarea) chatTextarea.placeholder = originalPlaceholder;
+                if (activeInput) activeInput.placeholder = originalPlaceholder;
                 if (uploadBtn) {
                     uploadBtn.textContent = '📎';
                     uploadBtn.disabled = false;

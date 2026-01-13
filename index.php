@@ -164,7 +164,7 @@ require_once __DIR__ . '/src/templates/header.php';
                             </a>
                         </div>
                     <?php else: ?>
-                        <a href="#" onclick="openLoginModal(event)" class="login-btn-chat">Войти / Присоединиться</a>
+                        <a href="#" onclick="openLoginModal(event)" class="login-btn-chat">Войти</a>
                     <?php endif; ?>
                 </div>
 
@@ -190,8 +190,9 @@ require_once __DIR__ . '/src/templates/header.php';
                     </div>
                     <form id="chat-mobile-form">
                         <textarea id="chat-mobile-input" placeholder="Напиши что-нибудь..." rows="3"></textarea>
-                        <div class="chat-mobile-actions">
-                            <!-- Duplicate toolbar buttons if needed or keep minimal -->
+                        <div class="chat-mobile-actions" style="display: flex; align-items: center;">
+                            <button type="button" id="mobile-sticker-btn" class="chat-format-btn" style="margin-right: 5px; font-size: 20px;">😊</button>
+                            <button type="button" id="mobile-upload-btn" class="chat-format-btn" style="margin-right: auto; font-size: 20px;">📎</button>
                             <button type="submit" class="btn-primary" style="padding: 8px 20px;">➤</button>
                         </div>
                     </form>
