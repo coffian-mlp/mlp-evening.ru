@@ -406,6 +406,12 @@ body.dashboard-layout {
     position: relative;
     text-align: center;
     color: #eee;
+    
+    /* Mobile Scroll Fix */
+    max-height: 90vh;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.2) transparent;
 }
 .close-modal, .close-modal-profile {
     position: absolute;
