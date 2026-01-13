@@ -216,6 +216,9 @@ require_once __DIR__ . '/src/templates/header.php';
                     </div>
             <!-- Sticker Picker Container -->
             <div id="sticker-picker" class="sticker-picker" style="display: none;">
+                <div class="sticker-header" style="display: flex; justify-content: flex-end; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                     <button type="button" class="sticker-close-btn">&times;</button>
+                </div>
                 <div class="sticker-tabs" id="sticker-tabs"></div>
                 <div class="sticker-grid" id="sticker-grid"></div>
             </div>
