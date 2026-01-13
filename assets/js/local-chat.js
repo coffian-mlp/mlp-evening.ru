@@ -1293,6 +1293,36 @@ $(document).ready(function() {
         zoomImg.attr('src', src);
         zoomPreview.fadeIn(100);
         isLongPress = true;
+
+        // --- Dynamic Positioning Logic ---
+        const isMobile = window.innerWidth <= 768 || window.matchMedia('(pointer: coarse)').matches;
+        
+        if (isMobile) {
+            // Mobile: Center Screen
+            zoomPreview.css({
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                bottom: 'auto'
+            });
+        } else {
+            // Desktop: Position Above Chat/Picker
+            const chatContainer = document.querySelector('.chat-container');
+            if (chatContainer) {
+                const rect = chatContainer.getBoundingClientRect();
+                // Center horizontally relative to chat, sit above picker area (~300px from bottom)
+                const leftPos = rect.left + (rect.width / 2);
+                const bottomOffset = 280; // Sticker picker height + margin
+                const topPos = rect.bottom - bottomOffset;
+
+                zoomPreview.css({
+                    top: topPos + 'px',
+                    left: leftPos + 'px',
+                    transform: 'translate(-50%, -100%)', // Anchor bottom-center
+                    bottom: 'auto'
+                });
+            }
+        }
     }
 
     function hideZoomPreview() {
@@ -1310,7 +1340,7 @@ $(document).ready(function() {
         }
 
         stickers.forEach(s => {
-            const img = $(`<img src="${escapeHtml(s.image_url)}" class="picker-sticker" title=":${escapeHtml(s.code)}:">`);
+            const img = $(`<img src="${escapeHtml(s.image_url)}" class="picker-sticker" title=":${escapeHtml(s.code)}:" draggable="false">`);
             
             // --- Smart Click/Hold Logic ---
             
@@ -1323,6 +1353,11 @@ $(document).ready(function() {
                 }, 300); // 300ms hold time
             });
 
+            // 1.1 Touch Move: Cancel timer if scrolling
+            img.on('touchmove', function(e) {
+                clearTimeout(longPressTimer);
+            });
+
             // 2. Mouse/Touch Up: Decide Action
             img.on('mouseup touchend', function(e) {
                 clearTimeout(longPressTimer); // Cancel timer if fast tap
@@ -1331,12 +1366,19 @@ $(document).ready(function() {
                     // It was a long press (preview shown) -> Just hide preview
                     hideZoomPreview();
                     isLongPress = false; // Reset
-                    e.preventDefault(); // Prevent ghost clicks
+                    if (e.cancelable) e.preventDefault(); // Prevent ghost clicks
                 } else {
                     // Fast tap -> Insert Sticker
+                    // Only insert if we didn't just scroll (checked implicitly by touchmove cancelling timer, but let's be safe)
+                    // If touchmove fired, longPressTimer is cleared, isLongPress is false.
+                    // But we might still get here.
+                    // Actually, if we scrolled, we probably don't want to insert either?
+                    // Standard click behavior handles this usually.
+                    
                     insertSticker(s.code);
+                    
                     // Mobile: Prevent phantom clicks/zoom
-                    if (e.type === 'touchend') e.preventDefault(); 
+                    if (e.type === 'touchend' && e.cancelable) e.preventDefault(); 
                 }
             });
 
@@ -1381,8 +1423,10 @@ $(document).ready(function() {
         input.selectionEnd = newPos;
         
         // Hide picker on mobile? Or keep open for multi-select?
-        // Let's keep open on desktop, maybe close on mobile? 
-        // For now, keep open.
+        // Close on mobile to return to keyboard
+        if (input.id === 'chat-mobile-input') {
+             $('#sticker-picker').fadeOut(100);
+        }
     }
 
     // Toggle Picker
