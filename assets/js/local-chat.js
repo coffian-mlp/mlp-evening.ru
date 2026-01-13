@@ -1343,29 +1343,48 @@ $(document).ready(function() {
             const img = $(`<img src="${escapeHtml(s.image_url)}" class="picker-sticker" title=":${escapeHtml(s.code)}:" draggable="false">`);
             
             // --- Smart Click/Hold Logic ---
-            let hasMoved = false;
+            let startX = 0;
+            let startY = 0;
+            let isDragging = false;
             
             // 1. Mouse/Touch Down: Start Timer
             img.on('mousedown touchstart', function(e) {
-                // e.preventDefault(); // Don't block scroll!
-                hasMoved = false; // Reset
                 isLongPress = false;
+                isDragging = false;
+                
+                if (e.type === 'touchstart') {
+                    const touch = e.originalEvent.touches[0];
+                    startX = touch.clientX;
+                    startY = touch.clientY;
+                }
+                
                 longPressTimer = setTimeout(() => {
-                    if (!hasMoved) showZoomPreview(s.image_url);
+                    if (!isDragging) showZoomPreview(s.image_url);
                 }, 300); // 300ms hold time
             });
 
-            // 1.1 Touch Move: Cancel timer if scrolling
+            // 1.1 Touch Move: Check movement
             img.on('touchmove', function(e) {
-                hasMoved = true;
-                clearTimeout(longPressTimer);
+                const touch = e.originalEvent.touches[0];
+                if (Math.abs(touch.clientX - startX) > 10 || Math.abs(touch.clientY - startY) > 10) {
+                     isDragging = true;
+                     clearTimeout(longPressTimer);
+                }
             });
 
             // 2. Mouse/Touch Up: Decide Action
             img.on('mouseup touchend', function(e) {
                 clearTimeout(longPressTimer); // Cancel timer if fast tap
                 
-                if (hasMoved) return; // Ignore if scrolled
+                // Double check drag for touchend (sometimes touchmove doesn't fire for quick swipes?)
+                if (e.type === 'touchend') {
+                    const touch = e.originalEvent.changedTouches[0];
+                    if (Math.abs(touch.clientX - startX) > 10 || Math.abs(touch.clientY - startY) > 10) {
+                        isDragging = true;
+                    }
+                }
+
+                if (isDragging) return; // Ignore if dragged/scrolled
 
                 if (isLongPress) {
                     // It was a long press (preview shown) -> Just hide preview
@@ -1374,12 +1393,6 @@ $(document).ready(function() {
                     if (e.cancelable) e.preventDefault(); // Prevent ghost clicks
                 } else {
                     // Fast tap -> Insert Sticker
-                    // Only insert if we didn't just scroll (checked implicitly by touchmove cancelling timer, but let's be safe)
-                    // If touchmove fired, longPressTimer is cleared, isLongPress is false.
-                    // But we might still get here.
-                    // Actually, if we scrolled, we probably don't want to insert either?
-                    // Standard click behavior handles this usually.
-                    
                     insertSticker(s.code);
                     
                     // Mobile: Prevent phantom clicks/zoom
