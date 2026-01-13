@@ -1343,18 +1343,21 @@ $(document).ready(function() {
             const img = $(`<img src="${escapeHtml(s.image_url)}" class="picker-sticker" title=":${escapeHtml(s.code)}:" draggable="false">`);
             
             // --- Smart Click/Hold Logic ---
+            let hasMoved = false;
             
             // 1. Mouse/Touch Down: Start Timer
             img.on('mousedown touchstart', function(e) {
                 // e.preventDefault(); // Don't block scroll!
+                hasMoved = false; // Reset
                 isLongPress = false;
                 longPressTimer = setTimeout(() => {
-                    showZoomPreview(s.image_url);
+                    if (!hasMoved) showZoomPreview(s.image_url);
                 }, 300); // 300ms hold time
             });
 
             // 1.1 Touch Move: Cancel timer if scrolling
             img.on('touchmove', function(e) {
+                hasMoved = true;
                 clearTimeout(longPressTimer);
             });
 
@@ -1362,6 +1365,8 @@ $(document).ready(function() {
             img.on('mouseup touchend', function(e) {
                 clearTimeout(longPressTimer); // Cancel timer if fast tap
                 
+                if (hasMoved) return; // Ignore if scrolled
+
                 if (isLongPress) {
                     // It was a long press (preview shown) -> Just hide preview
                     hideZoomPreview();
