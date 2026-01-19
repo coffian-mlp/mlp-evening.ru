@@ -226,7 +226,7 @@ require_once __DIR__ . '/src/templates/header.php';
             <form id="chat-form">
                         <input type="file" id="chat-file-input" hidden>
                         <textarea id="chat-input" placeholder="Напиши что-нибудь..." rows="1"></textarea>
-                        <button type="submit">Отправить</button>
+                        <button type="submit">➤</button>
                     </form>
                  <?php else: ?>
                     <div class="chat-login-prompt">

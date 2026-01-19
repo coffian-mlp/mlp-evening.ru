@@ -340,7 +340,7 @@
     box-shadow: 0 0 15px rgba(186, 104, 200, 0.1);
 }
 #chat-form button {
-    padding: 0 24px;
+    padding: 0 18px;
     background: linear-gradient(135deg, #7b1fa2, #4a148c);
     color: white;
     border: none;
