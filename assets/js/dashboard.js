@@ -1,4 +1,4 @@
-$(document).ready(function() {
+﻿$(document).ready(function() {
     
     // --- Логика переключения вкладок ---
     $(".nav-tile").click(function() {
