@@ -1,4 +1,4 @@
-// main.js - Глобальные скрипты для всего сайта
+﻿// main.js - Глобальные скрипты для всего сайта
 
 // Switch Profile Tabs
 window.switchProfileTab = function(tabName) {

@@ -1,4 +1,4 @@
-// Local Chat Logic using SSE (Server-Sent Events)
+﻿// Local Chat Logic using SSE (Server-Sent Events)
 // Updated by Twilight Sparkle
 
 $(document).ready(function() {
