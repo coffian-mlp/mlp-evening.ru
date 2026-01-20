@@ -444,6 +444,7 @@ function openUserModal() {
     $('#user_chat_color').val('#6d2f8e');
     $('#user_password').val('');
     $('#user_role').val('user');
+    $('#user_font_preference').val('open_sans'); // Default font
     $('#user-modal-title').text('Новый пони');
     
     // Init Pickers
@@ -452,6 +453,7 @@ function openUserModal() {
     $('.color-picker-ui .color-swatch').removeClass('active');
     $(`.color-picker-ui .color-swatch[data-color="#6d2f8e"]`).addClass('active');
 }
+
 
 function closeUserModal() {
     $('#user-modal').fadeOut(200);
@@ -487,6 +489,18 @@ function editUser(user) {
     $('#user_role').val(user.role);
     $('#user-modal-title').text('Редактировать пони');
     
+    // Получаем опции пользователя, чтобы заполнить шрифт
+    // Нам нужно сделать отдельный запрос, так как в общем списке юзеров опций нет
+    $.post('api.php', { action: 'get_user_options', user_id: user.id }, function(res) {
+        if (res.success) {
+            var font = res.data.options.font_preference || 'open_sans';
+            $('#user_font_preference').val(font);
+        } else {
+            // Fallback
+            $('#user_font_preference').val('open_sans');
+        }
+    }, 'json');
+    
     // Init Pickers
     if (window.initColorPickers) window.initColorPickers();
     // Update active swatch
@@ -494,6 +508,7 @@ function editUser(user) {
     $('.color-picker-ui .color-swatch').removeClass('active');
     $(`.color-picker-ui .color-swatch[data-color="${color}"]`).addClass('active');
 }
+
 
 function deleteUser(id) {
     if (!confirm('Точно изгнать этого пони?')) return;

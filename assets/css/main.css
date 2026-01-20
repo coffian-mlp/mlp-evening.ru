@@ -307,10 +307,10 @@ body.dashboard-layout {
 .form-group { margin-bottom: 20px; text-align: left; }
 .form-label { display: block; margin-bottom: 5px; color: #bbb; font-weight: 600; }
 
-.form-input, input[type="text"], input[type="number"], input[type="password"], input[type="email"], select {
+.form-input, input[type="text"], input[type="number"], input[type="password"], input[type="email"] {
     width: 100%; 
     padding: 10px 12px; 
-    border: 1px solid rgba(255,255,255,0.1); 
+    border: 1px solid rgba(186, 104, 200, 0.5);
     border-radius: 6px; 
     box-sizing: border-box;
     font-family: inherit;
@@ -319,11 +319,110 @@ body.dashboard-layout {
     color: #fff;
     transition: all 0.2s;
 }
-.form-input:focus, input:focus, select:focus {
+
+/* Form Focus States */
+.form-input:focus, input:focus {
     outline: none;
     border-color: var(--focus-color);
-    background: rgba(0,0,0,0.5);
-    box-shadow: 0 0 10px rgba(186, 104, 200, 0.1);
+    background-color: rgba(0,0,0,0.5);
+    box-shadow: 0 0 10px rgba(186, 104, 200, 0.2);
+}
+
+/* === Custom Select (JS Replacement) === */
+.custom-select-wrapper {
+    position: relative;
+    font-family: inherit;
+    width: 100%;
+    margin-bottom: 10px; /* Same as inputs */
+}
+
+.custom-select-wrapper select {
+    display: none; /* Hide original select */
+}
+
+.select-selected {
+    background-color: rgba(0,0,0,0.3);
+    border: 1px solid rgba(186, 104, 200, 0.5);
+    border-radius: 6px;
+    color: #fff;
+    padding: 10px 12px;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s;
+    font-size: 14px;
+    position: relative;
+}
+
+/* Arrow */
+.select-selected:after {
+    position: absolute;
+    content: "";
+    top: 50%;
+    right: 15px;
+    width: 0;
+    height: 0;
+    border: 6px solid transparent;
+    border-color: var(--accent-color) transparent transparent transparent;
+    transform: translateY(-25%);
+    transition: transform 0.2s;
+}
+
+/* Arrow Rotate on Open */
+.select-selected.select-arrow-active:after {
+    border-color: transparent transparent var(--accent-color) transparent;
+    transform: translateY(-75%);
+}
+
+.select-selected:hover {
+    background-color: rgba(0,0,0,0.4);
+    border-color: var(--focus-color);
+}
+
+.select-items {
+    position: absolute;
+    background-color: var(--bg-dark);
+    border: 1px solid var(--focus-color);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    z-index: 9999;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-color) rgba(0,0,0,0.2);
+}
+
+/* Hide items when closed */
+.select-hide {
+    display: none;
+}
+
+.select-items div {
+    color: var(--text-main);
+    padding: 10px 12px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    transition: background 0.1s;
+}
+
+.select-items div:last-child {
+    border-bottom: none;
+}
+
+.select-items div:hover, .same-as-selected {
+    background-color: var(--primary-color);
+    color: #fff;
+}
+
+/* Fix rounding when open */
+.select-selected.select-arrow-active {
+    border-radius: 6px 6px 0 0;
+    border-bottom-color: transparent;
 }
 
 /* Password Toggle Wrapper */

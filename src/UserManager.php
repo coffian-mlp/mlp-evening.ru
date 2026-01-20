@@ -131,7 +131,8 @@ class UserManager {
         $params = [];
 
         // 1. Separate options from main table fields
-        $optionFields = ['chat_color', 'avatar_url'];
+        $optionFields = ['chat_color', 'avatar_url', 'font_preference'];
+
         
         foreach ($optionFields as $field) {
             if (isset($data[$field])) {

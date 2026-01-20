@@ -69,6 +69,99 @@ $(document).ready(function() {
             .catch(err => console.log('Service Worker registration failed:', err));
     }
     
+    // --- 0.5 Custom Select Logic (The Magic Replacement) ---
+    window.initCustomSelects = function() {
+        var x, i, j, l, ll, selElmnt, a, b, c;
+        /* Look for any elements with the class "custom-select-enabled": */
+        // We will target ALL selects inside forms, or specific ones. 
+        // Let's target all selects that are not already wrapped.
+        
+        $('select:not(.no-custom)').each(function() {
+            if ($(this).parent('.custom-select-wrapper').length) return; // Already done
+            
+            // Wrap in wrapper
+            $(this).wrap('<div class="custom-select-wrapper"></div>');
+            selElmnt = this;
+            
+            // Create the selected item DIV
+            a = document.createElement("DIV");
+            a.setAttribute("class", "select-selected");
+            a.innerHTML = selElmnt.options[selElmnt.selectedIndex].innerHTML;
+            selElmnt.parentNode.appendChild(a);
+            
+            // Create the options list DIV
+            b = document.createElement("DIV");
+            b.setAttribute("class", "select-items select-hide");
+            
+            for (j = 0; j < selElmnt.length; j++) {
+                c = document.createElement("DIV");
+                c.innerHTML = selElmnt.options[j].innerHTML;
+                
+                // Add click handler
+                c.addEventListener("click", function(e) {
+                    var y, i, k, s, h, sl, yl;
+                    s = this.parentNode.parentNode.getElementsByTagName("select")[0];
+                    sl = s.length;
+                    h = this.parentNode.previousSibling;
+                    
+                    for (i = 0; i < sl; i++) {
+                        if (s.options[i].innerHTML == this.innerHTML) {
+                            s.selectedIndex = i;
+                            h.innerHTML = this.innerHTML;
+                            y = this.parentNode.getElementsByClassName("same-as-selected");
+                            yl = y.length;
+                            for (k = 0; k < yl; k++) {
+                                y[k].removeAttribute("class");
+                            }
+                            this.setAttribute("class", "same-as-selected");
+                            
+                            // Trigger change event on original select so other scripts know!
+                            $(s).trigger('change');
+                            break;
+                        }
+                    }
+                    h.click();
+                });
+                b.appendChild(c);
+            }
+            selElmnt.parentNode.appendChild(b);
+            
+            // Toggle open/close
+            a.addEventListener("click", function(e) {
+                e.stopPropagation();
+                closeAllSelect(this);
+                this.nextSibling.classList.toggle("select-hide");
+                this.classList.toggle("select-arrow-active");
+            });
+        });
+    };
+
+    function closeAllSelect(elmnt) {
+        var x, y, i, xl, yl, arrNo = [];
+        x = document.getElementsByClassName("select-items");
+        y = document.getElementsByClassName("select-selected");
+        xl = x.length;
+        yl = y.length;
+        for (i = 0; i < yl; i++) {
+            if (elmnt == y[i]) {
+                arrNo.push(i)
+            } else {
+                y[i].classList.remove("select-arrow-active");
+            }
+        }
+        for (i = 0; i < xl; i++) {
+            if (arrNo.indexOf(i)) {
+                x[i].classList.add("select-hide");
+            }
+        }
+    }
+
+    /* If the user clicks anywhere outside the select box, then close all select boxes: */
+    document.addEventListener("click", closeAllSelect);
+
+    // Run Init
+    initCustomSelects();
+
     // --- 1. CSRF Protection Setup ---
     // Автоматически добавляем токен во все AJAX запросы
     $.ajaxSetup({
@@ -615,7 +708,36 @@ $(document).ready(function() {
         }
     });
 
+    // --- 7. Font Switcher Logic ---
+    window.applyUserFont = function(fontName) {
+        var fontStack = "'Open Sans', sans-serif"; // Default
+        
+        switch(fontName) {
+            case 'fira':
+                fontStack = "'Fira Sans', sans-serif";
+                break;
+            case 'pt':
+                fontStack = "'PT Sans', sans-serif";
+                break;
+            case 'rubik':
+                fontStack = "'Rubik', sans-serif";
+                break;
+            case 'inter':
+                fontStack = "'Inter', sans-serif";
+                break;
+            default:
+                fontStack = "'Open Sans', sans-serif";
+        }
+        
+        document.documentElement.style.setProperty('--main-font', fontStack);
+    };
+
+    // Apply font on load if set globally (from PHP)
+    if (window.currentUserFont) {
+        applyUserFont(window.currentUserFont);
+    }
 }); // End of $(document).ready
+
 
 // --- 6. Загрузка списка соцсетей в профиле (ВЫНЕСЕНО) ---
 window.openProfileModal = function(e) {
@@ -898,7 +1020,17 @@ $(document).ready(function() {
                         window.currentUserNickname = u.nickname;
                     }
                     
-                    setTimeout(function() { $('#profile-modal').fadeOut(200); }, 500);
+                    // Обновляем шрифт интерфейса, если он изменился
+                    var newFont = $form.find('select[name="font_preference"]').val();
+                    if (newFont) {
+                        applyUserFont(newFont);
+                    }
+
+                    setTimeout(function() { 
+                        $('#profile-modal').fadeOut(200); 
+                        // Re-init custom selects just in case DOM changed or for future dynamic elements
+                        // initCustomSelects(); 
+                    }, 500);
                 } else {
                     $error.text(response.message).show();
                 }
@@ -911,6 +1043,7 @@ $(document).ready(function() {
             }
         });
     });
+
 
     // Preview Avatar
     $('input[name="avatar_url"]').on('input', function() {
