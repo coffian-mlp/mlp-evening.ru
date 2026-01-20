@@ -208,18 +208,9 @@ try {
                 }
                 
                 // Привязываем!
-                $stmt = $db->prepare("INSERT INTO user_socials (user_id, provider, provider_uid, username, first_name, last_name, avatar_url) VALUES (?, 'telegram', ?, ?, ?, ?, ?)");
-                // 6 вопросительных знаков = 6 переменных = 'isssss'
-                $stmt->bind_param("isssss", 
-                    $userId, 
-                    $tgUser['id'], 
-                    $tgUser['username'], 
-                    $tgUser['first_name'], 
-                    $tgUser['last_name'], 
-                    $tgUser['photo_url']
-                );
+                $userManager = new UserManager();
                 
-                if ($stmt->execute()) {
+                if ($userManager->linkSocial($userId, 'telegram', $tgUser)) {
                     sendResponse(true, "Связь установлена!");
                 } else {
                     sendResponse(false, "Ошибка базы данных.", 'error');

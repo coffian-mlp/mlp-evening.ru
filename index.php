@@ -35,12 +35,14 @@ Auth::check(); // Init session
     
     // Group stickers by pack_id
     $stickersByPack = [];
-    $stickerMap = []; // For fast lookup in chat
-    
+    // $stickerMap = []; // Уже не нужно, берем из менеджера
+
     foreach ($allStickers as $s) {
         $stickersByPack[$s['pack_id']][] = $s;
-        $stickerMap[$s['code']] = $s['image_url'];
+        // $stickerMap[$s['code']] = $s['image_url'];
     }
+
+    $stickerMap = $stickerManager->getStickerMap(); // Используем встроенный метод
     
     // Combine into a structure for Frontend
     $frontendStickerData = [
