@@ -1,5 +1,8 @@
 # === MLP-Evening .htaccess ===
 
+# 0. Кодировка UTF-8
+AddDefaultCharset UTF-8
+
 # 1. Обработка ошибок
 ErrorDocument 404 /404.php
 
