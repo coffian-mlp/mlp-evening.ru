@@ -180,7 +180,7 @@ require_once __DIR__ . '/src/templates/header.php';
             </div>
             <!-- Compact Mode Trigger (Mobile) -->
             <?php if (isset($_SESSION['user_id'])): ?>
-                <button id="chat-mobile-fab" class="chat-mobile-fab" title="Написать">✎</button>
+                <button id="chat-mobile-fab" class="chat-mobile-fab" title="Написать" style="position: absolute; right: 20px; bottom: 20px; z-index: 90;">✎</button>
             <?php endif; ?>
 
             <!-- Compact Input Modal -->
@@ -261,6 +261,7 @@ require_once __DIR__ . '/src/templates/header.php';
         window.isModerator = <?= json_encode(Auth::isModerator()) ?>;
         window.currentUsername = <?= json_encode($_SESSION['username']) ?>;
         window.currentUserNickname = <?= json_encode($currentUser['nickname'] ?? $_SESSION['username']) ?>;
+        window.currentUserFont = <?= json_encode($userOptions['font_preference'] ?? 'open_sans') ?>;
         window.csrfToken = <?= json_encode(Auth::generateCsrfToken()) ?>;
         window.telegramBotUsername = <?= json_encode($telegramBotUsername) ?>; // Для профиля
         // Inject DB Options
@@ -451,6 +452,17 @@ require_once __DIR__ . '/src/templates/header.php';
                             <input type="text" class="color-manual-input" placeholder="#..." maxlength="7">
                         </div>
                     </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label class="form-label">Шрифт интерфейса</label>
+                    <select name="font_preference" class="form-input">
+                        <option value="open_sans" <?= ($userOptions['font_preference'] ?? '') === 'open_sans' ? 'selected' : '' ?>>Open Sans (Стандартный)</option>
+                        <option value="fira" <?= ($userOptions['font_preference'] ?? '') === 'fira' ? 'selected' : '' ?>>Fira Sans (Четкий)</option>
+                        <option value="pt" <?= ($userOptions['font_preference'] ?? '') === 'pt' ? 'selected' : '' ?>>PT Sans (Строгий)</option>
+                        <option value="rubik" <?= ($userOptions['font_preference'] ?? '') === 'rubik' ? 'selected' : '' ?>>Rubik (Мягкий)</option>
+                        <option value="inter" <?= ($userOptions['font_preference'] ?? '') === 'inter' ? 'selected' : '' ?>>Inter (Современный)</option>
+                    </select>
                 </div>
 
                 <div class="form-group" style="margin-bottom: 15px;">

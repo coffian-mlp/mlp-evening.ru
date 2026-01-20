@@ -4,7 +4,7 @@
     </div>
 
     <!-- Конец контента -->
-    <script src="/assets/js/main.js"></script>
+    <script src="/assets/js/main.js?v=<?= file_exists(__DIR__ . '/../../assets/js/main.js') ? filemtime(__DIR__ . '/../../assets/js/main.js') : time() ?>"></script>
     
     <?php if (isset($extraScripts)) echo $extraScripts; ?>
 
@@ -33,7 +33,7 @@
     <?php endif; ?>
 
     <?php if (isset($enableLocalChat) && $enableLocalChat): ?>
-        <script src="/assets/js/local-chat.js"></script>
+        <script src="/assets/js/local-chat.js?v=<?= file_exists(__DIR__ . '/../../assets/js/local-chat.js') ? filemtime(__DIR__ . '/../../assets/js/local-chat.js') : time() ?>"></script>
     <?php endif; ?>
 </body>
 </html>

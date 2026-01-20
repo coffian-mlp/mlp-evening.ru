@@ -20,11 +20,11 @@
     <meta property="og:locale" content="ru_RU">
     
     <!-- Fonts: Local Philosopher & Open Sans -->
-    <link rel="stylesheet" href="/assets/css/fonts.css">
+    <link rel="stylesheet" href="/assets/css/fonts.css?v=<?= file_exists(__DIR__ . '/../../assets/css/fonts.css') ? filemtime(__DIR__ . '/../../assets/css/fonts.css') : time() ?>">
 
-    <link rel="stylesheet" href="/assets/css/main.css">
+    <link rel="stylesheet" href="/assets/css/main.css?v=<?= file_exists(__DIR__ . '/../../assets/css/main.css') ? filemtime(__DIR__ . '/../../assets/css/main.css') : time() ?>">
     <?php if (isset($enableLocalChat) && $enableLocalChat): ?>
-        <link rel="stylesheet" href="/assets/css/chat.css">
+        <link rel="stylesheet" href="/assets/css/chat.css?v=<?= file_exists(__DIR__ . '/../../assets/css/chat.css') ? filemtime(__DIR__ . '/../../assets/css/chat.css') : time() ?>">
     <?php endif; ?>
     <?php if (isset($extraCss)) echo $extraCss; ?>
     

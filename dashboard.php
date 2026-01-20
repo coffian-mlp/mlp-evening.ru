@@ -41,8 +41,8 @@ $twoPartEpisodes = array_filter($allEpisodes, function($ep) {
 
 $pageTitle = 'Dashboard - MLP Evening';
 $bodyClass = 'dashboard-layout';
-$extraCss = '<link rel="stylesheet" href="/assets/css/dashboard.css">';
-$extraScripts = '<script src="/assets/js/dashboard.js"></script>';
+$extraCss = '<link rel="stylesheet" href="/assets/css/dashboard.css?v=' . (file_exists(__DIR__ . '/assets/css/dashboard.css') ? filemtime(__DIR__ . '/assets/css/dashboard.css') : time()) . '">';
+$extraScripts = '<script src="/assets/js/dashboard.js?v=' . (file_exists(__DIR__ . '/assets/js/dashboard.js') ? filemtime(__DIR__ . '/assets/js/dashboard.js') : time()) . '"></script>';
 $showChatBro = false; 
 $showPageHeader = true; // Включаем общий хедер
 
@@ -443,7 +443,18 @@ require_once __DIR__ . '/src/templates/header.php';
                 </div>
             </div>
 
-                <div class="form-group">
+            <div class="form-group">
+                <label class="form-label">Шрифт интерфейса</label>
+                <select name="font_preference" id="user_font_preference" class="form-input">
+                    <option value="open_sans">Open Sans (Стандартный)</option>
+                    <option value="fira">Fira Sans (Четкий)</option>
+                    <option value="pt">PT Sans (Строгий)</option>
+                    <option value="rubik">Rubik (Мягкий)</option>
+                    <option value="inter">Inter (Современный)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
                     <label class="form-label">Пароль</label>
                     <div class="password-wrapper">
                         <input type="password" name="password" id="user_password" class="form-input" placeholder="Пусто = не менять">

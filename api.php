@@ -425,6 +425,15 @@ try {
             $data['chat_color'] = $color;
         }
         
+        if (isset($_POST['font_preference'])) {
+            $font = trim($_POST['font_preference']);
+            // Whitelist fonts
+            $allowedFonts = ['open_sans', 'fira', 'pt', 'rubik', 'inter'];
+            if (in_array($font, $allowedFonts)) {
+                $data['font_preference'] = $font;
+            }
+        }
+        
         // Avatar Logic
         if (isset($_POST['avatar_url']) || isset($_FILES['avatar_file'])) {
             $url = trim($_POST['avatar_url'] ?? '');
@@ -588,6 +597,18 @@ try {
             sendResponse(true, "Список получен", 'success', ['users' => $users]);
             break;
 
+        case 'get_user_options':
+            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            
+            $targetUserId = (int)($_POST['user_id'] ?? 0);
+            if (!$targetUserId) sendResponse(false, "ID не указан", 'error');
+            
+            $userManager = new UserManager();
+            $options = $userManager->getUserOptions($targetUserId);
+            
+            sendResponse(true, "Опции получены", 'success', ['options' => $options]);
+            break;
+
         case 'get_audit_logs':
             if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
             
@@ -660,6 +681,7 @@ try {
             
             // New fields & Uploads
             $chat_color = trim($_POST['chat_color'] ?? '');
+            $font_preference = trim($_POST['font_preference'] ?? 'open_sans');
             $raw_avatar_url = trim($_POST['avatar_url'] ?? '');
             $avatar_url = $raw_avatar_url; // Default
             
@@ -686,7 +708,8 @@ try {
                     'nickname' => $nickname,
                     'role' => $role,
                     'avatar_url' => $avatar_url,
-                    'chat_color' => $chat_color
+                    'chat_color' => $chat_color,
+                    'font_preference' => $font_preference
                 ];
 
                 if (!empty($id)) {
@@ -710,7 +733,8 @@ try {
                     // We can reuse updateUser logic or just call it directly for options
                     $userManager->updateUser($newId, [
                         'avatar_url' => $avatar_url,
-                        'chat_color' => $chat_color
+                        'chat_color' => $chat_color,
+                        'font_preference' => $font_preference
                     ]);
                     
                     sendResponse(true, "Пользователь создан");
