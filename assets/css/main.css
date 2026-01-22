@@ -1,4 +1,4 @@
-﻿/* === MLP Evening: Main Styles === */
+/* === MLP Evening: Main Styles === */
 
 /* === 0. Variables (Elements of Harmony) === */
 :root {
@@ -12,6 +12,7 @@
     --danger: #ff5252;
     --success: #4caf50;
     --warning: #f1c40f;
+    --main-font: 'Open Sans', 'Segoe UI', Tahoma, sans-serif;
 }
 
 /* === 1. Base Reset & Layout === */

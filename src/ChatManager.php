@@ -305,7 +305,10 @@ class ChatManager {
 
     // --- Helper to fetch single full message ---
     private function getMessageById($id) {
-        $query = "SELECT cm.*, u.role, 
+        // COALESCE logic: Try nickname -> login -> historical username
+        $query = "SELECT cm.*, 
+                         COALESCE(NULLIF(u.nickname, ''), u.login, cm.username) as username,
+                         u.role, 
                          uo_color.option_value as chat_color,
                          uo_avatar.option_value as avatar_url
                   FROM chat_messages cm 
@@ -419,7 +422,9 @@ class ChatManager {
             
             if ($idsStr) {
                 // Fetch minimal details for quoting
-                $qQuery = "SELECT cm.id, cm.username, cm.message, cm.created_at, cm.is_deleted, 
+                $qQuery = "SELECT cm.id, 
+                                  COALESCE(NULLIF(u.nickname, ''), u.login, cm.username) as username,
+                                  cm.message, cm.created_at, cm.is_deleted, 
                                   uo_color.option_value as chat_color, 
                                   uo_avatar.option_value as avatar_url 
                            FROM chat_messages cm
@@ -497,7 +502,9 @@ class ChatManager {
     public function getMessages($limit = 50, $beforeId = null) {
         $limit = (int)$limit;
         
-        $sql = "SELECT cm.*, u.role, 
+        $sql = "SELECT cm.*, 
+                 COALESCE(NULLIF(u.nickname, ''), u.login, cm.username) as username,
+                 u.role, 
                  uo_color.option_value as chat_color,
                  uo_avatar.option_value as avatar_url
           FROM chat_messages cm 
@@ -541,7 +548,9 @@ class ChatManager {
         $params = [$lastId];
         $types = "i";
         
-        $sql = "SELECT cm.*, u.role, 
+        $sql = "SELECT cm.*, 
+                       COALESCE(NULLIF(u.nickname, ''), u.login, cm.username) as username,
+                       u.role, 
                        uo_color.option_value as chat_color,
                        uo_avatar.option_value as avatar_url
                 FROM chat_messages cm 
