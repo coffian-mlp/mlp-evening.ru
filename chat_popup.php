@@ -87,6 +87,42 @@ $telegramBotUsername = $config->getOption('telegram_bot_username', '');
 
         /* Скрываем кнопку разворачивания поп-апа внутри самого поп-апа */
         .popout-btn { display: none !important; }
+
+        /* === Принудительная ДЕСКТОПНАЯ ВЕРСИЯ === */
+        /* Возвращаем стандартное поле ввода */
+        .chat-input-area { 
+            display: block !important; 
+            position: relative !important;
+            bottom: 0 !important;
+            background: rgba(30, 20, 50, 0.4) !important;
+        }
+
+        /* Скрываем мобильную кнопку (FAB) и мобильное окно ввода */
+        .chat-mobile-fab, 
+        #chat-mobile-input-overlay { 
+            display: none !important; 
+        }
+
+        /* Возвращаем нормальный паддинг для списка сообщений */
+        .chat-messages {
+            padding-bottom: 10px !important; 
+        }
+
+        /* Стикеры в десктопном режиме */
+        .sticker-picker {
+            position: absolute !important;
+            bottom: 100% !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 250px !important;
+            border-radius: 6px 6px 0 0 !important;
+        }
+        
+        /* Кнопка закрытия стикеров (обычно скрыта на десктопе, но в попапе пусть будет, если места мало) */
+        .sticker-close-btn {
+            display: block !important; 
+        }
+
     </style>
 </head>
 <body>
@@ -245,9 +281,9 @@ $telegramBotUsername = $config->getOption('telegram_bot_username', '');
 
 <!-- Scripts -->
 <script src="/assets/js/jquery.min.js"></script>
+<script src="/assets/js/main.js?v=<?= time() ?>"></script>
 <script>
     window.serverTime = <?= time() ?>;
-    // Chat Config
     window.chatConfig = {
         driver: <?= json_encode($chatDriver) ?>,
         centrifugo: {
@@ -255,7 +291,10 @@ $telegramBotUsername = $config->getOption('telegram_bot_username', '');
             token: <?= json_encode($centrifugoToken) ?>
         }
     };
-</script>
+    </script>
+    <?php if (isset($_SESSION['user_id'])): ?>
+        <meta name="csrf-token" content="<?= Auth::generateCsrfToken() ?>">
+    <?php endif; ?>
 <?php if (isset($_SESSION['user_id'])): ?>
     <script>
         // Global User Info for JS
@@ -270,6 +309,13 @@ $telegramBotUsername = $config->getOption('telegram_bot_username', '');
         window.userOptions = <?= json_encode($userOptions) ?>;
         window.stickerMap = <?= json_encode($stickerMap) ?>;
         window.stickerData = <?= json_encode($frontendStickerData) ?>;
+        window.chatConfig = {
+            driver: <?= json_encode($chatDriver) ?>,
+            centrifugo: {
+                url: <?= json_encode($centrifugoUrl) ?>,
+                token: <?= json_encode($centrifugoToken) ?>
+            }
+        };
     </script>
 <?php endif; ?>
 <!-- Centrifuge JS (only if needed) -->
