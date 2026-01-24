@@ -172,6 +172,7 @@ require_once __DIR__ . '/src/templates/header.php';
 
                 <div class="chat-settings">
                     <span id="online-counter" class="online-badge" title="Онлайн">(0)</span>
+                    <button id="popout-chat" class="icon-btn popout-btn" title="Открыть в отдельном окне" onclick="window.open('/chat_popup.php', 'ChatWindow', 'width=450,height=700'); return false;" style="margin-right: 5px;">❐</button>
                     <button id="toggle-title-alert" class="icon-btn" title="Моргание вкладки">🔔</button>
                 </div>
             </div>
