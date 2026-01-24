@@ -279,6 +279,11 @@ $telegramBotUsername = $config->getOption('telegram_bot_username', '');
     <img src="" alt="Sticker Preview">
 </div>
 
+<!-- Global Lightbox -->
+<div id="global-lightbox" class="lightbox" onclick="this.style.display='none'">
+    <img id="global-lightbox-img" src="" alt="Zoom">
+</div>
+
 <!-- Scripts -->
 <script src="/assets/js/jquery.min.js"></script>
 <script src="/assets/js/main.js?v=<?= time() ?>"></script>
