@@ -1,9 +1,13 @@
+<?php
+// src/templates/header.php
+global $app;
+?>
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= $pageTitle ?? 'MLP-evening.ru - Поняшный вечерок' ?></title>
+    <title><?= $app->getTitle() ?></title>
     <link rel="icon" href="/favicon.png">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#2b1f43">
@@ -12,7 +16,7 @@
     <meta name="description" content="MLP-Evening - Поняшный вечерок. Стримы My Little Pony и ламповое общение.">
     <meta name="keywords" content="mlp, my little pony, stream, стрим, пони, поняшный вечерок">
     
-    <meta property="og:title" content="<?= $pageTitle ?? 'MLP-evening.ru - Поняшный вечерок' ?>">
+    <meta property="og:title" content="<?= $app->getTitle() ?>">
     <meta property="og:description" content="Заходи на огонек! Стримы любимых серий My Little Pony, ламповый чат и магия дружбы.">
     <meta property="og:image" content="https://mlp-evening.ru/assets/img/logo.png">
     <meta property="og:url" content="https://mlp-evening.ru">
@@ -20,13 +24,12 @@
     <meta property="og:locale" content="ru_RU">
     
     <!-- Fonts: Local Philosopher & Open Sans -->
-    <link rel="stylesheet" href="/assets/css/fonts.css?v=<?= file_exists(__DIR__ . '/../../assets/css/fonts.css') ? filemtime(__DIR__ . '/../../assets/css/fonts.css') : time() ?>">
+    <link rel="stylesheet" href="/assets/css/fonts.css?v=<?= file_exists($_SERVER['DOCUMENT_ROOT'] . '/assets/css/fonts.css') ? filemtime($_SERVER['DOCUMENT_ROOT'] . '/assets/css/fonts.css') : time() ?>">
 
-    <link rel="stylesheet" href="/assets/css/main.css?v=<?= file_exists(__DIR__ . '/../../assets/css/main.css') ? filemtime(__DIR__ . '/../../assets/css/main.css') : time() ?>">
-    <?php if (isset($enableLocalChat) && $enableLocalChat): ?>
-        <link rel="stylesheet" href="/assets/css/chat.css?v=<?= file_exists(__DIR__ . '/../../assets/css/chat.css') ? filemtime(__DIR__ . '/../../assets/css/chat.css') : time() ?>">
-    <?php endif; ?>
-    <?php if (isset($extraCss)) echo $extraCss; ?>
+    <link rel="stylesheet" href="/assets/css/main.css?v=<?= file_exists($_SERVER['DOCUMENT_ROOT'] . '/assets/css/main.css') ? filemtime($_SERVER['DOCUMENT_ROOT'] . '/assets/css/main.css') : time() ?>">
+    
+    <!-- Application Assets (Component CSS) -->
+    <?php $app->showHead(); ?>
     
     <?php if (isset($_SESSION['user_id'])): ?>
         <meta name="csrf-token" content="<?= Auth::generateCsrfToken() ?>">
