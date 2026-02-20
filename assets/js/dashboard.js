@@ -1,4 +1,4 @@
-﻿$(document).ready(function() {
+$(document).ready(function() {
     
     // --- Логика переключения вкладок ---
     $(".nav-tile").click(function() {
@@ -157,7 +157,7 @@
         btn.prop('disabled', true);
 
         $.ajax({
-            url: 'api.php',
+            url: '/api.php',
             type: 'POST',
             data: formData,
             contentType: false,
@@ -184,7 +184,7 @@
         btn.prop('disabled', true);
         
         $.ajax({
-            url: 'api.php',
+            url: '/api.php',
             type: 'POST',
             data: formData,
             contentType: false,
@@ -210,7 +210,7 @@
         btn.prop('disabled', true);
         
         $.ajax({
-            url: 'api.php',
+            url: '/api.php',
             type: 'POST',
             data: formData,
             contentType: false,
@@ -233,7 +233,7 @@
         btn.prop('disabled', true).text('Распаковка...');
 
         $.ajax({
-            url: 'api.php',
+            url: '/api.php',
             type: 'POST',
             data: formData,
             contentType: false,
@@ -287,7 +287,7 @@ function loadUsers() {
     $tbody.html('<tr><td colspan="7" style="text-align:center;">Загрузка...</td></tr>');
     
     $.ajax({
-        url: 'api.php',
+        url: '/api.php',
         method: 'POST',
         data: { action: 'get_users' },
         dataType: 'json',
@@ -351,7 +351,7 @@ function loadPunishedUsers() {
     $tbody.html('<tr><td colspan="5" style="text-align:center;">Загрузка...</td></tr>');
     
     $.ajax({
-        url: 'api.php',
+        url: '/api.php',
         method: 'POST',
         data: { action: 'get_users' }, // Reuse get_users and filter client-side
         dataType: 'json',
@@ -397,7 +397,7 @@ function loadAuditLogs() {
     $tbody.html('<tr><td colspan="6" style="text-align:center;">Загрузка...</td></tr>');
     
     $.ajax({
-        url: 'api.php',
+        url: '/api.php',
         method: 'POST',
         data: { action: 'get_audit_logs' },
         dataType: 'json',
@@ -465,7 +465,7 @@ function closeModal(selector) {
 
 function openUserCard(userId) {
     // Reuse the existing editUser logic but fetch fresh data first
-    $.post('api.php', { action: 'get_users' }, function(res) {
+    $.post('/api.php', { action: 'get_users' }, function(res) {
         if (res.success) {
             var user = res.data.users.find(u => u.id == userId);
             if (user) {
@@ -491,7 +491,7 @@ function editUser(user) {
     
     // Получаем опции пользователя, чтобы заполнить шрифт
     // Нам нужно сделать отдельный запрос, так как в общем списке юзеров опций нет
-    $.post('api.php', { action: 'get_user_options', user_id: user.id }, function(res) {
+    $.post('/api.php', { action: 'get_user_options', user_id: user.id }, function(res) {
         if (res.success) {
             var font = res.data.options.font_preference || 'open_sans';
             $('#user_font_preference').val(font);
@@ -514,7 +514,7 @@ function deleteUser(id) {
     if (!confirm('Точно изгнать этого пони?')) return;
     
     $.ajax({
-        url: 'api.php',
+        url: '/api.php',
         method: 'POST',
         data: { action: 'delete_user', user_id: id },
         dataType: 'json',
@@ -546,7 +546,7 @@ function openMuteModal(id, name) {
 
 function unbanUser(id) {
     if (!confirm('Разбанить пользователя?')) return;
-    $.post('api.php', { action: 'unban_user', user_id: id }, function(res) {
+    $.post('/api.php', { action: 'unban_user', user_id: id }, function(res) {
         showFlashMessage(res.message, res.success ? 'success' : 'error');
         if(res.success) { loadUsers(); loadPunishedUsers(); loadAuditLogs(); }
     }, 'json');
@@ -554,7 +554,7 @@ function unbanUser(id) {
 
 function unmuteUser(id) {
     if (!confirm('Снять мут?')) return;
-    $.post('api.php', { action: 'unmute_user', user_id: id }, function(res) {
+    $.post('/api.php', { action: 'unmute_user', user_id: id }, function(res) {
         showFlashMessage(res.message, res.success ? 'success' : 'error');
         if(res.success) { loadUsers(); loadPunishedUsers(); loadAuditLogs(); }
     }, 'json');
@@ -569,7 +569,7 @@ function loadStickers() {
     // Also refresh packs list to stay sync
     loadPacks();
 
-    $.post('api.php', { action: 'get_stickers' }, function(res) {
+    $.post('/api.php', { action: 'get_stickers' }, function(res) {
         if (res.success) {
             $tbody.empty();
             if (res.data.stickers.length === 0) {
@@ -597,7 +597,7 @@ function loadStickers() {
 }
 
 function loadPacks() {
-    $.post('api.php', { action: 'get_packs' }, function(res) {
+    $.post('/api.php', { action: 'get_packs' }, function(res) {
         if (res.success) {
             var $list = $('#packs-list');
             var $select = $('#sticker-pack-select');
@@ -676,7 +676,7 @@ function openEditPackModal(pack) {
 function deletePack(id, name) {
     if (!confirm(`Точно удалить пак "${name}"?\n\nВНИМАНИЕ: Все стикеры внутри будут удалены безвозвратно!`)) return;
     
-    $.post('api.php', { action: 'delete_pack', id: id }, function(res) {
+    $.post('/api.php', { action: 'delete_pack', id: id }, function(res) {
         window.showFlashMessage(res.message, res.success ? 'success' : 'error');
         if (res.success) {
             loadPacks();
@@ -693,7 +693,7 @@ function deletePack(id, name) {
 function deleteSticker(id) {
     if (!confirm('Удалить этот стикер?')) return;
     
-    $.post('api.php', { action: 'delete_sticker', id: id }, function(res) {
+    $.post('/api.php', { action: 'delete_sticker', id: id }, function(res) {
         window.showFlashMessage(res.message, res.type);
         if (res.success) {
             loadStickers();
