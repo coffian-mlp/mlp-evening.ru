@@ -98,7 +98,7 @@ $(document).ready(function() {
             return;
         }
         
-        $.post('api.php', {
+        $.post('/api.php', {
             action: 'toggle_reaction',
             message_id: msgId,
             reaction: reaction
@@ -188,14 +188,28 @@ $(document).ready(function() {
             picker.append(item);
         }
         
-        btn.append(picker);
+        // Smart Positioning (Relative to Chat Container)
+        // We calculate distance from the container's left edge, not the screen edge.
+        const container = btn.closest('.chat-messages');
+        // Fallback to window left if container not found (e.g. strict mobile view)
+        const containerLeft = container.length ? container[0].getBoundingClientRect().left : 0;
+        const btnLeft = btn[0].getBoundingClientRect().left;
+        const relativeLeft = btnLeft - containerLeft;
 
-        // Check positioning
-        // If button is too close to left edge (< 280px), show on right
-        const btnRect = btn[0].getBoundingClientRect();
-        if (btnRect.left < 280) {
+        // Threshold: ~220px (approx width of picker + padding)
+        if (relativeLeft < 220) {
             picker.addClass('position-right');
+            // Force styles via JS to bypass potential CSS cache issues
+            picker.css({
+                'left': '100%',
+                'right': 'auto',
+                'margin-right': '0',
+                'margin-left': '8px',
+                'transform': 'translateY(-50%)'
+            });
         }
+        
+        btn.append(picker);
     }
 
     // Delegated Events for Reactions
@@ -250,7 +264,7 @@ $(document).ready(function() {
     function saveOption(key, value) {
         if (!window.currentUserId) return; // Only for logged in users
         
-        $.post('api.php', {
+        $.post('/api.php', {
             action: 'save_user_option',
             key: key,
             value: value
@@ -934,7 +948,7 @@ $(document).ready(function() {
                     break;
                 case 'purge':
                     showChatInput(`Purge: ${contextTargetUsername}`, 'Удалить последние сообщения:', 'purge', function(reason, minutes, count) {
-                        $.post('api.php', { 
+                        $.post('/api.php', { 
                             action: 'purge_messages', 
                             user_id: contextTargetUserId,
                             count: count || 50
@@ -945,7 +959,7 @@ $(document).ready(function() {
                     break;
                 case 'ban':
                     showChatInput(`Бан: ${contextTargetUsername}`, 'Укажите причину бана:', 'ban', function(reason) {
-                        $.post('api.php', { 
+                        $.post('/api.php', { 
                             action: 'ban_user', 
                             user_id: contextTargetUserId, 
                             reason: reason 
@@ -956,7 +970,7 @@ $(document).ready(function() {
                     break;
                 case 'mute':
                     showChatInput(`Мут: ${contextTargetUsername}`, 'Выберите срок и причину:', 'mute', function(reason, minutes) {
-                        $.post('api.php', { 
+                        $.post('/api.php', { 
                             action: 'mute_user', 
                             user_id: contextTargetUserId, 
                             minutes: minutes,
@@ -1063,7 +1077,7 @@ $(document).ready(function() {
         const oldScrollHeight = chatMessages.scrollHeight;
         const oldScrollTop = chatMessages.scrollTop;
 
-        $.post('api.php', { action: 'get_messages', limit: 20, before_id: oldestMessageId }, function(res) {
+        $.post('/api.php', { action: 'get_messages', limit: 20, before_id: oldestMessageId }, function(res) {
             isLoadingHistory = false;
             btn.text(originalText);
             
@@ -1122,7 +1136,7 @@ $(document).ready(function() {
     }
 
     function fetchHistory() {
-        $.post('api.php', { action: 'get_messages', limit: 20 }, function(res) {
+        $.post('/api.php', { action: 'get_messages', limit: 20 }, function(res) {
             if (res.success && res.data && res.data.messages) {
                 addLoadMoreButton();
                 
@@ -1334,7 +1348,7 @@ $(document).ready(function() {
             // Not in DOM -> Load Context
             showChatNotification("Ищу сообщение в архивах...", 'info');
             
-            $.post('api.php', { action: 'get_message_context', id: targetId }, function(res) {
+            $.post('/api.php', { action: 'get_message_context', id: targetId }, function(res) {
                 if (res.success && res.data.messages && res.data.messages.length > 0) {
                     // Clear Chat
                     chatMessages.innerHTML = '';
@@ -1443,7 +1457,7 @@ $(document).ready(function() {
     function performSearch(query) {
         searchResults.html('<div style="text-align:center; padding:20px; color:#888;">Поиск... 🔍</div>');
         
-        $.post('api.php', { action: 'search_messages', query: query, limit: 50 }, function(res) {
+        $.post('/api.php', { action: 'search_messages', query: query, limit: 50 }, function(res) {
             searchResults.empty();
             if (res.success && res.data.messages && res.data.messages.length > 0) {
                 res.data.messages.forEach(msg => {
@@ -1628,7 +1642,7 @@ $(document).ready(function() {
         }
 
         $.ajax({
-            url: 'api.php',
+            url: '/api.php',
             method: 'POST',
             data: data,
             success: function(response) {
@@ -1705,7 +1719,7 @@ $(document).ready(function() {
         const msgId = msgDiv.attr('data-id');
 
         showChatConfirmation('Удалить сообщение?', function() {
-            $.post('api.php', { action: 'delete_message', message_id: msgId }, function(res) {
+            $.post('/api.php', { action: 'delete_message', message_id: msgId }, function(res) {
                 if(!res.success) {
                     showChatNotification(res.message, 'error');
                 }
@@ -1719,7 +1733,7 @@ $(document).ready(function() {
         const msgId = msgDiv.attr('data-id');
 
         showChatConfirmation('Восстановить сообщение?', function() {
-            $.post('api.php', { action: 'restore_message', message_id: msgId }, function(res) {
+            $.post('/api.php', { action: 'restore_message', message_id: msgId }, function(res) {
                 if(!res.success) {
                     showChatNotification(res.message, 'error');
                 }
@@ -1733,7 +1747,7 @@ $(document).ready(function() {
     // Logout Logic
     $('#logout-form').on('submit', function(e) {
         e.preventDefault();
-        $.post('api.php', $(this).serialize(), function(res) {
+        $.post('/api.php', $(this).serialize(), function(res) {
             if (res.success) {
                 location.reload();
             } else {
@@ -1772,7 +1786,7 @@ $(document).ready(function() {
             const formData = new FormData(this);
 
             $.ajax({
-                url: 'api.php',
+                url: '/api.php',
                 type: 'POST',
                 data: formData,
                 processData: false,
@@ -2195,7 +2209,7 @@ $(document).ready(function() {
         }
 
         $.ajax({
-            url: 'api.php',
+            url: '/api.php',
             type: 'POST',
             data: formData,
             processData: false,
