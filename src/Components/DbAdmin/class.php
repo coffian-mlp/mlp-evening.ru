@@ -208,6 +208,7 @@ class DbAdminComponent extends Component {
     }
 
     private function getPrimaryKey($db, $table) {
+        if (empty($table)) return null;
         $res = $db->query("SHOW KEYS FROM `$table` WHERE Key_name = 'PRIMARY'");
         if ($res && $row = $res->fetch_assoc()) {
             return $row['Column_name'];
