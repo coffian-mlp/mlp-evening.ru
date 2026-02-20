@@ -5,6 +5,26 @@
 $config = $arResult['config']; // Helper
 ?>
 <div class="card">
+    <h3 class="dashboard-title">🛠️ Системные Настройки</h3>
+    <form method="post" action="/api.php">
+        <input type="hidden" name="action" value="update_settings">
+        
+        <div class="form-group">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="hidden" name="debug_mode" value="0">
+                <input type="checkbox" name="debug_mode" value="1" <?= $config->getOption('debug_mode', 0) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                <strong>Включить режим отладки (Display Errors)</strong>
+            </label>
+            <p style="font-size: 0.85em; color: #666; margin-left: 24px; margin-top: 4px;">
+                Показывает ошибки PHP на экране. Полезно, если <code>api.php</code> отдает 500. Не забудьте выключить на боевом!
+            </p>
+        </div>
+
+        <button type="submit" class="btn-primary">Сохранить настройки</button>
+    </form>
+</div>
+
+<div class="card">
     <h3 class="dashboard-title">💬 Настройки Чата</h3>
     <form method="post" action="/api.php">
         <input type="hidden" name="action" value="update_settings">

@@ -131,7 +131,7 @@ class UserManager {
         $params = [];
 
         // 1. Separate options from main table fields
-        $optionFields = ['chat_color', 'avatar_url', 'font_preference'];
+        $optionFields = ['chat_color', 'avatar_url', 'font_preference', 'font_scale'];
 
         
         foreach ($optionFields as $field) {
@@ -248,8 +248,39 @@ class UserManager {
         
         if ($stmt->execute()) {
             $newUserId = $stmt->insert_id;
+            
+            // Random Color Generation 🎨
+            $colors = [
+                '#6d2f8e', // Twilight (Default)
+                '#D63E85', // Pinkie
+                '#D67229', // Applejack
+                '#0087BD', // Rainbow Dash
+                '#5B2C6F', // Rarity
+                '#C7971E', // Fluttershy (Gold)
+                '#2E8B57', // Lyra
+                '#1E3F5A', // Bon Bon
+                '#D32F2F', // Red
+                '#C2185B', // Pink
+                '#7B1FA2', // Purple
+                '#512DA8', // Deep Purple
+                '#303F9F', // Indigo
+                '#1976D2', // Blue
+                '#0288D1', // Light Blue
+                '#0097A7', // Cyan
+                '#00796B', // Teal
+                '#388E3C', // Green
+                '#689F38', // Light Green
+                '#FBC02D', // Yellow
+                '#FFA000', // Amber
+                '#F57C00', // Orange
+                '#E64A19', // Deep Orange
+                '#5D4037', // Brown
+                '#455A64'  // Blue Grey
+            ];
+            $randomColor = $colors[array_rand($colors)];
+
             // Set default options
-            $this->setUserOption($newUserId, 'chat_color', '#6d2f8e');
+            $this->setUserOption($newUserId, 'chat_color', $randomColor);
             $this->setUserOption($newUserId, 'avatar_url', '/assets/img/default-avatar.png');
             
             $this->clearAllUsersCache(); // Add to list

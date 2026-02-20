@@ -52,6 +52,15 @@
                 </div>
 
                 <div class="form-group" style="margin-bottom: 15px;">
+                    <label class="form-label">Размер шрифта (<span id="font-scale-val"><?= ($arResult['options']['font_scale'] ?? 100) ?></span>%)</label>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="font-size:0.8em; color:#666;">50%</span>
+                        <input type="range" name="font_scale" min="50" max="150" step="5" value="<?= ($arResult['options']['font_scale'] ?? 100) ?>" class="form-range" style="flex:1;" oninput="document.getElementById('font-scale-val').textContent = this.value; window.applyFontScale ? window.applyFontScale(this.value) : null;">
+                        <span style="font-size:0.8em; color:#666;">150%</span>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 15px;">
                     <label class="form-label">Аватарка</label>
                     <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
                         <img src="<?= htmlspecialchars($arResult['user']['avatar_url'] ?: '/assets/img/default-avatar.png') ?>" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid #ddd;" id="profile-avatar-preview">

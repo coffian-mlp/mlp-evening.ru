@@ -2,9 +2,18 @@
 // src/templates/footer.php
 global $app;
 ?>
-    <!-- Global Lightbox -->
-    <div id="global-lightbox" class="lightbox" onclick="this.style.display='none'">
-        <img id="global-lightbox-img" src="" alt="Zoom">
+    <!-- Global Smart Lightbox -->
+    <div id="global-lightbox" class="lightbox" style="display: none;">
+        <button id="lightbox-close" class="lightbox-close-btn">&times;</button>
+        <div class="lightbox-content">
+            <img id="global-lightbox-img" src="" alt="Full Image" draggable="false">
+        </div>
+        <div class="lightbox-controls">
+            <span id="lightbox-zoom-level">100%</span>
+            <button id="lightbox-zoom-in" title="Zoom In">+</button>
+            <button id="lightbox-zoom-out" title="Zoom Out">-</button>
+            <button id="lightbox-reset" title="Reset">⟲</button>
+        </div>
     </div>
 
     <!-- Конец контента -->

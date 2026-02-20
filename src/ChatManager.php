@@ -82,6 +82,20 @@ class ChatManager {
         // Basic HTML escaping to prevent XSS
         $message = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
 
+        // --- Anti-Duplicate Check (Idempotency) ---
+        // Check if user sent the exact same message within last 3 seconds
+        $dupStmt = $this->db->prepare("SELECT id FROM chat_messages WHERE user_id = ? AND message = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 3 SECOND) LIMIT 1");
+        if ($dupStmt) {
+            $dupStmt->bind_param("is", $userId, $message);
+            $dupStmt->execute();
+            if ($dupStmt->get_result()->fetch_assoc()) {
+                $dupStmt->close();
+                // Silently ignore duplicate to prevent "double post" visual
+                return true; 
+            }
+            $dupStmt->close();
+        }
+
         $quotedJson = null;
         if (!empty($quotedMsgIds) && is_array($quotedMsgIds)) {
             // Validate that all IDs are integers
@@ -303,6 +317,43 @@ class ChatManager {
         return 0;
     }
 
+    public function searchMessages($query, $limit = 50, $offset = 0) {
+        $query = trim($query);
+        if (empty($query)) return [];
+        
+        // Escape query for LIKE
+        $searchTerm = '%' . $this->db->real_escape_string($query) . '%';
+        $limit = (int)$limit;
+        $offset = (int)$offset;
+        
+        $sql = "SELECT cm.*, 
+                 COALESCE(NULLIF(u.nickname, ''), u.login, cm.username) as username,
+                 u.role, 
+                 uo_color.option_value as chat_color,
+                 uo_avatar.option_value as avatar_url
+          FROM chat_messages cm 
+          LEFT JOIN users u ON cm.user_id = u.id 
+          LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
+          LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
+          WHERE cm.message LIKE ? AND cm.is_deleted = 0
+          ORDER BY cm.id DESC LIMIT ? OFFSET ?";
+          
+        $stmt = $this->db->prepare($sql);
+        $stmt->bind_param("sii", $searchTerm, $limit, $offset);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $messages = [];
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                if (empty($row['chat_color'])) $row['chat_color'] = '#6d2f8e';
+                $messages[] = $row;
+            }
+        }
+        
+        return $this->processMessages($messages); // Don't reverse here, user wants search results (newest first usually)
+    }
+
     // --- Helper to fetch single full message ---
     private function getMessageById($id) {
         // COALESCE logic: Try nickname -> login -> historical username
@@ -401,14 +452,136 @@ class ChatManager {
         return $text;
     }
 
+    public function toggleReaction($messageId, $userId, $reactionType) {
+        // Validate reaction type
+        $allowed = ['like', 'dislike', 'laugh', 'cry', 'neutral'];
+        if (!in_array($reactionType, $allowed)) {
+            return ['success' => false, 'message' => 'Неизвестная реакция'];
+        }
+
+        // Check if exists
+        $stmt = $this->db->prepare("SELECT id FROM chat_reactions WHERE message_id = ? AND user_id = ? AND reaction = ?");
+        $stmt->bind_param("iis", $messageId, $userId, $reactionType);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        
+        $action = 'added';
+        if ($res && $row = $res->fetch_assoc()) {
+            // Remove
+            $del = $this->db->prepare("DELETE FROM chat_reactions WHERE id = ?");
+            $del->bind_param("i", $row['id']);
+            $del->execute();
+            $action = 'removed';
+        } else {
+            // Add
+            $ins = $this->db->prepare("INSERT INTO chat_reactions (message_id, user_id, reaction) VALUES (?, ?, ?)");
+            $ins->bind_param("iis", $messageId, $userId, $reactionType);
+            $ins->execute();
+        }
+        
+        // Broadcast Update
+        $reactions = $this->getReactionsForMessage($messageId);
+        
+        $this->broadcast([
+            'type' => 'reaction_update',
+            'id' => $messageId,
+            'reactions' => $reactions
+        ]);
+        
+        return ['success' => true, 'action' => $action, 'reactions' => $reactions];
+    }
+
+    private function getReactionsForMessage($messageId) {
+        // Get counts and users
+        $stmt = $this->db->prepare("SELECT cr.reaction, COUNT(*) as count, 
+                                           GROUP_CONCAT(
+                                              CONCAT_WS('|', 
+                                                  COALESCE(NULLIF(u.nickname, ''), u.login),
+                                                  COALESCE(uo_color.option_value, ''),
+                                                  COALESCE(uo_avatar.option_value, '')
+                                              ) SEPARATOR ';;'
+                                           ) as users_data
+                                    FROM chat_reactions cr
+                                    LEFT JOIN users u ON cr.user_id = u.id
+                                    LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
+                                    LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
+                                    WHERE cr.message_id = ? 
+                                    GROUP BY cr.reaction");
+        $stmt->bind_param("i", $messageId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        
+        $counts = [];
+        while($row = $res->fetch_assoc()) {
+            $counts[$row['reaction']] = [
+                'count' => (int)$row['count'],
+                'users' => $row['users_data']
+            ];
+        }
+        
+        return $counts;
+    }
+
     private function processMessages($messages) {
-        // Collect all quoted message IDs
+        if (empty($messages)) return [];
+
+        // Collect all quoted message IDs & Current IDs
         $allQuotedIds = [];
+        $currentMsgIds = [];
+        
         foreach ($messages as $msg) {
+            $currentMsgIds[] = $msg['id'];
             if (!empty($msg['quoted_msg_ids'])) {
                 $ids = json_decode($msg['quoted_msg_ids'], true);
                 if (is_array($ids)) {
                     $allQuotedIds = array_merge($allQuotedIds, $ids);
+                }
+            }
+        }
+        
+        // --- Reaction Fetching (Batch) ---
+        $reactionsData = [];
+        $myReactions = [];
+        $currentUserId = $_SESSION['user_id'] ?? 0;
+        
+        if (!empty($currentMsgIds)) {
+            $idsStr = implode(',', array_map('intval', $currentMsgIds));
+            
+            // 1. Counts & Users with Details
+            $rQuery = "SELECT cr.message_id, cr.reaction, COUNT(*) as count,
+                              GROUP_CONCAT(
+                                  CONCAT_WS('|', 
+                                      COALESCE(NULLIF(u.nickname, ''), u.login),
+                                      COALESCE(uo_color.option_value, ''),
+                                      COALESCE(uo_avatar.option_value, '')
+                                  ) SEPARATOR ';;'
+                              ) as users_data
+                       FROM chat_reactions cr
+                       LEFT JOIN users u ON cr.user_id = u.id
+                       LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
+                       LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
+                       WHERE cr.message_id IN ($idsStr) 
+                       GROUP BY cr.message_id, cr.reaction";
+            $rRes = $this->db->query($rQuery);
+            if ($rRes) {
+                while($rRow = $rRes->fetch_assoc()) {
+                    $reactionsData[$rRow['message_id']][$rRow['reaction']] = [
+                        'count' => (int)$rRow['count'],
+                        'users' => $rRow['users_data']
+                    ];
+                }
+            }
+            
+            // 2. My Reactions
+            if ($currentUserId) {
+                $myQuery = "SELECT message_id, reaction 
+                            FROM chat_reactions 
+                            WHERE message_id IN ($idsStr) AND user_id = $currentUserId";
+                $myRes = $this->db->query($myQuery);
+                if ($myRes) {
+                    while($myRow = $myRes->fetch_assoc()) {
+                        $myReactions[$myRow['message_id']][] = $myRow['reaction'];
+                    }
                 }
             }
         }
@@ -478,6 +651,9 @@ class ChatManager {
                 // Можно добавить флаг, чтобы фронтенд знал
                 $msg['deleted'] = true;
             } else {
+                // Save raw message for editing BEFORE parsing
+                $msg['raw_message'] = $msg['message'];
+                
                 // Apply Markdown Parsing here!
                 // It is already htmlspecialchars()'d in DB save, so we are safe to add HTML tags.
                 $msg['message'] = $this->parseMarkdown($msg['message']);
@@ -495,6 +671,10 @@ class ChatManager {
                     }
                 }
             }
+            
+            // Attach Reactions 
+            $msg['reactions'] = $reactionsData[$msg['id']] ?? [];
+            $msg['my_reactions'] = $myReactions[$msg['id']] ?? [];
         }
         return $messages;
     }
@@ -543,46 +723,64 @@ class ChatManager {
         return $this->processMessages(array_reverse($messages)); 
     }
 
-    public function getMessagesAfter($lastId, $lastEditedTime = null) {
-        $lastId = (int)$lastId;
-        $params = [$lastId];
-        $types = "i";
-        
-        $sql = "SELECT cm.*, 
-                       COALESCE(NULLIF(u.nickname, ''), u.login, cm.username) as username,
-                       u.role, 
-                       uo_color.option_value as chat_color,
-                       uo_avatar.option_value as avatar_url
-                FROM chat_messages cm 
-                LEFT JOIN users u ON cm.user_id = u.id 
-                LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
-                LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
-                WHERE cm.id > ?";
-        
-        // Добавляем условие для измененных сообщений
-        if ($lastEditedTime) {
-            $sql .= " OR (cm.edited_at > ? AND cm.id <= ?)";
-            // Для сравнения времени используем строку, так как edited_at это DATETIME/TIMESTAMP
-            // А lastEditedTime мы ожидаем в формате 'Y-m-d H:i:s' UTC или timestamp
-            $params[] = $lastEditedTime;
-            $params[] = $lastId;
-            $types .= "si";
-        }
-        
-        $sql .= " ORDER BY cm.id ASC";
+    public function getMessagesContext($messageId, $radius = 20) {
+        $messageId = (int)$messageId;
+        $radius = (int)$radius;
+        if ($radius < 1) $radius = 1;
+        if ($radius > 50) $radius = 50;
 
-        $stmt = $this->db->prepare($sql);
-        $stmt->bind_param($types, ...$params);
+        // 1. Get Target + Radius older
+        $sqlOlder = "SELECT id FROM chat_messages WHERE id <= ? ORDER BY id DESC LIMIT ?";
+        // Radius + 1 (target itself)
+        $limit = $radius + 1; 
+        
+        $stmt = $this->db->prepare($sqlOlder);
+        $stmt->bind_param("ii", $messageId, $limit);
         $stmt->execute();
         $res = $stmt->get_result();
         
-        $messages = [];
+        $ids = [];
+        while ($row = $res->fetch_assoc()) {
+            $ids[] = $row['id'];
+        }
+        
+        // 2. Get Radius newer
+        $sqlNewer = "SELECT id FROM chat_messages WHERE id > ? ORDER BY id ASC LIMIT ?";
+        $stmt = $this->db->prepare($sqlNewer);
+        $stmt->bind_param("ii", $messageId, $radius);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        
+        while ($row = $res->fetch_assoc()) {
+            $ids[] = $row['id'];
+        }
+        
+        if (empty($ids)) return [];
+        
+        // 3. Fetch full data for these IDs
+        $idsStr = implode(',', $ids);
+        
+        $sqlFull = "SELECT cm.*, 
+                 COALESCE(NULLIF(u.nickname, ''), u.login, cm.username) as username,
+                 u.role, 
+                 uo_color.option_value as chat_color,
+                 uo_avatar.option_value as avatar_url
+          FROM chat_messages cm 
+          LEFT JOIN users u ON cm.user_id = u.id 
+          LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
+          LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
+          WHERE cm.id IN ($idsStr)
+          ORDER BY cm.id ASC";
+          
+        $res = $this->db->query($sqlFull);
+        $finalMessages = [];
         if ($res) {
             while ($row = $res->fetch_assoc()) {
                 if (empty($row['chat_color'])) $row['chat_color'] = '#6d2f8e';
-                $messages[] = $row;
+                $finalMessages[] = $row;
             }
         }
-        return $this->processMessages($messages);
+        
+        return $this->processMessages($finalMessages);
     }
 }

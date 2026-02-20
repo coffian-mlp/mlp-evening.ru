@@ -24,3 +24,12 @@ Auth::check();
 // 5. Инициализация приложения
 global $app;
 $app = \Core\Application::getInstance();
+
+// Отладка
+if (ConfigManager::getInstance()->getOption('debug_mode', 0)) {
+    ini_set('display_errors', 1);
+    ini_set('display_startup_errors', 1);
+    error_reporting(E_ALL);
+} else {
+    ini_set('display_errors', 0);
+}

@@ -18,6 +18,7 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
 // CSS чата подключается автоматически через Component->includeTemplate() -> style.css
 // JS чата подключается автоматически через Component->includeTemplate() -> script.js
 ?>
+<link rel="stylesheet" href="/src/Components/Chat/templates/popup/tooltip.css">
 
 <!-- Chat Container -->
 <div class="chat-container" id="chat" style="<?= isset($arParams['HEIGHT']) ? 'height:'.$arParams['HEIGHT'] : '' ?>">
@@ -89,9 +90,19 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
 
         <div class="chat-settings">
             <span id="online-counter" class="online-badge" title="Онлайн">(0)</span>
+            <button id="chat-search-btn" class="icon-btn" title="Поиск">🔍</button>
             <!-- Кнопка popout удалена для popup-шаблона -->
             <button id="toggle-title-alert" class="icon-btn" title="Моргание вкладки">🔔</button>
         </div>
+    </div>
+    
+    <!-- Search Overlay -->
+    <div id="chat-search-overlay" class="chat-search-overlay" style="display: none;">
+        <div class="chat-search-header">
+             <input type="text" id="chat-search-input" placeholder="Поиск сообщений..." autocomplete="off">
+             <button id="chat-search-close" class="chat-search-close" title="Закрыть">&times;</button>
+        </div>
+        <div id="chat-search-results" class="chat-search-results"></div>
     </div>
     
     <div class="chat-messages" id="chat-messages">
@@ -111,11 +122,15 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
                 <button id="chat-mobile-close" class="chat-mobile-close">&times;</button>
             </div>
             <form id="chat-mobile-form">
-                <textarea id="chat-mobile-input" placeholder="Напиши что-нибудь..." rows="3"></textarea>
-                <div class="chat-mobile-actions" style="display: flex; align-items: center;">
-                    <button type="button" id="mobile-sticker-btn" class="chat-format-btn" style="margin-right: 5px; font-size: 20px;">😊</button>
-                    <button type="button" id="mobile-upload-btn" class="chat-format-btn" style="margin-right: auto; font-size: 20px;">📎</button>
-                    <button type="submit" class="btn-primary" style="padding: 8px 20px;">➤</button>
+                <div class="chat-mobile-input-wrapper">
+                    <textarea id="chat-mobile-input" placeholder="Напиши что-нибудь..." rows="3"></textarea>
+                    <button type="submit" class="chat-mobile-send-btn" title="Отправить">➤</button>
+                </div>
+                <div class="chat-mobile-actions">
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" id="mobile-sticker-btn" class="chat-format-btn" style="font-size: 20px;" title="Стикеры">😊</button>
+                        <button type="button" id="mobile-upload-btn" class="chat-format-btn" style="font-size: 20px;" title="Загрузить">📎</button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -193,6 +208,7 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
         window.currentUsername = <?= json_encode($_SESSION['username']) ?>;
         window.currentUserNickname = <?= json_encode($currentUser['nickname'] ?? $_SESSION['username']) ?>;
         window.currentUserFont = <?= json_encode($userOptions['font_preference'] ?? 'open_sans') ?>;
+        window.currentUserFontScale = <?= json_encode($userOptions['font_scale'] ?? 100) ?>;
         window.csrfToken = <?= json_encode(Auth::generateCsrfToken()) ?>;
         window.telegramBotUsername = <?= json_encode($telegramBotUsername) ?>;
         window.userOptions = <?= json_encode($userOptions) ?>;

@@ -1,4 +1,4 @@
-﻿// main.js - Глобальные скрипты для всего сайта
+// main.js - Глобальные скрипты для всего сайта
 
 // Switch Profile Tabs
 window.switchProfileTab = function(tabName) {
@@ -31,32 +31,123 @@ function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// --- Global Lightbox ---
+// --- Global Smart Lightbox ---
 $(document).ready(function() {
-    // Click on Chat Images & Stickers
-    // Targets: Chat images (excluding emojis) AND Dashboard sticker previews
-    // Removed :not(.chat-sticker) so stickers also open in lightbox
-    $(document).on('click', '.chat-message img:not(.emoji), .sticker-preview-img', function(e) {
-        // Prevent default link navigation if wrapped in <a>
+    const lightbox = $('#global-lightbox');
+    const lightboxImg = $('#global-lightbox-img');
+    const lightboxClose = $('#lightbox-close');
+    const zoomLevelEl = $('#lightbox-zoom-level');
+    
+    let scale = 1;
+    let pointX = 0;
+    let pointY = 0;
+    let isDragging = false;
+    let dragStartX = 0, dragStartY = 0;
+    
+    function updateTransform() {
+        lightboxImg.css('transform', `translate(${pointX}px, ${pointY}px) scale(${scale})`);
+        zoomLevelEl.text(Math.round(scale * 100) + '%');
+    }
+    
+    function openLightbox(src) {
+        scale = 1;
+        pointX = 0;
+        pointY = 0;
+        lightboxImg.attr('src', src);
+        updateTransform();
+        lightbox.css('display', 'flex').hide().fadeIn(200);
+        $('body').css('overflow', 'hidden'); // Lock scroll
+    }
+    
+    function closeLightbox() {
+        lightbox.fadeOut(200, function() {
+            lightboxImg.attr('src', '');
+            $('body').css('overflow', ''); // Unlock scroll
+        });
+    }
+
+    // Trigger on Chat Images, Sticker Previews, or explicit triggers
+    // Exclude emojis and mobile stickers (if handled differently, but here standard is ok)
+    $(document).on('click', '.chat-message img:not(.emoji), .sticker-preview-img, .lightbox-trigger, .chat-img', function(e) {
         e.preventDefault();
+        e.stopPropagation();
         
-        var src = $(this).attr('src');
-        // Check if wrapped in link to high-res image
-        var parentLink = $(this).closest('a');
+        let src = $(this).attr('src');
+        // Check for linked high-res
+        const parentLink = $(this).closest('a');
         if (parentLink.length) {
-            var href = parentLink.attr('href');
+            const href = parentLink.attr('href');
             if (href && href.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i)) {
                 src = href;
             }
         }
         
-        $('#global-lightbox-img').attr('src', src);
-        $('#global-lightbox').addClass('active').fadeIn(200);
+        openLightbox(src);
     });
 
-    // Close on click
-    $('#global-lightbox').click(function(e) {
-        $(this).removeClass('active').fadeOut(200);
+    // Close events
+    lightboxClose.on('click', closeLightbox);
+    
+    lightbox.on('click', function(e) {
+        if (e.target === this || $(e.target).hasClass('lightbox-content')) {
+            closeLightbox();
+        }
+    });
+    
+    $(document).on('keydown', function(e) {
+        if (e.key === "Escape" && lightbox.is(':visible')) {
+            closeLightbox();
+        }
+    });
+    
+    // Zoom Controls
+    $('#lightbox-zoom-in').on('click', function(e) { 
+        e.stopPropagation();
+        scale += 0.2; updateTransform(); 
+    });
+    $('#lightbox-zoom-out').on('click', function(e) { 
+        e.stopPropagation();
+        scale = Math.max(0.1, scale - 0.2); updateTransform(); 
+    });
+    $('#lightbox-reset').on('click', function(e) { 
+        e.stopPropagation();
+        scale = 1; pointX = 0; pointY = 0; updateTransform(); 
+    });
+    
+    // Wheel Zoom
+    lightbox.on('wheel', function(e) {
+        e.preventDefault();
+        const zoomSpeed = 0.1;
+        if (e.originalEvent.deltaY < 0) {
+            scale += zoomSpeed;
+        } else {
+            scale = Math.max(0.1, scale - zoomSpeed);
+        }
+        updateTransform();
+    });
+    
+    // Panning (Mouse)
+    lightboxImg.on('mousedown', function(e) {
+        if (e.which !== 1) return;
+        isDragging = true;
+        dragStartX = e.clientX - pointX;
+        dragStartY = e.clientY - pointY;
+        lightboxImg.css('transition', 'none'); 
+        e.preventDefault();
+    });
+    
+    $(document).on('mousemove', function(e) {
+        if (!isDragging) return;
+        pointX = e.clientX - dragStartX;
+        pointY = e.clientY - dragStartY;
+        lightboxImg.css('transform', `translate(${pointX}px, ${pointY}px) scale(${scale})`);
+    });
+    
+    $(document).on('mouseup', function() {
+        if (isDragging) {
+            isDragging = false;
+            lightboxImg.css('transition', 'transform 0.1s ease-out');
+        }
     });
 });
 
@@ -236,7 +327,15 @@ $(document).ready(function() {
                 { color: '#ff5722', name: 'Sunset Shimmer' },
                 { color: '#009688', name: 'Chrysalis' },
                 { color: '#795548', name: 'Discord' },
-                { color: '#607d8b', name: 'Background Pony' }
+                { color: '#607d8b', name: 'Background Pony' },
+                { color: '#a52658', name: 'Fizzlepop Berrytwist' },
+                { color: '#ff9f2c', name: 'Sunny Starscout' },
+                { color: '#9f76d7', name: 'Izzy Moonbow' },
+                { color: '#f2b661', name: 'Hitch Trailblazer' },
+                { color: '#dd97b8', name: 'Pipp Petals' },
+                { color: '#e0e0f0', name: 'Zipp Storm' },
+                { color: '#5e3a77', name: 'Opaline Arcana' },
+                { color: '#8eb0d6', name: 'Misty Brightdawn' }
             ];
 
             // Create swatches container
@@ -661,7 +760,7 @@ $(document).ready(function() {
                         var name = u.nickname;
                         
                         html += `
-                            <div class="online-user-item">
+                            <div class="online-user-item" onclick="if(window.insertMention) window.insertMention('${escapeHtml(name)}');">
                                 <img src="${avatarUrl}" class="online-user-avatar" alt="${escapeHtml(name)}">
                                 <span style="color:${color}; font-weight:600;">${escapeHtml(name)}</span>
                             </div>
@@ -732,9 +831,91 @@ $(document).ready(function() {
         document.documentElement.style.setProperty('--main-font', fontStack);
     };
 
+    // --- 7.5 Font Scale Logic ---
+    window.applyFontScale = function(scale) {
+        // Ensure scale is within bounds
+        scale = Math.min(Math.max(parseInt(scale), 50), 150);
+        
+        // We set font-size on html. Assuming base is 100% (browser default).
+        // Using percentage allows user agent stylesheets to work normally.
+        document.documentElement.style.fontSize = scale + '%';
+    };
+
     // Apply font on load if set globally (from PHP)
     if (window.currentUserFont) {
         applyUserFont(window.currentUserFont);
+    }
+    
+    // Apply font scale
+    if (window.currentUserFontScale) {
+        applyFontScale(window.currentUserFontScale);
+    }
+    // Helper to soft-reload chat interface
+    function reloadChatInterface() {
+        $.post('api.php', { 
+            action: 'get_chat_input', 
+            csrf_token: $('meta[name="csrf-token"]').attr('content') 
+        }, function(res) {
+            if (res.success) {
+                // Replace Input Area
+                const oldArea = document.querySelector('.chat-input-area');
+                if (oldArea) {
+                    oldArea.outerHTML = res.data.html;
+                }
+                
+                // Update Global Variables
+                if (res.data.user_data) {
+                    const u = res.data.user_data;
+                    window.currentUserId = u.user_id;
+                    window.currentUserRole = u.role;
+                    window.isModerator = u.is_moderator;
+                    window.currentUsername = u.username;
+                    window.currentUserNickname = u.nickname;
+                    window.csrfToken = u.csrf_token;
+                    window.userOptions = u.user_options;
+                    
+                    // Update CSRF token in meta tag
+                    $('meta[name="csrf-token"]').attr('content', u.csrf_token);
+                    
+                    // Build Profile Link HTML manually
+                    const avatarUrl = u.avatar_url || '/assets/img/default-avatar.png';
+                    const userMenuHtml = `
+                        <div class="user-controls">
+                            <a href="#" onclick="openProfileModal(event)" class="profile-link" title="Настройки профиля">
+                                <span class="avatar-mini">
+                                    <img src="${escapeHtml(avatarUrl)}" alt="">
+                                </span>
+                                <span class="username" style="color: ${escapeHtml(u.chat_color || '#ce93d8')}">
+                                    ${escapeHtml(u.nickname)}
+                                </span>
+                            </a>
+                        </div>
+                    `;
+                    // Replace user menu content entirely
+                    $('.chat-user-menu').html(userMenuHtml);
+                    
+                    // Inject Mobile FAB if missing
+                    if ($('#chat-mobile-fab').length === 0) {
+                        const fab = $('<button id="chat-mobile-fab" class="chat-mobile-fab" title="Написать" style="position: absolute; right: 20px; bottom: 20px; z-index: 90;">✎</button>');
+                        $('#chat').append(fab); 
+                        fab.click(function() {
+                            $('#chat-mobile-input-overlay').css('display', 'flex').hide().fadeIn(200);
+                            $('#chat-mobile-input').focus();
+                        });
+                    }
+                    
+                    // Update connection and history (if functions exist)
+                    if (window.updateChatConnection && res.data.chat_config) {
+                        window.updateChatConnection(res.data.chat_config);
+                    }
+                    if (window.reloadChatMessages) {
+                        window.reloadChatMessages();
+                    }
+                }
+            } else {
+                location.reload(); 
+            }
+        }, 'json').fail(() => location.reload());
     }
 }); // End of $(document).ready
 
@@ -939,10 +1120,18 @@ $(document).ready(function() {
              // $btn.prop('disabled', false);
 
              if (response.success) {
-                 if (response.data && response.data.reload) {
-                     location.reload();
+                 showFlashMessage(response.message, 'success');
+                 $('#login-modal').fadeOut(200);
+                 
+                 // Try to load chat input if we are on a page with chat
+                 if (document.getElementById('chat')) {
+                     reloadChatInterface();
                  } else {
-                     location.reload(); // Default
+                     if (response.data && response.data.reload) {
+                         location.reload();
+                     } else {
+                         location.reload(); 
+                     }
                  }
              } else {
                  // Check for CAPTCHA
@@ -1025,11 +1214,14 @@ $(document).ready(function() {
                     if (newFont) {
                         applyUserFont(newFont);
                     }
+                    
+                    var newScale = $form.find('input[name="font_scale"]').val();
+                    if (newScale) {
+                        applyFontScale(newScale);
+                    }
 
                     setTimeout(function() { 
                         $('#profile-modal').fadeOut(200); 
-                        // Re-init custom selects just in case DOM changed or for future dynamic elements
-                        // initCustomSelects(); 
                     }, 500);
                 } else {
                     $error.text(response.message).show();
