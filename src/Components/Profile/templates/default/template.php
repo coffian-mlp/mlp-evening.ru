@@ -119,7 +119,7 @@
 
         <!-- Profile Actions Footer -->
         <div class="profile-actions-footer">
-            <form id="logout-form" method="post" action="api.php" style="margin: 0;">
+            <form id="logout-form" method="post" action="/api.php" style="margin: 0;">
                 <input type="hidden" name="action" value="logout">
                 <input type="hidden" name="csrf_token" value="<?= $arResult['csrf_token'] ?>">
                 <button type="submit" class="btn btn-outline-danger">

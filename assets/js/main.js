@@ -460,7 +460,7 @@ $(document).ready(function() {
     };
 
     function loadCaptchaStep() {
-        $.post('api.php', { action: 'captcha_start', csrf_token: window.csrfToken }, function(response) {
+        $.post('/api.php', { action: 'captcha_start', csrf_token: window.csrfToken }, function(response) {
             if (response.success) {
                 renderCaptchaStep(response.data);
             } else {
@@ -535,7 +535,7 @@ $(document).ready(function() {
     }
 
     function checkCaptchaAnswer(answer) {
-        $.post('api.php', { 
+        $.post('/api.php', { 
             action: 'captcha_check', 
             answer: answer,
             csrf_token: window.csrfToken 
@@ -568,7 +568,7 @@ $(document).ready(function() {
     function submitRegistration() {
         var formData = $('#ajax-register-form').serialize();
         
-        $.post('api.php', formData, function(response) {
+        $.post('/api.php', formData, function(response) {
              if (response.success) {
                 showFlashMessage(response.message, 'success');
                 if (response.data && response.data.reload) {
@@ -594,7 +594,7 @@ $(document).ready(function() {
         
         // Отправляем данные на сервер для проверки и входа
         $.ajax({
-            url: 'api.php',
+            url: '/api.php',
             method: 'POST',
             data: {
                 action: 'social_login',
@@ -626,7 +626,7 @@ $(document).ready(function() {
     // Callback для ПРИВЯЗКИ (Bind) в профиле
     window.onTelegramBind = function(user) {
         $.ajax({
-            url: 'api.php',
+            url: '/api.php',
             method: 'POST',
             data: {
                 action: 'bind_social',
@@ -721,7 +721,7 @@ $(document).ready(function() {
     });
 
     function sendHeartbeat() {
-        $.post('api.php', { 
+        $.post('/api.php', { 
             action: 'heartbeat',
             csrf_token: $('meta[name="csrf-token"]').attr('content') 
         }, function(response) {
@@ -798,11 +798,11 @@ $(document).ready(function() {
         data.append('csrf_token', window.csrfToken || ''); // Handle if not set (public)
 
         if (navigator.sendBeacon) {
-            navigator.sendBeacon('api.php', data);
+            navigator.sendBeacon('/api.php', data);
         } else {
             // Fallback (Blocking XHR - deprecated but works)
             const xhr = new XMLHttpRequest();
-            xhr.open('POST', 'api.php', false); // false = synchronous
+            xhr.open('POST', '/api.php', false); // false = synchronous
             xhr.send(data);
         }
     });
@@ -852,7 +852,7 @@ $(document).ready(function() {
     }
     // Helper to soft-reload chat interface
     function reloadChatInterface() {
-        $.post('api.php', { 
+        $.post('/api.php', { 
             action: 'get_chat_input', 
             csrf_token: $('meta[name="csrf-token"]').attr('content') 
         }, function(res) {
@@ -938,7 +938,7 @@ function loadUserSocials() {
     var $widgetContainer = $('#telegram-widget-container');
 
     $.ajax({
-        url: 'api.php',
+        url: '/api.php',
         method: 'POST',
         data: { 
             action: 'get_user_socials',
@@ -962,7 +962,7 @@ function loadUserSocials() {
                         e.preventDefault();
                         if(!confirm('Точно отвязать Telegram?')) return;
                         
-                        $.post('api.php', {
+                        $.post('/api.php', {
                             action: 'unlink_social',
                             provider: 'telegram',
                             csrf_token: $('meta[name="csrf-token"]').attr('content')
@@ -1082,7 +1082,7 @@ $(document).ready(function() {
         $btn.prop('disabled', true).text('Отправка...');
         $msg.hide().removeClass('error-msg success-msg');
         
-        $.post('api.php', $form.serialize(), function(response) {
+        $.post('/api.php', $form.serialize(), function(response) {
             $btn.prop('disabled', false).text('Отправить письмо');
             
             if (response.success) {
@@ -1116,7 +1116,7 @@ $(document).ready(function() {
             formData += '&action=login';
         }
 
-        $.post('api.php', formData, function(response) {
+        $.post('/api.php', formData, function(response) {
              // $btn.prop('disabled', false);
 
              if (response.success) {
@@ -1163,7 +1163,7 @@ $(document).ready(function() {
         // Show immediate feedback or spinner?
         // Let's just do it quietly but handle the response
         
-        $.post('api.php', $(this).serialize(), function(response) {
+        $.post('/api.php', $(this).serialize(), function(response) {
             if (response.success) {
                 location.reload();
             } else {
@@ -1187,7 +1187,7 @@ $(document).ready(function() {
         var formData = new FormData(this);
 
         $.ajax({
-            url: 'api.php',
+            url: '/api.php',
             type: 'POST',
             data: formData,
             contentType: false,

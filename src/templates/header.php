@@ -71,7 +71,7 @@ global $app;
             <?php if (isset($_SESSION['user_id'])): ?>
                 <div class="user-area">
                     <span class="username">Привет, <?= htmlspecialchars($_SESSION['username']) ?>! 👋</span>
-                    <form method="post" action="api.php" style="margin: 0;">
+                    <form method="post" action="/api.php" style="margin: 0;">
                         <input type="hidden" name="action" value="logout">
                         <button type="submit" class="btn-logout">🚪 Выйти</button>
                     </form>
