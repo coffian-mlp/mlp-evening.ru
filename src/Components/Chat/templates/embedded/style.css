@@ -1,6 +1,127 @@
-﻿/* === MLP Evening: Chat Styles (Dark Glassmorphism Theme) === */
+/* === MLP Evening: Chat Styles (Dark Glassmorphism Theme) === */
 
-/* --- 1. Top Bar & User Menu --- */
+/* --- 9. Search Styles --- */
+.chat-search-overlay {
+    position: absolute;
+    top: 60px; /* Match .chat-top-bar height */
+    left: 0;
+    right: 0;
+    bottom: 0; /* Cover everything below header */
+    background: rgba(43, 31, 67, 0.98); /* Opaque background to hide messages */
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    backdrop-filter: blur(10px);
+    animation: slideDown 0.2s ease-out;
+}
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.chat-search-header {
+    padding: 10px 15px;
+    display: flex;
+    gap: 10px;
+    background: rgba(0,0,0,0.2);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    align-items: center;
+    flex-shrink: 0;
+}
+
+#chat-search-input {
+    flex: 1;
+    padding: 10px 15px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(0,0,0,0.3);
+    color: #fff;
+    font-size: 15px;
+    outline: none;
+    transition: all 0.2s;
+}
+#chat-search-input:focus {
+    border-color: var(--accent-color);
+    background: rgba(0,0,0,0.5);
+    box-shadow: 0 0 10px rgba(186, 104, 200, 0.2);
+}
+
+.chat-search-close {
+    background: none;
+    border: none;
+    font-size: 28px;
+    color: var(--text-muted);
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 5px;
+    transition: color 0.2s;
+}
+.chat-search-close:hover {
+    color: #ff8a80;
+}
+
+.chat-search-results {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 0;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.2) transparent;
+}
+
+/* Result Item Style */
+.search-result-item {
+    padding: 12px 15px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    cursor: pointer;
+    transition: background 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.search-result-item:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+.search-result-meta {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+    font-family: 'Philosopher', sans-serif;
+}
+
+.search-result-author {
+    font-weight: bold;
+    color: var(--accent-color);
+}
+
+.search-result-text {
+    color: #e0e0e0;
+    line-height: 1.4;
+    max-height: 3.6em; /* 2-3 lines */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    font-size: 0.95em;
+}
+
+.search-result-highlight {
+    background: rgba(255, 235, 59, 0.3);
+    color: #fff;
+    border-radius: 2px;
+    padding: 0 2px;
+}
+
+.search-no-results {
+    padding: 30px;
+    text-align: center;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
 .chat-top-bar {
     display: flex;
     justify-content: space-between;
@@ -234,6 +355,12 @@
 }
 .message-mentioned:hover { background-color: rgba(255, 235, 59, 0.2); }
 
+.message-quoted {
+    background-color: rgba(186, 104, 200, 0.1);
+    border-left: 3px solid rgba(186, 104, 200, 0.5) !important;
+}
+.message-quoted:hover { background-color: rgba(186, 104, 200, 0.15); }
+
 /* --- Mobile Compact Mode --- */
 .chat-mobile-fab {
     display: none;
@@ -265,6 +392,8 @@
     border-top: 1px solid rgba(255,255,255,0.1);
     animation: slideUp 0.2s ease-out;
     position: relative; /* Fix for absolute children (stickers) */
+    /* Ensure box-sizing includes padding */
+    box-sizing: border-box;
 }
 @keyframes slideUp {
     from { transform: translateY(100%); }
@@ -288,20 +417,64 @@
     cursor: pointer;
 }
 
+/* Mobile Input Wrapper for Ghost Button */
+.chat-mobile-input-wrapper {
+    position: relative;
+    width: 100%;
+    margin-bottom: 10px;
+}
+
 #chat-mobile-input {
     width: 100%;
     background: rgba(0,0,0,0.3);
     border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 8px;
+    border-radius: 12px;
     color: white;
-    padding: 10px;
+    padding: 12px 50px 12px 12px; /* Extra padding on right for button */
     resize: none;
     font-family: inherit;
-    margin-bottom: 10px;
+    /* margin-bottom: 10px; - moved to wrapper margin */
+    box-sizing: border-box; /* Important for width: 100% */
 }
+
+/* Ghost Button (Floating Send) */
+.chat-mobile-send-btn {
+    position: absolute;
+    bottom: 8px; /* Offset from bottom of input */
+    right: 8px;  /* Offset from right of input */
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #7b1fa2, #4a148c);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    z-index: 10;
+    
+    /* Ghost Effect */
+    opacity: 0.6;
+    transform: scale(0.9);
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.chat-mobile-send-btn:hover,
+.chat-mobile-send-btn:active,
+.chat-mobile-send-btn:focus {
+    opacity: 1;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(123, 31, 162, 0.5);
+    outline: none;
+}
+
 .chat-mobile-actions {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between; /* Space out sticker/upload buttons */
+    align-items: center;
 }
 
 /* Responsive Trigger */
@@ -309,6 +482,13 @@
     .chat-input-area { display: none; } /* Hide standard input */
     .chat-mobile-fab { display: flex; } /* Show FAB */
     .chat-messages { padding-bottom: 80px; } /* Space for FAB */
+    
+    /* Mobile Image Fix */
+    .chat-img {
+        max-height: 200px;
+        max-width: 100%;
+        object-fit: contain;
+    }
 }
 
 .chat-input-area {
@@ -319,10 +499,22 @@
     flex-shrink: 0; /* Не сжимать */
 }
 
-#chat-form { display: flex; gap: 10px; }
-#chat-input {
+#chat-form { 
+    display: flex; 
+    gap: 10px; 
+    align-items: flex-end;
+}
+
+/* Desktop Input Wrapper */
+.chat-input-wrapper {
+    position: relative;
+    width: 100%;
     flex: 1;
-    padding: 12px;
+}
+
+#chat-input {
+    width: 100%;
+    padding: 12px 50px 12px 12px; /* Space for ghost button */
     border-radius: 12px;
     border: 1px solid rgba(255,255,255,0.1);
     resize: none;
@@ -333,28 +525,51 @@
     color: #fff;
     transition: all 0.2s;
     max-height: 120px;
+    box-sizing: border-box;
 }
 #chat-input:focus {
     border-color: rgba(186, 104, 200, 0.5);
     background: rgba(0,0,0,0.4);
     box-shadow: 0 0 15px rgba(186, 104, 200, 0.1);
 }
-#chat-form button {
-    padding: 0 18px;
+
+/* Desktop Ghost Button */
+#chat-form button[type="submit"] {
+    position: absolute;
+    bottom: 8px; /* Inside wrapper */
+    right: 8px;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    
     background: linear-gradient(135deg, #7b1fa2, #4a148c);
     color: white;
     border: none;
-    border-radius: 12px;
+    border-radius: 50%;
+    
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
     cursor: pointer;
     font-weight: bold;
-    transition: all 0.2s;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
     text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    
+    /* Ghost Effect */
+    opacity: 0.6;
+    transform: scale(0.9);
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 10;
 }
-#chat-form button:hover {
+
+#chat-form button[type="submit"]:hover,
+#chat-form button[type="submit"]:focus {
     background: linear-gradient(135deg, #8e24aa, #6a1b9a);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+    opacity: 1;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(123, 31, 162, 0.5);
+    outline: none;
 }
 
 .chat-login-prompt { text-align: center; color: var(--text-muted); font-size: 0.9em; }
@@ -532,6 +747,7 @@
     font-weight: bold; 
     color: var(--accent-color); 
     margin-right: 10px; /* Отступ от кнопки, если имя длинное */
+    font-family: 'Philosopher', sans-serif;
 }
 
 .quote-link-btn { 
@@ -561,6 +777,15 @@
     -webkit-line-clamp: 2; 
     line-clamp: 2; /* Standard property added */
     -webkit-box-orient: vertical; 
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+.quote-content.expanded {
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
+    display: block;
+    overflow: visible;
 }
 
 #quote-preview-area {
@@ -591,7 +816,7 @@
     0% { background-color: rgba(186, 104, 200, 0.4); }
     100% { background-color: transparent; }
 }
-.message-highlight { animation: highlightFade 2s ease-out; }
+.highlight-message { animation: highlightFade 2s ease-out; }
 
 .chat-sticker {
     max-width: 250px; /* Увеличили ширину для горизонтальных стикеров */
@@ -796,4 +1021,154 @@
     from { transform: scale(0.9); opacity: 0; }
     to { transform: scale(1); opacity: 1; }
 }
+.chat-return-btn {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: none;
+    background: var(--primary-color);
+    color: white;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    font-weight: bold;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.chat-return-btn:hover {
+    transform: translateX(-50%) scale(1.05);
+    box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+}
+
 .chat-confirm-buttons { display: flex; justify-content: center; gap: 10px; }
+
+/* --- 10. Reactions Styles --- */
+.message-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+    align-items: center;
+    position: relative; /* For picker positioning context if needed */
+    justify-content: flex-end; /* Move to right */
+}
+
+.reaction-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    font-size: 0.85em;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s;
+    color: var(--text-muted);
+}
+
+.reaction-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.reaction-item.active {
+    background: rgba(186, 104, 200, 0.15);
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+}
+
+.reaction-count {
+    font-weight: bold;
+    font-size: 0.9em;
+}
+
+.add-reaction-btn {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: transparent;
+    border: 1px solid transparent;
+    color: #888; /* Default Gray */
+    cursor: pointer;
+    font-size: 16px;
+    opacity: 0;
+    transition: all 0.2s;
+    position: relative; /* Anchor for picker */
+    margin-left: 4px;
+}
+
+.chat-message:hover .add-reaction-btn,
+.message-reactions:hover .add-reaction-btn,
+.add-reaction-btn.active,
+.add-reaction-btn:hover { /* Keep visible if hovered or active */
+    opacity: 1;
+}
+
+.add-reaction-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff; /* White on hover */
+}
+
+/* Make SVG inherit color */
+.add-reaction-btn svg {
+    display: block;
+}
+
+.reaction-picker {
+    position: absolute;
+    top: 50%;
+    right: 100%; /* Position to the left of the button */
+    left: auto;
+    bottom: auto;
+    transform: translateY(-50%);
+    margin-right: 8px; /* Spacing handled visually */
+    margin-bottom: 0;
+    
+    background: var(--bg-darker);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    padding: 5px 8px;
+    display: flex;
+    gap: 4px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    backdrop-filter: blur(10px);
+    z-index: 1000;
+    
+    /* Animation */
+    animation: pickerFadeIn 0.2s ease-out;
+    white-space: nowrap;
+}
+
+/* Invisible bridge to prevent mouseleave when moving from button to picker */
+.reaction-picker::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 100%;
+    width: 15px; /* Covers the margin gap */
+    background: transparent;
+}
+
+@keyframes pickerFadeIn {
+    from { opacity: 0; transform: translateY(-50%) translateX(10px); }
+    to { opacity: 1; transform: translateY(-50%); }
+}
+
+.reaction-picker-item {
+    font-size: 20px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: transform 0.2s;
+}
+.reaction-picker-item:hover {
+    transform: scale(1.2);
+}

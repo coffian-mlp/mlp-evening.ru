@@ -44,6 +44,17 @@ global $app;
         window.currentUserRole = "<?= isset($_SESSION['role']) ? $_SESSION['role'] : '' ?>";
         // Pass server time (seconds) to calculate clock skew
         window.serverTime = <?= time() ?>;
+        
+        <?php 
+        // Pass User Options if logged in
+        if (isset($_SESSION['user_id'])) {
+            $uMgr = new UserManager();
+            $uOpts = $uMgr->getUserOptions($_SESSION['user_id']);
+            echo "window.userOptions = " . json_encode($uOpts) . ";\n";
+            echo "window.currentUserFont = " . json_encode($uOpts['font_preference'] ?? 'open_sans') . ";\n";
+            echo "window.currentUserFontScale = " . json_encode($uOpts['font_scale'] ?? 100) . ";\n";
+        }
+        ?>
     </script>
 </head>
 <body class="<?= $bodyClass ?? '' ?>">

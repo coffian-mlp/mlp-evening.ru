@@ -1,11 +1,18 @@
 <?php
 
-// Отключаем вывод ошибок в поток вывода, чтобы не ломать JSON
-error_reporting(E_ALL);
-ini_set('display_errors', 0);
+// Отключаем вывод ошибок в поток вывода по умолчанию, но позволяем включить через конфиг
+require_once __DIR__ . '/src/ConfigManager.php';
+$debugMode = ConfigManager::getInstance()->getOption('debug_mode', 0);
+if ($debugMode) {
+    ini_set('display_errors', 1);
+    ini_set('display_startup_errors', 1);
+    error_reporting(E_ALL);
+} else {
+    ini_set('display_errors', 0);
+    error_reporting(E_ALL); // Логируем все, но не выводим
+}
 
 require_once __DIR__ . '/src/EpisodeManager.php';
-require_once __DIR__ . '/src/ConfigManager.php';
 require_once __DIR__ . '/src/Auth.php';
 require_once __DIR__ . '/src/ChatManager.php';
 require_once __DIR__ . '/src/UserManager.php';
@@ -97,6 +104,33 @@ try {
     }
 
     // Public Actions
+    if ($action === 'get_chat_input') {
+        ob_start();
+        include __DIR__ . '/src/Components/Chat/templates/embedded/input_area.php';
+        $html = ob_get_clean();
+        
+        $userData = [];
+        if (Auth::check()) {
+            $um = new UserManager();
+            $currentUser = $um->getUserById($_SESSION['user_id']);
+            $userOptions = $um->getUserOptions($_SESSION['user_id']);
+            
+            $userData = [
+                'user_id' => $_SESSION['user_id'],
+                'role' => $_SESSION['role'],
+                'username' => $_SESSION['username'],
+                'nickname' => $currentUser['nickname'] ?? $_SESSION['username'],
+                'chat_color' => $currentUser['chat_color'] ?? '#6d2f8e',
+                'avatar_url' => $currentUser['avatar_url'] ?? '',
+                'csrf_token' => Auth::generateCsrfToken(),
+                'is_moderator' => Auth::isModerator(),
+                'user_options' => $userOptions
+            ];
+        }
+        
+        sendResponse(true, "Loaded", 'success', ['html' => $html, 'user_data' => $userData]);
+    }
+
     if ($action === 'captcha_start') {
         require_once __DIR__ . '/src/CaptchaManager.php';
         $captcha = new CaptchaManager();
@@ -434,6 +468,13 @@ try {
             }
         }
         
+        if (isset($_POST['font_scale'])) {
+            $scale = (int)$_POST['font_scale'];
+            if ($scale < 50) $scale = 50;
+            if ($scale > 150) $scale = 150;
+            $data['font_scale'] = $scale;
+        }
+        
         // Avatar Logic
         if (isset($_POST['avatar_url']) || isset($_FILES['avatar_file'])) {
             $url = trim($_POST['avatar_url'] ?? '');
@@ -475,6 +516,11 @@ try {
         case 'update_settings':
             $config = ConfigManager::getInstance();
             
+            // --- System Settings ---
+            if (isset($_POST['debug_mode'])) {
+                $config->setOption('debug_mode', (int)$_POST['debug_mode']);
+            }
+
             if (isset($_POST['stream_url'])) {
                 $url = trim($_POST['stream_url']);
                 // Простейшая валидация
@@ -682,6 +728,7 @@ try {
             // New fields & Uploads
             $chat_color = trim($_POST['chat_color'] ?? '');
             $font_preference = trim($_POST['font_preference'] ?? 'open_sans');
+            $font_scale = (int)($_POST['font_scale'] ?? 100);
             $raw_avatar_url = trim($_POST['avatar_url'] ?? '');
             $avatar_url = $raw_avatar_url; // Default
             
@@ -709,7 +756,8 @@ try {
                     'role' => $role,
                     'avatar_url' => $avatar_url,
                     'chat_color' => $chat_color,
-                    'font_preference' => $font_preference
+                    'font_preference' => $font_preference,
+                    'font_scale' => $font_scale
                 ];
 
                 if (!empty($id)) {
@@ -734,7 +782,8 @@ try {
                     $userManager->updateUser($newId, [
                         'avatar_url' => $avatar_url,
                         'chat_color' => $chat_color,
-                        'font_preference' => $font_preference
+                        'font_preference' => $font_preference,
+                        'font_scale' => $font_scale
                     ]);
                     
                     sendResponse(true, "Пользователь создан");
@@ -878,6 +927,54 @@ try {
             $messages = $chat->getMessages($limit, $beforeId);
             
             sendResponse(true, "Сообщения получены", 'success', ['messages' => $messages]);
+            break;
+
+        case 'search_messages':
+            $query = trim($_POST['query'] ?? '');
+            $limit = (int)($_POST['limit'] ?? 50);
+            $offset = (int)($_POST['offset'] ?? 0);
+            
+            if (empty($query)) {
+                sendResponse(false, "Пустой запрос", 'error');
+            }
+            
+            if ($limit > 100) $limit = 100;
+            if ($limit < 1) $limit = 1;
+            
+            $chat = new ChatManager();
+            $messages = $chat->searchMessages($query, $limit, $offset);
+            
+            sendResponse(true, "Результаты поиска", 'success', ['messages' => $messages]);
+            break;
+
+        case 'get_message_context':
+            $id = (int)($_POST['id'] ?? 0);
+            if (!$id) {
+                sendResponse(false, "ID сообщения не указан", 'error');
+            }
+            
+            $chat = new ChatManager();
+            $messages = $chat->getMessagesContext($id, 20); // 20 before + 20 after
+            
+            sendResponse(true, "Контекст загружен", 'success', ['messages' => $messages]);
+            break;
+
+        case 'toggle_reaction':
+            $messageId = (int)($_POST['message_id'] ?? 0);
+            $reaction = trim($_POST['reaction'] ?? '');
+            
+            if (!$messageId || empty($reaction)) {
+                sendResponse(false, "Некорректные данные", 'error');
+            }
+            
+            $chat = new ChatManager();
+            $result = $chat->toggleReaction($messageId, $_SESSION['user_id'], $reaction);
+            
+            if ($result['success']) {
+                sendResponse(true, "Реакция обновлена", 'success', $result);
+            } else {
+                sendResponse(false, $result['message'], 'error');
+            }
             break;
 
         case 'send_message':

@@ -1,4 +1,4 @@
-﻿/* === MLP Evening: Chat Styles (Dark Glassmorphism Theme) === */
+/* === MLP Evening: Chat Styles (Dark Glassmorphism Theme) === */
 
 /* --- 1. Top Bar & User Menu --- */
 .chat-top-bar {
@@ -591,7 +591,7 @@
     0% { background-color: rgba(186, 104, 200, 0.4); }
     100% { background-color: transparent; }
 }
-.message-highlight { animation: highlightFade 2s ease-out; }
+.highlight-message { animation: highlightFade 2s ease-out; }
 
 .chat-sticker {
     max-width: 250px; /* Увеличили ширину для горизонтальных стикеров */

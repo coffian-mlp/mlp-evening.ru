@@ -1,10 +1,230 @@
-﻿// Local Chat Logic using SSE (Server-Sent Events)
+// Local Chat Logic using SSE (Server-Sent Events)
 // Updated by Twilight Sparkle
 
 $(document).ready(function() {
     const chatMessages = document.getElementById('chat-messages');
-    const chatForm = document.getElementById('chat-form');
-    const chatInput = document.getElementById('chat-input');
+
+    // === Custom Tooltip Logic ===
+    let tooltipTimeout;
+    
+    function showReactionTooltip(element) {
+        const usersData = $(element).attr('data-users');
+        if (!usersData) return;
+
+        // Remove existing
+        $('.reaction-user-tooltip').remove();
+
+        const tooltip = $('<div class="reaction-user-tooltip"></div>');
+        const list = $('<div class="reaction-tooltip-list"></div>');
+        
+        // Header
+        const reactionType = $(element).data('reaction');
+        const reactionIcon = REACTION_ICONS[reactionType] || '';
+        tooltip.append(`<div class="reaction-tooltip-header">${reactionIcon} Реакции</div>`);
+
+        // Parse Users: "Name|Color|Avatar;;Name2|..."
+        const users = usersData.split(';;');
+        users.forEach(userStr => {
+            const parts = userStr.split('|');
+            const name = parts[0] || 'Аноним';
+            const color = parts[1] || '#ce93d8'; // Default lilac
+            let avatar = parts[2] || '/assets/img/default-avatar.png';
+            if (avatar === 'default-avatar.png') avatar = '/assets/img/default-avatar.png';
+
+            const userRow = $(`
+                <div class="reaction-tooltip-user">
+                    <img src="${escapeHtml(avatar)}" class="reaction-tooltip-avatar">
+                    <span class="reaction-tooltip-name" style="color: ${escapeHtml(color)}">${escapeHtml(name)}</span>
+                </div>
+            `);
+            list.append(userRow);
+        });
+
+        tooltip.append(list);
+        $('body').append(tooltip); // Append to body to avoid clipping
+
+        // Position
+        const rect = element.getBoundingClientRect();
+        const tooltipWidth = tooltip.outerWidth();
+        
+        tooltip.css({
+            top: (rect.top + window.scrollY - tooltip.outerHeight() - 8) + 'px',
+            left: (rect.left + window.scrollX + (rect.width / 2)) + 'px'
+        });
+
+        // Animate
+        requestAnimationFrame(() => {
+            tooltip.addClass('visible');
+        });
+    }
+
+    function hideReactionTooltip() {
+        const tooltip = $('.reaction-user-tooltip');
+        tooltip.removeClass('visible');
+        setTimeout(() => tooltip.remove(), 200);
+    }
+
+    // Delegated Tooltip Events
+    $(document).on('mouseenter', '.reaction-item', function() {
+        const el = this;
+        clearTimeout(tooltipTimeout);
+        tooltipTimeout = setTimeout(() => {
+            showReactionTooltip(el);
+        }, 300); // Small delay to prevent flashing
+    });
+
+    $(document).on('mouseleave', '.reaction-item', function() {
+        clearTimeout(tooltipTimeout);
+        hideReactionTooltip();
+    });
+    
+    // Also hide on click (toggle)
+    $(document).on('click', '.reaction-item', function() {
+        hideReactionTooltip();
+    });
+
+    // === Reaction Logic 🦄 ===
+    const REACTION_ICONS = {
+        like: '👍',
+        dislike: '👎',
+        laugh: '😂',
+        cry: '😢',
+        neutral: '😐'
+    };
+
+    function toggleReaction(msgId, reaction) {
+        if (!window.currentUserId) {
+            showChatNotification("Войди, чтобы реагировать!", 'error');
+            return;
+        }
+        
+        $.post('api.php', {
+            action: 'toggle_reaction',
+            message_id: msgId,
+            reaction: reaction
+        }, function(res) {
+            if (res.success) {
+                updateMessageReactions(msgId, res.data.reactions, res.data.action, reaction);
+            } else {
+                showChatNotification(res.message, 'error');
+            }
+        }, 'json');
+    }
+
+    function updateMessageReactions(msgId, reactions, action = null, myReaction = null) {
+        const msgEl = $(`.chat-message[data-id="${msgId}"]`);
+        if (!msgEl.length) return;
+        
+        const container = msgEl.find('.message-reactions');
+        let myReactions = [];
+        
+        // Recover existing "my reactions" from DOM
+        container.find('.reaction-item.active').each(function() {
+            myReactions.push($(this).data('reaction'));
+        });
+        
+        // Update "my reactions" based on action (if triggered by me)
+        if (action === 'added' && myReaction) {
+            if (!myReactions.includes(myReaction)) myReactions.push(myReaction);
+        } else if (action === 'removed' && myReaction) {
+            myReactions = myReactions.filter(r => r !== myReaction);
+        }
+        
+        renderReactionsDOM(container, reactions, myReactions);
+    }
+
+    function renderReactionsDOM(container, reactions, myReactions) {
+        container.empty();
+        
+        // Add Reaction Items
+        for (const [type, data] of Object.entries(reactions)) {
+            let count = 0;
+            let users = '';
+            
+            if (typeof data === 'object' && data !== null) {
+                count = data.count || 0;
+                users = data.users || '';
+            } else {
+                count = parseInt(data);
+                users = '';
+            }
+
+            if (count > 0) {
+                const isActive = myReactions.includes(type);
+                // Store raw user data in attribute for custom tooltip
+                const usersAttr = users ? `data-users="${escapeHtml(users)}"` : '';
+                
+                // Removed title attribute to prevent default browser tooltip
+                const btn = $(`<div class="reaction-item ${isActive ? 'active' : ''}" data-reaction="${type}" ${usersAttr}>
+                    ${REACTION_ICONS[type] || type} <span class="reaction-count">${count}</span>
+                </div>`);
+                container.append(btn);
+            }
+        }
+        
+        // Add "Gray Thumb" Button (Trigger)
+        // Using a DIV instead of BUTTON to allow valid nesting of the picker
+        const addBtn = $('<div class="add-reaction-btn" role="button" title="Нравится (или выбери другое)">' +
+            '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.11 7 8.5V21h14c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1.91l-.01-.01L23 10z"/></svg>' +
+            '</div>');
+        container.append(addBtn);
+    }
+
+    function showReactionPicker(msgId, btn) {
+        // Don't recreate if already exists inside this btn
+        if (btn.find('.reaction-picker').length > 0) return;
+
+        $('.reaction-picker').remove(); // Close others
+        
+        const picker = $('<div class="reaction-picker"></div>');
+        
+        for (const [type, icon] of Object.entries(REACTION_ICONS)) {
+            const item = $(`<div class="reaction-picker-item" title="${type}">${icon}</div>`);
+            item.click(function(e) {
+                e.stopPropagation();
+                toggleReaction(msgId, type);
+                picker.remove();
+            });
+            picker.append(item);
+        }
+        
+        btn.append(picker);
+    }
+
+    // Delegated Events for Reactions
+    $(document).on('click', '.reaction-item', function(e) {
+        e.stopPropagation();
+        const msgId = $(this).closest('.chat-message').data('id');
+        const reaction = $(this).data('reaction');
+        toggleReaction(msgId, reaction);
+    });
+
+    // Hover: Show Picker
+    $(document).on('mouseenter', '.add-reaction-btn', function(e) {
+        const msgId = $(this).closest('.chat-message').data('id');
+        showReactionPicker(msgId, $(this));
+    });
+
+    // Leave: Hide Picker
+    $(document).on('mouseleave', '.add-reaction-btn', function(e) {
+        $(this).find('.reaction-picker').remove();
+    });
+
+    // Click: Default Like
+    $(document).on('click', '.add-reaction-btn', function(e) {
+        e.stopPropagation();
+        // Ignore if clicking inside the picker (should be handled by picker item click, but just in case)
+        if ($(e.target).closest('.reaction-picker').length) return;
+
+        const msgId = $(this).closest('.chat-message').data('id');
+        toggleReaction(msgId, 'like');
+    });
+    
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('.add-reaction-btn').length) {
+            $('.reaction-picker').remove();
+        }
+    });
 
     // === Notification Logic (Title Alert) ===
     
@@ -92,9 +312,9 @@ $(document).ready(function() {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    // Current User Data (Populated by PHP in global scope or via API check)
-    const currentUserId = window.currentUserId || null;
-    const currentUserRole = window.currentUserRole || null; // 'admin' or 'user'
+    // Connection Instances
+    let centrifugeInstance = null;
+    let evtSourceInstance = null;
     
     // Calculate Clock Skew
     // window.serverTime is PHP time() (seconds)
@@ -152,23 +372,34 @@ $(document).ready(function() {
         div.dataset.userRole = data.role || 'user'; // Store User Role for moderation check
         div.dataset.timestamp = data.created_at; // Store ISO timestamp for calculations
 
-        // Check for Mention
-        // Use window.currentUserNickname (preferred) or window.currentUsername
-        // We check for @Nickname (case insensitive or exact?) - usually exact or loose.
-        // Let's try exact match with @ prefix.
+        // Store raw message for editing
+        if (data.raw_message) {
+             div.dataset.raw = data.raw_message;
+        }
+
+        // Check for Mention (Direct @Nick)
         const myNick = window.currentUserNickname || window.currentUsername;
+        let isMentioned = false;
+        
         if (myNick) {
-            // Backend sends escaped HTML, so we might need to match escaped nick? 
-            // Usually username is simple, but let's be careful.
-            // Search in data.message content.
-            // The message might contain HTML tags (spans), so simple includes might fail if name is split (unlikely).
-            // Safer: regex for @MyNick\b
             const mentionRegex = new RegExp(`@${escapeRegExp(myNick)}\\b`, 'i');
-            // We check the raw message if possible, but data.message is processed HTML.
-            // It should contain <span class="md-mention">@Nick</span>
-            // So we check text content? No, data.message is HTML string.
             if (mentionRegex.test(data.message)) {
+                isMentioned = true;
                 div.classList.add('message-mentioned');
+            }
+        }
+        
+        // Check for Quote Mention (Soft Highlight)
+        // If NOT directly mentioned, but one of the quotes is mine
+        if (!isMentioned && data.quotes && data.quotes.length > 0 && currentUserId) {
+            // Check if any quote author is me (by username comparison, as quotes stores username snapshot usually)
+            // But better to check original ID? We don't have original author ID in quote object easily,
+            // quotes array in msg usually has: id, username, message, etc.
+            // Let's check by username.
+            const isQuoted = data.quotes.some(q => q.username === myNick);
+            
+            if (isQuoted) {
+                div.classList.add('message-quoted');
             }
         }
         
@@ -215,7 +446,7 @@ $(document).ready(function() {
                  if (qAvatar === 'default-avatar.png') qAvatar = '/assets/img/default-avatar.png';
                  
                  const qColor = q.chat_color ? `style="color: ${escapeHtml(q.chat_color)}"` : '';
-                 let qContent = escapeHtml(q.message || '');
+                 let qContent = q.message || '';
                  if (q.deleted) {
                      qContent = '<em style="color:#999;">Сообщение удалено</em>';
                  }
@@ -237,20 +468,20 @@ $(document).ready(function() {
 
         // Actions (Edit/Delete/Quote)
         let actionsHtml = '';
-        const isMyMessage = (currentUserId && parseInt(data.user_id) === parseInt(currentUserId));
-        const canModerate = (currentUserRole === 'admin' || currentUserRole === 'moderator');
+        const isMyMessage = (window.currentUserId && parseInt(data.user_id) === parseInt(window.currentUserId));
+        const canModerate = (window.currentUserRole === 'admin' || window.currentUserRole === 'moderator');
         
         // Target Role logic for Moderation
         const targetRole = data.role || 'user';
         let canPunish = false;
         
         if (canModerate && !isMyMessage) {
-            if (currentUserRole === 'admin') {
+            if (window.currentUserRole === 'admin') {
                 // Admin can punish anyone EXCEPT other admins
                 if (targetRole !== 'admin') {
                     canPunish = true; 
                 }
-            } else if (currentUserRole === 'moderator') {
+            } else if (window.currentUserRole === 'moderator') {
                 // Moderator can punish only normal users
                 canPunish = (targetRole === 'user');
             }
@@ -298,6 +529,39 @@ $(document).ready(function() {
         
         // Debug display inside message (Temporary) - hidden now
         const debugInfo = ''; 
+
+        // Reactions HTML
+        let reactionsHtml = '<div class="message-reactions">';
+        const reactions = data.reactions || {};
+        const myReactions = data.my_reactions || [];
+        
+        for (const [type, data] of Object.entries(reactions)) {
+            let count = 0;
+            let users = '';
+            
+            if (typeof data === 'object' && data !== null) {
+                count = data.count || 0;
+                users = data.users || '';
+            } else {
+                count = parseInt(data);
+                users = '';
+            }
+
+            if (count > 0) {
+                const isActive = myReactions.includes(type);
+                // Store raw user data in attribute for custom tooltip
+                const usersAttr = users ? `data-users="${escapeHtml(users)}"` : '';
+                const icon = REACTION_ICONS[type] || type;
+                
+                // Removed title attribute completely
+                reactionsHtml += `<div class="reaction-item ${isActive ? 'active' : ''}" data-reaction="${type}" ${usersAttr}>
+                    ${icon} <span class="reaction-count">${count}</span>
+                </div>`;
+            }
+        }
+        reactionsHtml += `<div class="add-reaction-btn" role="button" title="Нравится (или выбери другое)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.11 7 8.5V21h14c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1.91l-.01-.01L23 10z"/></svg>
+        </div></div>`;
 
         // Deleted State Special Content
         if (data.deleted) {
@@ -359,6 +623,7 @@ $(document).ready(function() {
                     <div class="chat-text">
                         ${formatMessage(data.message)} ${editedMark} ${debugInfo}
                     </div>
+                    ${reactionsHtml}
                 </div>
             `;
         }
@@ -366,20 +631,31 @@ $(document).ready(function() {
     }
 
     function appendMessage(data) {
+        // Smart Scroll Logic 🧠
+        // Check if user is near bottom (within 150px)
+        const threshold = 150; 
+        const isNearBottom = (chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight) <= threshold;
+        const isMyMessage = (window.currentUserId && parseInt(data.user_id) === parseInt(window.currentUserId));
+
         const div = createMessageElement(data);
         chatMessages.appendChild(div);
-        scrollToBottom();
         
-        // Wait for images to load then scroll again
+        // Scroll only if near bottom OR if I sent the message
+        if (isNearBottom || isMyMessage) {
+            scrollToBottom();
+        }
+        
+        // Wait for images to load then scroll again (if allowed)
         const images = div.querySelectorAll('img');
         if (images.length > 0) {
             let loaded = 0;
             const total = images.length;
             const onImgLoad = () => {
                 loaded++;
-                // Scroll on every image load or just at end? 
-                // Better on every load to smooth out if multiple large images
-                scrollToBottom(); 
+                // Scroll on every image load only if we decided to scroll
+                if (isNearBottom || isMyMessage) {
+                    scrollToBottom(); 
+                }
             };
             
             images.forEach(img => {
@@ -488,7 +764,7 @@ $(document).ready(function() {
             // Hide Punish options if not allowed
             const targetRole = targetMsgEl.data('userRole') || 'user';
             const msgUserId = targetMsgEl.data('userId'); // Ensure we get UserID from DOM
-            const isSelf = (currentUserId && msgUserId == currentUserId);
+            const isSelf = (window.currentUserId && msgUserId == window.currentUserId);
             const isMyMessage = isSelf; // Alias for clarity
 
             // Check Time Limit for Edit/Delete (10 mins)
@@ -512,9 +788,9 @@ $(document).ready(function() {
             // Hierarchy Check for Delete
             let canDelete = isMyMessage; // Owner always can (if logic permits, e.g. recent?) - backend checks owner rights separately
             if (!isMyMessage) {
-                if (currentUserRole === 'admin') {
+                if (window.currentUserRole === 'admin') {
                      if (targetRole !== 'admin') canDelete = true;
-                } else if (currentUserRole === 'moderator') {
+                } else if (window.currentUserRole === 'moderator') {
                      if (targetRole === 'user') canDelete = true;
                 }
             }
@@ -534,9 +810,9 @@ $(document).ready(function() {
             // --- Moderation Actions ---
             let canPunish = false;
             if (!isSelf) {
-                if (currentUserRole === 'admin') {
+                if (window.currentUserRole === 'admin') {
                     if (targetRole !== 'admin') canPunish = true;
-                } else if (currentUserRole === 'moderator') {
+                } else if (window.currentUserRole === 'moderator') {
                     if (targetRole === 'user') canPunish = true;
                 }
             }
@@ -610,27 +886,39 @@ $(document).ready(function() {
                     $(`.chat-message[data-id="${contextTargetId}"] .quote-btn`).click();
                     break;
                 case 'edit':
-                    // Manually trigger edit logic (since button might be hidden or not rendered if we rely on menu)
-                    // Or simulate click if button exists?
-                    // Better reuse logic.
+                    // Manually trigger edit logic
                     {
                         const msgDiv = $(`.chat-message[data-id="${contextTargetId}"]`);
-                        let text = msgDiv.find('.chat-text').clone().children().remove().end().text().trim();
+                        let text = msgDiv.data('raw');
+                        
+                        if (text) {
+                            const txt = document.createElement('textarea');
+                            txt.innerHTML = text;
+                            text = txt.value;
+                        } else {
+                            text = msgDiv.find('.chat-text').clone().children().remove().end().text().trim();
+                        }
+
+                        const chatInput = document.getElementById('chat-input');
                         if (chatInput) {
                             chatInput.value = text;
                             chatInput.focus();
                             chatInput.dataset.editingId = contextTargetId;
                             chatInput.classList.add('editing-mode');
-                            const submitBtn = chatForm.querySelector('button');
-                            if (submitBtn) submitBtn.textContent = 'Сохранить';
-                        }
+                            chatInput.dispatchEvent(new Event('input')); // Adjust height
+                            const chatForm = document.getElementById('chat-form');
+            const submitBtn = chatForm ? chatForm.querySelector('button') : null;
+            if (submitBtn) submitBtn.textContent = '✔'; // Checkmark
+        }
                     }
                     break;
                 case 'reply':
                     // Just mention
+                    const chatInput = document.getElementById('chat-input');
                     if (chatInput && contextTargetUsername) {
                         chatInput.value += `@${contextTargetUsername} `;
                         chatInput.focus();
+                        chatInput.dispatchEvent(new Event('input')); // Adjust height
                     }
                     break;
                 case 'delete':
@@ -694,6 +982,11 @@ $(document).ready(function() {
     // Unified Message Handler
     function processIncomingData(data) {
         // Handle specialized events
+        if (data.type === 'reaction_update') {
+             updateMessageReactions(data.id, data.reactions);
+             return;
+        }
+
         if (data.type === 'delete') {
              const existingMsg = document.querySelector(`.chat-message[data-id="${data.id}"]`);
              if (existingMsg) {
@@ -734,7 +1027,7 @@ $(document).ready(function() {
             // Notification Logic
             const msgDate = new Date(data.created_at);
             const msgTime = msgDate.getTime() / 1000;
-            if (msgTime > window.chatStartServerTime && data.user_id != currentUserId) {
+            if (msgTime > window.chatStartServerTime && data.user_id != window.currentUserId) {
                 blinkTitle();
             }
         }
@@ -856,59 +1149,85 @@ $(document).ready(function() {
     }
 
     // Initialize Connection
-    const chatConfig = window.chatConfig || { driver: 'sse' };
-    console.log("🦄 Chat Driver:", chatConfig.driver);
+    function initChatConnection() {
+        // Clean up existing
+        if (centrifugeInstance) {
+            centrifugeInstance.disconnect();
+            centrifugeInstance = null;
+        }
+        if (evtSourceInstance) {
+            evtSourceInstance.close();
+            evtSourceInstance = null;
+        }
 
-    if (chatConfig.driver === 'centrifugo') {
-        // Load history first
-        fetchHistory();
+        const chatConfig = window.chatConfig || { driver: 'sse' };
+        console.log("🦄 Chat Driver:", chatConfig.driver);
 
-        if (window.Centrifuge) {
-                const centrifuge = new Centrifuge(chatConfig.centrifugo.url, {
+        if (chatConfig.driver === 'centrifugo') {
+             if (window.Centrifuge) {
+                centrifugeInstance = new Centrifuge(chatConfig.centrifugo.url, {
                     token: chatConfig.centrifugo.token
                 });
 
-                const sub = centrifuge.newSubscription("public:chat");
+                const sub = centrifugeInstance.newSubscription("public:chat");
 
                 sub.on('publication', function(ctx) {
-                // Centrifugo sends data in ctx.data
-                processIncomingData(ctx.data);
+                    processIncomingData(ctx.data);
+                });
+
+                sub.subscribe();
+                centrifugeInstance.connect();
+                console.log("✅ Centrifugo connected");
+            } else {
+                console.error("❌ Centrifuge library is missing!");
+            }
+        } else {
+            // SSE Fallback
+            console.log("🔌 Connecting via SSE...");
+            evtSourceInstance = new EventSource('/chat_stream.php');
+
+            evtSourceInstance.addEventListener('online_count', function(e) {
+                try {
+                    const data = JSON.parse(e.data);
+                    updateOnlineCounter(data.count, data.users);
+                } catch (err) {
+                    console.error("Online parse error", err);
+                }
             });
 
-            sub.subscribe();
-            centrifuge.connect();
-            console.log("✅ Centrifugo connected");
-        } else {
-            console.error("❌ Centrifuge library is missing!");
+            evtSourceInstance.onmessage = function(e) {
+                try {
+                    if (e.data === 'keepalive') return;
+                    const data = JSON.parse(e.data);
+                    processIncomingData(data);
+                } catch (err) {
+                    console.error("Chat parse error", err);
+                }
+            };
+
+            evtSourceInstance.onerror = function(e) {
+                console.log("EventSource failed. Reconnecting...", e);
+            };
         }
-    } else {
-        // SSE Fallback (Default)
-        console.log("🔌 Connecting via SSE...");
-        const evtSource = new EventSource('/chat_stream.php');
-
-        evtSource.addEventListener('online_count', function(e) {
-            try {
-                const data = JSON.parse(e.data);
-                updateOnlineCounter(data.count, data.users);
-            } catch (err) {
-                console.error("Online parse error", err);
-            }
-        });
-
-        evtSource.onmessage = function(e) {
-            try {
-                if (e.data === 'keepalive') return;
-                const data = JSON.parse(e.data);
-                processIncomingData(data);
-            } catch (err) {
-                console.error("Chat parse error", err);
-            }
-        };
-
-        evtSource.onerror = function(e) {
-            console.log("EventSource failed. Reconnecting...", e);
-        };
     }
+    
+    // Initial Load
+    // Always fetch history on load/reload
+    fetchHistory();
+    initChatConnection();
+    
+    // Expose for updates
+    window.reloadChatMessages = function() {
+        const chatMessages = document.getElementById('chat-messages');
+        if (chatMessages) chatMessages.innerHTML = '';
+        oldestMessageId = null;
+        fetchHistory();
+    };
+    
+    window.updateChatConnection = function(config) {
+        if (config) window.chatConfig = config;
+        initChatConnection();
+    };
 
     // State for quoting
     let pendingQuotes = [];
@@ -950,23 +1269,54 @@ $(document).ready(function() {
         const msgId = msgDiv.attr('data-id');
         const username = msgDiv.find('.username').text().trim();
         
-        // Get text, remove .edited-mark or other children if any
+        // --- Smart Quoting (Selection) ---
+        const selection = window.getSelection();
+        const selectedText = selection.toString().trim();
+        const chatInput = document.getElementById('chat-input');
+        
+        // Check if selection is non-empty AND is inside THIS message
+        if (selectedText.length > 0 && selection.anchorNode && msgDiv[0].contains(selection.anchorNode)) {
+            if (chatInput) {
+                // Format as Markdown Blockquote
+                const quoteText = selectedText.split('\n').map(line => `> ${line}`).join('\n') + '\n\n';
+                
+                const start = chatInput.selectionStart;
+                const end = chatInput.selectionEnd;
+                const currentVal = chatInput.value;
+                
+                // Add newline before if needed (if not empty and not already newlined)
+                const prefix = (start > 0 && currentVal[start-1] !== '\n') ? '\n' : '';
+                
+                chatInput.value = currentVal.substring(0, start) + prefix + quoteText + currentVal.substring(end);
+                
+                // Move cursor to end of inserted quote
+                const newPos = start + prefix.length + quoteText.length;
+                chatInput.selectionStart = newPos;
+                chatInput.selectionEnd = newPos;
+                
+                chatInput.focus();
+                chatInput.dispatchEvent(new Event('input')); // Auto-resize
+                
+                // Clear selection to avoid confusion
+                selection.removeAllRanges();
+            }
+            return; // Stop here, don't add as attachment
+        }
+
+        // --- Standard Full Quote (Attachment) ---
+        // Get text for preview
         let text = msgDiv.find('.chat-text').clone().children().remove().end().text().trim();
         
         // Avoid duplicate quotes
         if (!pendingQuotes.find(q => q.id == msgId)) {
             pendingQuotes.push({ id: msgId, username: username, text: text });
             updateQuotePreview();
-            chatInput.focus();
+            if (chatInput) chatInput.focus();
         }
     });
 
-    // Handle Link to Message
-    $(document).on('click', '.quote-link-btn', function(e) {
-        e.preventDefault();
-        e.stopPropagation(); // Stop card expand
-        
-        const targetId = $(this).data('targetId');
+    // --- Context Navigation Logic ---
+    function loadMessageContext(targetId) {
         const targetEl = $(`.chat-message[data-id="${targetId}"]`);
         
         if (targetEl.length) {
@@ -974,8 +1324,154 @@ $(document).ready(function() {
             targetEl.addClass('highlight-message');
             setTimeout(() => targetEl.removeClass('highlight-message'), 2000);
         } else {
-            showChatNotification("Сообщение не найдено (возможно, оно слишком старое)", 'info');
+            // Not in DOM -> Load Context
+            showChatNotification("Ищу сообщение в архивах...", 'info');
+            
+            $.post('api.php', { action: 'get_message_context', id: targetId }, function(res) {
+                if (res.success && res.data.messages && res.data.messages.length > 0) {
+                    // Clear Chat
+                    chatMessages.innerHTML = '';
+                    
+                    // Hide Load More Button
+                    $('#load-more-btn').hide();
+                    oldestMessageId = null; 
+                    
+                    // Use Fragment for performance and avoid auto-scroll side effects
+                    const fragment = document.createDocumentFragment();
+                    res.data.messages.forEach(msg => {
+                        if (!msg.type) msg.type = 'message';
+                        const div = createMessageElement(msg);
+                        fragment.appendChild(div);
+                    });
+                    
+                    chatMessages.appendChild(fragment);
+                    
+                    // Scroll to target
+                    const newTarget = $(`.chat-message[data-id="${targetId}"]`);
+                    if (newTarget.length) {
+                        newTarget[0].scrollIntoView({ behavior: 'auto', block: 'center' });
+                        newTarget.addClass('highlight-message');
+                    }
+                    
+                    // Show "Return to Present" Button
+                    if ($('#return-to-present-btn').length === 0) {
+                        const returnBtn = $('<button id="return-to-present-btn" class="chat-return-btn">⬇ Вернуться к новым</button>');
+                        $(chatMessages).append(returnBtn);
+                        
+                        returnBtn.css({
+                            position: 'absolute',
+                            bottom: '80px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            zIndex: 100,
+                            padding: '8px 16px',
+                            borderRadius: '20px',
+                            border: 'none',
+                            background: 'var(--primary-color)',
+                            color: 'white',
+                            cursor: 'pointer',
+                            boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
+                            fontWeight: 'bold'
+                        });
+                        
+                        $('.chat-input-wrapper').append(returnBtn);
+                        
+                        returnBtn.on('click', function() {
+                            $(this).remove();
+                            chatMessages.innerHTML = '';
+                            fetchHistory(); 
+                        });
+                    }
+                    
+                } else {
+                    showChatNotification("Сообщение не найдено (возможно, удалено)", 'error');
+                }
+            }, 'json').fail(() => {
+                showChatNotification("Ошибка связи с архивом", 'error');
+            });
         }
+    }
+
+    // Handle Link to Message (Refactored)
+    $(document).on('click', '.quote-link-btn', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const targetId = $(this).data('targetId');
+        loadMessageContext(targetId);
+    });
+
+    // --- Search Logic ---
+    const searchBtn = $('#chat-search-btn');
+    const searchOverlay = $('#chat-search-overlay');
+    const searchInput = $('#chat-search-input');
+    const searchClose = $('#chat-search-close');
+    const searchResults = $('#chat-search-results');
+    let searchDebounceTimer;
+
+    searchBtn.click(function() {
+        searchOverlay.css('display', 'flex').hide().slideDown(200);
+        searchInput.focus();
+    });
+
+    searchClose.click(function() {
+        searchOverlay.slideUp(200);
+        searchInput.val('');
+        searchResults.empty();
+    });
+
+    searchInput.on('input', function() {
+        const query = $(this).val().trim();
+        clearTimeout(searchDebounceTimer);
+        
+        if (query.length < 2) {
+            searchResults.empty();
+            return;
+        }
+        
+        searchDebounceTimer = setTimeout(() => {
+            performSearch(query);
+        }, 500);
+    });
+
+    function performSearch(query) {
+        searchResults.html('<div style="text-align:center; padding:20px; color:#888;">Поиск... 🔍</div>');
+        
+        $.post('api.php', { action: 'search_messages', query: query, limit: 50 }, function(res) {
+            searchResults.empty();
+            if (res.success && res.data.messages && res.data.messages.length > 0) {
+                res.data.messages.forEach(msg => {
+                    const date = new Date(msg.created_at).toLocaleString();
+                    // Strip tags for preview
+                    let plainText = msg.message.replace(/<[^>]*>?/gm, ''); 
+                    
+                    const item = $(`
+                        <div class="search-result-item" data-id="${msg.id}">
+                            <div class="search-result-meta">
+                                <span class="search-result-author" style="color:${escapeHtml(msg.chat_color)}">${escapeHtml(msg.username)}</span>
+                                <span>${date}</span>
+                            </div>
+                            <div class="search-result-text"></div> 
+                        </div>
+                    `);
+                    
+                    // Highlight query
+                    const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
+                    const highlighted = plainText.replace(regex, '<span class="search-result-highlight">$1</span>');
+                    
+                    item.find('.search-result-text').html(highlighted);
+                    
+                    searchResults.append(item);
+                });
+            } else {
+                searchResults.html('<div class="search-no-results">Ничего не найдено 🤷‍♀️</div>');
+            }
+        }, 'json');
+    }
+
+    $(document).on('click', '.search-result-item', function() {
+        const id = $(this).data('id');
+        searchOverlay.slideUp(200);
+        loadMessageContext(id);
     });
 
     // Handle Click on Quote Card (Expand)
@@ -1031,14 +1527,28 @@ $(document).ready(function() {
         mobileForm.on('submit', function(e) {
             e.preventDefault();
             const text = mobileInput.val().trim();
+            const chatInput = document.getElementById('chat-input');
             if (text && chatInput) {
-                // Transfer to main input and submit
-                chatInput.value = text;
-                const event = new Event('submit', { cancelable: true });
-                document.getElementById('chat-form').dispatchEvent(event);
+                const mobileBtn = $(this).find('button[type="submit"]');
+                mobileBtn.prop('disabled', true);
                 
-                mobileInput.val('');
-                closeMobileModal();
+                // Transfer to main input
+                chatInput.value = text;
+                
+                // Trigger main submit
+                const event = new Event('submit', { cancelable: true });
+                // We add a custom property to pass the callback
+                event.detail = { 
+                    callback: function(success) {
+                         mobileBtn.prop('disabled', false);
+                         if (success) {
+                             mobileInput.val('');
+                             closeMobileModal();
+                         }
+                    }
+                };
+                
+                document.getElementById('chat-form').dispatchEvent(event);
             }
         });
 
@@ -1068,81 +1578,117 @@ $(document).ready(function() {
         });
     }
 
-    // 2. Handle Send Message
-    if (chatForm) {
-        chatForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const message = chatInput.value.trim();
-            if (!message) return;
+    // 2. Handle Send Message (Delegated)
+    $(document).on('submit', '#chat-form', function(e) {
+        e.preventDefault();
+        
+        // Re-grab input dynamically to support HTML replacement
+        const chatInput = document.getElementById('chat-input');
+        if (!chatInput) return;
 
-            // Check if we are in "Edit Mode"
-            const editingId = chatInput.dataset.editingId;
-            const action = editingId ? 'edit_message' : 'send_message';
-            const data = {
-                action: action,
-                message: message
-            };
-            if (editingId) data.message_id = editingId;
-            
-            // Add Quoted IDs
-            if (pendingQuotes.length > 0 && !editingId) {
-                 const ids = pendingQuotes.map(q => q.id);
-                 data.quoted_msg_ids = ids.join(',');
-            }
+        // Check for callback from mobile (passed via event detail if using native dispatch, 
+        // but since we replaced the element, mobile might need update too?
+        // Actually, mobile modal dispatches event to #chat-form. 
+        // If #chat-form is replaced, mobile sync might fail if it holds reference to old form.
+        // But mobile sync uses document.getElementById('chat-form').dispatchEvent. 
+        // So it should work if ID is preserved.
+        const callback = (e.detail && e.detail.callback) ? e.detail.callback : null;
 
-            const oldVal = chatInput.value;
-            chatInput.value = '';
-            
-            // Clear quotes locally
-            const oldQuotes = [...pendingQuotes];
-            pendingQuotes = [];
-            updateQuotePreview();
+        const message = chatInput.value.trim();
+        if (!message) {
+             if (callback) callback(false);
+             return;
+        }
 
-            // Clear editing state visual
-            if (editingId) {
-                chatInput.removeAttribute('data-editing-id');
-                chatForm.querySelector('button').textContent = 'Отправить';
-                chatInput.classList.remove('editing-mode');
-            }
+        // Block form immediately
+        const $form = $(this);
+        const submitBtn = $form.find('button[type="submit"]');
+        submitBtn.prop('disabled', true);
 
-            $.ajax({
-                url: 'api.php',
-                method: 'POST',
-                data: data,
-                success: function(response) {
-                    if (!response.success) {
-                        showChatNotification(response.message, 'error');
-                        chatInput.value = oldVal; // Restore if failed
-                        pendingQuotes = oldQuotes; // Restore quotes
-                        updateQuotePreview();
-                    }
-                },
-                error: function() {
-                    showChatNotification("Ошибка сети. Попробуй позже.", 'error');
-                    chatInput.value = oldVal;
-                    pendingQuotes = oldQuotes;
+        // Check if we are in "Edit Mode"
+        const editingId = chatInput.dataset.editingId;
+        const action = editingId ? 'edit_message' : 'send_message';
+        const data = {
+            action: action,
+            message: message
+        };
+        if (editingId) data.message_id = editingId;
+        
+        // Add Quoted IDs
+        if (pendingQuotes.length > 0 && !editingId) {
+             const ids = pendingQuotes.map(q => q.id);
+             data.quoted_msg_ids = ids.join(',');
+        }
+
+        $.ajax({
+            url: 'api.php',
+            method: 'POST',
+            data: data,
+            success: function(response) {
+                if (response.success) {
+                    // Clear input only on success
+                    chatInput.value = '';
+                    chatInput.dispatchEvent(new Event('input')); // Reset height
+                    
+                    // Clear quotes locally
+                    pendingQuotes = [];
                     updateQuotePreview();
+                    
+                    // Clear editing state visual
+                    if (editingId) {
+                        chatInput.removeAttribute('data-editing-id');
+                        submitBtn.text('➤'); // Use text() for jQuery obj
+                        chatInput.classList.remove('editing-mode');
+                    }
+                    
+                    if (callback) callback(true);
+                } else {
+                    showChatNotification(response.message, 'error');
+                    if (callback) callback(false);
                 }
-            });
+            },
+            error: function() {
+                showChatNotification("Ошибка сети. Попробуй позже.", 'error');
+                if (callback) callback(false);
+            },
+            complete: function() {
+                // Unlock button
+                submitBtn.prop('disabled', false);
+                // Focus back to input only if NOT mobile callback
+                if (!callback) chatInput.focus();
+            }
         });
-    }
+    });
 
     // 2.5 Handle Message Actions (Event Delegation)
     $(document).on('click', '.edit-btn', function(e) {
         e.preventDefault();
         const msgDiv = $(this).closest('.chat-message');
         const msgId = msgDiv.attr('data-id');
-        // Get text from .chat-text, excluding .edited-mark
-        let text = msgDiv.find('.chat-text').clone().children().remove().end().text().trim();
+        
+        let text = msgDiv.data('raw');
+        
+        if (text) {
+            // Decode HTML entities (since backend sends safely escaped HTML)
+            const txt = document.createElement('textarea');
+            txt.innerHTML = text;
+            text = txt.value;
+        } else {
+             // Fallback for old messages without raw data
+             text = msgDiv.find('.chat-text').clone().children().remove().end().text().trim();
+        }
         
         // Set input to edit mode
+        const chatInput = document.getElementById('chat-input');
         if (chatInput) {
             chatInput.value = text;
             chatInput.focus();
             chatInput.dataset.editingId = msgId;
             chatInput.classList.add('editing-mode');
-            const submitBtn = chatForm.querySelector('button');
-            if (submitBtn) submitBtn.textContent = 'Сохранить';
+            chatInput.dispatchEvent(new Event('input')); // Adjust height
+            const chatForm = document.getElementById('chat-form');
+            const submitBtn = chatForm ? chatForm.querySelector('button') : null;
+            if (submitBtn) submitBtn.textContent = '✔'; // Checkmark
         }
     });
 
@@ -1463,6 +2009,7 @@ $(document).ready(function() {
         const newPos = start + prefix.length + codeStr.length;
         input.selectionStart = newPos;
         input.selectionEnd = newPos;
+        input.dispatchEvent(new Event('input')); // Adjust height
         
         // Hide picker on mobile? Or keep open for multi-select?
         // Close on mobile to return to keyboard
@@ -1471,20 +2018,19 @@ $(document).ready(function() {
         }
     }
 
-    // Toggle Picker
-    if (stickerBtn.length) {
-        stickerBtn.on('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            if (stickerPicker.is(':visible')) {
-                stickerPicker.fadeOut(200);
-            } else {
-                if (!stickersInitialized) initStickerPicker();
-                stickerPicker.fadeIn(200).css('display', 'flex'); // Flex for layout
-            }
-        });
-    }
+    // Toggle Picker (Delegated)
+    $(document).on('click', '#sticker-btn', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const stickerPicker = $('#sticker-picker');
+        if (stickerPicker.is(':visible')) {
+            stickerPicker.fadeOut(200);
+        } else {
+            if (!stickersInitialized) initStickerPicker();
+            stickerPicker.fadeIn(200).css('display', 'flex'); // Flex for layout
+        }
+    });
 
     // Close on click outside
     $(window).on('click', function(e) {
@@ -1495,11 +2041,15 @@ $(document).ready(function() {
         }
     });
 
-    $('.chat-format-btn').on('click', function(e) {
-        if ($(this).attr('id') === 'sticker-btn') return; // Skip sticker btn handled above
+    $(document).on('click', '.chat-format-btn', function(e) {
+        const id = $(this).attr('id');
+        // Skip special buttons
+        if (id === 'sticker-btn' || id === 'chat-upload-btn' || id === 'mobile-sticker-btn' || id === 'mobile-upload-btn') return;
+        
         e.preventDefault();
         const format = $(this).data('format');
         const input = document.getElementById('chat-input'); 
+        if (!input) return;
         
         const start = input.selectionStart;
         const end = input.selectionEnd;
@@ -1565,35 +2115,41 @@ $(document).ready(function() {
     });
 
     // 9. Auto-resize Textarea & Handle Enter
-    const chatTextarea = document.getElementById('chat-input');
-    if (chatTextarea) {
-        chatTextarea.addEventListener('input', function() {
-            this.style.height = 'auto'; // Reset to re-calculate
-            this.style.height = (this.scrollHeight) + 'px';
-        });
+    $(document).on('input', '#chat-input', function() {
+        this.style.height = 'auto'; // Reset to re-calculate
+        this.style.height = (this.scrollHeight) + 'px';
+    });
 
-        chatTextarea.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault(); // Prevent newline
-                // Trigger submit
-                const event = new Event('submit', { cancelable: true });
-                document.getElementById('chat-form').dispatchEvent(event);
-            }
-        });
-    }
+    $(document).on('keydown', '#chat-input', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault(); // Prevent newline
+            // Trigger submit
+            const event = new Event('submit', { cancelable: true });
+            const form = document.getElementById('chat-form');
+            if (form) form.dispatchEvent(event);
+        }
+    });
 
     // 6. Handle Spoiler Reveal
     $(document).on('click', '.md-spoiler', function() {
         $(this).toggleClass('revealed');
     });
 
-    // 7. Handle Mention Click (Insert into input)
-    $(document).on('click', '.md-mention', function() {
-        const username = $(this).text(); // Includes @
-        if (chatInput) {
-            chatInput.value += (chatInput.value ? ' ' : '') + username + ' ';
+    // 7. Helper: Insert Mention
+    window.insertMention = function(username) {
+        const chatInput = document.getElementById('chat-input');
+        if (chatInput && username) {
+            const safeName = username.trim().replace(/\s+/g, ' ');
+            chatInput.value += (chatInput.value ? ' ' : '') + '@' + safeName + ' ';
             chatInput.focus();
+            chatInput.dispatchEvent(new Event('input')); // Adjust height
         }
+    };
+
+    // 7.1 Handle Mention Click (Insert into input)
+    $(document).on('click', '.md-mention', function() {
+        const username = $(this).text().replace('@', ''); 
+        window.insertMention(username);
     });
 
     // 8. Handle Username Click (Insert Mention)
@@ -1601,13 +2157,8 @@ $(document).ready(function() {
         // Only if not holding modifier keys (to allow default selection if needed)
         if (e.ctrlKey || e.metaKey) return;
         
-        const username = $(this).text().trim();
-        if (chatInput && username) {
-            // Clean username just in case
-            const safeName = username.replace(/\s+/g, ' ');
-            chatInput.value += (chatInput.value ? ' ' : '') + '@' + safeName + ' ';
-            chatInput.focus();
-        }
+        const username = $(this).text();
+        window.insertMention(username);
     });
 
     // 10. File Upload Logic
@@ -1691,57 +2242,52 @@ $(document).ready(function() {
         });
     }
 
-    if (uploadBtn && fileInput) {
-        uploadBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            fileInput.click();
-        });
+    $(document).on('click', '#chat-upload-btn', function(e) {
+        e.preventDefault();
+        const fileInput = document.getElementById('chat-file-input');
+        if (fileInput) fileInput.click();
+    });
 
-        fileInput.addEventListener('change', function() {
-            if (this.files && this.files[0]) {
-                uploadFile(this.files[0]);
-                this.value = ''; // Reset
-            }
-        });
-    }
-
-    // Paste Handler
-    if (chatTextarea) {
-        chatTextarea.addEventListener('paste', function(e) {
-            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-            for (let i = 0; i < items.length; i++) {
-                if (items[i].kind === 'file') {
-                    e.preventDefault();
-                    const file = items[i].getAsFile();
-                    uploadFile(file);
-                    return; // Upload first found file
-                }
-            }
-        });
-        
-        // Drag & Drop
-        const dropZone = document.querySelector('.chat-input-area');
-        if (dropZone) {
-            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                dropZone.addEventListener(eventName, preventDefaults, false);
-            });
-
-            function preventDefaults(e) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-
-            dropZone.addEventListener('dragenter', () => dropZone.classList.add('highlight-drop'), false);
-            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('highlight-drop'), false);
-            
-            dropZone.addEventListener('drop', function(e) {
-                dropZone.classList.remove('highlight-drop');
-                const dt = e.dataTransfer;
-                const files = dt.files;
-                if (files && files[0]) {
-                    uploadFile(files[0]);
-                }
-            }, false);
+    $(document).on('change', '#chat-file-input', function() {
+        if (this.files && this.files[0]) {
+            uploadFile(this.files[0]);
+            this.value = ''; // Reset
         }
-    }
+    });
+
+    // Paste Handler (Delegated)
+    $(document).on('paste', '#chat-input', function(e) {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].kind === 'file') {
+                e.preventDefault();
+                const file = items[i].getAsFile();
+                uploadFile(file);
+                return; 
+            }
+        }
+    });
+        
+    // Drag & Drop (Delegated)
+    $(document).on('dragenter dragover dragleave drop', '.chat-input-area', function(e) {
+         e.preventDefault();
+         e.stopPropagation();
+    });
+    
+    $(document).on('dragenter', '.chat-input-area', function() {
+         $(this).addClass('highlight-drop');
+    });
+    
+    $(document).on('dragleave', '.chat-input-area', function() {
+         $(this).removeClass('highlight-drop');
+    });
+    
+    $(document).on('drop', '.chat-input-area', function(e) {
+         $(this).removeClass('highlight-drop');
+         const dt = e.originalEvent.dataTransfer;
+         const files = dt.files;
+         if (files && files[0]) {
+             uploadFile(files[0]);
+         }
+    });
 });

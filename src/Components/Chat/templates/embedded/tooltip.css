@@ -1,0 +1,82 @@
+/* Reaction User Tooltip */
+.reaction-user-tooltip {
+    position: absolute;
+    /* JS sets top/left, so we reset these to avoid conflicts */
+    top: 0;
+    left: 0;
+    margin: 0;
+    
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    
+    background: rgba(20, 20, 20, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 8px;
+    min-width: 150px;
+    max-width: 250px;
+    z-index: 2000;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    backdrop-filter: blur(5px);
+    pointer-events: none;
+    
+    opacity: 0;
+    transition: opacity 0.2s;
+    transform: translateX(-50%); /* Center horizontally relative to JS-set left */
+}
+
+.reaction-user-tooltip.visible {
+    opacity: 1;
+}
+
+.reaction-user-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: rgba(20, 20, 20, 0.95) transparent transparent transparent;
+}
+
+.reaction-tooltip-header {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    padding-bottom: 4px;
+}
+
+.reaction-tooltip-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.reaction-tooltip-user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.reaction-tooltip-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #333;
+}
+
+.reaction-tooltip-name {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

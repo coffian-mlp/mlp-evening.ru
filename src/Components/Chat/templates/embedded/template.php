@@ -18,6 +18,7 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
 // CSS чата подключается автоматически через Component->includeTemplate() -> style.css
 // JS чата подключается автоматически через Component->includeTemplate() -> script.js
 ?>
+<link rel="stylesheet" href="/src/Components/Chat/templates/embedded/tooltip.css">
 
 <!-- Chat Container -->
 <div class="chat-container" id="chat" style="<?= isset($arParams['HEIGHT']) ? 'height:'.$arParams['HEIGHT'] : '' ?>">
@@ -89,11 +90,21 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
 
         <div class="chat-settings">
             <span id="online-counter" class="online-badge" title="Онлайн">(0)</span>
+            <button id="chat-search-btn" class="icon-btn" title="Поиск">🔍</button>
             <?php if ($arResult['mode'] !== 'popup'): ?>
                 <button id="popout-chat" class="icon-btn popout-btn" title="Открыть в отдельном окне" onclick="window.open('/chat_popup.php', 'ChatWindow', 'width=450,height=700'); return false;" style="margin-right: 5px;">❐</button>
             <?php endif; ?>
             <button id="toggle-title-alert" class="icon-btn" title="Моргание вкладки">🔔</button>
         </div>
+    </div>
+    
+    <!-- Search Overlay -->
+    <div id="chat-search-overlay" class="chat-search-overlay" style="display: none;">
+        <div class="chat-search-header">
+             <input type="text" id="chat-search-input" placeholder="Поиск сообщений..." autocomplete="off">
+             <button id="chat-search-close" class="chat-search-close" title="Закрыть">&times;</button>
+        </div>
+        <div id="chat-search-results" class="chat-search-results"></div>
     </div>
     
     <div class="chat-messages" id="chat-messages">
@@ -113,52 +124,22 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
                 <button id="chat-mobile-close" class="chat-mobile-close">&times;</button>
             </div>
             <form id="chat-mobile-form">
-                <textarea id="chat-mobile-input" placeholder="Напиши что-нибудь..." rows="3"></textarea>
-                <div class="chat-mobile-actions" style="display: flex; align-items: center;">
-                    <button type="button" id="mobile-sticker-btn" class="chat-format-btn" style="margin-right: 5px; font-size: 20px;">😊</button>
-                    <button type="button" id="mobile-upload-btn" class="chat-format-btn" style="margin-right: auto; font-size: 20px;">📎</button>
-                    <button type="submit" class="btn-primary" style="padding: 8px 20px;">➤</button>
+                <div class="chat-mobile-input-wrapper">
+                    <textarea id="chat-mobile-input" placeholder="Напиши что-нибудь..." rows="3"></textarea>
+                    <button type="submit" class="chat-mobile-send-btn" title="Отправить">➤</button>
+                </div>
+                <div class="chat-mobile-actions">
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" id="mobile-sticker-btn" class="chat-format-btn" style="font-size: 20px;" title="Стикеры">😊</button>
+                        <button type="button" id="mobile-upload-btn" class="chat-format-btn" style="font-size: 20px;" title="Загрузить">📎</button>
+                    </div>
                 </div>
             </form>
         </div>
     </div>
 
-    <div class="chat-input-area">
-            <?php if (isset($_SESSION['user_id'])): ?>
-            <div id="quote-preview-area" class="hidden"></div>
-            <!-- Toolbar -->
-            <div class="chat-toolbar">
-                <button type="button" class="chat-format-btn" data-format="bold" title="Жирный (**text**)">B</button>
-                <button type="button" class="chat-format-btn" data-format="italic" title="Курсив (*text*)">I</button>
-                <button type="button" class="chat-format-btn" data-format="strike" title="Зачеркнутый (~~text~~)">S</button>
-                <button type="button" class="chat-format-btn" data-format="quote" title="Цитата (> text)">❞</button>
-                <button type="button" class="chat-format-btn" data-format="code" title="Код (`text`)">&lt;/&gt;</button>
-                <button type="button" class="chat-format-btn" data-format="spoiler" title="Спойлер (||text||)">👁</button>
-                <div class="toolbar-separator"></div>
-                <button type="button" class="chat-format-btn" id="sticker-btn" title="Стикеры">😊</button>
-                <button type="button" class="chat-format-btn" id="chat-upload-btn" title="Загрузить файл (Картинка/Док)">📎</button>
-            </div>
-            <!-- Sticker Picker Container -->
-            <div id="sticker-picker" class="sticker-picker" style="display: none;">
-                <div class="sticker-header" style="display: flex; justify-content: flex-end; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                        <button type="button" class="sticker-close-btn">&times;</button>
-                </div>
-                <div class="sticker-tabs" id="sticker-tabs"></div>
-                <div class="sticker-grid" id="sticker-grid"></div>
-            </div>
+    <?php include __DIR__ . '/input_area.php'; ?>
 
-            <form id="chat-form">
-                <input type="file" id="chat-file-input" hidden>
-                <textarea id="chat-input" placeholder="Напиши что-нибудь..." rows="1"></textarea>
-                <button type="submit">➤</button>
-            </form>
-            <?php else: ?>
-            <div class="chat-login-prompt">
-                <a href="#" id="login-link">Войди</a>, чтобы общаться.
-            </div>
-            <?php endif; ?>
-    </div>
-</div>
 
 <!-- Context Menu (Global) -->
 <ul id="chat-context-menu" class="chat-context-menu" style="display: none;">
@@ -195,6 +176,7 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
         window.currentUsername = <?= json_encode($_SESSION['username']) ?>;
         window.currentUserNickname = <?= json_encode($currentUser['nickname'] ?? $_SESSION['username']) ?>;
         window.currentUserFont = <?= json_encode($userOptions['font_preference'] ?? 'open_sans') ?>;
+        window.currentUserFontScale = <?= json_encode($userOptions['font_scale'] ?? 100) ?>;
         window.csrfToken = <?= json_encode(Auth::generateCsrfToken()) ?>;
         window.telegramBotUsername = <?= json_encode($telegramBotUsername) ?>;
         window.userOptions = <?= json_encode($userOptions) ?>;

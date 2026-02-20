@@ -1,10 +1,231 @@
-﻿// Local Chat Logic using SSE (Server-Sent Events)
+// Local Chat Logic using SSE (Server-Sent Events)
 // Updated by Twilight Sparkle
 
 $(document).ready(function() {
     const chatMessages = document.getElementById('chat-messages');
     const chatForm = document.getElementById('chat-form');
     const chatInput = document.getElementById('chat-input');
+
+    // === Custom Tooltip Logic ===
+    let tooltipTimeout;
+    
+    function showReactionTooltip(element) {
+        const usersData = $(element).attr('data-users');
+        if (!usersData) return;
+
+        // Remove existing
+        $('.reaction-user-tooltip').remove();
+
+        const tooltip = $('<div class="reaction-user-tooltip"></div>');
+        const list = $('<div class="reaction-tooltip-list"></div>');
+        
+        // Header
+        const reactionType = $(element).data('reaction');
+        const reactionIcon = REACTION_ICONS[reactionType] || '';
+        tooltip.append(`<div class="reaction-tooltip-header">${reactionIcon} Реакции</div>`);
+
+        // Parse Users: "Name|Color|Avatar;;Name2|..."
+        const users = usersData.split(';;');
+        users.forEach(userStr => {
+            const parts = userStr.split('|');
+            const name = parts[0] || 'Аноним';
+            const color = parts[1] || '#ce93d8'; // Default lilac
+            let avatar = parts[2] || '/assets/img/default-avatar.png';
+            if (avatar === 'default-avatar.png') avatar = '/assets/img/default-avatar.png';
+
+            const userRow = $(`
+                <div class="reaction-tooltip-user">
+                    <img src="${escapeHtml(avatar)}" class="reaction-tooltip-avatar">
+                    <span class="reaction-tooltip-name" style="color: ${escapeHtml(color)}">${escapeHtml(name)}</span>
+                </div>
+            `);
+            list.append(userRow);
+        });
+
+        tooltip.append(list);
+        $('body').append(tooltip); // Append to body to avoid clipping
+
+        // Position
+        const rect = element.getBoundingClientRect();
+        
+        tooltip.css({
+            top: (rect.top + window.scrollY - tooltip.outerHeight() - 8) + 'px',
+            left: (rect.left + window.scrollX + (rect.width / 2)) + 'px'
+        });
+
+        // Animate
+        requestAnimationFrame(() => {
+            tooltip.addClass('visible');
+        });
+    }
+
+    function hideReactionTooltip() {
+        const tooltip = $('.reaction-user-tooltip');
+        tooltip.removeClass('visible');
+        setTimeout(() => tooltip.remove(), 200);
+    }
+
+    // Delegated Tooltip Events
+    $(document).on('mouseenter', '.reaction-item', function() {
+        const el = this;
+        clearTimeout(tooltipTimeout);
+        tooltipTimeout = setTimeout(() => {
+            showReactionTooltip(el);
+        }, 300); // Small delay to prevent flashing
+    });
+
+    $(document).on('mouseleave', '.reaction-item', function() {
+        clearTimeout(tooltipTimeout);
+        hideReactionTooltip();
+    });
+    
+    // Also hide on click (toggle)
+    $(document).on('click', '.reaction-item', function() {
+        hideReactionTooltip();
+    });
+
+    // === Reaction Logic 🦄 ===
+    const REACTION_ICONS = {
+        like: '👍',
+        dislike: '👎',
+        laugh: '😂',
+        cry: '😢',
+        neutral: '😐'
+    };
+
+    function toggleReaction(msgId, reaction) {
+        if (!window.currentUserId) {
+            showChatNotification("Войди, чтобы реагировать!", 'error');
+            return;
+        }
+        
+        $.post('api.php', {
+            action: 'toggle_reaction',
+            message_id: msgId,
+            reaction: reaction
+        }, function(res) {
+            if (res.success) {
+                updateMessageReactions(msgId, res.data.reactions, res.data.action, reaction);
+            } else {
+                showChatNotification(res.message, 'error');
+            }
+        }, 'json');
+    }
+
+    function updateMessageReactions(msgId, reactions, action = null, myReaction = null) {
+        const msgEl = $(`.chat-message[data-id="${msgId}"]`);
+        if (!msgEl.length) return;
+        
+        const container = msgEl.find('.message-reactions');
+        let myReactions = [];
+        
+        // Recover existing "my reactions" from DOM
+        container.find('.reaction-item.active').each(function() {
+            myReactions.push($(this).data('reaction'));
+        });
+        
+        // Update "my reactions" based on action (if triggered by me)
+        if (action === 'added' && myReaction) {
+            if (!myReactions.includes(myReaction)) myReactions.push(myReaction);
+        } else if (action === 'removed' && myReaction) {
+            myReactions = myReactions.filter(r => r !== myReaction);
+        }
+        
+        renderReactionsDOM(container, reactions, myReactions);
+    }
+
+    function renderReactionsDOM(container, reactions, myReactions) {
+        container.empty();
+        
+        // Add Reaction Items
+        for (const [type, data] of Object.entries(reactions)) {
+            let count = 0;
+            let users = '';
+            
+            if (typeof data === 'object' && data !== null) {
+                count = data.count || 0;
+                users = data.users || '';
+            } else {
+                count = parseInt(data);
+                users = '';
+            }
+
+            if (count > 0) {
+                const isActive = myReactions.includes(type);
+                // Store raw user data in attribute for custom tooltip
+                const usersAttr = users ? `data-users="${escapeHtml(users)}"` : '';
+                
+                // Removed title attribute to prevent default browser tooltip
+                const btn = $(`<div class="reaction-item ${isActive ? 'active' : ''}" data-reaction="${type}" ${usersAttr}>
+                    ${REACTION_ICONS[type] || type} <span class="reaction-count">${count}</span>
+                </div>`);
+                container.append(btn);
+            }
+        }
+        
+        // Add "Gray Thumb" Button (Trigger)
+        // Using a DIV instead of BUTTON to allow valid nesting of the picker
+        const addBtn = $('<div class="add-reaction-btn" role="button" title="Нравится (или выбери другое)">' +
+            '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.11 7 8.5V21h14c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1.91l-.01-.01L23 10z"/></svg>' +
+            '</div>');
+        container.append(addBtn);
+    }
+
+    function showReactionPicker(msgId, btn) {
+        // Don't recreate if already exists inside this btn
+        if (btn.find('.reaction-picker').length > 0) return;
+
+        $('.reaction-picker').remove(); // Close others
+        
+        const picker = $('<div class="reaction-picker"></div>');
+        
+        for (const [type, icon] of Object.entries(REACTION_ICONS)) {
+            const item = $(`<div class="reaction-picker-item" title="${type}">${icon}</div>`);
+            item.click(function(e) {
+                e.stopPropagation();
+                toggleReaction(msgId, type);
+                picker.remove();
+            });
+            picker.append(item);
+        }
+        
+        btn.append(picker);
+    }
+
+    // Delegated Events for Reactions
+    $(document).on('click', '.reaction-item', function(e) {
+        e.stopPropagation();
+        const msgId = $(this).closest('.chat-message').data('id');
+        const reaction = $(this).data('reaction');
+        toggleReaction(msgId, reaction);
+    });
+
+    // Hover: Show Picker
+    $(document).on('mouseenter', '.add-reaction-btn', function(e) {
+        const msgId = $(this).closest('.chat-message').data('id');
+        showReactionPicker(msgId, $(this));
+    });
+
+    // Leave: Hide Picker
+    $(document).on('mouseleave', '.add-reaction-btn', function(e) {
+        $(this).find('.reaction-picker').remove();
+    });
+
+    // Click: Default Like
+    $(document).on('click', '.add-reaction-btn', function(e) {
+        e.stopPropagation();
+        // Ignore if clicking inside the picker (should be handled by picker item click, but just in case)
+        if ($(e.target).closest('.reaction-picker').length) return;
+
+        const msgId = $(this).closest('.chat-message').data('id');
+        toggleReaction(msgId, 'like');
+    });
+    
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('.add-reaction-btn').length) {
+            $('.reaction-picker').remove();
+        }
+    });
 
     // === Notification Logic (Title Alert) ===
     
@@ -152,23 +373,28 @@ $(document).ready(function() {
         div.dataset.userRole = data.role || 'user'; // Store User Role for moderation check
         div.dataset.timestamp = data.created_at; // Store ISO timestamp for calculations
 
-        // Check for Mention
-        // Use window.currentUserNickname (preferred) or window.currentUsername
-        // We check for @Nickname (case insensitive or exact?) - usually exact or loose.
-        // Let's try exact match with @ prefix.
+        // Store raw message for editing
+        if (data.raw_message) {
+            div.dataset.raw = data.raw_message;
+        }
+
+        // Check for Mention (Direct @Nick)
         const myNick = window.currentUserNickname || window.currentUsername;
+        let isMentioned = false;
+        
         if (myNick) {
-            // Backend sends escaped HTML, so we might need to match escaped nick? 
-            // Usually username is simple, but let's be careful.
-            // Search in data.message content.
-            // The message might contain HTML tags (spans), so simple includes might fail if name is split (unlikely).
-            // Safer: regex for @MyNick\b
             const mentionRegex = new RegExp(`@${escapeRegExp(myNick)}\\b`, 'i');
-            // We check the raw message if possible, but data.message is processed HTML.
-            // It should contain <span class="md-mention">@Nick</span>
-            // So we check text content? No, data.message is HTML string.
             if (mentionRegex.test(data.message)) {
+                isMentioned = true;
                 div.classList.add('message-mentioned');
+            }
+        }
+        
+        // Check for Quote Mention (Soft Highlight)
+        if (!isMentioned && data.quotes && data.quotes.length > 0 && currentUserId) {
+            const isQuoted = data.quotes.some(q => q.username === myNick);
+            if (isQuoted) {
+                div.classList.add('message-quoted');
             }
         }
         
@@ -215,7 +441,7 @@ $(document).ready(function() {
                  if (qAvatar === 'default-avatar.png') qAvatar = '/assets/img/default-avatar.png';
                  
                  const qColor = q.chat_color ? `style="color: ${escapeHtml(q.chat_color)}"` : '';
-                 let qContent = escapeHtml(q.message || '');
+                 let qContent = q.message || '';
                  if (q.deleted) {
                      qContent = '<em style="color:#999;">Сообщение удалено</em>';
                  }
@@ -299,6 +525,39 @@ $(document).ready(function() {
         // Debug display inside message (Temporary) - hidden now
         const debugInfo = ''; 
 
+        // Reactions HTML
+        let reactionsHtml = '<div class="message-reactions">';
+        const reactions = data.reactions || {};
+        const myReactions = data.my_reactions || [];
+        
+        for (const [type, data] of Object.entries(reactions)) {
+            let count = 0;
+            let users = '';
+            
+            if (typeof data === 'object' && data !== null) {
+                count = data.count || 0;
+                users = data.users || '';
+            } else {
+                count = parseInt(data);
+                users = '';
+            }
+
+            if (count > 0) {
+                const isActive = myReactions.includes(type);
+                // Store raw user data in attribute for custom tooltip
+                const usersAttr = users ? `data-users="${escapeHtml(users)}"` : '';
+                const icon = REACTION_ICONS[type] || type;
+                
+                // Removed title attribute completely
+                reactionsHtml += `<div class="reaction-item ${isActive ? 'active' : ''}" data-reaction="${type}" ${usersAttr}>
+                    ${icon} <span class="reaction-count">${count}</span>
+                </div>`;
+            }
+        }
+        reactionsHtml += `<div class="add-reaction-btn" role="button" title="Нравится (или выбери другое)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.11 7 8.5V21h14c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1.91l-.01-.01L23 10z"/></svg>
+        </div></div>`;
+
         // Deleted State Special Content
         if (data.deleted) {
              let restoreHtml = '';
@@ -359,6 +618,7 @@ $(document).ready(function() {
                     <div class="chat-text">
                         ${formatMessage(data.message)} ${editedMark} ${debugInfo}
                     </div>
+                    ${reactionsHtml}
                 </div>
             `;
         }
@@ -366,20 +626,31 @@ $(document).ready(function() {
     }
 
     function appendMessage(data) {
+        // Smart Scroll Logic 🧠
+        // Check if user is near bottom (within 150px)
+        const threshold = 150; 
+        const isNearBottom = (chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight) <= threshold;
+        const isMyMessage = (window.currentUserId && parseInt(data.user_id) === parseInt(window.currentUserId));
+
         const div = createMessageElement(data);
         chatMessages.appendChild(div);
-        scrollToBottom();
         
-        // Wait for images to load then scroll again
+        // Scroll only if near bottom OR if I sent the message
+        if (isNearBottom || isMyMessage) {
+            scrollToBottom();
+        }
+        
+        // Wait for images to load then scroll again (if allowed)
         const images = div.querySelectorAll('img');
         if (images.length > 0) {
             let loaded = 0;
             const total = images.length;
             const onImgLoad = () => {
                 loaded++;
-                // Scroll on every image load or just at end? 
-                // Better on every load to smooth out if multiple large images
-                scrollToBottom(); 
+                // Scroll on every image load only if we decided to scroll
+                if (isNearBottom || isMyMessage) {
+                    scrollToBottom(); 
+                }
             };
             
             images.forEach(img => {
@@ -610,20 +881,28 @@ $(document).ready(function() {
                     $(`.chat-message[data-id="${contextTargetId}"] .quote-btn`).click();
                     break;
                 case 'edit':
-                    // Manually trigger edit logic (since button might be hidden or not rendered if we rely on menu)
-                    // Or simulate click if button exists?
-                    // Better reuse logic.
+                    // Manually trigger edit logic
                     {
                         const msgDiv = $(`.chat-message[data-id="${contextTargetId}"]`);
-                        let text = msgDiv.find('.chat-text').clone().children().remove().end().text().trim();
+                        let text = msgDiv.data('raw');
+                        
+                        if (text) {
+                            const txt = document.createElement('textarea');
+                            txt.innerHTML = text;
+                            text = txt.value;
+                        } else {
+                            text = msgDiv.find('.chat-text').clone().children().remove().end().text().trim();
+                        }
+
                         if (chatInput) {
                             chatInput.value = text;
                             chatInput.focus();
                             chatInput.dataset.editingId = contextTargetId;
                             chatInput.classList.add('editing-mode');
-                            const submitBtn = chatForm.querySelector('button');
-                            if (submitBtn) submitBtn.textContent = 'Сохранить';
-                        }
+                            chatInput.dispatchEvent(new Event('input')); // Adjust height
+            const submitBtn = chatForm.querySelector('button');
+            if (submitBtn) submitBtn.textContent = '✔';
+        }
                     }
                     break;
                 case 'reply':
@@ -631,6 +910,7 @@ $(document).ready(function() {
                     if (chatInput && contextTargetUsername) {
                         chatInput.value += `@${contextTargetUsername} `;
                         chatInput.focus();
+                        chatInput.dispatchEvent(new Event('input')); // Adjust height
                     }
                     break;
                 case 'delete':
@@ -694,6 +974,11 @@ $(document).ready(function() {
     // Unified Message Handler
     function processIncomingData(data) {
         // Handle specialized events
+        if (data.type === 'reaction_update') {
+             updateMessageReactions(data.id, data.reactions);
+             return;
+        }
+
         if (data.type === 'delete') {
              const existingMsg = document.querySelector(`.chat-message[data-id="${data.id}"]`);
              if (existingMsg) {
@@ -950,23 +1235,54 @@ $(document).ready(function() {
         const msgId = msgDiv.attr('data-id');
         const username = msgDiv.find('.username').text().trim();
         
-        // Get text, remove .edited-mark or other children if any
+        // --- Smart Quoting (Selection) ---
+        const selection = window.getSelection();
+        const selectedText = selection.toString().trim();
+        const chatInput = document.getElementById('chat-input');
+        
+        // Check if selection is non-empty AND is inside THIS message
+        if (selectedText.length > 0 && selection.anchorNode && msgDiv[0].contains(selection.anchorNode)) {
+            if (chatInput) {
+                // Format as Markdown Blockquote
+                const quoteText = selectedText.split('\n').map(line => `> ${line}`).join('\n') + '\n\n';
+                
+                const start = chatInput.selectionStart;
+                const end = chatInput.selectionEnd;
+                const currentVal = chatInput.value;
+                
+                // Add newline before if needed
+                const prefix = (start > 0 && currentVal[start-1] !== '\n') ? '\n' : '';
+                
+                chatInput.value = currentVal.substring(0, start) + prefix + quoteText + currentVal.substring(end);
+                
+                // Move cursor to end of inserted quote
+                const newPos = start + prefix.length + quoteText.length;
+                chatInput.selectionStart = newPos;
+                chatInput.selectionEnd = newPos;
+                
+                chatInput.focus();
+                chatInput.dispatchEvent(new Event('input')); // Auto-resize
+                
+                // Clear selection
+                selection.removeAllRanges();
+            }
+            return; // Stop here, don't add as attachment
+        }
+        
+        // --- Standard Full Quote (Attachment) ---
+        // Get text for preview
         let text = msgDiv.find('.chat-text').clone().children().remove().end().text().trim();
         
         // Avoid duplicate quotes
         if (!pendingQuotes.find(q => q.id == msgId)) {
             pendingQuotes.push({ id: msgId, username: username, text: text });
             updateQuotePreview();
-            chatInput.focus();
+            if (chatInput) chatInput.focus();
         }
     });
 
-    // Handle Link to Message
-    $(document).on('click', '.quote-link-btn', function(e) {
-        e.preventDefault();
-        e.stopPropagation(); // Stop card expand
-        
-        const targetId = $(this).data('targetId');
+    // --- Context Navigation Logic ---
+    function loadMessageContext(targetId) {
         const targetEl = $(`.chat-message[data-id="${targetId}"]`);
         
         if (targetEl.length) {
@@ -974,8 +1290,148 @@ $(document).ready(function() {
             targetEl.addClass('highlight-message');
             setTimeout(() => targetEl.removeClass('highlight-message'), 2000);
         } else {
-            showChatNotification("Сообщение не найдено (возможно, оно слишком старое)", 'info');
+            // Not in DOM -> Load Context
+            showChatNotification("Ищу сообщение в архивах...", 'info');
+            
+            $.post('api.php', { action: 'get_message_context', id: targetId }, function(res) {
+                if (res.success && res.data.messages && res.data.messages.length > 0) {
+                    chatMessages.innerHTML = '';
+                    $('#load-more-btn').hide();
+                    oldestMessageId = null;
+                    
+                    // Use Fragment for performance and avoid auto-scroll side effects
+                    const fragment = document.createDocumentFragment();
+                    res.data.messages.forEach(msg => {
+                        if (!msg.type) msg.type = 'message';
+                        const div = createMessageElement(msg);
+                        fragment.appendChild(div);
+                    });
+                    
+                    chatMessages.appendChild(fragment);
+                    
+                    const newTarget = $(`.chat-message[data-id="${targetId}"]`);
+                    if (newTarget.length) {
+                        newTarget[0].scrollIntoView({ behavior: 'auto', block: 'center' });
+                        newTarget.addClass('highlight-message');
+                    }
+                    
+                    // Show "Return" Button
+                    if ($('#return-to-present-btn').length === 0) {
+                        const returnBtn = $('<button id="return-to-present-btn" class="chat-return-btn">⬇ Вернуться к новым</button>');
+                        
+                        // Style for popup (fixed at bottom center)
+                        returnBtn.css({
+                            position: 'absolute',
+                            bottom: '80px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            zIndex: 100,
+                            padding: '8px 16px',
+                            borderRadius: '20px',
+                            border: 'none',
+                            background: 'var(--primary-color)',
+                            color: 'white',
+                            cursor: 'pointer',
+                            boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
+                            fontWeight: 'bold'
+                        });
+                        
+                        $('.chat-container').append(returnBtn); // Popup container
+                        
+                        returnBtn.on('click', function() {
+                            $(this).remove();
+                            chatMessages.innerHTML = '';
+                            fetchHistory();
+                        });
+                    }
+                    
+                } else {
+                    showChatNotification("Сообщение не найдено", 'error');
+                }
+            }, 'json').fail(() => {
+                showChatNotification("Ошибка связи", 'error');
+            });
         }
+    }
+
+    // Handle Link to Message (Refactored)
+    $(document).on('click', '.quote-link-btn', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const targetId = $(this).data('targetId');
+        loadMessageContext(targetId);
+    });
+
+    // --- Search Logic ---
+    const searchBtn = $('#chat-search-btn');
+    const searchOverlay = $('#chat-search-overlay');
+    const searchInput = $('#chat-search-input');
+    const searchClose = $('#chat-search-close');
+    const searchResults = $('#chat-search-results');
+    let searchDebounceTimer;
+
+    searchBtn.click(function() {
+        searchOverlay.css('display', 'flex').hide().slideDown(200);
+        searchInput.focus();
+    });
+
+    searchClose.click(function() {
+        searchOverlay.slideUp(200);
+        searchInput.val('');
+        searchResults.empty();
+    });
+
+    searchInput.on('input', function() {
+        const query = $(this).val().trim();
+        clearTimeout(searchDebounceTimer);
+        
+        if (query.length < 2) {
+            searchResults.empty();
+            return;
+        }
+        
+        searchDebounceTimer = setTimeout(() => {
+            performSearch(query);
+        }, 500);
+    });
+
+    function performSearch(query) {
+        searchResults.html('<div style="text-align:center; padding:20px; color:#888;">Поиск... 🔍</div>');
+        
+        $.post('api.php', { action: 'search_messages', query: query, limit: 50 }, function(res) {
+            searchResults.empty();
+            if (res.success && res.data.messages && res.data.messages.length > 0) {
+                res.data.messages.forEach(msg => {
+                    const date = new Date(msg.created_at).toLocaleString();
+                    let plainText = msg.message.replace(/<[^>]*>?/gm, ''); 
+                    
+                    const item = $(`
+                        <div class="search-result-item" data-id="${msg.id}">
+                            <div class="search-result-meta">
+                                <span class="search-result-author" style="color:${escapeHtml(msg.chat_color)}">${escapeHtml(msg.username)}</span>
+                                <span>${date}</span>
+                            </div>
+                            <div class="search-result-text"></div> 
+                        </div>
+                    `);
+                    
+                    const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
+                    const highlighted = plainText.replace(regex, '<span class="search-result-highlight">$1</span>');
+                    
+                    item.find('.search-result-text').html(highlighted);
+                    
+                    searchResults.append(item);
+                });
+            } else {
+                searchResults.html('<div class="search-no-results">Ничего не найдено 🤷‍♀️</div>');
+            }
+        }, 'json');
+    }
+
+    $(document).on('click', '.search-result-item', function() {
+        const id = $(this).data('id');
+        searchOverlay.slideUp(200);
+        loadMessageContext(id);
     });
 
     // Handle Click on Quote Card (Expand)
@@ -1075,6 +1531,10 @@ $(document).ready(function() {
             const message = chatInput.value.trim();
             if (!message) return;
 
+            // Block form immediately
+            const submitBtn = chatForm.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+
             // Check if we are in "Edit Mode"
             const editingId = chatInput.dataset.editingId;
             const action = editingId ? 'edit_message' : 'send_message';
@@ -1090,38 +1550,39 @@ $(document).ready(function() {
                  data.quoted_msg_ids = ids.join(',');
             }
 
-            const oldVal = chatInput.value;
-            chatInput.value = '';
-            
-            // Clear quotes locally
-            const oldQuotes = [...pendingQuotes];
-            pendingQuotes = [];
-            updateQuotePreview();
-
-            // Clear editing state visual
-            if (editingId) {
-                chatInput.removeAttribute('data-editing-id');
-                chatForm.querySelector('button').textContent = 'Отправить';
-                chatInput.classList.remove('editing-mode');
-            }
-
             $.ajax({
                 url: 'api.php',
                 method: 'POST',
                 data: data,
                 success: function(response) {
-                    if (!response.success) {
-                        showChatNotification(response.message, 'error');
-                        chatInput.value = oldVal; // Restore if failed
-                        pendingQuotes = oldQuotes; // Restore quotes
+                    if (response.success) {
+                        // Clear input only on success
+                        chatInput.value = '';
+                        chatInput.dispatchEvent(new Event('input')); // Reset height
+                        
+                        // Clear quotes locally
+                        pendingQuotes = [];
                         updateQuotePreview();
+                        
+                        // Clear editing state visual
+                        if (editingId) {
+                            chatInput.removeAttribute('data-editing-id');
+                            submitBtn.textContent = '➤'; 
+                            chatInput.classList.remove('editing-mode');
+                        }
+                    } else {
+                        showChatNotification(response.message, 'error');
+                        // Input remains filled, user can retry
                     }
                 },
                 error: function() {
                     showChatNotification("Ошибка сети. Попробуй позже.", 'error');
-                    chatInput.value = oldVal;
-                    pendingQuotes = oldQuotes;
-                    updateQuotePreview();
+                },
+                complete: function() {
+                    // Unlock button
+                    submitBtn.disabled = false;
+                    // Focus back to input
+                    chatInput.focus();
                 }
             });
         });
@@ -1132,17 +1593,26 @@ $(document).ready(function() {
         e.preventDefault();
         const msgDiv = $(this).closest('.chat-message');
         const msgId = msgDiv.attr('data-id');
-        // Get text from .chat-text, excluding .edited-mark
-        let text = msgDiv.find('.chat-text').clone().children().remove().end().text().trim();
         
+        let text = msgDiv.data('raw');
+        
+        if (text) {
+             const txt = document.createElement('textarea');
+             txt.innerHTML = text;
+             text = txt.value;
+        } else {
+             text = msgDiv.find('.chat-text').clone().children().remove().end().text().trim();
+        }
+
         // Set input to edit mode
         if (chatInput) {
             chatInput.value = text;
             chatInput.focus();
             chatInput.dataset.editingId = msgId;
             chatInput.classList.add('editing-mode');
+            chatInput.dispatchEvent(new Event('input')); // Adjust height
             const submitBtn = chatForm.querySelector('button');
-            if (submitBtn) submitBtn.textContent = 'Сохранить';
+            if (submitBtn) submitBtn.textContent = '✔';
         }
     });
 
@@ -1463,6 +1933,7 @@ $(document).ready(function() {
         const newPos = start + prefix.length + codeStr.length;
         input.selectionStart = newPos;
         input.selectionEnd = newPos;
+        input.dispatchEvent(new Event('input')); // Adjust height
         
         // Hide picker on mobile? Or keep open for multi-select?
         // Close on mobile to return to keyboard
@@ -1587,13 +2058,21 @@ $(document).ready(function() {
         $(this).toggleClass('revealed');
     });
 
-    // 7. Handle Mention Click (Insert into input)
-    $(document).on('click', '.md-mention', function() {
-        const username = $(this).text(); // Includes @
-        if (chatInput) {
-            chatInput.value += (chatInput.value ? ' ' : '') + username + ' ';
+    // 7. Helper: Insert Mention
+    window.insertMention = function(username) {
+        const chatInput = document.getElementById('chat-input');
+        if (chatInput && username) {
+            const safeName = username.trim().replace(/\s+/g, ' ');
+            chatInput.value += (chatInput.value ? ' ' : '') + '@' + safeName + ' ';
             chatInput.focus();
+            chatInput.dispatchEvent(new Event('input')); // Adjust height
         }
+    };
+
+    // 7.1 Handle Mention Click (Insert into input)
+    $(document).on('click', '.md-mention', function() {
+        const username = $(this).text().replace('@', '');
+        window.insertMention(username);
     });
 
     // 8. Handle Username Click (Insert Mention)
@@ -1601,13 +2080,8 @@ $(document).ready(function() {
         // Only if not holding modifier keys (to allow default selection if needed)
         if (e.ctrlKey || e.metaKey) return;
         
-        const username = $(this).text().trim();
-        if (chatInput && username) {
-            // Clean username just in case
-            const safeName = username.replace(/\s+/g, ' ');
-            chatInput.value += (chatInput.value ? ' ' : '') + '@' + safeName + ' ';
-            chatInput.focus();
-        }
+        const username = $(this).text();
+        window.insertMention(username);
     });
 
     // 10. File Upload Logic
