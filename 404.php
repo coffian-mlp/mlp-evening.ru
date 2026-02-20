@@ -1,7 +1,10 @@
 <?php
-$pageTitle = '404 - Страница не найдена';
+require_once __DIR__ . '/init.php';
+
+$app->setTitle('404 - Страница не найдена');
+$app->addCss('/assets/css/error.css');
+
 $bodyClass = 'error-page';
-$extraCss = '<link rel="stylesheet" href="/assets/css/error.css">';
 require_once __DIR__ . '/src/templates/header.php';
 ?>
 

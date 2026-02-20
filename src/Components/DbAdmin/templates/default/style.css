@@ -1,0 +1,102 @@
+/* DB Admin Component Styles */
+
+.db-admin-container {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+/* Sidebar Links */
+.table-link {
+    display: block; 
+    padding: 8px 12px; 
+    text-decoration: none; 
+    color: #ccc; 
+    border-radius: 6px; 
+    margin-bottom: 2px;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+}
+
+.table-link:hover {
+    background: rgba(109, 47, 142, 0.2);
+    color: #fff;
+    transform: translateX(2px);
+}
+
+.table-link.active {
+    background: rgba(109, 47, 142, 0.4);
+    color: #fff;
+    border-color: #6d2f8e;
+    box-shadow: 0 0 10px rgba(109, 47, 142, 0.2);
+}
+
+/* Filter Form */
+.db-filter-form {
+    display: flex; 
+    gap: 10px; 
+    align-items: center; 
+    background: rgba(30, 20, 50, 0.6); /* Royal Eggplant */
+    padding: 15px; 
+    border-radius: 8px; 
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    flex-wrap: wrap;
+    backdrop-filter: blur(5px);
+}
+
+.db-filter-label {
+    font-weight: bold; 
+    font-size: 0.9em; 
+    color: var(--accent-color, #ce93d8);
+    margin-right: 5px;
+}
+
+.db-filter-select {
+    width: auto !important; 
+    min-width: 120px;
+}
+
+.db-filter-input {
+    width: 200px !important;
+}
+
+.db-filter-btn {
+    padding: 8px 20px !important;
+}
+
+.db-filter-reset {
+    text-decoration: none; 
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: rgba(244, 67, 54, 0.1);
+    color: #ff8a80;
+    border: 1px solid rgba(244, 67, 54, 0.3);
+    transition: all 0.2s;
+}
+
+.db-filter-reset:hover {
+    background: rgba(244, 67, 54, 0.3);
+    color: white;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .db-admin-container {
+        flex-direction: column;
+    }
+    
+    .card[style*="width: 250px"] {
+        width: 100% !important;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    
+    .db-filter-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .db-filter-select, .db-filter-input {
+        width: 100% !important;
+    }
+}
