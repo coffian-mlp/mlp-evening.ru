@@ -1158,8 +1158,26 @@
     background: transparent;
 }
 
+.reaction-picker.position-right {
+    left: 100%;
+    right: auto;
+    margin-right: 0;
+    margin-left: 8px;
+    animation: pickerFadeInRight 0.2s ease-out;
+}
+
+.reaction-picker.position-right::after {
+    left: auto;
+    right: 100%;
+}
+
 @keyframes pickerFadeIn {
     from { opacity: 0; transform: translateY(-50%) translateX(10px); }
+    to { opacity: 1; transform: translateY(-50%); }
+}
+
+@keyframes pickerFadeInRight {
+    from { opacity: 0; transform: translateY(-50%) translateX(-10px); }
     to { opacity: 1; transform: translateY(-50%); }
 }
 

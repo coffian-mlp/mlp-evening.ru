@@ -189,6 +189,13 @@ $(document).ready(function() {
         }
         
         btn.append(picker);
+
+        // Check positioning
+        // If button is too close to left edge (< 220px), show on right
+        const btnRect = btn[0].getBoundingClientRect();
+        if (btnRect.left < 220) {
+            picker.addClass('position-right');
+        }
     }
 
     // Delegated Events for Reactions
