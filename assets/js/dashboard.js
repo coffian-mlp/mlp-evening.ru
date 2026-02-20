@@ -367,32 +367,6 @@ function loadPunishedUsers() {
                 }
                 
                 punished.forEach(function(u) {
-                    // ... (rest of logic) ...
-                    // Since I can't easily match the exact inner content due to variables, 
-                    // I will just add the error handler to the AJAX call structure.
-                    // But wait, the file content I read matches perfectly.
-                    // I will rewrite the whole functions to include error handling.
-
-    var $tbody = $('#punished-users-table tbody');
-    $tbody.html('<tr><td colspan="5" style="text-align:center;">Загрузка...</td></tr>');
-    
-    $.ajax({
-        url: '/api.php',
-        method: 'POST',
-        data: { action: 'get_users' }, // Reuse get_users and filter client-side
-        dataType: 'json',
-        success: function(res) {
-            if (res.success) {
-                $tbody.empty();
-                
-                var punished = res.data.users.filter(u => u.is_banned == 1 || u.is_muted);
-                
-                if (punished.length === 0) {
-                    $tbody.html('<tr><td colspan="5" style="text-align:center;">В Понивилле все спокойно 😇</td></tr>');
-                    return;
-                }
-                
-                punished.forEach(function(u) {
                     var type = '';
                     if (u.is_banned == 1) type += 'BAN ';
                     if (u.is_muted) type += 'MUTE ';
@@ -413,7 +387,12 @@ function loadPunishedUsers() {
                     `;
                     $tbody.append(row);
                 });
+            } else {
+                 $tbody.html('<tr><td colspan="5" style="text-align:center; color:red;">Ошибка загрузки</td></tr>');
             }
+        },
+        error: function(xhr, status, error) {
+             $tbody.html('<tr><td colspan="5" style="text-align:center; color:red;">Сбой сети: ' + escapeHtml(error) + '</td></tr>');
         }
     });
 }
@@ -453,7 +432,12 @@ function loadAuditLogs() {
                     `;
                     $tbody.append(row);
                 });
+            } else {
+                 $tbody.html('<tr><td colspan="6" style="text-align:center; color:red;">Ошибка загрузки логов</td></tr>');
             }
+        },
+        error: function(xhr, status, error) {
+             $tbody.html('<tr><td colspan="6" style="text-align:center; color:red;">Сбой сети: ' + escapeHtml(error) + '</td></tr>');
         }
     });
 }
@@ -619,7 +603,9 @@ function loadStickers() {
         } else {
             $tbody.html(`<tr><td colspan="4" style="text-align:center; color:red;">Ошибка: ${escapeHtml(res.message)}</td></tr>`);
         }
-    }, 'json');
+    }, 'json').fail(function(xhr, status, error) {
+         $tbody.html(`<tr><td colspan="4" style="text-align:center; color:red;">AJAX Error: ${escapeHtml(error)}</td></tr>`);
+    });
 }
 
 function loadPacks() {
@@ -732,4 +718,3 @@ function deleteSticker(id) {
         }
     }, 'json');
 }
-
