@@ -1046,13 +1046,14 @@
 
 /* --- 10. Reactions Styles --- */
 .message-reactions {
-    display: flex;
+    display: inline-flex; /* Make it inline to sit next to text */
     flex-wrap: wrap;
     gap: 4px;
-    margin-top: 6px;
+    margin-top: 0; /* Remove top margin */
+    margin-left: 8px; /* Add space from text */
     align-items: center;
-    position: relative; /* For picker positioning context if needed */
-    justify-content: flex-end; /* Move to right */
+    position: relative; /* For picker positioning context */
+    vertical-align: middle; /* Align with text */
 }
 
 .reaction-item {

@@ -617,8 +617,8 @@ $(document).ready(function() {
                     ${quotesHtml}
                     <div class="chat-text">
                         ${formatMessage(data.message)} ${editedMark} ${debugInfo}
+                        ${reactionsHtml}
                     </div>
-                    ${reactionsHtml}
                 </div>
             `;
         }
