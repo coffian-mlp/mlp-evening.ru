@@ -192,9 +192,9 @@ $(document).ready(function() {
         btn.append(picker);
 
         // Check positioning
-        // If button is too close to left edge (< 220px), show on right
+        // If button is too close to left edge (< 280px), show on right
         const btnRect = btn[0].getBoundingClientRect();
-        if (btnRect.left < 220) {
+        if (btnRect.left < 280) {
             picker.addClass('position-right');
         }
     }
