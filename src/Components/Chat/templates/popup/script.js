@@ -1490,7 +1490,7 @@ $(document).ready(function() {
             if (text && chatInput) {
                 // Transfer to main input and submit
                 chatInput.value = text;
-                const event = new Event('submit', { cancelable: true });
+                const event = new Event('submit', { bubbles: true, cancelable: true });
                 document.getElementById('chat-form').dispatchEvent(event);
                 
                 mobileInput.val('');
@@ -2047,7 +2047,7 @@ $(document).ready(function() {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault(); // Prevent newline
                 // Trigger submit
-                const event = new Event('submit', { cancelable: true });
+                const event = new Event('submit', { bubbles: true, cancelable: true });
                 document.getElementById('chat-form').dispatchEvent(event);
             }
         });
