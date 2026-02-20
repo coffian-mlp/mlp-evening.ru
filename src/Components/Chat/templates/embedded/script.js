@@ -1536,7 +1536,7 @@ $(document).ready(function() {
                 chatInput.value = text;
                 
                 // Trigger main submit
-                const event = new Event('submit', { cancelable: true });
+                const event = new Event('submit', { bubbles: true, cancelable: true });
                 // We add a custom property to pass the callback
                 event.detail = { 
                     callback: function(success) {
@@ -2124,7 +2124,8 @@ $(document).ready(function() {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault(); // Prevent newline
             // Trigger submit
-            const event = new Event('submit', { cancelable: true });
+            // IMPORTANT: bubbles: true is required for delegated event handlers!
+            const event = new Event('submit', { bubbles: true, cancelable: true });
             const form = document.getElementById('chat-form');
             if (form) form.dispatchEvent(event);
         }
