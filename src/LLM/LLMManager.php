@@ -134,6 +134,12 @@ class LLMManager {
             if (empty($context)) {
                 return false;
             }
+            
+            // If the last message in the chat is from the bot itself, don't talk to yourself
+            $lastMsg = end($context);
+            if ($lastMsg && $lastMsg['role'] === 'assistant') {
+                return false;
+            }
 
             $prompt = $this->systemPrompt . "\n\nПроанализируй последние сообщения. Если нужно что-то сказать (разрядить обстановку, ответить на вопрос, поддержать беседу) - напиши ответ. Если встревать не стоит - ответь ровно одним словом: SILENCE.";
             
