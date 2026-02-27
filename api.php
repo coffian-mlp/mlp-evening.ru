@@ -1167,7 +1167,11 @@ try {
                 // Вызываем магию ИИ
                 require_once __DIR__ . '/src/LLM/LLMManager.php';
                 $llm = new LLMManager();
-                $llm->processTrigger('mention', ['message' => $message, 'message_id' => $newMsgId === true ? null : $newMsgId]);
+                $llm->processTrigger('mention', [
+                    'message' => $message, 
+                    'message_id' => $newMsgId === true ? null : $newMsgId,
+                    'quoted_msg_ids' => $quotedMsgIds
+                ]);
 
                 exit();
             } else {

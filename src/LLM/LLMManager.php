@@ -101,7 +101,22 @@ class LLMManager {
             $botNickname = $botUser['nickname'] ?? 'Твайлайт Спаркл';
             
             // Check if bot is mentioned by login or nickname
-            if (stripos($message, '@' . $botLogin) !== false || stripos($message, '@' . $botNickname) !== false) {
+            $isMentioned = (stripos($message, '@' . $botLogin) !== false || stripos($message, '@' . $botNickname) !== false);
+            
+            // Check if any of the quoted messages belong to the bot
+            $isQuoted = false;
+            $quotedMsgIds = $contextData['quoted_msg_ids'] ?? [];
+            if (!empty($quotedMsgIds) && is_array($quotedMsgIds)) {
+                foreach ($quotedMsgIds as $qId) {
+                    $qMsg = $this->chatManager->getMessageById($qId);
+                    if ($qMsg && $qMsg['user_id'] == $this->botUserId) {
+                        $isQuoted = true;
+                        break;
+                    }
+                }
+            }
+
+            if ($isMentioned || $isQuoted) {
                 $context = $this->buildContext(20);
                 $response = $this->askWithFallback($context, $this->systemPrompt);
                 
