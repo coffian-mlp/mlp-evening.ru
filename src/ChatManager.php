@@ -125,9 +125,10 @@ class ChatManager {
                 $fullMsg['type'] = 'message';
                 $this->broadcast($fullMsg);
             }
+            return $newId;
         }
         
-        return $result;
+        return false;
     }
 
     public function editMessage($messageId, $userId, $newMessage) {
