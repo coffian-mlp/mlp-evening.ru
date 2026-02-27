@@ -127,7 +127,14 @@ class LLMManager {
                 }
             }
         } elseif ($triggerType === 'cron_spontaneous') {
-            $context = $this->buildContext(30);
+            // Get last 30 messages, but only if they were posted within the last 3 hours
+            $context = $this->buildContext(30, 3);
+            
+            // If the chat has been dead for 3 hours (empty context), don't even ask the LLM
+            if (empty($context)) {
+                return false;
+            }
+
             $prompt = $this->systemPrompt . "\n\nПроанализируй последние сообщения. Если нужно что-то сказать (разрядить обстановку, ответить на вопрос, поддержать беседу) - напиши ответ. Если встревать не стоит - ответь ровно одним словом: SILENCE.";
             
             $response = $this->askWithFallback($context, $prompt);
@@ -186,12 +193,23 @@ class LLMManager {
         return null;
     }
 
-    private function buildContext($limit = 20) {
+    private function buildContext($limit = 20, $maxAgeHours = null) {
         // Fetch last N messages
         $messages = $this->chatManager->getMessages($limit);
         $context = [];
 
+        $currentTime = time();
+
         foreach ($messages as $msg) {
+            // Check message age if required
+            if ($maxAgeHours !== null) {
+                $msgTime = strtotime($msg['created_at'] . ' UTC');
+                $hoursDiff = ($currentTime - $msgTime) / 3600;
+                if ($hoursDiff > $maxAgeHours) {
+                    continue; // Skip messages older than maxAgeHours
+                }
+            }
+
             $role = ($msg['user_id'] == $this->botUserId) ? 'assistant' : 'user';
             $time = date('H:i', strtotime($msg['created_at']));
             $username = $msg['username'];
