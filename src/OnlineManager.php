@@ -75,10 +75,44 @@ class OnlineManager {
         $resUsers = $stmtUsers->get_result();
         
         $users = [];
+        
+        // Add AI Bot if enabled
+        $config = ConfigManager::getInstance();
+        if ($config->getOption('ai_enabled', 0)) {
+            $botUserId = (int)$config->getOption('ai_bot_user_id', 0);
+            if ($botUserId > 0) {
+                $stmtBot = $this->db->prepare("
+                    SELECT u.id, u.nickname, u.login, uo_avatar.option_value as avatar, uo.option_value as chat_color 
+                    FROM users u
+                    LEFT JOIN user_options uo ON u.id = uo.user_id AND uo.option_key = 'chat_color'
+                    LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
+                    WHERE u.id = ?
+                ");
+                $stmtBot->bind_param("i", $botUserId);
+                $stmtBot->execute();
+                $resBot = $stmtBot->get_result();
+                if ($botRow = $resBot->fetch_assoc()) {
+                    if (empty($botRow['chat_color'])) $botRow['chat_color'] = '#9b59b6'; 
+                    if (empty($botRow['avatar'])) $botRow['avatar'] = '/assets/img/default-avatar.png'; 
+                    if (empty($botRow['nickname'])) $botRow['nickname'] = $botRow['login'];
+                    $botRow['nickname'] = '✨ ' . $botRow['nickname']; // Добавим звездочку для красоты!
+                    $users[] = $botRow;
+                }
+            }
+        }
+
         while ($row = $resUsers->fetch_assoc()) {
             if (empty($row['chat_color'])) $row['chat_color'] = '#6d2f8e'; // Default color
             if (empty($row['avatar'])) $row['avatar'] = '/assets/img/default-avatar.png'; 
-            $users[] = $row;
+            
+            // Проверяем, не добавили ли мы бота уже (на всякий случай)
+            $isBot = false;
+            if (isset($botUserId) && $row['id'] == $botUserId) {
+                $isBot = true;
+            }
+            if (!$isBot) {
+                $users[] = $row;
+            }
         }
 
         return [
