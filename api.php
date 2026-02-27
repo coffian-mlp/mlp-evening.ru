@@ -1134,7 +1134,8 @@ try {
                 sendResponse(false, "Не так быстро, сахарок! Подожди $rateLimit сек.", 'error');
             }
 
-            if ($chat->addMessage($userId, $username, $message, $quotedMsgIds)) {
+            $newMsgId = $chat->addMessage($userId, $username, $message, $quotedMsgIds);
+            if ($newMsgId) {
                 // Отправляем ответ клиенту, чтобы не задерживать UI
                 $responseJson = json_encode([
                     'success' => true,
@@ -1166,7 +1167,7 @@ try {
                 // Вызываем магию ИИ
                 require_once __DIR__ . '/src/LLM/LLMManager.php';
                 $llm = new LLMManager();
-                $llm->processTrigger('mention', ['message' => $message]);
+                $llm->processTrigger('mention', ['message' => $message, 'message_id' => $newMsgId === true ? null : $newMsgId]);
 
                 exit();
             } else {

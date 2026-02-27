@@ -106,7 +106,8 @@ class LLMManager {
                 $response = $this->askWithFallback($context, $this->systemPrompt);
                 
                 if ($response && $response !== 'SILENCE') {
-                    $this->chatManager->addMessage($this->botUserId, $botNickname, $response);
+                    $quotedIds = isset($contextData['message_id']) && $contextData['message_id'] ? [$contextData['message_id']] : [];
+                    $this->chatManager->addMessage($this->botUserId, $botNickname, $response, $quotedIds);
                     return true;
                 }
             }
