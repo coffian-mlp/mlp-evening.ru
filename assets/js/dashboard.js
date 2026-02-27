@@ -112,11 +112,15 @@ $(document).ready(function() {
                 window.showFlashMessage(response.message, response.type);
                 
                 if (response.success) {
-                    $form.find("input[type='text'], input[type='number'], input[type='password'], input[type='url'], input[type='file']").val("");
-                    // Reset selects if any
-                    $form.find("select").prop('selectedIndex', 0);
-                    
                     var action = $form.find("input[name='action']").val();
+                    
+                    // Не очищаем поля для форм с настройками
+                    if (action !== 'update_settings') {
+                        $form.find("input[type='text'], input[type='number'], input[type='password'], input[type='url'], input[type='file'], textarea").val("");
+                        // Reset selects if any
+                        $form.find("select").prop('selectedIndex', 0);
+                    }
+                    
                     if (action === 'clear_watching_log') {
                         $("#tab-history table tr:not(:first)").remove();
                         $("#tab-history table").append("<tr><td colspan='3' style='text-align:center; color:#999;'>История пуста (обновите страницу)</td></tr>");
