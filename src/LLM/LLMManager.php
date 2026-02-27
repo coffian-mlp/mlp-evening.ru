@@ -137,11 +137,30 @@ class LLMManager {
     }
 
     private function askWithFallback($context, $prompt) {
+        // Добавим в промпт жесткое указание не писать метки времени и свое имя
+        $prompt .= "\n\nВАЖНО: Пиши ТОЛЬКО текст своего ответа. НИКОГДА не добавляй свое имя, никнейм или время в начале сообщения (например, не пиши '[12:00] Твайлайт:').";
+
+        $userManager = new UserManager();
+        $botUser = $userManager->getUserById($this->botUserId);
+        $botLogin = $botUser['login'] ?? 'Twilight';
+        $botNickname = $botUser['nickname'] ?? 'Твайлайт Спаркл';
+
         foreach ($this->providers as $provider) {
             try {
                 $response = $provider->askChat($context, $prompt);
                 if ($response) {
-                    return $response;
+                    // Очистка ответа от случайно сгенерированных временных меток и имен
+                    $response = trim($response);
+                    
+                    // Удаляем `[12:34] Имя:` 
+                    $response = preg_replace('/^\[\d{2}:\d{2}\]\s*[^:]+:\s*/iu', '', $response);
+                    // Удаляем `Имя:`
+                    $response = preg_replace('/^' . preg_quote($botNickname, '/') . ':\s*/iu', '', $response);
+                    $response = preg_replace('/^' . preg_quote($botLogin, '/') . ':\s*/iu', '', $response);
+                    // На всякий случай удаляем еще раз, если было вложенное
+                    $response = preg_replace('/^\[\d{2}:\d{2}\]\s*[^:]+:\s*/iu', '', $response);
+
+                    return trim($response);
                 }
             } catch (Exception $e) {
                 error_log("LLM Provider Error (" . get_class($provider) . "): " . $e->getMessage());
