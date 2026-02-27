@@ -95,19 +95,18 @@ class LLMManager {
 
         if ($triggerType === 'mention') {
             $message = $contextData['message'] ?? '';
-            $botUsername = $this->getBotUsername();
+            $userManager = new UserManager();
+            $botUser = $userManager->getUserById($this->botUserId);
+            $botLogin = $botUser['login'] ?? 'Twilight';
+            $botNickname = $botUser['nickname'] ?? 'Твайлайт Спаркл';
             
-            // Debugging output
-            error_log("LLMManager DEBUG: Message: " . $message);
-            error_log("LLMManager DEBUG: Bot Username: " . $botUsername);
-            
-            // Check if bot is mentioned
-            if (stripos($message, '@' . $botUsername) !== false) {
+            // Check if bot is mentioned by login or nickname
+            if (stripos($message, '@' . $botLogin) !== false || stripos($message, '@' . $botNickname) !== false) {
                 $context = $this->buildContext(20);
                 $response = $this->askWithFallback($context, $this->systemPrompt);
                 
                 if ($response && $response !== 'SILENCE') {
-                    $this->chatManager->addMessage($this->botUserId, $botUsername, $response);
+                    $this->chatManager->addMessage($this->botUserId, $botNickname, $response);
                     return true;
                 }
             }
