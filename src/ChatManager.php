@@ -356,7 +356,7 @@ class ChatManager {
     }
 
     // --- Helper to fetch single full message ---
-    private function getMessageById($id) {
+    public function getMessageById($id) {
         // COALESCE logic: Try nickname -> login -> historical username
         $query = "SELECT cm.*, 
                          COALESCE(NULLIF(u.nickname, ''), u.login, cm.username) as username,
