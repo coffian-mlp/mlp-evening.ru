@@ -220,6 +220,7 @@ class UserManager {
 
     public function createUser($login, $password, $role = 'user', $nickname = null, $email = null) {
         if (empty($nickname)) $nickname = $login; 
+        if ($email === '') $email = null; // Fix for unique constraint on empty emails
         
         // ... (check login) ...
         $stmt = $this->db->prepare("SELECT id FROM users WHERE login = ?");
