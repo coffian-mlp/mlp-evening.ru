@@ -221,7 +221,11 @@ try {
                 flush();
             }
 
-            sleep(2);
+            // Закрываем сессию, чтобы не блокировать другие запросы пользователя
+            session_write_close();
+            
+            // Рандомная задержка
+            sleep(rand(4, 42));
 
             require_once __DIR__ . '/src/LLM/LLMManager.php';
             $llm = new LLMManager();
@@ -341,8 +345,11 @@ try {
                  flush();
              }
 
+             // Закрываем сессию
+             session_write_close();
+             
              // Даем ИИ время "напечатать" приветствие
-             sleep(2);
+             sleep(rand(4, 42));
 
              // Приветствие от ИИ
              require_once __DIR__ . '/src/LLM/LLMManager.php';
@@ -496,7 +503,10 @@ try {
                     flush();
                 }
 
-                sleep(2);
+                // Закрываем сессию
+                session_write_close();
+                
+                sleep(rand(4, 42));
 
                 require_once __DIR__ . '/src/LLM/LLMManager.php';
                 $llm = new LLMManager();
@@ -1161,8 +1171,11 @@ try {
                     flush();
                 }
 
-                // Даем ИИ секунду "на подумать", чтобы его сообщение не появилось раньше пользовательского
-                sleep(2);
+                // Закрываем сессию пользователя, чтобы он мог продолжить сидеть на сайте, пока мы думаем
+                session_write_close();
+                
+                // Даем ИИ случайное время "на подумать" от 4 до 42 секунд
+                sleep(rand(4, 42));
 
                 // Вызываем магию ИИ
                 require_once __DIR__ . '/src/LLM/LLMManager.php';
