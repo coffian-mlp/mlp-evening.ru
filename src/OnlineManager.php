@@ -95,7 +95,7 @@ class OnlineManager {
                     if (empty($botRow['chat_color'])) $botRow['chat_color'] = '#9b59b6'; 
                     if (empty($botRow['avatar'])) $botRow['avatar'] = '/assets/img/default-avatar.png'; 
                     if (empty($botRow['nickname'])) $botRow['nickname'] = $botRow['login'];
-                    $botRow['nickname'] = '✨ ' . $botRow['nickname']; // Добавим звездочку для красоты!
+                    // $botRow['nickname'] = '✨ ' . $botRow['nickname']; // Убрали звездочку, так как она ломает автокомплит и теги в чате
                     $users[] = $botRow;
                 }
             }
