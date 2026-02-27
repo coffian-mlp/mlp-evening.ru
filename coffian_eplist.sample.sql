@@ -67,7 +67,17 @@
     67|-- Password: password (hash below is for 'password')
     68|
     69|INSERT INTO `users` (`login`, `password_hash`, `role`) VALUES
-    70|('admin', '$2y$10$n.9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9', 'admin');
+    70|('admin', '$2y$10$n.9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9', 'admin'),
+('Twilight', '$2y$10$n.9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9', 'user');
+
+INSERT INTO `site_options` (`key_name`, `value`) VALUES
+('ai_bot_user_id', '2'),
+('ai_enabled', '1'),
+('ai_system_prompt', 'Ты — Твайлайт Спаркл, Принцесса Дружбы из My Little Pony. Ты просто участница чата брони-сайта, а не ассистент. Общайся непринужденно, используй поняшный сленг. НИКОГДА не предлагай помощь и не спрашивай "чем могу помочь", просто поддерживай беседу.');
+
+INSERT INTO `user_options` (`user_id`, `option_key`, `option_value`) VALUES
+(2, 'chat_color', '#9b59b6'),
+(2, 'avatar_url', 'https://i.imgur.com/K12X8rO.png');
     71|
     72|-- --------------------------------------------------------
     73|

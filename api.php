@@ -199,7 +199,35 @@ try {
         $result = $service->handleLogin($provider, $data);
 
         if ($result['success']) {
-            sendResponse(true, $result['message'], 'success', ['redirect' => $result['redirect']]);
+            $responseJson = json_encode([
+                'success' => true,
+                'message' => $result['message'],
+                'type' => 'success',
+                'data' => ['redirect' => $result['redirect']]
+            ]);
+            
+            if (function_exists('fastcgi_finish_request')) {
+                echo $responseJson;
+                fastcgi_finish_request();
+            } else {
+                @ob_end_clean();
+                header("Connection: close");
+                ignore_user_abort(true);
+                ob_start();
+                echo $responseJson;
+                $size = ob_get_length();
+                header("Content-Length: $size");
+                ob_end_flush();
+                flush();
+            }
+
+            sleep(2);
+
+            require_once __DIR__ . '/src/LLM/LLMManager.php';
+            $llm = new LLMManager();
+            $llm->processTrigger('greeting', ['username' => $_SESSION['username'] ?? 'Гость']);
+
+            exit();
         } else {
             sendResponse(false, $result['message'], 'error');
         }
@@ -289,7 +317,39 @@ try {
 
          if (Auth::login($username, $password)) {
              Auth::resetLoginAttempts($ip); // Reset on success
-             sendResponse(true, "Добро пожаловать, $username! Рады тебя видеть!", 'success', ['reload' => true]);
+             
+             // Отправляем ответ клиенту
+             $responseJson = json_encode([
+                 'success' => true,
+                 'message' => "Добро пожаловать, $username! Рады тебя видеть!",
+                 'type' => 'success',
+                 'data' => ['reload' => true]
+             ]);
+             
+             if (function_exists('fastcgi_finish_request')) {
+                 echo $responseJson;
+                 fastcgi_finish_request();
+             } else {
+                 @ob_end_clean();
+                 header("Connection: close");
+                 ignore_user_abort(true);
+                 ob_start();
+                 echo $responseJson;
+                 $size = ob_get_length();
+                 header("Content-Length: $size");
+                 ob_end_flush();
+                 flush();
+             }
+
+             // Даем ИИ время "напечатать" приветствие
+             sleep(2);
+
+             // Приветствие от ИИ
+             require_once __DIR__ . '/src/LLM/LLMManager.php';
+             $llm = new LLMManager();
+             $llm->processTrigger('greeting', ['username' => $username]);
+
+             exit();
          } else {
              $newCount = Auth::recordFailedLogin($ip);
              
@@ -414,7 +474,35 @@ try {
             
             // 4. Автоматический вход
             if (Auth::login($login, $password)) {
-                sendResponse(true, "Ура! Ты с нами! Добро пожаловать!", 'success', ['reload' => true]);
+                $responseJson = json_encode([
+                    'success' => true,
+                    'message' => "Ура! Ты с нами! Добро пожаловать!",
+                    'type' => 'success',
+                    'data' => ['reload' => true]
+                ]);
+                
+                if (function_exists('fastcgi_finish_request')) {
+                    echo $responseJson;
+                    fastcgi_finish_request();
+                } else {
+                    @ob_end_clean();
+                    header("Connection: close");
+                    ignore_user_abort(true);
+                    ob_start();
+                    echo $responseJson;
+                    $size = ob_get_length();
+                    header("Content-Length: $size");
+                    ob_end_flush();
+                    flush();
+                }
+
+                sleep(2);
+
+                require_once __DIR__ . '/src/LLM/LLMManager.php';
+                $llm = new LLMManager();
+                $llm->processTrigger('greeting', ['username' => $login]);
+
+                exit();
             } else {
                 sendResponse(true, "Ура! Ты с нами! Теперь можно войти.", 'success');
             }
@@ -558,6 +646,52 @@ try {
             }
             if (isset($_POST['telegram_bot_username'])) {
                 $config->setOption('telegram_bot_username', trim($_POST['telegram_bot_username']));
+            }
+
+            // AI Settings
+            if (isset($_POST['ai_bot_user_id'])) {
+                $config->setOption('ai_bot_user_id', (int)$_POST['ai_bot_user_id']);
+            }
+            if (isset($_POST['ai_enabled'])) {
+                $config->setOption('ai_enabled', (int)$_POST['ai_enabled']);
+            }
+            if (isset($_POST['ai_system_prompt'])) {
+                $config->setOption('ai_system_prompt', trim($_POST['ai_system_prompt']));
+            }
+            if (isset($_POST['ai_proxy_url'])) {
+                $config->setOption('ai_proxy_url', trim($_POST['ai_proxy_url']));
+            }
+            if (isset($_POST['ai_primary_provider'])) {
+                $config->setOption('ai_primary_provider', trim($_POST['ai_primary_provider']));
+            }
+            
+            // AI Providers
+            if (isset($_POST['ai_openai_key'])) {
+                $config->setOption('ai_openai_key', trim($_POST['ai_openai_key']));
+            }
+            if (isset($_POST['ai_openai_base_url'])) {
+                $config->setOption('ai_openai_base_url', trim($_POST['ai_openai_base_url']));
+            }
+            if (isset($_POST['ai_openai_model'])) {
+                $config->setOption('ai_openai_model', trim($_POST['ai_openai_model']));
+            }
+            
+            if (isset($_POST['ai_openrouter_key'])) {
+                $config->setOption('ai_openrouter_key', trim($_POST['ai_openrouter_key']));
+            }
+            if (isset($_POST['ai_openrouter_model'])) {
+                $config->setOption('ai_openrouter_model', trim($_POST['ai_openrouter_model']));
+            }
+
+            if (isset($_POST['ai_yandex_key'])) {
+                $config->setOption('ai_yandex_key', trim($_POST['ai_yandex_key']));
+            }
+            if (isset($_POST['ai_yandex_folder_id'])) {
+                $config->setOption('ai_yandex_folder_id', trim($_POST['ai_yandex_folder_id']));
+            }
+
+            if (isset($_POST['ai_gigachat_key'])) {
+                $config->setOption('ai_gigachat_key', trim($_POST['ai_gigachat_key']));
             }
 
             // SMTP Settings
@@ -1001,7 +1135,40 @@ try {
             }
 
             if ($chat->addMessage($userId, $username, $message, $quotedMsgIds)) {
-                sendResponse(true, "Сообщение отправлено");
+                // Отправляем ответ клиенту, чтобы не задерживать UI
+                $responseJson = json_encode([
+                    'success' => true,
+                    'message' => "Сообщение отправлено",
+                    'type' => 'success',
+                    'data' => []
+                ]);
+                
+                // Закрываем соединение с клиентом, чтобы PHP мог думать дальше (для PHP-FPM)
+                if (function_exists('fastcgi_finish_request')) {
+                    echo $responseJson;
+                    fastcgi_finish_request();
+                } else {
+                    // Fallback для других SAPI
+                    @ob_end_clean();
+                    header("Connection: close");
+                    ignore_user_abort(true);
+                    ob_start();
+                    echo $responseJson;
+                    $size = ob_get_length();
+                    header("Content-Length: $size");
+                    ob_end_flush();
+                    flush();
+                }
+
+                // Даем ИИ секунду "на подумать", чтобы его сообщение не появилось раньше пользовательского
+                sleep(2);
+
+                // Вызываем магию ИИ
+                require_once __DIR__ . '/src/LLM/LLMManager.php';
+                $llm = new LLMManager();
+                $llm->processTrigger('mention', ['message' => $message]);
+
+                exit();
             } else {
                 sendResponse(false, "Ой, что-то пошло не так при отправке...", 'error');
             }

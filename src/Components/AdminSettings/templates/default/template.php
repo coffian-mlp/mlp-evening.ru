@@ -50,6 +50,97 @@ $config = $arResult['config']; // Helper
 </div>
 
 <div class="card">
+    <h3 class="dashboard-title">🧠 Настройки ИИ Бота (Живая Пони)</h3>
+    <form method="post" action="/api.php">
+        <input type="hidden" name="action" value="update_settings">
+        
+        <div class="form-group">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="hidden" name="ai_enabled" value="0">
+                <input type="checkbox" name="ai_enabled" value="1" <?= $config->getOption('ai_enabled', 0) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                <strong>Включить ИИ-бота в чате</strong>
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Системный Промпт (Характер)</label>
+            <textarea name="ai_system_prompt" class="form-input" rows="4"><?= htmlspecialchars($config->getOption('ai_system_prompt', 'Ты — Твайлайт Спаркл, Принцесса Дружбы...')) ?></textarea>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">ID Пользователя Бота</label>
+            <input type="number" name="ai_bot_user_id" value="<?= htmlspecialchars($config->getOption('ai_bot_user_id', '')) ?>" class="form-input" placeholder="ID пользователя (например, 2)">
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">От имени этого пользователя бот будет писать в чат.</p>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Прокси (socks5://... или vless://...)</label>
+            <input type="text" name="ai_proxy_url" value="<?= htmlspecialchars($config->getOption('ai_proxy_url', '')) ?>" class="form-input" placeholder="Необязательно. Если vless - скачай xray в src/LLM/bin">
+        </div>
+
+        <hr style="margin: 15px 0; border: none; border-top: 1px solid #eee;">
+
+        <h4>Провайдер ИИ</h4>
+        <p style="font-size: 0.85em; color: #666; margin-bottom: 15px;">Выберите основного провайдера. Остальные (если у них заполнены ключи) будут работать как запасные, если основной не ответит.</p>
+        
+        <div class="form-group">
+            <select name="ai_primary_provider" class="form-input" onchange="document.querySelectorAll('.ai-provider-group').forEach(el => el.style.display = 'none'); document.getElementById('ai_group_' + this.value).style.display = 'block';">
+                <option value="openai" <?= $config->getOption('ai_primary_provider', 'openai') === 'openai' ? 'selected' : '' ?>>OpenAI / GitHub Models / Groq</option>
+                <option value="openrouter" <?= $config->getOption('ai_primary_provider', 'openai') === 'openrouter' ? 'selected' : '' ?>>OpenRouter</option>
+                <option value="yandex" <?= $config->getOption('ai_primary_provider', 'openai') === 'yandex' ? 'selected' : '' ?>>YandexGPT</option>
+                <option value="gigachat" <?= $config->getOption('ai_primary_provider', 'openai') === 'gigachat' ? 'selected' : '' ?>>GigaChat</option>
+            </select>
+        </div>
+
+        <div id="ai_group_openai" class="ai-provider-group" <?= $config->getOption('ai_primary_provider', 'openai') === 'openai' ? '' : 'style="display:none;"' ?>>
+            <div class="form-group">
+                <label class="form-label">OpenAI API Key (или GitHub Models)</label>
+                <input type="password" name="ai_openai_key" value="<?= htmlspecialchars($config->getOption('ai_openai_key', '')) ?>" class="form-input">
+            </div>
+            <div class="form-group" style="display: flex; gap: 10px;">
+                <div style="flex: 1;">
+                    <label class="form-label">OpenAI Base URL</label>
+                    <input type="text" name="ai_openai_base_url" value="<?= htmlspecialchars($config->getOption('ai_openai_base_url', 'https://api.openai.com/v1/chat/completions')) ?>" class="form-input">
+                </div>
+                <div style="flex: 1;">
+                    <label class="form-label">Модель OpenAI</label>
+                    <input type="text" name="ai_openai_model" value="<?= htmlspecialchars($config->getOption('ai_openai_model', 'gpt-4o-mini')) ?>" class="form-input">
+                </div>
+            </div>
+        </div>
+
+        <div id="ai_group_openrouter" class="ai-provider-group" <?= $config->getOption('ai_primary_provider', 'openai') === 'openrouter' ? '' : 'style="display:none;"' ?>>
+            <div class="form-group">
+                <label class="form-label">OpenRouter API Key</label>
+                <input type="password" name="ai_openrouter_key" value="<?= htmlspecialchars($config->getOption('ai_openrouter_key', '')) ?>" class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label">OpenRouter Модель</label>
+                <input type="text" name="ai_openrouter_model" value="<?= htmlspecialchars($config->getOption('ai_openrouter_model', 'qwen/qwen3-coder:free')) ?>" class="form-input">
+            </div>
+        </div>
+
+        <div id="ai_group_yandex" class="ai-provider-group" <?= $config->getOption('ai_primary_provider', 'openai') === 'yandex' ? '' : 'style="display:none;"' ?>>
+            <div class="form-group">
+                <label class="form-label">YandexGPT API Key</label>
+                <input type="password" name="ai_yandex_key" value="<?= htmlspecialchars($config->getOption('ai_yandex_key', '')) ?>" class="form-input">
+                <label class="form-label" style="margin-top: 5px;">Yandex Folder ID</label>
+                <input type="text" name="ai_yandex_folder_id" value="<?= htmlspecialchars($config->getOption('ai_yandex_folder_id', '')) ?>" class="form-input">
+            </div>
+        </div>
+
+        <div id="ai_group_gigachat" class="ai-provider-group" <?= $config->getOption('ai_primary_provider', 'openai') === 'gigachat' ? '' : 'style="display:none;"' ?>>
+            <div class="form-group">
+                <label class="form-label">GigaChat Auth Key</label>
+                <input type="password" name="ai_gigachat_key" value="<?= htmlspecialchars($config->getOption('ai_gigachat_key', '')) ?>" class="form-input">
+            </div>
+        </div>
+
+        <button type="submit" class="btn-primary">Сохранить ИИ настройки</button>
+    </form>
+</div>
+
+<div class="card">
     <h3 class="dashboard-title">🔗 Социальная Авторизация</h3>
     <form method="post" action="/api.php">
         <input type="hidden" name="action" value="update_settings">

@@ -1,0 +1,45 @@
+{
+    "log": {
+        "loglevel": "warning"
+    },
+    "inbounds": [
+        {
+            "listen": "127.0.0.1",
+            "port": 10808,
+            "protocol": "socks",
+            "settings": {
+                "udp": true
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "vless",
+            "settings": {
+                "vnext": [
+                    {
+                        "address": "178.20.211.23",
+                        "port": 23995,
+                        "users": [
+                            {
+                                "id": "fec9f4bb-d2f6-4001-9bc6-e9aefc91e715",
+                                "encryption": "none"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "tcp",
+                "security": "reality",
+                "realitySettings": {
+                    "publicKey": "2YmZIugM4xrID4dG1Yt72WmWGLQ5xbOfqDWR62MOJn0",
+                    "shortId": "8f",
+                    "serverName": "google.com",
+                    "fingerprint": "chrome",
+                    "show": false
+                }
+            }
+        }
+    ]
+}
