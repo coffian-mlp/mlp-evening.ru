@@ -139,7 +139,7 @@ class LLMManager {
         } elseif ($triggerType === 'greeting') {
             $userLogin = $contextData['username'] ?? 'Гость';
             $context = $this->buildContext(10);
-            $prompt = $this->systemPrompt . "\n\nПользователь $userLogin только что зашел на сайт. Поздоровайся с ним, опираясь на текущий контекст чата. Будь краткой и приветливой.";
+            $prompt = $this->systemPrompt . "\n\nПользователь $userLogin только что зашел на сайт. Поздоровайся с ним, обязательно упомянув его по имени (например, '@$userLogin'). Будь краткой и приветливой.";
             
             $response = $this->askWithFallback($context, $prompt);
             
