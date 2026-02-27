@@ -101,7 +101,20 @@ class LLMManager {
             $botNickname = $botUser['nickname'] ?? 'Твайлайт Спаркл';
             
             // Check if bot is mentioned by login or nickname
-            $isMentioned = (stripos($message, '@' . $botLogin) !== false || stripos($message, '@' . $botNickname) !== false);
+            $isMentioned = false;
+            if (stripos($message, '@' . $botLogin) !== false || stripos($message, '@' . $botNickname) !== false) {
+                $isMentioned = true;
+            } else {
+                // Дополнительные алиасы (без @), на которые реагирует бот
+                $aliases = ['твайлайт', 'твай', 'тволот', 'баклажан', 'twilight'];
+                foreach ($aliases as $alias) {
+                    // Используем границы слова \b с модификатором u (unicode)
+                    if (preg_match('/\b' . preg_quote($alias, '/') . '\b/iu', $message)) {
+                        $isMentioned = true;
+                        break;
+                    }
+                }
+            }
             
             // Check if any of the quoted messages belong to the bot
             $isQuoted = false;
