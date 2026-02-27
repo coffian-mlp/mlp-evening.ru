@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../ConfigManager.php';
 require_once __DIR__ . '/../ChatManager.php';
+require_once __DIR__ . '/../Database.php';
 require_once __DIR__ . '/../UserManager.php';
 require_once __DIR__ . '/OpenRouterProvider.php';
 require_once __DIR__ . '/OpenAIProvider.php';
@@ -101,16 +102,18 @@ class LLMManager {
             $botNickname = $botUser['nickname'] ?? 'Твайлайт Спаркл';
             
             // Check if bot is mentioned by login or nickname
-            $isMentioned = false;
+            $isExplicitMention = false;
+            $isMentionedByAlias = false;
+            
             if (stripos($message, '@' . $botLogin) !== false || stripos($message, '@' . $botNickname) !== false) {
-                $isMentioned = true;
+                $isExplicitMention = true;
             } else {
                 // Дополнительные алиасы (без @), на которые реагирует бот
-                $aliases = ['твайлайт', 'твай', 'тволот', 'баклажан', 'twilight'];
+                $aliases = ['твайлайт', 'твай', 'тволот', 'баклажан', 'twilight', 'искорка', 'спаркл', 'твайли', 'твайка', 'света', 'светка'];
                 foreach ($aliases as $alias) {
                     // Используем границы слова \b с модификатором u (unicode)
                     if (preg_match('/\b' . preg_quote($alias, '/') . '\b/iu', $message)) {
-                        $isMentioned = true;
+                        $isMentionedByAlias = true;
                         break;
                     }
                 }
@@ -129,7 +132,44 @@ class LLMManager {
                 }
             }
 
-            if ($isMentioned || $isQuoted) {
+            if ($isExplicitMention || $isMentionedByAlias || $isQuoted) {
+                // Если это только неявный алиас (не прямое упоминание и не ответ боту), применяем жесткую защиту от спама
+                if ($isMentionedByAlias && !$isExplicitMention && !$isQuoted) {
+                    $db = Database::getInstance()->getConnection();
+                    
+                    // 1. Проверяем, не было ли самое последнее сообщение в чате от самого бота
+                    $stmtLast = $db->prepare("SELECT user_id FROM chat_messages ORDER BY id DESC LIMIT 1");
+                    $stmtLast->execute();
+                    $resLast = $stmtLast->get_result();
+                    if ($rowLast = $resLast->fetch_assoc()) {
+                        if ($rowLast['user_id'] == $this->botUserId) {
+                            return false; // Бот только что писал (или это его последнее сообщение), не реагируем на алиасы
+                        }
+                    }
+                    
+                    // 2. Проверяем время последнего сообщения от бота для rate-лимитов
+                    $stmtBot = $db->prepare("SELECT created_at FROM chat_messages WHERE user_id = ? ORDER BY id DESC LIMIT 1");
+                    $stmtBot->bind_param("i", $this->botUserId);
+                    $stmtBot->execute();
+                    $resBot = $stmtBot->get_result();
+                    
+                    if ($rowBot = $resBot->fetch_assoc()) {
+                        $lastBotTime = strtotime($rowBot['created_at'] . ' UTC');
+                        $timeDiff = time() - $lastBotTime;
+                        
+                        if ($timeDiff <= 600) {
+                            // Меньше 10 минут -> не отвечаем вообще
+                            return false;
+                        } elseif ($timeDiff <= 3600) {
+                            // От 10 минут до 1 часа -> ролл 1 к 20 (5% шанс ответить)
+                            if (rand(1, 20) !== 20) {
+                                return false; 
+                            }
+                        }
+                        // Больше 1 часа -> 100% ответ
+                    }
+                }
+
                 $context = $this->buildContext(20);
                 $response = $this->askWithFallback($context, $this->systemPrompt);
                 
