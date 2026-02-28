@@ -5,13 +5,22 @@
 
 require_once __DIR__ . '/src/LLM/LLMManager.php';
 
+// Логирование запусков
+$logFile = __DIR__ . '/cron_llm.log';
+$timestamp = date('Y-m-d H:i:s');
+
+function logMessage($file, $time, $msg) {
+    file_put_contents($file, "[$time] $msg\n", FILE_APPEND);
+    echo $msg . "\n";
+}
+
 $llm = new LLMManager();
 
 // Пытаемся сгенерировать спонтанное сообщение
 $result = $llm->processTrigger('cron_spontaneous');
 
 if ($result) {
-    echo "Спонтанное сообщение отправлено.\n";
+    logMessage($logFile, $timestamp, "Спонтанное сообщение отправлено.");
 } else {
-    echo "Пони решила промолчать (или бот отключен).\n";
+    logMessage($logFile, $timestamp, "Пони решила промолчать (или бот отключен/чат пуст).");
 }
