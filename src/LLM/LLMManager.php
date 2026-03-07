@@ -109,8 +109,12 @@ class LLMManager {
                 $isExplicitMention = true;
             } else {
                 // Дополнительные алиасы (без @), на которые реагирует бот
-                $aliases = ['лира', 'lyra', 'хартстрингс', 'lyra heartstrings', 'лирочка'];
+                $config = ConfigManager::getInstance();
+                $aliasesStr = $config->getOption('ai_aliases', 'лира, lyra, хартстрингс, lyra heartstrings, лирочка');
+                $aliases = array_map('trim', explode(',', $aliasesStr));
+                
                 foreach ($aliases as $alias) {
+                    if (empty($alias)) continue;
                     // Используем \p{L} для корректной работы с кириллицей, так как \b может сбоить
                     if (preg_match('/(^|[^\p{L}])' . preg_quote($alias, '/') . '([^\p{L}]|$)/iu', $message)) {
                         $isMentionedByAlias = true;

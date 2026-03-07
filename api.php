@@ -680,6 +680,9 @@ try {
             if (isset($_POST['ai_system_prompt'])) {
                 $config->setOption('ai_system_prompt', trim($_POST['ai_system_prompt']));
             }
+            if (isset($_POST['ai_aliases'])) {
+                $config->setOption('ai_aliases', trim($_POST['ai_aliases']));
+            }
             if (isset($_POST['ai_proxy_url'])) {
                 $config->setOption('ai_proxy_url', trim($_POST['ai_proxy_url']));
             }

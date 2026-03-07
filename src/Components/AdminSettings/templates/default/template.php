@@ -64,7 +64,13 @@ $config = $arResult['config']; // Helper
 
         <div class="form-group">
             <label class="form-label">Системный Промпт (Характер)</label>
-            <textarea name="ai_system_prompt" class="form-input" rows="4"><?= htmlspecialchars($config->getOption('ai_system_prompt', 'Ты — Твайлайт Спаркл, Принцесса Дружбы...')) ?></textarea>
+            <textarea name="ai_system_prompt" class="form-input" rows="4"><?= htmlspecialchars($config->getOption('ai_system_prompt', 'Ты — Лира Хартстрингс, мятная единорожка из Понивилля...')) ?></textarea>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Имена-упоминания (через запятую)</label>
+            <input type="text" name="ai_aliases" value="<?= htmlspecialchars($config->getOption('ai_aliases', 'лира, lyra, хартстрингс, lyra heartstrings, лирочка')) ?>" class="form-input" placeholder="Например: лира, lyra, хартстрингс">
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">На эти слова бот будет откликаться без @. Работает без учета регистра.</p>
         </div>
 
         <div class="form-group">
