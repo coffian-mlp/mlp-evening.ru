@@ -105,14 +105,14 @@ class LLMManager {
             $isExplicitMention = false;
             $isMentionedByAlias = false;
             
-            if (stripos($message, '@' . $botLogin) !== false || stripos($message, '@' . $botNickname) !== false) {
+            if (mb_stripos($message, '@' . $botLogin, 0, 'UTF-8') !== false || mb_stripos($message, '@' . $botNickname, 0, 'UTF-8') !== false) {
                 $isExplicitMention = true;
             } else {
                 // Дополнительные алиасы (без @), на которые реагирует бот
                 $aliases = ['лира', 'lyra', 'хартстрингс', 'lyra heartstrings', 'лирочка'];
                 foreach ($aliases as $alias) {
-                    // Используем границы слова \b с модификатором u (unicode)
-                    if (preg_match('/\b' . preg_quote($alias, '/') . '\b/iu', $message)) {
+                    // Используем \p{L} для корректной работы с кириллицей, так как \b может сбоить
+                    if (preg_match('/(^|[^\p{L}])' . preg_quote($alias, '/') . '([^\p{L}]|$)/iu', $message)) {
                         $isMentionedByAlias = true;
                         break;
                     }
