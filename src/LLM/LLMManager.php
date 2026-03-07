@@ -157,16 +157,16 @@ class LLMManager {
                         $lastBotTime = strtotime($rowBot['created_at'] . ' UTC');
                         $timeDiff = time() - $lastBotTime;
                         
-                        if ($timeDiff <= 600) {
-                            // Меньше 10 минут -> не отвечаем вообще
+                        if ($timeDiff <= 30) {
+                            // Меньше 30 секунд -> не отвечаем вообще (защита от спама)
                             return false;
-                        } elseif ($timeDiff <= 3600) {
-                            // От 10 минут до 1 часа -> ролл 1 к 20 (5% шанс ответить)
-                            if (rand(1, 20) !== 20) {
+                        } elseif ($timeDiff <= 120) {
+                            // От 30 секунд до 2 минут -> 50% шанс ответить
+                            if (rand(1, 2) !== 2) {
                                 return false; 
                             }
                         }
-                        // Больше 1 часа -> 100% ответ
+                        // Больше 2 минут -> 100% ответ
                     }
                 }
 
