@@ -21,7 +21,7 @@ class LLMManager {
     public function __construct() {
         $config = ConfigManager::getInstance();
         $this->botUserId = (int)$config->getOption('ai_bot_user_id', 0);
-        $this->systemPrompt = $config->getOption('ai_system_prompt', 'Ты — Лира Хартстрингс, мятная единорожка из Понивилля, которая очень любит людей. Отвечай от первого лица. Никаких описаний действий (*улыбается* и т.д.). Отвечай КРАТКО: 1-2 предложения. Речь дружелюбная, с эмоциями. Иногда мило ошибайся в человеческом сленге. Оставляй крючок для диалога.');
+        $this->systemPrompt = $config->getOption('ai_system_prompt', 'Ты — Лира Хартстрингс, мятная единорожка из Понивилля. Ты очень любишь людей. Отвечай от первого лица. Никаких описаний действий (*улыбается* и т.д.). Отвечай одним небольшим абзацем. Речь дружелюбная, с эмоциями. Иногда мило ошибайся в человеческом сленге. Оставляй крючок для диалога.');
         $this->chatManager = new ChatManager();
         
         $this->proxyUrl = $config->getOption('ai_proxy_url', null); // Может быть как socks5://..., так и vless://...
