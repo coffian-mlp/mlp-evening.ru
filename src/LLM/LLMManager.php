@@ -21,7 +21,7 @@ class LLMManager {
     public function __construct() {
         $config = ConfigManager::getInstance();
         $this->botUserId = (int)$config->getOption('ai_bot_user_id', 0);
-        $this->systemPrompt = $config->getOption('ai_system_prompt', 'Ты — Твайлайт Спаркл, Принцесса Дружбы из My Little Pony. Ты просто участница чата брони-сайта. Общайся непринужденно, используй поняшный сленг. НИКОГДА не предлагай помощь. ОТВЕЧАЙ ОЧЕНЬ КРАТКО: 5-10 слов максимум, строго в одну строку. Не спамь смайлами (максимум один).');
+        $this->systemPrompt = $config->getOption('ai_system_prompt', 'Ты — Лира Хартстрингс, мятная единорожка из Понивилля, которая очень любит людей. Отвечай от первого лица. Никаких описаний действий (*улыбается* и т.д.). Отвечай КРАТКО: 1-2 предложения. Речь дружелюбная, с эмоциями. Иногда мило ошибайся в человеческом сленге. Оставляй крючок для диалога.');
         $this->chatManager = new ChatManager();
         
         $this->proxyUrl = $config->getOption('ai_proxy_url', null); // Может быть как socks5://..., так и vless://...
@@ -98,8 +98,8 @@ class LLMManager {
             $message = $contextData['message'] ?? '';
             $userManager = new UserManager();
             $botUser = $userManager->getUserById($this->botUserId);
-            $botLogin = $botUser['login'] ?? 'Twilight';
-            $botNickname = $botUser['nickname'] ?? 'Твайлайт Спаркл';
+            $botLogin = $botUser['login'] ?? 'Lyra';
+            $botNickname = $botUser['nickname'] ?? 'Лира Хартстрингс';
             
             // Check if bot is mentioned by login or nickname
             $isExplicitMention = false;
@@ -109,7 +109,7 @@ class LLMManager {
                 $isExplicitMention = true;
             } else {
                 // Дополнительные алиасы (без @), на которые реагирует бот
-                $aliases = ['твайлайт', 'твай', 'тволот', 'баклажан', 'twilight', 'искорка', 'спаркл', 'твайли', 'твайка', 'света', 'светка'];
+                $aliases = ['лира', 'lyra', 'хартстрингс', 'lyra heartstrings', 'лирочка'];
                 foreach ($aliases as $alias) {
                     // Используем границы слова \b с модификатором u (unicode)
                     if (preg_match('/\b' . preg_quote($alias, '/') . '\b/iu', $message)) {
@@ -173,7 +173,9 @@ class LLMManager {
                 $context = $this->buildContext(20);
                 $response = $this->askWithFallback($context, $this->systemPrompt);
                 
-                if ($response && $response !== 'SILENCE') {
+                $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
+                
+                if ($response && !$isSilence) {
                     $quotedIds = isset($contextData['message_id']) && $contextData['message_id'] ? [$contextData['message_id']] : [];
                     $this->chatManager->addMessage($this->botUserId, $botNickname, $response, $quotedIds);
                     return true;
@@ -198,7 +200,9 @@ class LLMManager {
             
             $response = $this->askWithFallback($context, $prompt);
             
-            if ($response && trim($response) !== 'SILENCE') {
+            $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
+            
+            if ($response && !$isSilence) {
                 $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(), $response);
                 return true;
             }
@@ -209,7 +213,9 @@ class LLMManager {
             
             $response = $this->askWithFallback($context, $prompt);
             
-            if ($response && trim($response) !== 'SILENCE') {
+            $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
+            
+            if ($response && !$isSilence) {
                 $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(), $response);
                 return true;
             }
@@ -219,13 +225,13 @@ class LLMManager {
     }
 
     private function askWithFallback($context, $prompt) {
-        // Добавим в промпт жесткое указание не писать метки времени и свое имя
-        $prompt .= "\n\nВАЖНО: Пиши ТОЛЬКО текст своего ответа. НИКОГДА не добавляй свое имя, никнейм или время в начале сообщения (например, не пиши '[12:00] Твайлайт:').";
-
         $userManager = new UserManager();
         $botUser = $userManager->getUserById($this->botUserId);
-        $botLogin = $botUser['login'] ?? 'Twilight';
-        $botNickname = $botUser['nickname'] ?? 'Твайлайт Спаркл';
+        $botLogin = $botUser['login'] ?? 'Lyra';
+        $botNickname = $botUser['nickname'] ?? 'Лира Хартстрингс';
+
+        // Добавим в промпт жесткое указание не писать метки времени и свое имя
+        $prompt .= "\n\nВАЖНО: Пиши ТОЛЬКО текст своего ответа. НИКОГДА не добавляй свое имя, никнейм или время в начале сообщения (например, не пиши '[12:00] {$botNickname}:').";
 
         foreach ($this->providers as $provider) {
             try {
@@ -239,8 +245,18 @@ class LLMManager {
                     // Удаляем `Имя:`
                     $response = preg_replace('/^' . preg_quote($botNickname, '/') . ':\s*/iu', '', $response);
                     $response = preg_replace('/^' . preg_quote($botLogin, '/') . ':\s*/iu', '', $response);
+                    
+                    // Удаляем по первому слову никнейма (например "Лира: " если ник "Лира Хартстрингс")
+                    $nicknameParts = explode(' ', $botNickname);
+                    if (!empty($nicknameParts[0])) {
+                        $response = preg_replace('/^' . preg_quote($nicknameParts[0], '/') . ':\s*/iu', '', $response);
+                    }
+                    
                     // На всякий случай удаляем еще раз, если было вложенное
                     $response = preg_replace('/^\[\d{2}:\d{2}\]\s*[^:]+:\s*/iu', '', $response);
+
+                    // Если вдруг LLM добавила кавычки в начале и конце
+                    $response = preg_replace('/^"(.*)"$/us', '$1', trim($response));
 
                     return trim($response);
                 }
@@ -288,7 +304,7 @@ class LLMManager {
     private function getBotUsername() {
         $userManager = new UserManager();
         $user = $userManager->getUserById($this->botUserId);
-        return $user['nickname'] ?? $user['login'] ?? 'Twilight';
+        return $user['nickname'] ?? $user['login'] ?? 'Lyra';
     }
 
     private function ensureBotUserExists() {
@@ -296,9 +312,9 @@ class LLMManager {
         $user = $userManager->getUserById($this->botUserId);
         
         if (!$user) {
-            // Create Twilight if she doesn't exist
+            // Create Lyra if she doesn't exist
             $randomPass = bin2hex(random_bytes(16));
-            $newId = $userManager->createUser('Twilight', $randomPass, 'user', 'Твайлайт Спаркл');
+            $newId = $userManager->createUser('Lyra', $randomPass, 'user', 'Лира Хартстрингс');
             
             if ($newId) {
                 $userManager->updateUser($newId, [
