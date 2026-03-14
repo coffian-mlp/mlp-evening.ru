@@ -82,53 +82,64 @@ class ChatManager {
         // Basic HTML escaping to prevent XSS
         $message = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
 
-        // --- Anti-Duplicate Check (Idempotency) ---
-        // Check if user sent the exact same message within last 3 seconds
-        $dupStmt = $this->db->prepare("SELECT id FROM chat_messages WHERE user_id = ? AND message = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 3 SECOND) LIMIT 1");
-        if ($dupStmt) {
-            $dupStmt->bind_param("is", $userId, $message);
-            $dupStmt->execute();
-            if ($dupStmt->get_result()->fetch_assoc()) {
+        // --- Anti-Duplicate (Idempotency) + Race Fix ---
+        // Serialize addMessage per user so two concurrent requests (e.g. double submit / network retry)
+        // cannot both pass the duplicate check before either INSERT commits.
+        $lockName = 'chat_add_' . (int)$userId;
+        $acquired = $this->db->query("SELECT GET_LOCK('" . $this->db->real_escape_string($lockName) . "', 5) AS ok");
+        if (!$acquired || !($row = $acquired->fetch_assoc()) || empty($row['ok'])) {
+            if ($acquired) $acquired->free();
+            return false; // Could not acquire lock (timeout or error)
+        }
+        if ($acquired) $acquired->free();
+
+        try {
+            // Check if user sent the exact same message within last 3 seconds
+            $dupStmt = $this->db->prepare("SELECT id FROM chat_messages WHERE user_id = ? AND message = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 3 SECOND) LIMIT 1");
+            if ($dupStmt) {
+                $dupStmt->bind_param("is", $userId, $message);
+                $dupStmt->execute();
+                if ($dupStmt->get_result()->fetch_assoc()) {
+                    $dupStmt->close();
+                    $this->db->query("SELECT RELEASE_LOCK('" . $this->db->real_escape_string($lockName) . "')");
+                    return true; // Silently ignore duplicate
+                }
                 $dupStmt->close();
-                // Silently ignore duplicate to prevent "double post" visual
-                return true; 
             }
-            $dupStmt->close();
-        }
 
-        $quotedJson = null;
-        if (!empty($quotedMsgIds) && is_array($quotedMsgIds)) {
-            // Validate that all IDs are integers
-            $quotedMsgIds = array_filter($quotedMsgIds, 'is_numeric');
-            $quotedMsgIds = array_map('intval', $quotedMsgIds);
-            if (!empty($quotedMsgIds)) {
-                // Ensure unique IDs
-                $quotedMsgIds = array_unique($quotedMsgIds);
-                // Re-index array
-                $quotedMsgIds = array_values($quotedMsgIds);
-                $quotedJson = json_encode($quotedMsgIds);
+            $quotedJson = null;
+            if (!empty($quotedMsgIds) && is_array($quotedMsgIds)) {
+                $quotedMsgIds = array_filter($quotedMsgIds, 'is_numeric');
+                $quotedMsgIds = array_map('intval', $quotedMsgIds);
+                if (!empty($quotedMsgIds)) {
+                    $quotedMsgIds = array_unique($quotedMsgIds);
+                    $quotedMsgIds = array_values($quotedMsgIds);
+                    $quotedJson = json_encode($quotedMsgIds);
+                }
             }
-        }
 
-        // Используем UTC для хранения!
-        $stmt = $this->db->prepare("INSERT INTO chat_messages (user_id, username, message, created_at, quoted_msg_ids) VALUES (?, ?, ?, UTC_TIMESTAMP(), ?)");
-        $stmt->bind_param("isss", $userId, $username, $message, $quotedJson);
-        $result = $stmt->execute();
-        $newId = $stmt->insert_id;
-        $stmt->close();
-        
-        if ($result && $newId) {
-            // Fetch full message to broadcast
-            $fullMsg = $this->getMessageById($newId);
-            if ($fullMsg) {
-                // Add type 'message' for frontend router
-                $fullMsg['type'] = 'message';
-                $this->broadcast($fullMsg);
+            // Используем UTC для хранения!
+            $stmt = $this->db->prepare("INSERT INTO chat_messages (user_id, username, message, created_at, quoted_msg_ids) VALUES (?, ?, ?, UTC_TIMESTAMP(), ?)");
+            $stmt->bind_param("isss", $userId, $username, $message, $quotedJson);
+            $result = $stmt->execute();
+            $newId = $stmt->insert_id;
+            $stmt->close();
+
+            if ($result && $newId) {
+                $fullMsg = $this->getMessageById($newId);
+                if ($fullMsg) {
+                    $fullMsg['type'] = 'message';
+                    $this->broadcast($fullMsg);
+                }
+                $this->db->query("SELECT RELEASE_LOCK('" . $this->db->real_escape_string($lockName) . "')");
+                return $newId;
             }
-            return $newId;
+            $this->db->query("SELECT RELEASE_LOCK('" . $this->db->real_escape_string($lockName) . "')");
+            return false;
+        } catch (Exception $e) {
+            $this->db->query("SELECT RELEASE_LOCK('" . $this->db->real_escape_string($lockName) . "')");
+            throw $e;
         }
-        
-        return false;
     }
 
     public function editMessage($messageId, $userId, $newMessage) {
