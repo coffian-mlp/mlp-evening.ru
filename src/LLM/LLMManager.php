@@ -262,6 +262,11 @@ class LLMManager {
                     // Если вдруг LLM добавила кавычки в начале и конце
                     $response = preg_replace('/^"(.*)"$/us', '$1', trim($response));
 
+                    // Нормализация: LLM иногда возвращает HTML-сущности (&quot;, &#34; и т.д.).
+                    // Декодируем их в обычные символы; при сохранении ChatManager снова сделает
+                    // htmlspecialchars — тогда в чате отобразятся нормальные кавычки, а не буквально &quot;
+                    $response = html_entity_decode($response, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
                     return trim($response);
                 }
             } catch (Exception $e) {
