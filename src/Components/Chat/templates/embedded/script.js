@@ -1817,10 +1817,6 @@ $(document).ready(function() {
     // 5. Chat Toolbar Logic
     
     // --- Sticker Picker Logic 🦄 ---
-    const stickerBtn = $('#sticker-btn');
-    const stickerPicker = $('#sticker-picker');
-    const stickerTabs = $('#sticker-tabs');
-    const stickerGrid = $('#sticker-grid');
     let stickersInitialized = false;
 
     function initStickerPicker() {
@@ -1829,6 +1825,9 @@ $(document).ready(function() {
         const data = window.stickerData || { packs: [], stickers: {} };
         const packs = data.packs;
         const stickersByPack = data.stickers;
+        
+        const stickerTabs = $('#sticker-tabs');
+        const stickerGrid = $('#sticker-grid');
 
         if (!packs || packs.length === 0) {
             stickerGrid.html('<div style="padding:10px; color:#999; text-align:center;">Нет стикеров :(</div>');
@@ -1866,12 +1865,13 @@ $(document).ready(function() {
     }
 
     // --- Sticker Zoom Preview Helpers ---
-    const zoomPreview = $('#sticker-zoom-preview');
-    const zoomImg = zoomPreview.find('img');
     let longPressTimer;
     let isLongPress = false;
 
     function showZoomPreview(src) {
+        const zoomPreview = $('#sticker-zoom-preview');
+        const zoomImg = zoomPreview.find('img');
+        
         zoomImg.attr('src', src);
         zoomPreview.fadeIn(100);
         isLongPress = true;
@@ -1908,11 +1908,12 @@ $(document).ready(function() {
     }
 
     function hideZoomPreview() {
-        zoomPreview.fadeOut(100);
+        $('#sticker-zoom-preview').fadeOut(100);
         // Не сбрасываем isLongPress здесь сразу, чтобы обработчик mouseup мог понять, что произошло
     }
 
     function renderStickerGrid(packId) {
+        const stickerGrid = $('#sticker-grid');
         stickerGrid.empty();
         const stickers = (window.stickerData.stickers[packId] || []);
         
