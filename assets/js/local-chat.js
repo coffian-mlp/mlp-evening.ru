@@ -1075,6 +1075,9 @@ $(document).ready(function() {
             const message = chatInput.value.trim();
             if (!message) return;
 
+            const submitBtn = chatForm.querySelector('button[type="submit"]');
+            if (submitBtn) submitBtn.disabled = true;
+
             // Check if we are in "Edit Mode"
             const editingId = chatInput.dataset.editingId;
             const action = editingId ? 'edit_message' : 'send_message';
@@ -1101,7 +1104,7 @@ $(document).ready(function() {
             // Clear editing state visual
             if (editingId) {
                 chatInput.removeAttribute('data-editing-id');
-                chatForm.querySelector('button').textContent = 'Отправить';
+                if (submitBtn) submitBtn.textContent = 'Отправить';
                 chatInput.classList.remove('editing-mode');
             }
 
@@ -1122,6 +1125,9 @@ $(document).ready(function() {
                     chatInput.value = oldVal;
                     pendingQuotes = oldQuotes;
                     updateQuotePreview();
+                },
+                complete: function() {
+                    if (submitBtn) submitBtn.disabled = false;
                 }
             });
         });
