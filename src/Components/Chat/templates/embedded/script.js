@@ -1870,10 +1870,14 @@ $(document).ready(function() {
 
     function showZoomPreview(src) {
         const zoomPreview = $('#sticker-zoom-preview');
+        // Выносим превью в body, иначе .chat-container с overflow:hidden его обрезает (параспрайты!)
+        if (zoomPreview.length && zoomPreview.parent()[0] !== document.body) {
+            zoomPreview.appendTo('body');
+        }
         const zoomImg = zoomPreview.find('img');
         
         zoomImg.attr('src', src);
-        zoomPreview.fadeIn(100);
+        zoomPreview.css({ position: 'fixed', zIndex: 99999 }).fadeIn(100);
         isLongPress = true;
 
         // --- Dynamic Positioning Logic ---
@@ -1888,19 +1892,25 @@ $(document).ready(function() {
                 bottom: 'auto'
             });
         } else {
-            // Desktop: Position Above Chat/Picker
+            // Desktop: Position Above Chat/Picker (viewport coordinates — мы уже в body)
             const chatContainer = document.querySelector('.chat-container');
             if (chatContainer) {
                 const rect = chatContainer.getBoundingClientRect();
-                // Center horizontally relative to chat, sit above picker area (~300px from bottom)
                 const leftPos = rect.left + (rect.width / 2);
-                const bottomOffset = 280; // Sticker picker height + margin
+                const bottomOffset = 280;
                 const topPos = rect.bottom - bottomOffset;
 
                 zoomPreview.css({
                     top: topPos + 'px',
                     left: leftPos + 'px',
-                    transform: 'translate(-50%, -100%)', // Anchor bottom-center
+                    transform: 'translate(-50%, -100%)',
+                    bottom: 'auto'
+                });
+            } else {
+                zoomPreview.css({
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
                     bottom: 'auto'
                 });
             }
