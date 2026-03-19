@@ -66,6 +66,10 @@ require_once __DIR__ . '/../src/templates/header.php';
             <div class="icon">👥</div>
             <div class="label">Пользователи</div>
         </div>
+        <div class="nav-tile" data-target="#tab-events">
+            <div class="icon">📅</div>
+            <div class="label">Календарь</div>
+        </div>
         <div class="nav-tile" data-target="#tab-stickers">
             <div class="icon">😊</div>
             <div class="label">Стикеры</div>
@@ -102,6 +106,11 @@ require_once __DIR__ . '/../src/templates/header.php';
     <!-- Вкладка 3.5: Пользователи -->
     <div id="tab-users" class="tab-content">
         <?php $app->includeComponent('AdminUsers'); ?>
+    </div>
+
+    <!-- Вкладка 3.6: Календарь -->
+    <div id="tab-events" class="tab-content">
+        <?php $app->includeComponent('AdminEvents'); ?>
     </div>
 
     <!-- Вкладка 4: Стикеры -->
