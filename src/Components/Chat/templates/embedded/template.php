@@ -90,11 +90,37 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
 
         <div class="chat-settings">
             <span id="online-counter" class="online-badge" title="Онлайн">(0)</span>
-            <button id="chat-search-btn" class="icon-btn" title="Поиск">🔍</button>
-            <?php if ($arResult['mode'] !== 'popup'): ?>
-                <button id="popout-chat" class="icon-btn popout-btn" title="Открыть в отдельном окне" onclick="window.open('/chat_popup.php', 'ChatWindow', 'width=450,height=700'); return false;" style="margin-right: 5px;">❐</button>
-            <?php endif; ?>
-            <button id="toggle-title-alert" class="icon-btn" title="Моргание вкладки">🔔</button>
+            
+            <style>
+                .chat-dropdown-content a:hover {
+                    background-color: rgba(255,255,255,0.1);
+                }
+            </style>
+            <div class="chat-dropdown" style="position: relative; display: inline-block;">
+                <button class="icon-btn" id="chat-menu-btn" onclick="toggleChatMenu(event)" title="Меню чата">⚙️</button>
+                <div id="chat-dropdown-menu" class="chat-dropdown-content" style="display:none; position:absolute; right:0; background: var(--bg-dark); border:1px solid rgba(255,255,255,0.1); border-radius:5px; box-shadow:0 15px 50px rgba(0,0,0,0.6); backdrop-filter: blur(5px); z-index:100; min-width: 180px; padding: 5px 0;">
+                    <a href="#" onclick="window.open('/schedule.php', 'ScheduleWindow', 'width=800,height=700'); return false;" style="display:block; padding:8px 15px; color:#eee; text-decoration:none; white-space:nowrap;">📅 Расписание</a>
+                    <a href="javascript:void(0)" id="chat-search-btn" style="display:block; padding:8px 15px; color:#eee; text-decoration:none; white-space:nowrap;">🔍 Поиск сообщений</a>
+                    <a href="javascript:void(0)" id="toggle-title-alert" style="display:block; padding:8px 15px; color:#eee; text-decoration:none; white-space:nowrap;">🔔 Моргание вкладки</a>
+                    <?php if ($arResult['mode'] !== 'popup'): ?>
+                        <a href="#" id="popout-chat" onclick="window.open('/chat_popup.php', 'ChatWindow', 'width=450,height=700'); return false;" style="display:block; padding:8px 15px; color:#eee; text-decoration:none; white-space:nowrap;">❐ В отдельном окне</a>
+                    <?php endif; ?>
+                </div>
+            </div>
+            
+            <script>
+                function toggleChatMenu(e) {
+                    e.stopPropagation();
+                    const menu = document.getElementById('chat-dropdown-menu');
+                    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+                }
+                document.addEventListener('click', function(e) {
+                    const menu = document.getElementById('chat-dropdown-menu');
+                    if (menu && menu.style.display === 'block') {
+                        menu.style.display = 'none';
+                    }
+                });
+            </script>
         </div>
     </div>
     

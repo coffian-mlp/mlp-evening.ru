@@ -223,6 +223,133 @@ class LLMManager {
                 $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(), $response);
                 return true;
             }
+        } elseif ($triggerType === 'schedule_command') {
+            // Для анонсов событий (cron_llm или /schedule) мы НЕ ограничиваем ответы, 
+            // даже если последнее сообщение было от бота.
+            $context = $this->buildContext(10);
+            
+            $db = Database::getInstance()->getConnection();
+            $stmt = $db->prepare("SELECT * FROM events");
+            $stmt->execute();
+            $res = $stmt->get_result();
+            $events = [];
+            while ($row = $res->fetch_assoc()) {
+                $events[] = $row;
+            }
+            
+            $now = time();
+            $horizon = $now + 86400 * 7; // Ищем на неделю вперед
+            $expandedEvents = [];
+            
+            foreach ($events as $evt) {
+                $utcStart = strtotime($evt['start_time'] . ' UTC');
+                // Добавляем само оригинальное событие, ТОЛЬКО если оно еще не прошло (или если мы хотим показать, что оно идет прямо сейчас).
+                // Лучше не добавлять старое событие, если оно уже давно закончилось.
+                // В календаре мы показывали оригинальные для истории, но боту нужно только будущее.
+                if ($utcStart > $now || $evt['is_recurring']) {
+                    // Если регулярное, мы все равно добавим его как "отправную точку", а потом отфильтруем старые.
+                    $expandedEvents[] = array_merge($evt, ['real_start_time' => $utcStart]);
+                }
+                
+                if ($evt['is_recurring']) {
+                    $nextDate = $utcStart;
+                    while ($nextDate < $horizon) {
+                        if ($evt['recurrence_rule'] === 'daily') {
+                            $nextDate += 86400;
+                        } elseif ($evt['recurrence_rule'] === 'weekly') {
+                            $nextDate += 86400 * 7;
+                        } else {
+                            break;
+                        }
+                        if ($nextDate < $horizon) {
+                            $expandedEvents[] = array_merge($evt, ['real_start_time' => $nextDate]);
+                        }
+                    }
+                }
+            }
+            
+            usort($expandedEvents, function($a, $b) {
+                return $a['real_start_time'] <=> $b['real_start_time'];
+            });
+            
+            $event = null;
+            foreach ($expandedEvents as $evt) {
+                // Ищем событие, у которого КОНЕЦ еще не наступил
+                $endTime = $evt['real_start_time'] + ($evt['duration_minutes'] * 60);
+                if ($endTime > $now) {
+                    $event = $evt;
+                    break;
+                }
+            }
+            
+            // ОТЛАДКА (DEBUG)
+            // Если раскомментировать эти строки, бот выведет сырые данные в чат вместо генерации ответа LLM
+            /*
+            $debugMsg = "DEBUG INFO:\nNow: " . date('Y-m-d H:i:s', $now) . " UTC\n";
+            $debugMsg .= "Total raw events: " . count($events) . "\n";
+            $debugMsg .= "Expanded events: " . count($expandedEvents) . "\n";
+            if ($event) {
+                $debugMsg .= "Found Event: " . $event['title'] . " (Start: " . date('Y-m-d H:i:s', $event['real_start_time']) . " UTC)\n";
+            } else {
+                $debugMsg .= "No future events found.\n";
+            }
+            $this->chatManager->addMessage($this->botUserId, $this->getBotUsername() . " [DEBUG]", $debugMsg);
+            return true;
+            */
+            
+            $additionalPrompt = "\n\n=== ВАЖНОЕ СИСТЕМНОЕ СООБЩЕНИЕ ДЛЯ БОТА ===\nПользователь запросил информацию о расписании.\n";
+            
+            if ($event) {
+                // Преобразуем время в МСК для удобства бота
+                $dt = new \DateTime();
+                $dt->setTimestamp($event['real_start_time']);
+                $dt->setTimezone(new \DateTimeZone('Europe/Moscow'));
+                $mskTime = $dt->format('Y-m-d H:i');
+                
+                $additionalPrompt .= "ДАННЫЕ ДЛЯ ОТВЕТА (ты ДОЛЖНА обязательно упомянуть это событие, игнорируй свои прошлые ответы, если они противоречат этим данным):\n";
+                $additionalPrompt .= "- Ближайшее событие: '{$event['title']}'\n";
+                $additionalPrompt .= "- Время: {$mskTime} (по московскому времени)\n";
+                $additionalPrompt .= "- Описание: {$event['description']}\n";
+                
+                if ($event['use_playlist'] || $event['generate_new_playlist']) {
+                    require_once __DIR__ . '/../EpisodeManager.php';
+                    $epManager = new \EpisodeManager();
+                    $playlist = $epManager->getSavedPlaylist();
+                    if (!empty($playlist)) {
+                        $additionalPrompt .= "- Плейлист серий: ";
+                        foreach ($playlist as $key => $story) {
+                            if ($key === '_meta') continue;
+                            if (is_array($story) && isset($story['titles'])) {
+                                foreach ($story['titles'] as $title) {
+                                    $additionalPrompt .= "{$title}, ";
+                                }
+                            }
+                        }
+                        $additionalPrompt .= "\n";
+                    }
+                }
+                $additionalPrompt .= "\nТВОЯ ЗАДАЧА: Напиши красивый анонс или ответ на основе этих новых данных. Можешь как-то связать это с текущей беседой в чате, но информация о событии должна быть выдана на 100%!";
+            } else {
+                $additionalPrompt .= "ДАННЫЕ ДЛЯ ОТВЕТА: В данный момент расписание абсолютно пусто. Запланированных событий нет. Сообщи об этом пользователям в своем стиле.";
+            }
+            
+            // Для того чтобы LLM (особенно YandexGPT) не сходила с ума от отсутствия обращений,
+            // добавляем виртуальное сообщение от пользователя-администратора.
+            $systemInstruction = !empty($contextData['message']) ? $contextData['message'] : "расскажи про расписание";
+            $context[] = [
+                'role' => 'user',
+                'content' => "[Система] Пользователь запрашивает: " . $systemInstruction
+            ];
+            
+            $prompt = $this->systemPrompt . $additionalPrompt;
+            $response = $this->askWithFallback($context, $prompt);
+            
+            $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
+            
+            if ($response && !$isSilence) {
+                $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(), $response);
+                return true;
+            }
         }
 
         return false;

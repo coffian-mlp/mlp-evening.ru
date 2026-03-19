@@ -300,7 +300,7 @@ $(document).ready(function() {
     function updateNotificationUI() {
         const titleBtn = $('#toggle-title-alert');
         
-        titleBtn.text(titleAlertEnabled ? '🔔' : '🔕');
+        titleBtn.text((titleAlertEnabled ? '🔔' : '🔕') + ' Моргание вкладки');
         titleBtn.toggleClass('active', titleAlertEnabled);
 
         $('#profile-title-toggle').prop('checked', titleAlertEnabled);

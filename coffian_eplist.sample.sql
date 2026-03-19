@@ -280,3 +280,26 @@ CREATE TABLE IF NOT EXISTS `chat_reactions` (
   FOREIGN KEY (`message_id`) REFERENCES `chat_messages`(`id`) ON DELETE CASCADE,
   FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `events`
+--
+
+CREATE TABLE IF NOT EXISTS `events` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) NOT NULL,
+  `description` text,
+  `start_time` datetime NOT NULL,
+  `duration_minutes` int(11) NOT NULL DEFAULT '60',
+  `is_recurring` tinyint(1) DEFAULT '0',
+  `recurrence_rule` varchar(255) DEFAULT NULL,
+  `use_playlist` tinyint(1) DEFAULT '0',
+  `generate_new_playlist` tinyint(1) DEFAULT '0',
+  `color` varchar(50) DEFAULT '#6d2f8e',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `start_time` (`start_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
