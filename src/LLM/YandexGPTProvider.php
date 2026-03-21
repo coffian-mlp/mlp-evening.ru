@@ -107,10 +107,6 @@ class YandexGPTProvider implements LLMProviderInterface {
             'Content-Type: application/json'
         ]);
 
-        // DEBUG: Логируем запрос, чтобы понять куда и что мы отправляем
-        error_log("YANDEX DEBUG: URL=" . $url);
-        error_log("YANDEX DEBUG: DATA=" . json_encode($data));
-
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
