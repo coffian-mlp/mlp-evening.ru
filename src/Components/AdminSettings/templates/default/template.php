@@ -130,8 +130,9 @@ $config = $arResult['config']; // Helper
             <div class="form-group">
                 <label class="form-label">YandexGPT API Key</label>
                 <input type="password" name="ai_yandex_key" value="<?= htmlspecialchars($config->getOption('ai_yandex_key', '')) ?>" class="form-input">
-                <label class="form-label" style="margin-top: 5px;">Yandex Folder ID</label>
-                <input type="text" name="ai_yandex_folder_id" value="<?= htmlspecialchars($config->getOption('ai_yandex_folder_id', '')) ?>" class="form-input">
+                <label class="form-label" style="margin-top: 5px;">Yandex Folder ID или Model URI</label>
+                <input type="text" name="ai_yandex_folder_id" value="<?= htmlspecialchars($config->getOption('ai_yandex_folder_id', '')) ?>" class="form-input" placeholder="b1g... или gpt://...">
+                <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Можно указать просто Folder ID (тогда будет использована модель по умолчанию) или полную ссылку на модель, например: <code>gpt://b1g.../deepseek-v32/latest</code></p>
             </div>
         </div>
 

@@ -30,22 +30,42 @@ class YandexGPTProvider implements LLMProviderInterface {
             ];
         }
 
-        $data = [
-            'modelUri' => "gpt://$this->folderId/yandexgpt-lite/latest",
-            'completionOptions' => [
-                'stream' => false,
+        $modelUri = strpos($this->folderId, 'gpt://') === 0 
+            ? $this->folderId 
+            : "gpt://$this->folderId/yandexgpt-lite/latest";
+
+        // Если это сторонняя модель (DeepSeek, Llama и т.д.), Яндексу нужен OpenAI-совместимый API
+        $isOpenAiCompatible = strpos($modelUri, 'yandexgpt') === false;
+
+        if ($isOpenAiCompatible) {
+            $url = 'https://llm.api.cloud.yandex.net/v1/chat/completions';
+            $data = [
+                'model' => $modelUri,
+                'messages' => $messages,
                 'temperature' => 0.6,
-                'maxTokens' => '500'
-            ],
-            'messages' => $messages
-        ];
+                'max_tokens' => 500
+            ];
+            $authHeader = 'Authorization: Api-Key ' . $this->apiKey; // И для OpenAI API Яндекс понимает Api-Key
+        } else {
+            $url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion';
+            $data = [
+                'modelUri' => $modelUri,
+                'completionOptions' => [
+                    'stream' => false,
+                    'temperature' => 0.6,
+                    'maxTokens' => '500'
+                ],
+                'messages' => $messages
+            ];
+            $authHeader = 'Authorization: Api-Key ' . $this->apiKey;
+        }
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Authorization: Api-Key ' . $this->apiKey,
+            $authHeader,
             'Content-Type: application/json'
         ]);
 
@@ -63,8 +83,17 @@ class YandexGPTProvider implements LLMProviderInterface {
         }
 
         $decoded = json_decode($response, true);
-        if (isset($decoded['result']['alternatives'][0]['message']['text'])) {
-            return trim($decoded['result']['alternatives'][0]['message']['text']);
+        
+        if ($isOpenAiCompatible) {
+            // OpenAI API format
+            if (isset($decoded['choices'][0]['message']['content'])) {
+                return trim($decoded['choices'][0]['message']['content']);
+            }
+        } else {
+            // Yandex Foundation Models format
+            if (isset($decoded['result']['alternatives'][0]['message']['text'])) {
+                return trim($decoded['result']['alternatives'][0]['message']['text']);
+            }
         }
 
         throw new Exception("YandexGPT Invalid Response: " . $response);
