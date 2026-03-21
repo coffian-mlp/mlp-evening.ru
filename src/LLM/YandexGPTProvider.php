@@ -20,15 +20,13 @@ class YandexGPTProvider implements LLMProviderInterface {
 
         $modelUri = trim($this->folderId);
         
-        // Автодополнение URI, если ввели не полностью
-        if (strpos($modelUri, 'gpt://') !== 0) {
-            if (strpos($modelUri, '/') !== false) {
-                // Ввели b1gu0jm.../deepseek-v32/latest
-                $modelUri = "gpt://" . $modelUri;
-            } else {
-                // Ввели просто ID каталога b1gu0jm...
-                $modelUri = "gpt://$modelUri/yandexgpt-lite/latest";
-            }
+        // Автодополнение URI, если ввели просто ID каталога (без слэшей и gpt://)
+        if (strpos($modelUri, 'gpt://') !== 0 && strpos($modelUri, '/') === false) {
+             // Просто ID каталога - значит это стандартная яндексовская модель
+             $modelUri = "gpt://$modelUri/yandexgpt-lite/latest";
+        } elseif (strpos($modelUri, 'gpt://') !== 0) {
+             // Ввели что-то со слэшами, например b1gu0jm1h4vr4ggcq5la/deepseek-v32/latest
+             $modelUri = "gpt://" . $modelUri;
         }
 
         // Если это сторонняя модель (DeepSeek, Llama и т.д.), Яндексу нужен OpenAI-совместимый API
