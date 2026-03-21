@@ -32,11 +32,18 @@ class YandexGPTProvider implements LLMProviderInterface {
         // Если это сторонняя модель (DeepSeek, Llama и т.д.), Яндексу нужен OpenAI-совместимый API
         $isOpenAiCompatible = strpos($modelUri, 'yandexgpt') === false;
 
-        // Явный фикс для Яндекса. У них OpenAI-совместимый API на самом деле ожидает путь БЕЗ gpt://
-        // Судя по всему, они транслируют OpenAI запросы к своим Foundation Models, 
-        // и если мы передаем URI в формате gpt://..., транслятор не может его распарсить.
         if ($isOpenAiCompatible) {
-            $modelForApi = str_replace('gpt://', '', $modelUri); // Убираем gpt://
+            // ВАЖНО: OpenAI-совместимый эндпоинт Яндекса находится не на llm.api.cloud.yandex.net!
+            // В официальной документации для OpenAI-совместимого API указано использовать другой URL.
+            // Но ошибка "grpcCode:3" говорит о том, что роутер Яндекса на llm.api.cloud.yandex.net/v1/chat/completions
+            // всё ещё пытается проксировать запрос через старый gRPC сервис Foundation Models, 
+            // который вообще не знает про модель deepseek!
+            // Чтобы Яндекс понял, что это DeepSeek и отправил его в OpenAI-шлюз, 
+            // URI должен быть ТОЧНО таким, какой выдает Яндекс в консоли. 
+            // А именно: 'gpt://[каталог]/deepseek-v32/latest'
+            
+            // Если он всё равно выдает 'invalid model_uri', возможно нам нужно использовать 'Authorization: Bearer <API-КЛЮЧ>'
+            // Давайте попробуем заголовок 'Bearer ' вместо 'Api-Key '
             
             $url = 'https://llm.api.cloud.yandex.net/v1/chat/completions';
             
@@ -51,12 +58,21 @@ class YandexGPTProvider implements LLMProviderInterface {
             }
             
             $data = [
-                'model' => $modelForApi, // передаем без gpt://
+                'model' => $modelUri, // Оставляем gpt://... , так как без него Яндекс выдает {"error":{"message":"Failed to parse model URI","type":"invalid_request_error"}}
                 'messages' => $messages,
                 'temperature' => 0.6,
                 'max_tokens' => 500
             ];
-            $authHeader = 'Authorization: Api-Key ' . $this->apiKey; // И для OpenAI API Яндекс понимает Api-Key
+            
+            // И вот еще нюанс: для API v1/chat/completions Яндекса URI модели должен быть в формате просто `deepseek-v32` или `deepseek-v32/latest`
+            // или может быть `gpt://[id]/[модель]` всё же работает?
+            // Ошибка "invalid model_uri" с grpcCode:3 приходит от старого Foundation Models! 
+            // Это значит, что наш запрос каким-то образом попадает туда, а не в новый роутер OpenAI.
+            // Причина: мы шлём 'Authorization: Api-Key', а для OpenAI-совместимого API у Яндекса требуется Bearer или Api-Key. 
+            // Давай попробуем сформировать modelUri именно так, как они просят в доке: 'deepseek-v32' или 'gpt://...'.
+            
+            // Заменим 'Api-Key ' на 'Bearer '
+            $authHeader = 'Authorization: Bearer ' . $this->apiKey; 
         } else {
             $url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion';
             
