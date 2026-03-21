@@ -32,7 +32,12 @@ class YandexGPTProvider implements LLMProviderInterface {
         // Если это сторонняя модель (DeepSeek, Llama и т.д.), Яндексу нужен OpenAI-совместимый API
         $isOpenAiCompatible = strpos($modelUri, 'yandexgpt') === false;
 
+        // Явный фикс для Яндекса. У них OpenAI-совместимый API на самом деле ожидает путь БЕЗ gpt://
+        // Судя по всему, они транслируют OpenAI запросы к своим Foundation Models, 
+        // и если мы передаем URI в формате gpt://..., транслятор не может его распарсить.
         if ($isOpenAiCompatible) {
+            $modelForApi = str_replace('gpt://', '', $modelUri); // Убираем gpt://
+            
             $url = 'https://llm.api.cloud.yandex.net/v1/chat/completions';
             
             $messages = [
@@ -46,7 +51,7 @@ class YandexGPTProvider implements LLMProviderInterface {
             }
             
             $data = [
-                'model' => $modelUri,
+                'model' => $modelForApi, // передаем без gpt://
                 'messages' => $messages,
                 'temperature' => 0.6,
                 'max_tokens' => 500
