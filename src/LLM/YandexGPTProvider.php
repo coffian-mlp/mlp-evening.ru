@@ -18,27 +18,35 @@ class YandexGPTProvider implements LLMProviderInterface {
 
         $url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion';
 
-        // YandexGPT uses slightly different role names sometimes, but system/user/assistant are standard.
-        $messages = [
-            ['role' => 'system', 'text' => $systemPrompt]
-        ];
+        $modelUri = trim($this->folderId);
         
-        foreach ($messagesContext as $msg) {
-            $messages[] = [
-                'role' => $msg['role'],
-                'text' => $msg['content']
-            ];
+        // Автодополнение URI, если ввели не полностью
+        if (strpos($modelUri, 'gpt://') !== 0) {
+            if (strpos($modelUri, '/') !== false) {
+                // Ввели b1gu0jm.../deepseek-v32/latest
+                $modelUri = "gpt://" . $modelUri;
+            } else {
+                // Ввели просто ID каталога b1gu0jm...
+                $modelUri = "gpt://$modelUri/yandexgpt-lite/latest";
+            }
         }
-
-        $modelUri = strpos($this->folderId, 'gpt://') === 0 
-            ? $this->folderId 
-            : "gpt://$this->folderId/yandexgpt-lite/latest";
 
         // Если это сторонняя модель (DeepSeek, Llama и т.д.), Яндексу нужен OpenAI-совместимый API
         $isOpenAiCompatible = strpos($modelUri, 'yandexgpt') === false;
 
         if ($isOpenAiCompatible) {
             $url = 'https://llm.api.cloud.yandex.net/v1/chat/completions';
+            
+            $messages = [
+                ['role' => 'system', 'content' => $systemPrompt]
+            ];
+            foreach ($messagesContext as $msg) {
+                $messages[] = [
+                    'role' => $msg['role'],
+                    'content' => $msg['content']
+                ];
+            }
+            
             $data = [
                 'model' => $modelUri,
                 'messages' => $messages,
@@ -48,6 +56,17 @@ class YandexGPTProvider implements LLMProviderInterface {
             $authHeader = 'Authorization: Api-Key ' . $this->apiKey; // И для OpenAI API Яндекс понимает Api-Key
         } else {
             $url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion';
+            
+            $messages = [
+                ['role' => 'system', 'text' => $systemPrompt]
+            ];
+            foreach ($messagesContext as $msg) {
+                $messages[] = [
+                    'role' => $msg['role'],
+                    'text' => $msg['content']
+                ];
+            }
+            
             $data = [
                 'modelUri' => $modelUri,
                 'completionOptions' => [
