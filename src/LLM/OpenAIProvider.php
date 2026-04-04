@@ -30,7 +30,7 @@ class OpenAIProvider implements LLMProviderInterface {
             'model' => $this->model,
             'messages' => $messages,
             'temperature' => 0.7,
-            'max_tokens' => 1000 // Увеличили лимит токенов
+            'max_tokens' => 5000 // Увеличили лимит токенов
         ];
 
         $ch = curl_init($this->baseUrl);
