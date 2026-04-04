@@ -404,7 +404,7 @@ class LLMManager {
         return null;
     }
 
-    private function buildContext($limit = 50, $maxAgeHours = null) {
+    private function buildContext($limit = 25, $maxAgeHours = null) {
         // Fetch last N messages
         $messages = $this->chatManager->getMessages($limit);
         $context = [];
