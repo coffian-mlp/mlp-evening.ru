@@ -174,7 +174,7 @@ class LLMManager {
                     }
                 }
 
-                $context = $this->buildContext(20);
+                $context = $this->buildContext(24);
                 $response = $this->askWithFallback($context, $this->systemPrompt);
                 
                 $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
@@ -187,7 +187,7 @@ class LLMManager {
             }
         } elseif ($triggerType === 'cron_spontaneous') {
             // Get last 30 messages, but only if they were posted within the last 3 hours
-            $context = $this->buildContext(30, 3);
+            $context = $this->buildContext(24, 3);
             
             // If the chat has been dead for 3 hours (empty context), don't even ask the LLM
             if (empty($context)) {
@@ -216,7 +216,7 @@ class LLMManager {
             }
         } elseif ($triggerType === 'greeting') {
             $userLogin = $contextData['username'] ?? 'Гость';
-            $context = $this->buildContext(10);
+            $context = $this->buildContext(24);
             
             $instruction = "Пользователь $userLogin только что зашел на сайт. Поздоровайся с ним, обязательно упомянув его по имени (например, '@$userLogin'). Будь краткой и приветливой.";
             $context[] = [
@@ -235,7 +235,7 @@ class LLMManager {
         } elseif ($triggerType === 'schedule_command') {
             // Для анонсов событий (cron_llm или /schedule) мы НЕ ограничиваем ответы, 
             // даже если последнее сообщение было от бота.
-            $context = $this->buildContext(10);
+            $context = $this->buildContext(24);
             
             $db = Database::getInstance()->getConnection();
             $stmt = $db->prepare("SELECT * FROM events");
@@ -431,7 +431,7 @@ class LLMManager {
         return null;
     }
 
-    private function buildContext($limit = 25, $maxAgeHours = null) {
+    private function buildContext($limit = 24, $maxAgeHours = null) {
         // Fetch last N messages
         $messages = $this->chatManager->getMessages($limit);
         $context = [];
