@@ -30,7 +30,7 @@ class OpenRouterProvider implements LLMProviderInterface {
             'model' => $this->model,
             'messages' => $messages,
             'temperature' => 0.7,
-            'max_tokens' => 5000 // Увеличили лимит токенов
+            'max_tokens' => 2000
         ];
 
         $ch = curl_init($url);

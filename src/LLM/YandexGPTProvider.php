@@ -62,7 +62,7 @@ class YandexGPTProvider implements LLMProviderInterface {
                 'model' => $modelUri, // Оставляем gpt://... , так как без него Яндекс выдает {"error":{"message":"Failed to parse model URI","type":"invalid_request_error"}}
                 'messages' => $messages,
                 'temperature' => 0.6,
-                'max_tokens' => 5000
+                'max_tokens' => 2000
             ];
             
             // И вот еще нюанс: для API v1/chat/completions Яндекса URI модели должен быть в формате просто `deepseek-v32` или `deepseek-v32/latest`
@@ -92,7 +92,7 @@ class YandexGPTProvider implements LLMProviderInterface {
                 'completionOptions' => [
                     'stream' => false,
                     'temperature' => 0.6,
-                    'maxTokens' => '5000'
+                    'maxTokens' => '2000'
                 ],
                 'messages' => $messages
             ];

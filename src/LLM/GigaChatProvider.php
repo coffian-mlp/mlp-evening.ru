@@ -64,7 +64,7 @@ class GigaChatProvider implements LLMProviderInterface {
             'model' => 'GigaChat',
             'messages' => $messages,
             'temperature' => 0.7,
-            'max_tokens' => 5000
+            'max_tokens' => 2000
         ];
 
         $ch = curl_init($url);
