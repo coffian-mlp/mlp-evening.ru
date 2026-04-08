@@ -200,9 +200,13 @@ class LLMManager {
                 return false;
             }
 
-            $prompt = $this->systemPrompt . "\n\nПроанализируй последние сообщения. Если нужно что-то сказать (разрядить обстановку, ответить на вопрос, поддержать беседу) - напиши ответ. Если встревать не стоит - ответь ровно одним словом: SILENCE, но не нужно вообще молчать постоянно. Старайся поддерживать беседу в чате, даже если к тебе явно никто не обращается - это нормально.";
+            $instruction = "Проанализируй последние сообщения. Если нужно что-то сказать (разрядить обстановку, ответить на вопрос, поддержать беседу) - напиши ответ. Если встревать не стоит - ответь ровно одним словом: SILENCE, но не нужно вообще молчать постоянно. Старайся поддерживать беседу в чате, даже если к тебе явно никто не обращается - это нормально.";
+            $context[] = [
+                'role' => 'user',
+                'content' => "[Система] " . $instruction
+            ];
             
-            $response = $this->askWithFallback($context, $prompt);
+            $response = $this->askWithFallback($context, $this->systemPrompt);
             
             $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
             
@@ -213,9 +217,14 @@ class LLMManager {
         } elseif ($triggerType === 'greeting') {
             $userLogin = $contextData['username'] ?? 'Гость';
             $context = $this->buildContext(10);
-            $prompt = $this->systemPrompt . "\n\nПользователь $userLogin только что зашел на сайт. Поздоровайся с ним, обязательно упомянув его по имени (например, '@$userLogin'). Будь краткой и приветливой.";
             
-            $response = $this->askWithFallback($context, $prompt);
+            $instruction = "Пользователь $userLogin только что зашел на сайт. Поздоровайся с ним, обязательно упомянув его по имени (например, '@$userLogin'). Будь краткой и приветливой.";
+            $context[] = [
+                'role' => 'user',
+                'content' => "[Система] " . $instruction
+            ];
+            
+            $response = $this->askWithFallback($context, $this->systemPrompt);
             
             $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
             
@@ -338,10 +347,10 @@ class LLMManager {
             $systemInstruction = !empty($contextData['message']) ? $contextData['message'] : "расскажи про расписание";
             $context[] = [
                 'role' => 'user',
-                'content' => "[Система] Пользователь запрашивает: " . $systemInstruction
+                'content' => "[Система] Пользователь запрашивает: " . $systemInstruction . "\n" . $additionalPrompt
             ];
             
-            $prompt = $this->systemPrompt . $additionalPrompt;
+            $prompt = $this->systemPrompt;
             $response = $this->askWithFallback($context, $prompt);
             
             $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
@@ -361,8 +370,15 @@ class LLMManager {
         $botLogin = $botUser['login'] ?? 'Lyra';
         $botNickname = $botUser['nickname'] ?? 'Лира Хартстрингс';
 
-        // Добавим в промпт жесткое указание не писать метки времени и свое имя
-        $prompt .= "\n\nВАЖНО: Пиши ТОЛЬКО текст своего ответа. НИКОГДА не добавляй свое имя, никнейм или время в начале сообщения (например, не пиши '[12:00] {$botNickname}:').";
+        // Добавим жесткое указание не писать метки времени и свое имя к последнему сообщению
+        $instruction = "\n\n[Системное правило]: Пиши ТОЛЬКО текст своего ответа. НИКОГДА не добавляй свое имя, никнейм или время в начале сообщения (например, не пиши '[12:00] {$botNickname}:').";
+        
+        if (!empty($context)) {
+            $lastIndex = count($context) - 1;
+            $context[$lastIndex]['content'] .= $instruction;
+        } else {
+            $prompt .= $instruction;
+        }
 
         foreach ($this->providers as $provider) {
             try {
