@@ -30,7 +30,8 @@ class YandexGPTProvider implements LLMProviderInterface {
         }
 
         // Если это сторонняя модель (DeepSeek, Llama и т.д.), Яндексу нужен OpenAI-совместимый API
-        $isOpenAiCompatible = strpos($modelUri, 'yandexgpt') === false;
+        // Модели YandexGPT и AliceAI работают через основной Foundation Models API
+        $isOpenAiCompatible = strpos($modelUri, 'yandexgpt') === false && strpos($modelUri, 'alice') === false;
 
         if ($isOpenAiCompatible) {
             // ВАЖНО: OpenAI-совместимый эндпоинт Яндекса находится не на llm.api.cloud.yandex.net!
