@@ -86,6 +86,10 @@ require_once __DIR__ . '/../src/templates/header.php';
             <div class="icon">💾</div>
             <div class="label">База Данных</div>
         </div>
+        <div class="nav-tile" data-target="#tab-bot-commands">
+            <div class="icon">🤖</div>
+            <div class="label">Команды Бота</div>
+        </div>
     </div>
 
     <!-- Вкладка 1: Плейлист -->
@@ -131,6 +135,11 @@ require_once __DIR__ . '/../src/templates/header.php';
     <!-- Вкладка 6: База Данных -->
     <div id="tab-database" class="tab-content">
         <?php $app->includeComponent('DbAdmin'); ?>
+    </div>
+
+    <!-- Вкладка 7: Команды Бота -->
+    <div id="tab-bot-commands" class="tab-content">
+        <?php $app->includeComponent('AdminBotCommands'); ?>
     </div>
 
 </div>
