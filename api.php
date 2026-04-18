@@ -1206,10 +1206,41 @@ try {
                 require_once __DIR__ . '/src/LLM/LLMManager.php';
                 $llm = new LLMManager();
                 
-                if (preg_match('/^\/?(schedule|расписание)/ui', $message)) {
-                    $llm->processTrigger('schedule_command', [
+                $db = Database::getInstance()->getConnection();
+                $matchedCommand = null;
+                
+                // Проверяем, существует ли таблица bot_commands (на случай, если миграция еще не прошла)
+                $tableExists = $db->query("SHOW TABLES LIKE 'bot_commands'")->num_rows > 0;
+                
+                if ($tableExists) {
+                    $res = $db->query("SELECT * FROM bot_commands WHERE is_active = 1");
+                    if ($res) {
+                        while ($row = $res->fetch_assoc()) {
+                            $prefix = $row['command_prefix'];
+                            // Проверяем начинается ли сообщение с префикса (игнорируя регистр)
+                            if (mb_stripos($message, $prefix, 0, 'UTF-8') === 0 || mb_stripos($message, '/' . ltrim($prefix, '/'), 0, 'UTF-8') === 0) {
+                                // Дополнительно проверим, что после команды идет пробел или конец строки
+                                $len = mb_strlen($prefix, 'UTF-8');
+                                $nextChar = mb_substr($message, $len, 1, 'UTF-8');
+                                if ($nextChar === '' || preg_match('/\s/', $nextChar)) {
+                                    $matchedCommand = $row;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Fallback, если таблицы еще нет
+                    if (preg_match('/^\/?(schedule|расписание)/ui', $message)) {
+                        $matchedCommand = ['handler_type' => 'schedule'];
+                    }
+                }
+                
+                if ($matchedCommand) {
+                    $llm->processTrigger('dynamic_command', [
                         'message' => $message,
-                        'message_id' => $newMsgId === true ? null : $newMsgId
+                        'message_id' => $newMsgId === true ? null : $newMsgId,
+                        'command' => $matchedCommand
                     ]);
                 } else {
                     $llm->processTrigger('mention', [
