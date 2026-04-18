@@ -252,130 +252,100 @@ class LLMManager {
                 $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(), $response);
                 return true;
             }
-        } elseif ($triggerType === 'schedule_command') {
-            // Для анонсов событий (cron_llm или /schedule) мы НЕ ограничиваем ответы, 
-            // даже если последнее сообщение было от бота.
+        } elseif ($triggerType === 'dynamic_command') {
+            $command = $contextData['command'] ?? ['handler_type' => 'text', 'system_prompt' => ''];
             $context = $this->buildContext(24);
             
-            $db = Database::getInstance()->getConnection();
-            $stmt = $db->prepare("SELECT * FROM events");
-            $stmt->execute();
-            $res = $stmt->get_result();
-            $events = [];
-            while ($row = $res->fetch_assoc()) {
-                $events[] = $row;
-            }
-            
-            $now = time();
-            $horizon = $now + 86400 * 7; // Ищем на неделю вперед
-            $expandedEvents = [];
-            
-            foreach ($events as $evt) {
-                $utcStart = strtotime($evt['start_time'] . ' UTC');
-                // Добавляем само оригинальное событие, ТОЛЬКО если оно еще не прошло (или если мы хотим показать, что оно идет прямо сейчас).
-                // Лучше не добавлять старое событие, если оно уже давно закончилось.
-                // В календаре мы показывали оригинальные для истории, но боту нужно только будущее.
-                if ($utcStart > $now || $evt['is_recurring']) {
-                    // Если регулярное, мы все равно добавим его как "отправную точку", а потом отфильтруем старые.
-                    $expandedEvents[] = array_merge($evt, ['real_start_time' => $utcStart]);
+            if ($command['handler_type'] === 'schedule') {
+                $db = Database::getInstance()->getConnection();
+                $stmt = $db->prepare("SELECT * FROM events");
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $events = [];
+                while ($row = $res->fetch_assoc()) {
+                    $events[] = $row;
                 }
                 
-                if ($evt['is_recurring']) {
-                    $nextDate = $utcStart;
-                    while ($nextDate < $horizon) {
-                        if ($evt['recurrence_rule'] === 'daily') {
-                            $nextDate += 86400;
-                        } elseif ($evt['recurrence_rule'] === 'weekly') {
-                            $nextDate += 86400 * 7;
-                        } else {
-                            break;
-                        }
-                        if ($nextDate < $horizon) {
-                            $expandedEvents[] = array_merge($evt, ['real_start_time' => $nextDate]);
-                        }
+                $now = time();
+                $horizon = $now + 86400 * 7;
+                $expandedEvents = [];
+                
+                foreach ($events as $evt) {
+                    $utcStart = strtotime($evt['start_time'] . ' UTC');
+                    if ($utcStart > $now || $evt['is_recurring']) {
+                        $expandedEvents[] = array_merge($evt, ['real_start_time' => $utcStart]);
                     }
-                }
-            }
-            
-            usort($expandedEvents, function($a, $b) {
-                return $a['real_start_time'] <=> $b['real_start_time'];
-            });
-            
-            $event = null;
-            foreach ($expandedEvents as $evt) {
-                // Ищем событие, у которого КОНЕЦ еще не наступил
-                $endTime = $evt['real_start_time'] + ($evt['duration_minutes'] * 60);
-                if ($endTime > $now) {
-                    $event = $evt;
-                    break;
-                }
-            }
-            
-            // ОТЛАДКА (DEBUG)
-            // Если раскомментировать эти строки, бот выведет сырые данные в чат вместо генерации ответа LLM
-            /*
-            $debugMsg = "DEBUG INFO:\nNow: " . date('Y-m-d H:i:s', $now) . " UTC\n";
-            $debugMsg .= "Total raw events: " . count($events) . "\n";
-            $debugMsg .= "Expanded events: " . count($expandedEvents) . "\n";
-            if ($event) {
-                $debugMsg .= "Found Event: " . $event['title'] . " (Start: " . date('Y-m-d H:i:s', $event['real_start_time']) . " UTC)\n";
-            } else {
-                $debugMsg .= "No future events found.\n";
-            }
-            $this->chatManager->addMessage($this->botUserId, $this->getBotUsername() . " [DEBUG]", $debugMsg);
-            return true;
-            */
-            
-            $additionalPrompt = "\n\n=== ВАЖНОЕ СИСТЕМНОЕ СООБЩЕНИЕ ДЛЯ БОТА ===\n"
-                . "РЕЖИМ: АФИША / АНОНС.\n"
-                . "Ты НЕ участник беседы и НЕ собеседник чата. Ты пишешь официальный, красиво оформленный анонс для всех читателей.\n"
-                . "Запрещено: упоминать чат/переписку/сообщения/\"вы спросили\"/\"как выше\"; задавать вопросы; спорить; писать дисклеймеры.\n"
-                . "Правило фактов: используй ТОЛЬКО данные ниже. Ничего не выдумывай и не добавляй новых фактов.\n"
-                . "Формат ответа: Markdown.\n"
-                . "- Заголовок: '## ...'\n"
-                . "- Затем 3–6 буллетов, каждый с жирным ключом (**Когда**, **Что**, **Описание**, **Плейлист** — по уместности)\n"
-                . "- Заверши одной короткой строкой-призывом без вопросов.\n"
-                . "- Дополнительно: добавь ОДНУ короткую строку '**Что я думаю:** ...' (≤ 1 предложение). Это может быть лёгкая шутка или эмоция, но строго без новых фактов и без ссылок на чат.\n"
-                . "Пользователь запросил информацию о расписании.\n";
-            
-            if ($event) {
-                // Преобразуем время в МСК для удобства бота
-                $dt = new \DateTime();
-                $dt->setTimestamp($event['real_start_time']);
-                $dt->setTimezone(new \DateTimeZone('Europe/Moscow'));
-                $mskTime = $dt->format('Y-m-d H:i');
-                
-                $additionalPrompt .= "ДАННЫЕ ДЛЯ ОТВЕТА (ты ДОЛЖНА обязательно упомянуть это событие, игнорируй свои прошлые ответы, если они противоречат этим данным):\n";
-                $additionalPrompt .= "- Ближайшее событие: '{$event['title']}'\n";
-                $additionalPrompt .= "- Время: {$mskTime} (по московскому времени)\n";
-                $additionalPrompt .= "- Описание: {$event['description']}\n";
-                
-                if ($event['use_playlist'] || $event['generate_new_playlist']) {
-                    require_once __DIR__ . '/../EpisodeManager.php';
-                    $epManager = new \EpisodeManager();
-                    $playlist = $epManager->getSavedPlaylist();
-                    if (!empty($playlist)) {
-                        $additionalPrompt .= "- Плейлист серий: ";
-                        foreach ($playlist as $key => $story) {
-                            if ($key === '_meta') continue;
-                            if (is_array($story) && isset($story['titles'])) {
-                                foreach ($story['titles'] as $title) {
-                                    $additionalPrompt .= "{$title}, ";
-                                }
+                    if ($evt['is_recurring']) {
+                        $nextDate = $utcStart;
+                        while ($nextDate < $horizon) {
+                            if ($evt['recurrence_rule'] === 'daily') {
+                                $nextDate += 86400;
+                            } elseif ($evt['recurrence_rule'] === 'weekly') {
+                                $nextDate += 86400 * 7;
+                            } else {
+                                break;
+                            }
+                            if ($nextDate < $horizon) {
+                                $expandedEvents[] = array_merge($evt, ['real_start_time' => $nextDate]);
                             }
                         }
-                        $additionalPrompt .= "\n";
                     }
                 }
-                $additionalPrompt .= "\nТВОЯ ЗАДАЧА: Напиши красивый анонс на основе этих новых данных. Обязательно упомяни событие, время (в МСК) и кратко перескажи описание. Если плейлист есть — перечисли его. Держись формата выше. 5–7 предложений суммарно по смыслу, но приоритет — структура и точность фактов.";
+                
+                usort($expandedEvents, function($a, $b) {
+                    return $a['real_start_time'] <=> $b['real_start_time'];
+                });
+                
+                $event = null;
+                foreach ($expandedEvents as $evt) {
+                    $endTime = $evt['real_start_time'] + ($evt['duration_minutes'] * 60);
+                    if ($endTime > $now) {
+                        $event = $evt;
+                        break;
+                    }
+                }
+                
+                $additionalPrompt = "\n\n" . ($command['system_prompt'] ?: "Системное сообщение (расписание): ответь про ближайшее событие.");
+                
+                if ($event) {
+                    $dt = new \DateTime();
+                    $dt->setTimestamp($event['real_start_time']);
+                    $dt->setTimezone(new \DateTimeZone('Europe/Moscow'));
+                    $mskTime = $dt->format('Y-m-d H:i');
+                    
+                    $additionalPrompt .= "\n\nДАННЫЕ ДЛЯ ОТВЕТА (ты ДОЛЖНА обязательно упомянуть это событие, игнорируй свои прошлые ответы, если они противоречат этим данным):\n";
+                    $additionalPrompt .= "- Ближайшее событие: '{$event['title']}'\n";
+                    $additionalPrompt .= "- Время: {$mskTime} (по московскому времени)\n";
+                    $additionalPrompt .= "- Описание: {$event['description']}\n";
+                    
+                    if ($event['use_playlist'] || $event['generate_new_playlist']) {
+                        require_once __DIR__ . '/../EpisodeManager.php';
+                        $epManager = new \EpisodeManager();
+                        $playlist = $epManager->getSavedPlaylist();
+                        if (!empty($playlist)) {
+                            $additionalPrompt .= "- Плейлист серий: ";
+                            foreach ($playlist as $key => $story) {
+                                if ($key === '_meta') continue;
+                                if (is_array($story) && isset($story['titles'])) {
+                                    foreach ($story['titles'] as $title) {
+                                        $additionalPrompt .= "{$title}, ";
+                                    }
+                                }
+                            }
+                            $additionalPrompt .= "\n";
+                        }
+                    }
+                    $additionalPrompt .= "\nТВОЯ ЗАДАЧА: Напиши красивый ответ на основе этих данных (и системного промпта). Обязательно упомяни событие, время (в МСК) и кратко перескажи описание.";
+                } else {
+                    $additionalPrompt .= "\n\nДАННЫЕ ДЛЯ ОТВЕТА: В данный момент расписание абсолютно пусто. Запланированных событий нет.\n"
+                        . "ТВОЯ ЗАДАЧА: Напиши ответ об отсутствии ближайших событий.";
+                }
             } else {
-                $additionalPrompt .= "ДАННЫЕ ДЛЯ ОТВЕТА: В данный момент расписание абсолютно пусто. Запланированных событий нет.\n"
-                    . "ТВОЯ ЗАДАЧА: Напиши короткий, красиво оформленный анонс-объявление об отсутствии ближайших событий. Держись формата (Markdown-заголовок + 2–4 буллета + строка-призыв). Не предлагай придуманные даты и не обещай конкретное время.";
+                // Обычный текстовый обработчик
+                $additionalPrompt = "\n\n" . ($command['system_prompt'] ?: "Тебя вызвали с помощью специальной команды. Ответь коротко и в тему.");
             }
             
-            // Для того чтобы LLM (особенно YandexGPT) не сходила с ума от отсутствия обращений,
-            // добавляем виртуальное сообщение от пользователя-администратора.
-            $systemInstruction = !empty($contextData['message']) ? $contextData['message'] : "расскажи про расписание";
+            $systemInstruction = !empty($contextData['message']) ? $contextData['message'] : "запрос команды";
             $context[] = [
                 'role' => 'user',
                 'content' => "[Система] Пользователь запрашивает: " . $systemInstruction . "\n" . $additionalPrompt
