@@ -1217,15 +1217,13 @@ try {
                     if ($res) {
                         while ($row = $res->fetch_assoc()) {
                             $prefix = $row['command_prefix'];
-                            // Проверяем начинается ли сообщение с префикса (игнорируя регистр)
-                            if (mb_stripos($message, $prefix, 0, 'UTF-8') === 0 || mb_stripos($message, '/' . ltrim($prefix, '/'), 0, 'UTF-8') === 0) {
-                                // Дополнительно проверим, что после команды идет пробел или конец строки
-                                $len = mb_strlen($prefix, 'UTF-8');
-                                $nextChar = mb_substr($message, $len, 1, 'UTF-8');
-                                if ($nextChar === '' || preg_match('/\s/', $nextChar)) {
-                                    $matchedCommand = $row;
-                                    break;
-                                }
+                            $cleanPrefix = ltrim($prefix, '/');
+                            
+                            // Разрешаем писать команду с или без слеша (например: "schedule" или "/schedule")
+                            $msgPattern = '/^\/?' . preg_quote($cleanPrefix, '/') . '(?:\s|$)/ui';
+                            if (preg_match($msgPattern, trim($message))) {
+                                $matchedCommand = $row;
+                                break;
                             }
                         }
                     }

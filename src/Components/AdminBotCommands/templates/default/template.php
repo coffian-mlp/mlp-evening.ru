@@ -90,7 +90,7 @@
                                     <?= $cmd['is_active'] ? '<span style="color: green;">✔️</span>' : '<span style="color: red;">❌</span>' ?>
                                 </td>
                                 <td style="text-align: right;">
-                                    <button class="btn-xs btn-warning" onclick='editCommand(<?= json_encode($cmd) ?>)'>✏️</button>
+                                    <button class="btn-xs btn-warning" data-cmd="<?= htmlspecialchars(json_encode($cmd), ENT_QUOTES, 'UTF-8') ?>" onclick="editCommand(JSON.parse(this.dataset.cmd))">✏️</button>
                                     <form action="/dashboard/index.php" method="post" style="display: inline-block;" onsubmit="return confirm('Точно удалить?');">
                                         <input type="hidden" name="action" value="delete_command">
                                         <input type="hidden" name="id" value="<?= $cmd['id'] ?>">
