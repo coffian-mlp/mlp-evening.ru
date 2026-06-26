@@ -27,6 +27,7 @@ services:
   # База данных MySQL
   db:
     image: mysql:5.7
+    platform: linux/amd64
     environment:
       MYSQL_DATABASE: coffian_eplist
       MYSQL_USER: coffian_eplist
@@ -36,7 +37,7 @@ services:
       - db_data:/var/lib/mysql
       # Магия! Этот файл автоматически выполнится при первом запуске контейнера,
       # создав структуру таблиц и наполнив их данными.
-      - ./coffian_eplist.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./database.sample.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - mlp-net
 

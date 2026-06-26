@@ -1,3 +1,10 @@
+# Боевые конфиги (создаются из *.sample.*, содержат секреты — не коммитим)
+config.php
+centrifugo_config.json
+# Локальная рабочая копия дампа, если делается из database.sample.sql
+database.sql
+coffian_eplist.sql
+
 # AIDD kit (синхронизируется через sync-aidd-kit.sh, не коммитим в проект)
 .cursor/
 .claude/
