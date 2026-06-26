@@ -1,0 +1,7 @@
+# AIDD kit (синхронизируется через sync-aidd-kit.sh, не коммитим в проект)
+.cursor/
+.claude/
+scripts/
+.cursorrules
+AIDD_PROCESS.md
+CLAUDE.md
