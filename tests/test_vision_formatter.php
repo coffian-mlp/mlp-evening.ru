@@ -44,5 +44,26 @@ $out = VisionFormatter::expand([['role'=>'user','content'=>'![](/upload/chat/x.g
 $c = $out[0]['content'];
 check(is_array($c) && count($c) === 1 && $c[0]['type'] === 'image_url', 'только image_url, без пустого текста');
 
+echo "\n== Локальный файл -> base64-превью с ресайзом (нужен GD) ==\n";
+if (extension_loaded('gd')) {
+    $root = sys_get_temp_dir() . '/vf_' . getmypid();
+    @mkdir($root . '/upload/chat', 0777, true);
+    $im = imagecreatetruecolor(2000, 1500); // намеренно крупная — проверим уменьшение
+    imagefilledrectangle($im, 0, 0, 2000, 1500, imagecolorallocate($im, 10, 120, 200));
+    imagepng($im, $root . '/upload/chat/t.png');
+
+    $out = VisionFormatter::expand([['role' => 'user', 'content' => 'вот ![p](/upload/chat/t.png)']], 'https://x', $root);
+    $img = end($out[0]['content']);
+    check(strpos($img['image_url']['url'], 'data:image/jpeg;base64,') === 0, 'локальный файл -> data:image/jpeg;base64 (не URL)');
+    $rawImg = base64_decode(substr($img['image_url']['url'], strlen('data:image/jpeg;base64,')));
+    $sz = @getimagesizefromstring($rawImg);
+    check($sz && max($sz[0], $sz[1]) <= 1024, 'превью ужато до <=1024px (было 2000)');
+    check(strlen($rawImg) < 300000, 'превью весит < 300 КБ');
+
+    @unlink($root . '/upload/chat/t.png'); @rmdir($root . '/upload/chat'); @rmdir($root . '/upload'); @rmdir($root);
+} else {
+    echo "  (GD недоступен локально — кейс пропущен, проверим на проде)\n";
+}
+
 echo "\n" . ($fail === 0 ? "ALL PASS\n" : "FAILURES: $fail\n");
 exit($fail === 0 ? 0 : 1);

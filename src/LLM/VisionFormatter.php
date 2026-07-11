@@ -5,10 +5,18 @@
  * (content-массив с частями type=text / type=image_url), чтобы vision-модели «видели» вложения.
  *
  * Картинки в чате хранятся как markdown: ![alt](/upload/chat/xxx.png).
- * Относительные пути превращаются в абсолютные URL (ai_public_base_url).
+ * Локальные файлы УМЕНЬШАЮТСЯ (GD) до превью и встраиваются как base64 data-URI:
+ *  - модель НЕ фетчит удалённые URL (RouterAI/gemini принимает только инлайн-данные);
+ *  - превью весит ~100–200 КБ независимо от размера оригинала (оригиналы бывают в десятки МБ);
+ *  - vision-модели всё равно даунскейлят вход, потому потери качества для распознавания нет.
  * Применять только в OpenAI-совместимых провайдерах; Yandex/GigaChat используют текст как есть.
  */
 class VisionFormatter {
+
+    const MAX_IMAGES   = 4;          // не больше N картинок на запрос
+    const MAX_DIM      = 1024;       // макс. сторона превью, px
+    const JPEG_QUALITY = 80;
+    const MAX_PIXELS   = 30000000;   // защита памяти: не декодируем картинки крупнее ~30 Мпикс
 
     /** Развернуть картинки в messages, если включено ai_send_images. Иначе — вернуть как есть. */
     public static function maybeExpand(array $messages): array {
@@ -18,57 +26,120 @@ class VisionFormatter {
             return $messages;
         }
         $base = (string)$c->getOption('ai_public_base_url', 'https://mlp-evening.ru');
-        return self::expand($messages, $base);
+        $webroot = realpath(__DIR__ . '/../..'); // корень сайта (где лежит /upload)
+        return self::expand($messages, $base, $webroot ?: null);
     }
 
-    /** Чистое преобразование (без конфига) — покрыто юнит-тестами. */
-    public static function expand(array $messages, string $baseUrl): array {
+    /**
+     * $webroot задан → локальные /upload картинки ужимаются в base64-превью;
+     * иначе — отдаются абсолютным URL (используется в тестах чистой логики).
+     */
+    public static function expand(array $messages, string $baseUrl, ?string $webroot = null): array {
         $base = rtrim($baseUrl, '/');
+        $budget = self::MAX_IMAGES;
         foreach ($messages as &$msg) {
-            $msg = self::expandOne($msg, $base);
+            $msg = self::expandOne($msg, $base, $webroot, $budget);
         }
         unset($msg);
         return $messages;
     }
 
-    private static function expandOne(array $msg, string $base): array {
+    private static function expandOne(array $msg, string $base, ?string $webroot, int &$budget): array {
         $content = $msg['content'] ?? '';
-        if (!is_string($content) || $content === '') {
+        if (!is_string($content) || $content === '' || $budget <= 0) {
             return $msg;
         }
-
-        // markdown-картинки ![alt](url)
         if (!preg_match_all('/!\[[^\]]*\]\(([^)\s]+)\)/u', $content, $m)) {
             return $msg;
         }
 
-        $urls = [];
-        foreach ($m[1] as $u) {
-            $u = trim($u);
-            if ($u === '') continue;
-            if ($u[0] === '/') {
-                $u = $base . $u; // относительный /upload/... -> абсолютный
+        $parts = [];
+        foreach ($m[1] as $raw) {
+            if ($budget <= 0) break;
+            $img = self::resolveImage(trim($raw), $base, $webroot);
+            if ($img !== null) {
+                $parts[] = ['type' => 'image_url', 'image_url' => ['url' => $img]];
+                $budget--;
             }
-            if (!preg_match('#^https?://#i', $u)) continue;              // только http(s)
-            if (!preg_match('#\.(png|jpe?g|gif|webp|bmp)(\?|$)#i', $u)) continue; // только картинки
-            $urls[] = $u;
         }
-        if (!$urls) {
+        if (!$parts) {
             return $msg;
         }
 
-        // текст без markdown-картинок (сохраняем префикс "[HH:MM] user:" и остальной текст)
         $text = trim(preg_replace('/!\[[^\]]*\]\([^)\s]+\)/u', '', $content));
-
-        $parts = [];
+        $out = [];
         if ($text !== '') {
-            $parts[] = ['type' => 'text', 'text' => $text];
+            $out[] = ['type' => 'text', 'text' => $text];
         }
-        foreach ($urls as $u) {
-            $parts[] = ['type' => 'image_url', 'image_url' => ['url' => $u]];
+        $msg['content'] = array_merge($out, $parts);
+        return $msg;
+    }
+
+    /** data-URI уменьшенного превью (локальный файл) или абсолютный URL (внешний), либо null. */
+    private static function resolveImage(string $url, string $base, ?string $webroot): ?string {
+        if (self::imageMime($url) === null) {
+            return null; // не картинка
+        }
+        // Локальный путь на сайте: /upload/... -> ресайз в превью + base64
+        if ($url !== '' && $url[0] === '/' && $webroot !== null) {
+            $dataUri = self::thumbnailDataUri($webroot . $url);
+            if ($dataUri !== null) {
+                return $dataUri;
+            }
+            return $base . $url; // не смогли обработать локально — запасной абсолютный URL
+        }
+        if (preg_match('#^https?://#i', $url)) {
+            return $url; // внешний URL как есть
+        }
+        if ($url !== '' && $url[0] === '/') {
+            return $base . $url;
+        }
+        return null;
+    }
+
+    /** Читает локальный файл, ужимает через GD до MAX_DIM и возвращает data:image/jpeg;base64,... */
+    private static function thumbnailDataUri(string $path): ?string {
+        if (!is_file($path) || !function_exists('imagecreatefromstring')) {
+            return null;
+        }
+        $info = @getimagesize($path);
+        if (!$info) {
+            return null;
+        }
+        [$w, $h] = $info;
+        if ($w < 1 || $h < 1 || ($w * $h) > self::MAX_PIXELS) {
+            return null; // битая или слишком большая по памяти — пропускаем
+        }
+        $bytes = @file_get_contents($path);
+        if ($bytes === false) {
+            return null;
+        }
+        $src = @imagecreatefromstring($bytes);
+        if (!$src) {
+            return null;
         }
 
-        $msg['content'] = $parts;
-        return $msg;
+        $scale = min(1.0, self::MAX_DIM / max($w, $h));
+        $nw = max(1, (int)round($w * $scale));
+        $nh = max(1, (int)round($h * $scale));
+
+        $dst = imagecreatetruecolor($nw, $nh);
+        // белый фон (на случай прозрачности PNG — JPEG альфу не хранит)
+        imagefilledrectangle($dst, 0, 0, $nw, $nh, imagecolorallocate($dst, 255, 255, 255));
+        imagecopyresampled($dst, $src, 0, 0, 0, 0, $nw, $nh, $w, $h);
+
+        ob_start();
+        imagejpeg($dst, null, self::JPEG_QUALITY);
+        $jpeg = ob_get_clean();
+        // imagedestroy не нужен: с PHP 8.0 ресурсы GD — объекты, освобождаются сборщиком
+
+        if ($jpeg === false || $jpeg === '') {
+            return null;
+        }
+        return 'data:image/jpeg;base64,' . base64_encode($jpeg);
+    }
+
+    private static function imageMime(string $url): ?string {
+        return preg_match('#\.(png|jpe?g|gif|webp|bmp)(\?|$)#i', $url) ? 'image' : null;
     }
 }
