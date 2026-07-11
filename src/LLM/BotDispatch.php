@@ -14,6 +14,18 @@ class BotDispatch {
 
     /** Диспетчеризация триггера: очередь или inline (с lifelike-задержкой). */
     public static function dispatch(string $type, array $payload): void {
+        require_once __DIR__ . '/LLMManager.php';
+
+        // ГЕЙТ: на обычное сообщение бот реагирует, ТОЛЬКО если к нему обратились
+        // (@упоминание, алиас, цитата). Иначе — молчим (не ставим задачу, не отвечаем).
+        // Команды и приветствия проходят всегда.
+        if ($type === 'mention') {
+            $probe = new LLMManager();
+            if (!$probe->messageAddressesBot($payload['message'] ?? '', $payload['quoted_msg_ids'] ?? [])) {
+                return;
+            }
+        }
+
         if (self::shouldQueue()) {
             (new JobQueue())->enqueue($type, $payload, self::delaySeconds());
             return;
@@ -22,7 +34,6 @@ class BotDispatch {
         if (function_exists('set_time_limit')) { @set_time_limit(0); }
         @ignore_user_abort(true);
         sleep(self::delaySeconds());
-        require_once __DIR__ . '/LLMManager.php';
         (new LLMManager())->processTrigger($type, $payload);
     }
 

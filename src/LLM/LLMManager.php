@@ -422,6 +422,42 @@ class LLMManager {
     }
 
     /**
+     * Обратились ли к боту в сообщении: явное @упоминание, алиас (лира/lyra/…) или цитата его сообщения.
+     * Та же логика, что была внутри processTrigger('mention') — теперь применяется на этапе постановки
+     * в очередь, чтобы бот НЕ отвечал на сообщения, где его не звали.
+     */
+    public function messageAddressesBot(string $message, array $quotedMsgIds = []): bool {
+        $userManager = new UserManager();
+        $botUser = $userManager->getUserById($this->botUserId);
+        $botLogin = $botUser['login'] ?? 'Lyra';
+        $botNickname = $botUser['nickname'] ?? 'Лира Хартстрингс';
+
+        // Явное упоминание по логину/никнейму
+        if (mb_stripos($message, '@' . $botLogin, 0, 'UTF-8') !== false
+            || mb_stripos($message, '@' . $botNickname, 0, 'UTF-8') !== false) {
+            return true;
+        }
+        // Алиасы (без @)
+        $aliasesStr = ConfigManager::getInstance()->getOption('ai_aliases', 'лира, lyra, хартстрингс, lyra heartstrings, лирочка');
+        foreach (array_map('trim', explode(',', $aliasesStr)) as $alias) {
+            if ($alias === '') continue;
+            if (preg_match('/(^|[^\p{L}])' . preg_quote($alias, '/') . '([^\p{L}]|$)/iu', $message)) {
+                return true;
+            }
+        }
+        // Цитата сообщения бота
+        if (!empty($quotedMsgIds) && is_array($quotedMsgIds)) {
+            foreach ($quotedMsgIds as $qId) {
+                $qMsg = $this->chatManager->getMessageById($qId);
+                if ($qMsg && $qMsg['user_id'] == $this->botUserId) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * Контекст беседы для воркера. $beforeId ограничивает контекст сообщениями с id < $beforeId
      * (для single-ответа — контекст ДО триггера включительно: передавать message_id + 1).
      */
