@@ -93,6 +93,7 @@ $config = $arResult['config']; // Helper
             <select name="ai_primary_provider" class="form-input" onchange="document.querySelectorAll('.ai-provider-group').forEach(el => el.style.display = 'none'); document.getElementById('ai_group_' + this.value).style.display = 'block';">
                 <option value="openai" <?= $config->getOption('ai_primary_provider', 'openai') === 'openai' ? 'selected' : '' ?>>OpenAI / GitHub Models / Groq</option>
                 <option value="openrouter" <?= $config->getOption('ai_primary_provider', 'openai') === 'openrouter' ? 'selected' : '' ?>>OpenRouter</option>
+                <option value="routerai" <?= $config->getOption('ai_primary_provider', 'openai') === 'routerai' ? 'selected' : '' ?>>RouterAI (routerai.ru)</option>
                 <option value="yandex" <?= $config->getOption('ai_primary_provider', 'openai') === 'yandex' ? 'selected' : '' ?>>YandexGPT</option>
                 <option value="gigachat" <?= $config->getOption('ai_primary_provider', 'openai') === 'gigachat' ? 'selected' : '' ?>>GigaChat</option>
             </select>
@@ -123,6 +124,18 @@ $config = $arResult['config']; // Helper
             <div class="form-group">
                 <label class="form-label">OpenRouter Модель</label>
                 <input type="text" name="ai_openrouter_model" value="<?= htmlspecialchars($config->getOption('ai_openrouter_model', 'qwen/qwen3-coder:free')) ?>" class="form-input">
+            </div>
+        </div>
+
+        <div id="ai_group_routerai" class="ai-provider-group" <?= $config->getOption('ai_primary_provider', 'openai') === 'routerai' ? '' : 'style="display:none;"' ?>>
+            <div class="form-group">
+                <label class="form-label">RouterAI API Key</label>
+                <input type="password" name="ai_routerai_key" value="<?= htmlspecialchars($config->getOption('ai_routerai_key', '')) ?>" class="form-input">
+                <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Российский агрегатор (routerai.ru), OpenAI-совместимый. Не блокируется по гео, прокси не нужен.</p>
+            </div>
+            <div class="form-group">
+                <label class="form-label">RouterAI Модель</label>
+                <input type="text" name="ai_routerai_model" value="<?= htmlspecialchars($config->getOption('ai_routerai_model', 'openai/gpt-4o-mini')) ?>" class="form-input">
             </div>
         </div>
 

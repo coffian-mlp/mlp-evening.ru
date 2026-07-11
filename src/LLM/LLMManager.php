@@ -5,6 +5,7 @@ require_once __DIR__ . '/../ChatManager.php';
 require_once __DIR__ . '/../Database.php';
 require_once __DIR__ . '/../UserManager.php';
 require_once __DIR__ . '/OpenRouterProvider.php';
+require_once __DIR__ . '/RouterAIProvider.php';
 require_once __DIR__ . '/OpenAIProvider.php';
 require_once __DIR__ . '/YandexGPTProvider.php';
 require_once __DIR__ . '/GigaChatProvider.php';
@@ -48,6 +49,10 @@ class LLMManager {
         $openRouterModel = $config->getOption('ai_openrouter_model', 'qwen/qwen3-coder:free');
         $openRouterProvider = $openRouterKey ? new OpenRouterProvider($openRouterKey, $openRouterModel, $this->proxyUrl) : null;
 
+        $routerAiKey = $config->getOption('ai_routerai_key', '');
+        $routerAiModel = $config->getOption('ai_routerai_model', 'openai/gpt-4o-mini');
+        $routerAiProvider = $routerAiKey ? new RouterAIProvider($routerAiKey, $routerAiModel, $this->proxyUrl) : null;
+
         $yandexKey = $config->getOption('ai_yandex_key', '');
         $yandexFolderId = $config->getOption('ai_yandex_folder_id', '');
         $yandexProvider = ($yandexKey && $yandexFolderId) ? new YandexGPTProvider($yandexKey, $yandexFolderId) : null;
@@ -58,6 +63,7 @@ class LLMManager {
         $allProviders = [
             'openai' => $openaiProvider,
             'openrouter' => $openRouterProvider,
+            'routerai' => $routerAiProvider,
             'yandex' => $yandexProvider,
             'gigachat' => $gigachatProvider
         ];

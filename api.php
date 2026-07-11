@@ -714,6 +714,13 @@ try {
                 $config->setOption('ai_openrouter_model', trim($_POST['ai_openrouter_model']));
             }
 
+            if (isset($_POST['ai_routerai_key'])) {
+                $config->setOption('ai_routerai_key', trim($_POST['ai_routerai_key']));
+            }
+            if (isset($_POST['ai_routerai_model'])) {
+                $config->setOption('ai_routerai_model', trim($_POST['ai_routerai_model']));
+            }
+
             if (isset($_POST['ai_yandex_key'])) {
                 $config->setOption('ai_yandex_key', trim($_POST['ai_yandex_key']));
             }
