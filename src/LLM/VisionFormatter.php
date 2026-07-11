@@ -13,10 +13,11 @@
  */
 class VisionFormatter {
 
-    const MAX_IMAGES   = 4;          // не больше N картинок на запрос
-    const MAX_DIM      = 1024;       // макс. сторона превью, px
-    const JPEG_QUALITY = 80;
-    const MAX_PIXELS   = 30000000;   // защита памяти: не декодируем картинки крупнее ~30 Мпикс
+    const MAX_IMAGES     = 3;        // не больше N картинок на запрос
+    const RECENT_MSGS    = 3;        // картинки берём только из последних N сообщений (свежие/триггер)
+    const MAX_DIM        = 1024;     // макс. сторона превью, px
+    const JPEG_QUALITY   = 80;
+    const MAX_PIXELS     = 30000000; // защита памяти: не декодируем картинки крупнее ~30 Мпикс
 
     /** Развернуть картинки в messages, если включено ai_send_images. Иначе — вернуть как есть. */
     public static function maybeExpand(array $messages): array {
@@ -31,16 +32,21 @@ class VisionFormatter {
     }
 
     /**
+     * Разворачивает картинки ТОЛЬКО из последних RECENT_MSGS сообщений и от новых к старым —
+     * т.е. присылаем модели картинку из сообщения, на которое бот отвечает (свежую/триггер),
+     * а не весь скроллбэк (иначе старые картинки жгут бюджет в каждом ответе и вытесняют нужную).
+     *
      * $webroot задан → локальные /upload картинки ужимаются в base64-превью;
      * иначе — отдаются абсолютным URL (используется в тестах чистой логики).
      */
     public static function expand(array $messages, string $baseUrl, ?string $webroot = null): array {
         $base = rtrim($baseUrl, '/');
         $budget = self::MAX_IMAGES;
-        foreach ($messages as &$msg) {
-            $msg = self::expandOne($msg, $base, $webroot, $budget);
+        $n = count($messages);
+        $from = max(0, $n - self::RECENT_MSGS);
+        for ($i = $n - 1; $i >= $from && $budget > 0; $i--) {
+            $messages[$i] = self::expandOne($messages[$i], $base, $webroot, $budget);
         }
-        unset($msg);
         return $messages;
     }
 

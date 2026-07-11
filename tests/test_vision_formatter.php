@@ -44,6 +44,17 @@ $out = VisionFormatter::expand([['role'=>'user','content'=>'![](/upload/chat/x.g
 $c = $out[0]['content'];
 check(is_array($c) && count($c) === 1 && $c[0]['type'] === 'image_url', 'только image_url, без пустого текста');
 
+echo "\n== Только свежие сообщения: старую картинку из скроллбэка НЕ шлём ==\n";
+$ctx = [
+    ['role' => 'user', 'content' => 'старое ![old](/upload/chat/old.png)'], // вне окна RECENT_MSGS
+    ['role' => 'user', 'content' => 'бла'],
+    ['role' => 'user', 'content' => 'бла бла'],
+    ['role' => 'user', 'content' => 'свежее ![new](/upload/chat/new.png)'],  // свежее — в окне
+];
+$out = VisionFormatter::expand($ctx, $base); // webroot=null -> URL-режим
+check(is_string($out[0]['content']), 'старая картинка (вне окна) НЕ развёрнута');
+check(is_array($out[3]['content']), 'свежая картинка развёрнута');
+
 echo "\n== Локальный файл -> base64-превью с ресайзом (нужен GD) ==\n";
 if (extension_loaded('gd')) {
     $root = sys_get_temp_dir() . '/vf_' . getmypid();
