@@ -18,5 +18,8 @@ $app->includeComponent('Chat', 'popup', [
     'mode' => 'popup'
 ]);
 
+// Профиль: рендерит модалку #profile-modal, нужную кнопке "Настройки профиля" в шапке чата.
+$app->includeComponent('Profile');
+
 // Подключаем FOOTER (скрипты и finalize)
 require_once __DIR__ . '/src/templates/footer.php';

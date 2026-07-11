@@ -1705,7 +1705,21 @@ $(document).ready(function() {
     const profileForm = $('#ajax-profile-form');
     const profileError = $('#profile-error');
 
-    // window.openProfileModal удален отсюда, так как он теперь в main.js
+    // На попап-странице main.js не подключён — определяем хелперы профиля локально.
+    window.switchProfileTab = function(tabName) {
+        $('.profile-tab-content').hide();
+        $('#tab-' + tabName).fadeIn(200);
+        $('.profile-tab-btn').removeClass('active');
+        $('.profile-tab-btn[onclick*="' + tabName + '"]').addClass('active');
+    };
+
+    window.openProfileModal = function(e) {
+        if (e) e.preventDefault();
+        $('#profile-modal').css('display', 'flex').hide().fadeIn(200, function() {
+            // loadUserSocials живёт в main.js (только на основном сайте) — на попапе просто пропускаем.
+            if (typeof window.loadUserSocials === 'function') window.loadUserSocials();
+        });
+    };
 
     $('.close-modal-profile').on('click', function() {
         profileModal.fadeOut(200);
