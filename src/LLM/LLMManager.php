@@ -7,6 +7,7 @@ require_once __DIR__ . '/../UserManager.php';
 require_once __DIR__ . '/OpenRouterProvider.php';
 require_once __DIR__ . '/RouterAIProvider.php';
 require_once __DIR__ . '/OpenAIProvider.php';
+require_once __DIR__ . '/ResponseSanitizer.php';
 require_once __DIR__ . '/YandexGPTProvider.php';
 require_once __DIR__ . '/GigaChatProvider.php';
 require_once __DIR__ . '/XrayManager.php';
@@ -24,7 +25,7 @@ class LLMManager {
         $this->botUserId = (int)$config->getOption('ai_bot_user_id', 0);
         $this->systemPrompt = $config->getOption('ai_system_prompt', ''); // Промпт теперь берем только из админки (БД), без длинного дефолта в коде
         $this->chatManager = new ChatManager();
-        
+
         $this->proxyUrl = $config->getOption('ai_proxy_url', null); // Может быть как socks5://..., так и vless://...
         if ($this->proxyUrl && strpos($this->proxyUrl, 'socks5://') === 0) {
             $this->proxyUrl = str_replace('socks5://', 'socks5h://', $this->proxyUrl);
@@ -227,11 +228,12 @@ class LLMManager {
             }
 
             $instruction = "Проанализируй последние сообщения. Если нужно что-то сказать (разрядить обстановку, ответить на вопрос, поддержать беседу) - напиши ответ. Если встревать не стоит - ответь ровно одним словом: SILENCE, но не нужно вообще молчать постоянно. Старайся поддерживать беседу в чате, даже если к тебе явно никто не обращается - это нормально.";
+            // Инструкция как обычная реплика без префикса "[Система]" — префикс модель иногда выдавала эхом.
             $context[] = [
                 'role' => 'user',
-                'content' => "[Система] " . $instruction
+                'content' => $instruction
             ];
-            
+
             $response = $this->askWithFallback($context, $this->systemPrompt);
             
             $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
@@ -245,11 +247,12 @@ class LLMManager {
             $context = $this->buildContext(24);
             
             $instruction = "Пользователь $userLogin только что зашел на сайт. Поздоровайся с ним, обязательно упомянув его по имени (например, '@$userLogin'). Будь краткой и приветливой.";
+            // Инструкция как обычная реплика без префикса "[Система]" — префикс модель иногда выдавала эхом.
             $context[] = [
                 'role' => 'user',
-                'content' => "[Система] " . $instruction
+                'content' => $instruction
             ];
-            
+
             $response = $this->askWithFallback($context, $this->systemPrompt);
             
             $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
@@ -377,48 +380,24 @@ class LLMManager {
         $botLogin = $botUser['login'] ?? 'Lyra';
         $botNickname = $botUser['nickname'] ?? 'Лира Хартстрингс';
 
-        // Добавим жесткое указание не писать метки времени и свое имя к последнему сообщению
-        $instruction = "\n\n[Системное правило]: Пиши ТОЛЬКО текст своего ответа. НИКОГДА не добавляй свое имя, никнейм или время в начале сообщения (например, не пиши '[12:00] {$botNickname}:').";
-        
-        if (!empty($context)) {
-            $lastIndex = count($context) - 1;
-            $context[$lastIndex]['content'] .= $instruction;
-        } else {
-            $prompt .= $instruction;
-        }
+        // Жёсткое указание — ТОЛЬКО в системную роль, а НЕ в реплику диалога.
+        // Раньше оно дописывалось к последнему сообщению контекста, из-за чего модель
+        // периодически выдавала саму инструкцию эхом прямо в чат («прорыв системщины»).
+        $prompt .= "\n\n[Системное правило]: Пиши ТОЛЬКО текст своего ответа. НИКОГДА не добавляй своё имя, никнейм, время или служебные пометки в начале сообщения (например, не пиши '[12:00] {$botNickname}:').";
 
         foreach ($this->providers as $provider) {
             try {
                 $response = $provider->askChat($context, $prompt);
-                if ($response) {
-                    // Очистка ответа от случайно сгенерированных временных меток и имен
-                    $response = trim($response);
-                    
-                    // Удаляем `[12:34] Имя:` 
-                    $response = preg_replace('/^\[\d{2}:\d{2}\]\s*[^:]+:\s*/iu', '', $response);
-                    // Удаляем `Имя:`
-                    $response = preg_replace('/^' . preg_quote($botNickname, '/') . ':\s*/iu', '', $response);
-                    $response = preg_replace('/^' . preg_quote($botLogin, '/') . ':\s*/iu', '', $response);
-                    
-                    // Удаляем по первому слову никнейма (например "Лира: " если ник "Лира Хартстрингс")
-                    $nicknameParts = explode(' ', $botNickname);
-                    if (!empty($nicknameParts[0])) {
-                        $response = preg_replace('/^' . preg_quote($nicknameParts[0], '/') . ':\s*/iu', '', $response);
-                    }
-                    
-                    // На всякий случай удаляем еще раз, если было вложенное
-                    $response = preg_replace('/^\[\d{2}:\d{2}\]\s*[^:]+:\s*/iu', '', $response);
 
-                    // Если вдруг LLM добавила кавычки в начале и конце
-                    $response = preg_replace('/^"(.*)"$/us', '$1', trim($response));
+                // Единая очистка + выходной guard против прорыва системных инструкций/контекста.
+                $clean = ResponseSanitizer::clean($response, $botNickname, $botLogin);
 
-                    // Нормализация: LLM иногда возвращает HTML-сущности (&quot;, &#34; и т.д.).
-                    // Декодируем их в обычные символы; при сохранении ChatManager снова сделает
-                    // htmlspecialchars — тогда в чате отобразятся нормальные кавычки, а не буквально &quot;
-                    $response = html_entity_decode($response, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-
-                    return trim($response);
+                if ($clean !== null && $clean !== '') {
+                    return $clean;
                 }
+                // Пусто после очистки: либо провайдер промолчал, либо это был чистый
+                // прорыв системного текста, вырезанный целиком. В чат не постим — лучше
+                // тишина, чем «системщина». Пробуем следующего провайдера.
             } catch (Exception $e) {
                 error_log("LLM Provider Error (" . get_class($provider) . "): " . $e->getMessage());
                 continue; // Try next provider
