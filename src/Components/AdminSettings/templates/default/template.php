@@ -226,6 +226,15 @@ $config = $arResult['config']; // Helper
             <input type="text" name="ai_public_base_url" value="<?= htmlspecialchars($config->getOption('ai_public_base_url', 'https://mlp-evening.ru')) ?>" class="form-input" placeholder="https://mlp-evening.ru">
         </div>
 
+        <div class="form-group" style="margin-top: 10px;">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="hidden" name="ai_reactions" value="0">
+                <input type="checkbox" name="ai_reactions" value="1" <?= $config->getOption('ai_reactions', 1) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                Разрешить боту ставить реакции на сообщения
+            </label>
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Лира сможет реагировать (❤️ 😂 🔥 и др.) на сообщение, которому отвечает — вместо или вместе с текстом.</p>
+        </div>
+
         <button type="submit" class="btn-primary">Сохранить ИИ настройки</button>
     </form>
 </div>

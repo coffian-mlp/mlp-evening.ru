@@ -86,10 +86,16 @@ $(document).ready(function() {
     // === Reaction Logic 🦄 ===
     const REACTION_ICONS = {
         like: '👍',
-        dislike: '👎',
+        heart: '❤️',
         laugh: '😂',
+        wow: '😮',
+        fire: '🔥',
+        party: '🎉',
+        cool: '😎',
+        think: '🤔',
+        neutral: '😐',
         cry: '😢',
-        neutral: '😐'
+        dislike: '👎'
     };
 
     function toggleReaction(msgId, reaction) {

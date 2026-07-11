@@ -5,6 +5,7 @@ require_once __DIR__ . '/../Database.php';
 require_once __DIR__ . '/LLMManager.php';
 require_once __DIR__ . '/JobQueue.php';
 require_once __DIR__ . '/ReplyPolicy.php';
+require_once __DIR__ . '/ReactionParser.php';
 
 /**
  * Единый «голос» бота: реактив (очередь ответов) + проактив (спонтанные + анонсы по таймеру).
@@ -105,7 +106,21 @@ class BotWorker {
             $beforeId = (int)$decision['quote_message_id'] + 1;
         }
         $context = $this->llm->buildReplyContext(24, null, $beforeId);
-        $text = $this->llm->generateReply($context, ReplyPolicy::instruction($decision));
+        $raw = $this->llm->generateReply($context, ReplyPolicy::instruction($decision));
+
+        // Бот может поставить реакцию вместо/вместе с текстом.
+        $parsed = ReactionParser::extract($raw);
+        $text = $parsed['text'];
+
+        // Реакцию вешаем на цитируемое (single) или новейшее сообщение из пачки.
+        $reactTarget = $decision['quote_message_id'] ?? null;
+        if (!$reactTarget) {
+            $lastMention = end($mentions);
+            $reactTarget = $lastMention['message_id'] ?? null;
+        }
+        if ($parsed['reaction'] && $reactTarget && $this->config->getOption('ai_reactions', 1)) {
+            $this->llm->getChatManager()->toggleReaction((int)$reactTarget, $this->llm->getBotUserId(), $parsed['reaction']);
+        }
 
         if ($text !== null && $text !== '') {
             $quoted = $decision['quote_message_id'] ? [(int)$decision['quote_message_id']] : [];

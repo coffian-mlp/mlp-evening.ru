@@ -466,7 +466,7 @@ class ChatManager {
 
     public function toggleReaction($messageId, $userId, $reactionType) {
         // Validate reaction type
-        $allowed = ['like', 'dislike', 'laugh', 'cry', 'neutral'];
+        $allowed = ['like', 'dislike', 'laugh', 'cry', 'neutral', 'heart', 'fire', 'wow', 'think', 'party', 'cool'];
         if (!in_array($reactionType, $allowed)) {
             return ['success' => false, 'message' => 'Неизвестная реакция'];
         }

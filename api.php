@@ -741,6 +741,9 @@ try {
             if (isset($_POST['ai_public_base_url'])) {
                 $config->setOption('ai_public_base_url', trim($_POST['ai_public_base_url']));
             }
+            if (isset($_POST['ai_reactions'])) {
+                $config->setOption('ai_reactions', (int)$_POST['ai_reactions']);
+            }
 
             // SMTP Settings
             if (isset($_POST['smtp_enabled'])) {
