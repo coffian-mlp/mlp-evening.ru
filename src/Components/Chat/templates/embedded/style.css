@@ -1137,15 +1137,17 @@
     border-radius: 20px;
     padding: 5px 8px;
     display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 232px;
     gap: 4px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.5);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     z-index: 1000;
-    
+
     /* Animation */
     animation: pickerFadeIn 0.2s ease-out;
-    white-space: nowrap;
 }
 
 /* Invisible bridge to prevent mouseleave when moving from button to picker */
