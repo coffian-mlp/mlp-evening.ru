@@ -217,6 +217,18 @@ $(document).ready(function() {
         }
         
         btn.append(picker);
+
+        // Вертикальный клэмп: держим пикер внутри контейнера чата (для нижних/верхних сообщений).
+        if (container && container.length) {
+            const pr = picker[0].getBoundingClientRect();
+            const cr = container[0].getBoundingClientRect();
+            let shift = 0;
+            if (pr.bottom > cr.bottom - 4) shift = (cr.bottom - 4) - pr.bottom;      // уехал вниз -> поднять
+            else if (pr.top < cr.top + 4) shift = (cr.top + 4) - pr.top;             // уехал вверх -> опустить
+            if (shift !== 0) {
+                picker.css('transform', 'translateY(calc(-50% + ' + Math.round(shift) + 'px))');
+            }
+        }
     }
 
     // Delegated Events for Reactions
