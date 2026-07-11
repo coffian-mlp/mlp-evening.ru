@@ -156,6 +156,62 @@ $config = $arResult['config']; // Helper
             </div>
         </div>
 
+        <h4 style="margin-top: 25px;">Очередь и поведение бота</h4>
+        <p style="font-size: 0.85em; color: #666; margin-bottom: 15px;">Ответы через фоновый воркер (не блокирует чат) + анти-спам. Если выключено — прежнее поведение (ответ прямо в запросе).</p>
+
+        <div class="form-group">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="hidden" name="ai_use_queue" value="0">
+                <input type="checkbox" name="ai_use_queue" value="1" <?= $config->getOption('ai_use_queue', 0) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                Использовать очередь и воркер
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Режим воркера</label>
+            <?php $wm = $config->getOption('ai_worker_mode', 'auto'); ?>
+            <select name="ai_worker_mode" class="form-input">
+                <option value="auto"   <?= $wm === 'auto'   ? 'selected' : '' ?>>auto — очередь, inline-фоллбек если нет воркера</option>
+                <option value="cron"   <?= $wm === 'cron'   ? 'selected' : '' ?>>cron — воркер по расписанию</option>
+                <option value="daemon" <?= $wm === 'daemon' ? 'selected' : '' ?>>daemon — постоянный процесс</option>
+                <option value="inline" <?= $wm === 'inline' ? 'selected' : '' ?>>inline — без очереди, в запросе</option>
+            </select>
+        </div>
+
+        <div class="form-group" style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 130px;">
+                <label class="form-label">Задержка ответа, сек (мин)</label>
+                <input type="number" name="ai_delay_min" value="<?= htmlspecialchars($config->getOption('ai_delay_min', 4)) ?>" class="form-input">
+            </div>
+            <div style="flex: 1; min-width: 130px;">
+                <label class="form-label">Задержка ответа, сек (макс)</label>
+                <input type="number" name="ai_delay_max" value="<?= htmlspecialchars($config->getOption('ai_delay_max', 42)) ?>" class="form-input">
+            </div>
+            <div style="flex: 1; min-width: 130px;">
+                <label class="form-label">Окно дебаунса, сек</label>
+                <input type="number" name="ai_debounce_window" value="<?= htmlspecialchars($config->getOption('ai_debounce_window', 10)) ?>" class="form-input">
+            </div>
+        </div>
+
+        <div class="form-group" style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 130px;">
+                <label class="form-label">Порог спама (упоминаний)</label>
+                <input type="number" name="ai_spam_threshold" value="<?= htmlspecialchars($config->getOption('ai_spam_threshold', 4)) ?>" class="form-input">
+            </div>
+            <div style="flex: 1; min-width: 130px;">
+                <label class="form-label">Пауза между ответами, сек</label>
+                <input type="number" name="ai_reply_min_gap" value="<?= htmlspecialchars($config->getOption('ai_reply_min_gap', 20)) ?>" class="form-input">
+            </div>
+            <div style="flex: 1; min-width: 130px;">
+                <label class="form-label">Опрос воркера, сек</label>
+                <input type="number" name="ai_worker_poll" value="<?= htmlspecialchars($config->getOption('ai_worker_poll', 3)) ?>" class="form-input">
+            </div>
+            <div style="flex: 1; min-width: 130px;">
+                <label class="form-label">Интервал проактива, сек</label>
+                <input type="number" name="ai_proactive_interval" value="<?= htmlspecialchars($config->getOption('ai_proactive_interval', 240)) ?>" class="form-input">
+            </div>
+        </div>
+
         <button type="submit" class="btn-primary">Сохранить ИИ настройки</button>
     </form>
 </div>

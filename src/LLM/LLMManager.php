@@ -406,9 +406,44 @@ class LLMManager {
         return null;
     }
 
-    private function buildContext($limit = 24, $maxAgeHours = null) {
-        // Fetch last N messages
-        $messages = $this->chatManager->getMessages($limit);
+    // --- Публичный API для BotWorker (очередь). Аддитивно, не меняет существующие пути. ---
+
+    public function getBotUserId(): int {
+        return $this->botUserId;
+    }
+
+    public function getBotNickname(): string {
+        $user = (new UserManager())->getUserById($this->botUserId);
+        return $user['nickname'] ?? $user['login'] ?? 'Lyra';
+    }
+
+    public function getChatManager(): ChatManager {
+        return $this->chatManager;
+    }
+
+    /**
+     * Контекст беседы для воркера. $beforeId ограничивает контекст сообщениями с id < $beforeId
+     * (для single-ответа — контекст ДО триггера включительно: передавать message_id + 1).
+     */
+    public function buildReplyContext(int $limit = 24, $maxAgeHours = null, ?int $beforeId = null): array {
+        return $this->buildContext($limit, $maxAgeHours, $beforeId);
+    }
+
+    /**
+     * Сгенерировать текст ответа БЕЗ постинга (постит воркер — он решает цитату по политике).
+     * $extraInstruction — доп. указание режима (адресация/сводность) из ReplyPolicy::instruction().
+     */
+    public function generateReply(array $context, string $extraInstruction = ''): ?string {
+        $prompt = $this->systemPrompt;
+        if ($extraInstruction !== '') {
+            $prompt .= "\n\n" . $extraInstruction;
+        }
+        return $this->askWithFallback($context, $prompt);
+    }
+
+    private function buildContext($limit = 24, $maxAgeHours = null, $beforeId = null) {
+        // Fetch last N messages (при $beforeId — только сообщения старше этого id)
+        $messages = $this->chatManager->getMessages($limit, $beforeId);
         $context = [];
 
         $currentTime = time();

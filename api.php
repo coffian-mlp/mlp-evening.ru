@@ -234,12 +234,8 @@ try {
             set_time_limit(0);
             ignore_user_abort(true);
             
-            // Рандомная задержка
-            sleep(rand(4, 42));
-
-            require_once __DIR__ . '/src/LLM/LLMManager.php';
-            $llm = new LLMManager();
-            $llm->processTrigger('greeting', ['username' => $_SESSION['username'] ?? 'Гость']);
+            require_once __DIR__ . '/src/LLM/BotDispatch.php';
+            BotDispatch::dispatch('greeting', ['username' => $_SESSION['username'] ?? 'Гость']);
 
             exit();
         } else {
@@ -362,13 +358,8 @@ try {
              set_time_limit(0);
              ignore_user_abort(true);
              
-             // Даем ИИ время "напечатать" приветствие
-             sleep(rand(4, 42));
-
-             // Приветствие от ИИ
-             require_once __DIR__ . '/src/LLM/LLMManager.php';
-             $llm = new LLMManager();
-             $llm->processTrigger('greeting', ['username' => $username]);
+             require_once __DIR__ . '/src/LLM/BotDispatch.php';
+             BotDispatch::dispatch('greeting', ['username' => $username]);
 
              exit();
          } else {
@@ -524,11 +515,8 @@ try {
                 set_time_limit(0);
                 ignore_user_abort(true);
                 
-                sleep(rand(4, 42));
-
-                require_once __DIR__ . '/src/LLM/LLMManager.php';
-                $llm = new LLMManager();
-                $llm->processTrigger('greeting', ['username' => $login]);
+                require_once __DIR__ . '/src/LLM/BotDispatch.php';
+                BotDispatch::dispatch('greeting', ['username' => $login]);
 
                 exit();
             } else {
@@ -730,6 +718,22 @@ try {
 
             if (isset($_POST['ai_gigachat_key'])) {
                 $config->setOption('ai_gigachat_key', trim($_POST['ai_gigachat_key']));
+            }
+
+            // --- Очередь и поведение бота (BOT-QUEUE) ---
+            if (isset($_POST['ai_use_queue'])) {
+                $config->setOption('ai_use_queue', (int)$_POST['ai_use_queue']);
+            }
+            if (isset($_POST['ai_worker_mode'])) {
+                $mode = trim($_POST['ai_worker_mode']);
+                if (in_array($mode, ['auto', 'cron', 'daemon', 'inline'], true)) {
+                    $config->setOption('ai_worker_mode', $mode);
+                }
+            }
+            foreach (['ai_debounce_window', 'ai_delay_min', 'ai_delay_max', 'ai_spam_threshold', 'ai_reply_min_gap', 'ai_worker_poll', 'ai_proactive_interval'] as $k) {
+                if (isset($_POST[$k])) {
+                    $config->setOption($k, max(0, (int)$_POST[$k]));
+                }
             }
 
             // SMTP Settings
@@ -1202,30 +1206,18 @@ try {
                 // Закрываем сессию пользователя, чтобы он мог продолжить сидеть на сайте, пока мы думаем
                 session_write_close();
                 
-                // Снимаем лимит времени выполнения
-                set_time_limit(0);
-                ignore_user_abort(true);
-                
-                // Даем ИИ случайное время "на подумать" от 4 до 42 секунд
-                sleep(rand(4, 42));
-
-                // Вызываем магию ИИ
-                require_once __DIR__ . '/src/LLM/LLMManager.php';
-                $llm = new LLMManager();
-                
+                // Быстрое (без LLM) определение: команда или обычное упоминание.
+                require_once __DIR__ . '/src/LLM/BotDispatch.php';
                 $db = Database::getInstance()->getConnection();
                 $matchedCommand = null;
-                
+
                 // Проверяем, существует ли таблица bot_commands (на случай, если миграция еще не прошла)
                 $tableExists = $db->query("SHOW TABLES LIKE 'bot_commands'")->num_rows > 0;
-                
                 if ($tableExists) {
                     $res = $db->query("SELECT * FROM bot_commands WHERE is_active = 1");
                     if ($res) {
                         while ($row = $res->fetch_assoc()) {
-                            $prefix = $row['command_prefix'];
-                            $cleanPrefix = ltrim($prefix, '/');
-                            
+                            $cleanPrefix = ltrim($row['command_prefix'], '/');
                             // Разрешаем писать команду с или без слеша (например: "schedule" или "/schedule")
                             $msgPattern = '/^\/?' . preg_quote($cleanPrefix, '/') . '(?:\s|$)/ui';
                             if (preg_match($msgPattern, trim($message))) {
@@ -1240,18 +1232,24 @@ try {
                         $matchedCommand = ['handler_type' => 'schedule'];
                     }
                 }
-                
+
+                // Диспетчеризация: очередь (воркер ответит) или inline-фоллбек (с lifelike-задержкой).
+                $mid = ($newMsgId === true) ? null : $newMsgId;
                 if ($matchedCommand) {
-                    $llm->processTrigger('dynamic_command', [
-                        'message' => $message,
-                        'message_id' => $newMsgId === true ? null : $newMsgId,
-                        'command' => $matchedCommand
+                    BotDispatch::dispatch('dynamic_command', [
+                        'message'    => $message,
+                        'message_id' => $mid,
+                        'command'    => $matchedCommand,
+                        'user_id'    => $userId,
+                        'username'   => $username,
                     ]);
                 } else {
-                    $llm->processTrigger('mention', [
-                        'message' => $message, 
-                        'message_id' => $newMsgId === true ? null : $newMsgId,
-                        'quoted_msg_ids' => $quotedMsgIds
+                    BotDispatch::dispatch('mention', [
+                        'message'        => $message,
+                        'message_id'     => $mid,
+                        'quoted_msg_ids' => $quotedMsgIds,
+                        'user_id'        => $userId,
+                        'username'       => $username,
                     ]);
                 }
 
