@@ -735,6 +735,12 @@ try {
                     $config->setOption($k, max(0, (int)$_POST[$k]));
                 }
             }
+            if (isset($_POST['ai_send_images'])) {
+                $config->setOption('ai_send_images', (int)$_POST['ai_send_images']);
+            }
+            if (isset($_POST['ai_public_base_url'])) {
+                $config->setOption('ai_public_base_url', trim($_POST['ai_public_base_url']));
+            }
 
             // SMTP Settings
             if (isset($_POST['smtp_enabled'])) {

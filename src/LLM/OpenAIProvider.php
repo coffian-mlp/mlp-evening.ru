@@ -26,6 +26,9 @@ class OpenAIProvider implements LLMProviderInterface {
         
         $messages = array_merge($messages, $messagesContext);
 
+        require_once __DIR__ . '/VisionFormatter.php';
+        $messages = VisionFormatter::maybeExpand($messages); // vision: развернуть картинки в image_url
+
         $data = [
             'model' => $this->model,
             'messages' => $messages,

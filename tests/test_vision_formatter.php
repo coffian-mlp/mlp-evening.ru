@@ -1,0 +1,48 @@
+<?php
+/**
+ * Юнит-тест VisionFormatter::expand() — разворачивание картинок чата в мультимодальный формат.
+ * Запуск: php tests/test_vision_formatter.php
+ */
+
+require_once __DIR__ . '/../src/LLM/VisionFormatter.php';
+
+$fail = 0;
+function check($cond, $label) {
+    global $fail;
+    echo ($cond ? "  [OK] " : "  [FAIL] ") . $label . "\n";
+    if (!$cond) $fail++;
+}
+
+$base = 'https://mlp-evening.ru';
+
+echo "== Сообщение с картинкой -> мультимодальный content ==\n";
+$in = [['role' => 'user', 'content' => '[15:00] CoFFian: @Lyra ![изображение.png](/upload/chat/chat_abc.png) - что тут?']];
+$out = VisionFormatter::expand($in, $base);
+$c = $out[0]['content'];
+check(is_array($c), 'content стал массивом (мультимодальный)');
+check($c[0]['type'] === 'text' && strpos($c[0]['text'], 'что тут?') !== false, 'текст сохранён (без markdown-картинки)');
+check(strpos($c[0]['text'], '![') === false, 'markdown-картинка убрана из текста');
+$img = end($c);
+check($img['type'] === 'image_url', 'есть часть image_url');
+check($img['image_url']['url'] === 'https://mlp-evening.ru/upload/chat/chat_abc.png', 'относительный путь -> абсолютный URL');
+
+echo "\n== Абсолютный URL картинки не трогаем (кроме оборачивания) ==\n";
+$out = VisionFormatter::expand([['role'=>'user','content'=>'![x](https://example.com/pic.jpg)']], $base);
+check(end($out[0]['content'])['image_url']['url'] === 'https://example.com/pic.jpg', 'абсолютный URL сохранён как есть');
+
+echo "\n== Без картинок — не меняем ==\n";
+$in = [['role' => 'assistant', 'content' => '[15:01] Lyra: привет!']];
+$out = VisionFormatter::expand($in, $base);
+check($out[0]['content'] === '[15:01] Lyra: привет!', 'обычный текст остаётся строкой');
+
+echo "\n== Не-картиночная ссылка игнорируется ==\n";
+$out = VisionFormatter::expand([['role'=>'user','content'=>'смотри [док](/upload/chat/file.pdf)']], $base);
+check($out[0]['content'] === 'смотри [док](/upload/chat/file.pdf)', 'обычная ссылка (не ![], не картинка) не трогается');
+
+echo "\n== Только картинка, без текста ==\n";
+$out = VisionFormatter::expand([['role'=>'user','content'=>'![](/upload/chat/x.gif)']], $base);
+$c = $out[0]['content'];
+check(is_array($c) && count($c) === 1 && $c[0]['type'] === 'image_url', 'только image_url, без пустого текста');
+
+echo "\n" . ($fail === 0 ? "ALL PASS\n" : "FAILURES: $fail\n");
+exit($fail === 0 ? 0 : 1);
