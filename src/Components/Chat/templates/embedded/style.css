@@ -479,10 +479,29 @@
 
 /* Responsive Trigger */
 @media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
-    .chat-input-area { display: none; } /* Hide standard input */
-    .chat-mobile-fab { display: flex; } /* Show FAB */
-    .chat-messages { padding-bottom: 80px; } /* Space for FAB */
-    
+    /* Мобильный ввод теперь как на десктопе: постоянная нижняя панель, без FAB/модалки */
+    .chat-mobile-fab,
+    #chat-mobile-input-overlay { display: none !important; }
+
+    .chat-input-area { padding: 8px 10px; }
+
+    /* Тулбар форматирования: горизонтальный скролл, чтобы все кнопки влезали */
+    .chat-toolbar {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .chat-toolbar::-webkit-scrollbar { display: none; }
+    .chat-format-btn { flex-shrink: 0; }
+
+    /* 16px — чтобы iOS не зумил страницу при фокусе ввода; удобные тач-таргеты */
+    #chat-input { font-size: 16px; }
+    #chat-form button[type="submit"] { width: 40px; height: 40px; }
+
+    /* Стикер-пикер во всю ширину над вводом */
+    .sticker-picker { width: 100% !important; left: 0 !important; }
+
     /* Mobile Image Fix */
     .chat-img {
         max-height: 200px;
