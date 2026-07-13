@@ -73,6 +73,15 @@ class Auth {
         }
     }
 
+    /** Гейт админского API-действия (AR-1, MLP-226). Заменяет копипаст isAdmin-проверок. */
+    public static function requireApiAdmin() {
+        if (!self::isAdmin()) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Access Denied', 'type' => 'error']);
+            exit();
+        }
+    }
+
     public static function login($login, $password) {
         self::ensureSession();
 

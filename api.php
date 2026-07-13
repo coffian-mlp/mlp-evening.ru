@@ -620,7 +620,7 @@ try {
 
     switch ($action) {
         case 'update_settings':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             $config = ConfigManager::getInstance();
             
             // --- System Settings ---
@@ -772,13 +772,13 @@ try {
             break;
 
         case 'regenerate_playlist':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             $playlist = $manager->regeneratePlaylist();
             sendResponse(true, "🎲 Новый плейлист успешно сгенерирован и сохранен!", 'success', ['reload' => true]);
             break;
 
         case 'vote':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             if (!empty($_POST['episode_id'])) {
                 $manager->voteForEpisode($_POST['episode_id']);
                 sendResponse(true, "✅ Голос за эпизод #{$_POST['episode_id']} принят!");
@@ -788,7 +788,7 @@ try {
             break;
 
         case 'mark_watched':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             if (!empty($_POST['ids'])) {
                 $ids = explode(',', $_POST['ids']);
                 $ids = array_filter($ids, 'is_numeric');
@@ -806,19 +806,19 @@ try {
             break;
 
         case 'clear_votes':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             $manager->clearWannaWatch();
             sendResponse(true, "🗑️ Все голоса (Wanna Watch) сброшены.");
             break;
 
         case 'reset_times_watched':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             $manager->resetTimesWatched();
             sendResponse(true, "🔄 Счетчики просмотров (TIMES_WATCHED) сброшены!");
             break;
 
         case 'clear_watching_log':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             $manager->clearWatchingNowLog();
             sendResponse(true, "🗑️ Лог истории просмотров очищен.");
             break;
@@ -830,7 +830,7 @@ try {
 
         // --- User Management (Admin Only) ---
         case 'get_users':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             
             $userManager = new UserManager();
             $users = $userManager->getAllUsers(); // Now returns users with chat_color and avatar_url joined
@@ -838,7 +838,7 @@ try {
             break;
 
         case 'get_user_options':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             
             $targetUserId = (int)($_POST['user_id'] ?? 0);
             if (!$targetUserId) sendResponse(false, "ID не указан", 'error');
@@ -850,7 +850,7 @@ try {
             break;
 
         case 'get_audit_logs':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             
             $userManager = new UserManager();
             $logs = $userManager->getAuditLogs();
@@ -910,7 +910,7 @@ try {
             break;
 
         case 'save_user':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             
             $userManager = new UserManager();
             $id = $_POST['user_id'] ?? ''; 
@@ -988,7 +988,7 @@ try {
             break;
 
         case 'delete_user':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             
             $id = $_POST['user_id'] ?? '';
             if (empty($id)) sendResponse(false, "ID не указан", 'error');
@@ -1358,7 +1358,7 @@ try {
             break;
 
         case 'create_pack':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             $code = trim($_POST['code'] ?? '');
             $name = trim($_POST['name'] ?? '');
             $iconUrl = null;
@@ -1384,7 +1384,7 @@ try {
             break;
 
         case 'update_pack':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             $id = (int)($_POST['id'] ?? 0);
             $code = trim($_POST['code'] ?? '');
             $name = trim($_POST['name'] ?? '');
@@ -1411,7 +1411,7 @@ try {
             break;
 
         case 'delete_pack':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             $id = (int)($_POST['id'] ?? 0);
             if (!$id) sendResponse(false, "ID не указан", 'error');
             
@@ -1430,7 +1430,7 @@ try {
             break;
 
         case 'add_sticker':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             
             $code = trim($_POST['code'] ?? '');
             $packId = (int)($_POST['pack_id'] ?? 0);
@@ -1463,7 +1463,7 @@ try {
             break;
 
         case 'import_zip_stickers':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             
             $packId = (int)($_POST['pack_id'] ?? 0);
             if (!$packId) sendResponse(false, "Пак не выбран", 'error');
@@ -1484,7 +1484,7 @@ try {
             break;
 
         case 'delete_sticker':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             
             $id = (int)($_POST['id'] ?? 0);
             if (!$id) sendResponse(false, "ID не указан", 'error');
@@ -1498,7 +1498,7 @@ try {
             break;
             
         case 'save_event':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             
             $id = (int)($_POST['id'] ?? 0);
             $title = trim($_POST['title'] ?? '');
@@ -1553,7 +1553,7 @@ try {
             break;
 
         case 'delete_event':
-            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
+            Auth::requireApiAdmin();
             
             $id = (int)($_POST['id'] ?? 0);
             if (!$id) sendResponse(false, "ID не указан", 'error');
