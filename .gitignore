@@ -13,3 +13,8 @@ scripts/
 .cursorrules
 AIDD_PROCESS.md
 CLAUDE.md
+
+# AIDD: слой знаний и профили проекта (локальные, не коммитим)
+dev_knowledge/
+PROJECT_PROFILE.md
+USER_PROJECT_PROFILE.md
