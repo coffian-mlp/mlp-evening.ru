@@ -1,0 +1,12 @@
+{
+  "name": "mlp-evening-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "E2E/API-тесты (Playwright) для mlp-evening.ru. Основной проект — PHP; JS нужен только для тестов.",
+  "scripts": {
+    "test:e2e": "playwright test -c tests/playwright/playwright.config.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
+  }
+}
