@@ -6,6 +6,8 @@ playwright-report/
 # Боевые конфиги (создаются из *.sample.*, содержат секреты — не коммитим)
 config.php
 centrifugo_config.json
+# VLESS/Xray: бинарники и конфиг с секретами — НЕ коммитим (провижн вне git), см. MLP-221
+src/LLM/bin/
 # Локальная рабочая копия дампа, если делается из database.sample.sql
 database.sql
 coffian_eplist.sql
