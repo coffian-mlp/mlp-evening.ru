@@ -51,7 +51,8 @@ class DbAdminComponent extends Component {
                 $this->result['tables'][] = $row[0];
             }
         } catch (\Exception $e) {
-            $this->result['error'] = "Ошибка получения списка таблиц: " . $e->getMessage();
+            error_log('DbAdmin tables: ' . $e->getMessage());
+            $this->result['error'] = "Ошибка получения списка таблиц.";
         }
 
         // 2. View Specific Table
@@ -203,7 +204,8 @@ class DbAdminComponent extends Component {
                 throw new \Exception("Execute failed: " . $stmt->error);
             }
         } catch (\Exception $e) {
-            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+            error_log('DbAdmin updateRow: ' . $e->getMessage());
+            echo json_encode(['success' => false, 'message' => 'Ошибка сохранения строки.']);
         }
     }
 

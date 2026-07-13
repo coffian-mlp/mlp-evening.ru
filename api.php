@@ -26,7 +26,9 @@ header('Content-Type: application/json');
 register_shutdown_function(function() {
     $error = error_get_last();
     if ($error && ($error['type'] === E_ERROR || $error['type'] === E_PARSE)) {
-        echo json_encode(['success' => false, 'message' => 'Fatal Error: ' . $error['message'], 'type' => 'error']);
+        // L1: детали — в лог, наружу — общий текст (не раскрываем внутренности)
+        error_log('api.php fatal: ' . $error['message'] . ' @ ' . $error['file'] . ':' . $error['line']);
+        echo json_encode(['success' => false, 'message' => 'Внутренняя ошибка сервера.', 'type' => 'error']);
     }
 });
 
@@ -1594,5 +1596,7 @@ try {
     }
 
 } catch (Exception $e) {
-    sendResponse(false, "💥 Ошибка сервера: " . $e->getMessage(), 'error');
+    // L1: детали — в лог, наружу — общий текст
+    error_log('api.php exception: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+    sendResponse(false, "💥 Ошибка сервера. Попробуйте позже.", 'error');
 }

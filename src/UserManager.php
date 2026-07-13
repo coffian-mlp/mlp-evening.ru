@@ -201,7 +201,8 @@ class UserManager {
             $stmt->bind_param($types, ...$params);
             
             if (!$stmt->execute()) {
-                throw new Exception("Ошибка обновления: " . $stmt->error);
+                error_log('UserManager updateUser: ' . $stmt->error); // L1: деталь в лог
+                throw new Exception("Ошибка обновления данных пользователя.");
             }
             $success = true;
         }

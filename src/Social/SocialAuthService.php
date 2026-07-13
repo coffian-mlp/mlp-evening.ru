@@ -62,6 +62,7 @@ class SocialAuthService {
                 }
 
                 // Вход
+                Auth::regenerateSession(); // M1: защита от session fixation
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['login'];
                 $_SESSION['role'] = $user['role'];
@@ -88,6 +89,7 @@ class SocialAuthService {
             
             // Сразу логиним
             $user = $this->userManager->getUserById($newUserId);
+            Auth::regenerateSession(); // M1: защита от session fixation
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['username'] = $user['login'];
             $_SESSION['role'] = $user['role'];

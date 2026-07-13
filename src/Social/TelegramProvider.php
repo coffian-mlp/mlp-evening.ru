@@ -44,15 +44,15 @@ class TelegramProvider implements SocialProvider {
         $secretKey = hash('sha256', $this->botToken, true);
         $hash = hash_hmac('sha256', $dataCheckString, $secretKey);
 
-        // 4. Сравниваем
-        if (strcmp($hash, $checkHash) !== 0) {
+        // 4. Сравниваем (timing-safe, L2)
+        if (!hash_equals($hash, (string)$checkHash)) {
             error_log("TelegramProvider: Hash mismatch!");
             return null;
         }
 
-        // 5. Проверяем актуальность (auth_date) - чтобы не подсунули старый запрос
-        if ((time() - $data['auth_date']) > 86400) {
-            error_log("TelegramProvider: Data is outdated!");
+        // 5. Проверяем актуальность (auth_date) - чтобы не подсунули старый запрос (L2: guard isset)
+        if (!isset($data['auth_date']) || (time() - (int)$data['auth_date']) > 86400) {
+            error_log("TelegramProvider: Data is outdated or auth_date missing!");
             return null;
         }
 

@@ -3,10 +3,38 @@
 require_once __DIR__ . '/Database.php';
 
 class Auth {
-    public static function check() {
+    /**
+     * Единая точка старта сессии с безопасными cookie-параметрами (MLP-222, M1).
+     * HttpOnly + SameSite=Lax всегда; Secure — только на HTTPS (чтобы не сломать локальный HTTP).
+     */
+    private static function ensureSession() {
         if (session_status() === PHP_SESSION_NONE) {
+            session_set_cookie_params([
+                'lifetime' => 0,
+                'path'     => '/',
+                'httponly' => true,
+                'samesite' => 'Lax',
+                'secure'   => self::isSecureRequest(),
+            ]);
             session_start();
         }
+    }
+
+    private static function isSecureRequest() {
+        if (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off') {
+            return true;
+        }
+        return isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https';
+    }
+
+    /** Смена ID сессии после аутентификации — защита от session fixation (MLP-222, M1). */
+    public static function regenerateSession() {
+        self::ensureSession();
+        session_regenerate_id(true);
+    }
+
+    public static function check() {
+        self::ensureSession();
         return isset($_SESSION['user_id']);
     }
 
@@ -46,9 +74,7 @@ class Auth {
     }
 
     public static function login($login, $password) {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
+        self::ensureSession();
 
         $db = Database::getInstance()->getConnection();
         
@@ -59,6 +85,7 @@ class Auth {
 
         if ($res && $row = $res->fetch_assoc()) {
             if (password_verify($password, $row['password_hash'])) {
+                session_regenerate_id(true); // M1: защита от session fixation
                 $_SESSION['user_id'] = $row['id'];
                 // Теперь используем nickname для отображения!
                 $_SESSION['username'] = !empty($row['nickname']) ? $row['nickname'] : $row['login'];
@@ -74,16 +101,12 @@ class Auth {
     }
 
     public static function logout() {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
+        self::ensureSession();
         session_destroy();
     }
 
     public static function generateCsrfToken() {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
+        self::ensureSession();
         if (empty($_SESSION['csrf_token'])) {
             $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         }
@@ -91,9 +114,7 @@ class Auth {
     }
 
     public static function checkCsrfToken($token) {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
+        self::ensureSession();
         if (empty($_SESSION['csrf_token']) || empty($token)) {
             return false;
         }

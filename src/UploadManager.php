@@ -148,18 +148,26 @@ class UploadManager {
              throw new Exception("Некорректная ссылка.");
         }
 
+        // SSRF-защита (MLP-222, M3): только http/https, запрет внутренних адресов.
+        $this->assertSafeUrl($url);
+
+        // Контекст без следования редиректам — чтобы редирект не увёл на внутренний адрес.
+        $noRedirect = ['http' => [
+            'timeout'         => 5,
+            'follow_location' => 0,
+            'max_redirects'   => 0,
+        ]];
+
         // Пытаемся получить заголовки
-        $context = stream_context_create(['http' => ['method' => 'HEAD']]);
+        $context = stream_context_create(['http' => ['method' => 'HEAD', 'follow_location' => 0, 'max_redirects' => 0, 'timeout' => 5]]);
         $headers = @get_headers($url, 1, $context);
-        
+
         if (!$headers || strpos($headers[0], '200') === false) {
              throw new Exception("Не удалось получить доступ к файлу по ссылке.");
         }
 
-        // Скачиваем контент
-        $content = @file_get_contents($url, false, stream_context_create([
-            'http' => ['timeout' => 5] // Таймаут 5 сек
-        ]));
+        // Скачиваем контент (с ограничением объёма чтения, без редиректов)
+        $content = @file_get_contents($url, false, stream_context_create($noRedirect), 0, $this->maxSize + 1);
 
         if ($content === false) {
             throw new Exception("Ошибка загрузки файла по ссылке.");
@@ -198,5 +206,44 @@ class UploadManager {
         else $relDir = '/upload/avatars/';
         
         return $relDir . $filename;
+    }
+
+    /**
+     * SSRF-защита (MLP-222, M3): только http/https + запрет внутренних адресов.
+     * Резолвит хост и отклоняет приватные/зарезервированные/loopback/link-local IP
+     * (включая 169.254.169.254 — cloud metadata).
+     */
+    private function assertSafeUrl($url) {
+        $parts = parse_url($url);
+        if (!$parts || empty($parts['scheme']) || empty($parts['host'])) {
+            throw new Exception("Некорректная ссылка.");
+        }
+        $scheme = strtolower($parts['scheme']);
+        if ($scheme !== 'http' && $scheme !== 'https') {
+            throw new Exception("Разрешены только http/https ссылки.");
+        }
+        $host = $parts['host'];
+
+        $ips = [];
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            $ips[] = $host;
+        } else {
+            $v4 = gethostbynamel($host);
+            if ($v4) $ips = array_merge($ips, $v4);
+            $aaaa = @dns_get_record($host, DNS_AAAA);
+            if ($aaaa) {
+                foreach ($aaaa as $r) {
+                    if (!empty($r['ipv6'])) $ips[] = $r['ipv6'];
+                }
+            }
+        }
+        if (empty($ips)) {
+            throw new Exception("Не удалось разрешить адрес ссылки.");
+        }
+        foreach ($ips as $ip) {
+            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                throw new Exception("Ссылка ведёт на внутренний адрес — запрещено.");
+            }
+        }
     }
 }
