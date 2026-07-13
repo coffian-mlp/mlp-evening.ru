@@ -331,3 +331,16 @@ INSERT IGNORE INTO `bot_commands` (`command_prefix`, `description`, `handler_typ
 -- Добавляем алиас /расписание
 INSERT IGNORE INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`) VALUES
 ('/расписание', 'Алиас расписания', 'schedule', 'То же, что и /schedule', 1);
+
+-- MLP-223 (remember-me): persistent-token «запомнить меня». См. migrations/2026_07_auth_tokens.sql
+CREATE TABLE IF NOT EXISTS `auth_tokens` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `selector` CHAR(24) NOT NULL,
+    `validator_hash` CHAR(64) NOT NULL,
+    `user_id` INT NOT NULL,
+    `expires_at` DATETIME NOT NULL,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY `uniq_selector` (`selector`),
+    INDEX `idx_user` (`user_id`),
+    INDEX `idx_expires` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -66,6 +66,7 @@ class SocialAuthService {
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['login'];
                 $_SESSION['role'] = $user['role'];
+                Auth::issueRememberToken($user['id']); // соц-вход = «запомнить меня» включён (MLP-223)
             }
             
             // Обновляем инфо в user_socials (вдруг сменил ник/аву)
@@ -93,6 +94,7 @@ class SocialAuthService {
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['username'] = $user['login'];
             $_SESSION['role'] = $user['role'];
+            Auth::issueRememberToken($user['id']); // соц-вход = «запомнить меня» включён (MLP-223)
             
             return ['success' => true, 'message' => 'Добро пожаловать, новый пони!', 'redirect' => '/'];
             

@@ -111,7 +111,110 @@ class Auth {
 
     public static function logout() {
         self::ensureSession();
+        // remember-me: удаляем токен и cookie (MLP-223)
+        if (!empty($_COOKIE[self::REMEMBER_COOKIE])) {
+            $selector = explode(':', $_COOKIE[self::REMEMBER_COOKIE], 2)[0];
+            if ($selector) self::deleteRememberToken($selector);
+            self::clearRememberCookie();
+        }
         session_destroy();
+    }
+
+    // --- Remember-me (persistent token, MLP-223) ---
+    const REMEMBER_COOKIE = 'mlp_remember';
+    const REMEMBER_TTL = 2592000; // 30 дней
+
+    /** Выдать remember-токен: строка в auth_tokens + cookie "<selector>:<validator>". */
+    public static function issueRememberToken($userId) {
+        $selector  = bin2hex(random_bytes(12));   // 24 hex
+        $validator = bin2hex(random_bytes(32));   // 64 hex
+        $hash      = hash('sha256', $validator);
+        $expires   = gmdate('Y-m-d H:i:s', time() + self::REMEMBER_TTL);
+
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->prepare("INSERT INTO auth_tokens (selector, validator_hash, user_id, expires_at) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("ssis", $selector, $hash, $userId, $expires);
+        $stmt->execute();
+
+        self::setRememberCookie($selector . ':' . $validator, time() + self::REMEMBER_TTL);
+    }
+
+    /** Авто-вход по remember-cookie, если активной сессии нет. Ротирует токен (sliding expiry). */
+    public static function tryRememberLogin() {
+        if (self::check()) return;                       // уже вошёл
+        if (empty($_COOKIE[self::REMEMBER_COOKIE])) return;
+
+        $parts = explode(':', $_COOKIE[self::REMEMBER_COOKIE], 2);
+        if (count($parts) !== 2 || $parts[0] === '' || $parts[1] === '') {
+            self::clearRememberCookie();
+            return;
+        }
+        list($selector, $validator) = $parts;
+
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->prepare("SELECT validator_hash, user_id, expires_at FROM auth_tokens WHERE selector = ?");
+        $stmt->bind_param("s", $selector);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+
+        if (!$row) { self::clearRememberCookie(); return; }
+        if (strtotime($row['expires_at'] . ' UTC') < time()) {
+            self::deleteRememberToken($selector); self::clearRememberCookie(); return;
+        }
+        if (!hash_equals($row['validator_hash'], hash('sha256', $validator))) {
+            // невалидный validator при валидном selector — токен скомпрометирован/устарел
+            self::deleteRememberToken($selector); self::clearRememberCookie(); return;
+        }
+
+        $user = self::fetchUserForSession((int)$row['user_id']);
+        if (!$user) { self::deleteRememberToken($selector); self::clearRememberCookie(); return; }
+
+        // Устанавливаем сессию (с регенерацией id).
+        self::regenerateSession();
+        $_SESSION['user_id']  = $user['id'];
+        $_SESSION['username'] = !empty($user['nickname']) ? $user['nickname'] : $user['login'];
+        $_SESSION['role']     = $user['role'];
+        self::generateCsrfToken();
+
+        // Ротация: старый токен недействителен, выдаём новый с продлённым сроком.
+        self::deleteRememberToken($selector);
+        self::issueRememberToken($user['id']);
+    }
+
+    private static function fetchUserForSession($userId) {
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->prepare("SELECT id, login, nickname, role, is_banned FROM users WHERE id = ?");
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $u = $stmt->get_result()->fetch_assoc();
+        if (!$u || $u['is_banned']) return null; // забаненных не авто-логиним
+        return $u;
+    }
+
+    private static function deleteRememberToken($selector) {
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->prepare("DELETE FROM auth_tokens WHERE selector = ?");
+        $stmt->bind_param("s", $selector);
+        $stmt->execute();
+    }
+
+    private static function setRememberCookie($value, $expires) {
+        setcookie(self::REMEMBER_COOKIE, $value, [
+            'expires'  => $expires,
+            'path'     => '/',
+            'httponly' => true,
+            'samesite' => 'Lax',
+            'secure'   => self::isSecureRequest(),
+        ]);
+        $_COOKIE[self::REMEMBER_COOKIE] = $value;
+    }
+
+    private static function clearRememberCookie() {
+        setcookie(self::REMEMBER_COOKIE, '', [
+            'expires' => time() - 3600, 'path' => '/', 'httponly' => true,
+            'samesite' => 'Lax', 'secure' => self::isSecureRequest(),
+        ]);
+        unset($_COOKIE[self::REMEMBER_COOKIE]);
     }
 
     public static function generateCsrfToken() {

@@ -21,7 +21,10 @@
                     <button type="button" class="password-toggle-btn">👁️</button>
                 </div>
             </div>
-                <div style="text-align: right; margin-bottom: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <label style="font-size: 0.9em; cursor: pointer; user-select: none;">
+                        <input type="checkbox" name="remember" value="1" checked> Запомнить меня
+                    </label>
                     <a href="#" onclick="showForgotForm(event)" class="forgot-link">Забыли пароль?</a>
                 </div>
                 <button type="submit" class="btn-primary btn-block">Войти</button>

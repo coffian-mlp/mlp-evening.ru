@@ -20,6 +20,7 @@ require_once __DIR__ . '/src/CentrifugoService.php';
 
 // 4. Инициализация сессии
 Auth::check();
+Auth::tryRememberLogin(); // remember-me: авто-вход по cookie, если сессии нет (MLP-223)
 
 // 5. Инициализация приложения
 global $app;

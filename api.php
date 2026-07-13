@@ -329,7 +329,12 @@ try {
 
          if (Auth::login($username, $password)) {
              Auth::resetLoginAttempts($ip); // Reset on success
-             
+
+             // remember-me: выдаём долгоживущий токен, если отмечена галка (MLP-223)
+             if (!empty($_POST['remember'])) {
+                 Auth::issueRememberToken($_SESSION['user_id']);
+             }
+
              // Отправляем ответ клиенту
              $responseJson = json_encode([
                  'success' => true,
