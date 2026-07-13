@@ -735,6 +735,41 @@ class ChatManager {
         return $this->processMessages(array_reverse($messages)); 
     }
 
+    /**
+     * Инкремент для SSE (MLP-224, R1): новые сообщения (id > $lastId) + изменённые
+     * (отредактированные/удалённые) с момента $since. Хронологический порядок.
+     * Форма строк идентична getMessages().
+     */
+    public function getMessagesAfter($lastId, $since) {
+        $lastId = (int)$lastId;
+
+        $sql = "SELECT cm.*,
+                 COALESCE(NULLIF(u.nickname, ''), u.login, cm.username) as username,
+                 u.role,
+                 uo_color.option_value as chat_color,
+                 uo_avatar.option_value as avatar_url
+          FROM chat_messages cm
+          LEFT JOIN users u ON cm.user_id = u.id
+          LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
+          LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
+          WHERE cm.id > ? OR cm.edited_at > ? OR cm.deleted_at > ?
+          ORDER BY cm.id ASC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->bind_param("iss", $lastId, $since, $since);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $messages = [];
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                if (empty($row['chat_color'])) $row['chat_color'] = '#6d2f8e';
+                $messages[] = $row;
+            }
+        }
+        return $this->processMessages($messages);
+    }
+
     public function getMessagesContext($messageId, $radius = 20) {
         $messageId = (int)$messageId;
         $radius = (int)$radius;
