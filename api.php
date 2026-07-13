@@ -770,11 +770,13 @@ try {
             break;
 
         case 'regenerate_playlist':
+            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
             $playlist = $manager->regeneratePlaylist();
             sendResponse(true, "🎲 Новый плейлист успешно сгенерирован и сохранен!", 'success', ['reload' => true]);
             break;
 
         case 'vote':
+            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
             if (!empty($_POST['episode_id'])) {
                 $manager->voteForEpisode($_POST['episode_id']);
                 sendResponse(true, "✅ Голос за эпизод #{$_POST['episode_id']} принят!");
@@ -784,6 +786,7 @@ try {
             break;
 
         case 'mark_watched':
+            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
             if (!empty($_POST['ids'])) {
                 $ids = explode(',', $_POST['ids']);
                 $ids = array_filter($ids, 'is_numeric');
@@ -801,16 +804,19 @@ try {
             break;
 
         case 'clear_votes':
+            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
             $manager->clearWannaWatch();
             sendResponse(true, "🗑️ Все голоса (Wanna Watch) сброшены.");
             break;
 
         case 'reset_times_watched':
+            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
             $manager->resetTimesWatched();
             sendResponse(true, "🔄 Счетчики просмотров (TIMES_WATCHED) сброшены!");
             break;
 
         case 'clear_watching_log':
+            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
             $manager->clearWatchingNowLog();
             sendResponse(true, "🗑️ Лог истории просмотров очищен.");
             break;
