@@ -618,6 +618,7 @@ try {
 
     switch ($action) {
         case 'update_settings':
+            if (!Auth::isAdmin()) sendResponse(false, "Access Denied", 'error');
             $config = ConfigManager::getInstance();
             
             // --- System Settings ---

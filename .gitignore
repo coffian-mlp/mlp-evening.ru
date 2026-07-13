@@ -1,3 +1,8 @@
+# Node/Playwright (тесты гоняются через npx, локальные зависимости не коммитим)
+node_modules/
+test-results/
+playwright-report/
+
 # Боевые конфиги (создаются из *.sample.*, содержат секреты — не коммитим)
 config.php
 centrifugo_config.json
