@@ -16,6 +16,7 @@ require_once __DIR__ . '/src/EpisodeManager.php';
 require_once __DIR__ . '/src/Auth.php';
 require_once __DIR__ . '/src/ChatManager.php';
 require_once __DIR__ . '/src/UserManager.php';
+require_once __DIR__ . '/src/BotCommandManager.php';
 require_once __DIR__ . '/src/StickerManager.php';
 require_once __DIR__ . '/src/UploadManager.php';
 require_once __DIR__ . '/src/Mailer.php'; // Подключаем Mailer
@@ -1234,23 +1235,12 @@ try {
                 $db = Database::getInstance()->getConnection();
                 $matchedCommand = null;
 
-                // Проверяем, существует ли таблица bot_commands (на случай, если миграция еще не прошла)
-                $tableExists = $db->query("SHOW TABLES LIKE 'bot_commands'")->num_rows > 0;
-                if ($tableExists) {
-                    $res = $db->query("SELECT * FROM bot_commands WHERE is_active = 1");
-                    if ($res) {
-                        while ($row = $res->fetch_assoc()) {
-                            $cleanPrefix = ltrim($row['command_prefix'], '/');
-                            // Разрешаем писать команду с или без слеша (например: "schedule" или "/schedule")
-                            $msgPattern = '/^\/?' . preg_quote($cleanPrefix, '/') . '(?:\s|$)/ui';
-                            if (preg_match($msgPattern, trim($message))) {
-                                $matchedCommand = $row;
-                                break;
-                            }
-                        }
-                    }
+                // A3 (MLP-228): активные команды читаем через владельца таблицы.
+                $botCommands = new BotCommandManager();
+                if ($botCommands->isAvailable()) {
+                    $matchedCommand = BotCommandManager::matchCommand($botCommands->getActive(), $message);
                 } else {
-                    // Fallback, если таблицы еще нет
+                    // Fallback, если таблицы ещё нет (миграция не прогнана)
                     if (preg_match('/^\/?(schedule|расписание)/ui', $message)) {
                         $matchedCommand = ['handler_type' => 'schedule'];
                     }

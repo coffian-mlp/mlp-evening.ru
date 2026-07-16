@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../ConfigManager.php';
 require_once __DIR__ . '/../Database.php';
+require_once __DIR__ . '/../BotCommandManager.php';
 require_once __DIR__ . '/LLMManager.php';
 require_once __DIR__ . '/JobQueue.php';
 require_once __DIR__ . '/ReplyPolicy.php';
@@ -19,12 +20,14 @@ class BotWorker {
     private $db;
     private $queue;
     private $llm;
+    private $commands;
 
     public function __construct() {
-        $this->config = ConfigManager::getInstance();
-        $this->db     = Database::getInstance()->getConnection();
-        $this->queue  = new JobQueue();
-        $this->llm    = new LLMManager();
+        $this->config   = ConfigManager::getInstance();
+        $this->db       = Database::getInstance()->getConnection();
+        $this->queue    = new JobQueue();
+        $this->llm      = new LLMManager();
+        $this->commands = new BotCommandManager();
     }
 
     /** Один цикл: реактив → проактив → heartbeat. Под общим локом «один голос». */
@@ -250,10 +253,7 @@ class BotWorker {
     }
 
     private function scheduleCommandRow(): array {
-        $res = $this->db->query("SELECT * FROM bot_commands WHERE handler_type='schedule' AND is_active=1 LIMIT 1");
-        if ($res && $row = $res->fetch_assoc()) {
-            return $row;
-        }
-        return ['handler_type' => 'schedule', 'system_prompt' => ''];
+        return $this->commands->getScheduleCommand()
+            ?? ['handler_type' => 'schedule', 'system_prompt' => ''];
     }
 }
