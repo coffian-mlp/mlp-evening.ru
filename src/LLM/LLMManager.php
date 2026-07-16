@@ -246,8 +246,15 @@ class LLMManager {
             }
         } elseif ($triggerType === 'dynamic_command') {
             $command = $contextData['command'] ?? ['handler_type' => 'text', 'system_prompt' => ''];
+
+            // Опрос: бот генерирует вопрос+варианты и создаёт опрос (MLP-240). Отдельный путь —
+            // вывод структурированный (не обычная реплика), поэтому не идём в общий постинг ниже.
+            if ($command['handler_type'] === 'poll') {
+                return $this->createPollFromCommand($command, $contextData);
+            }
+
             $context = $this->buildContext(24);
-            
+
             if ($command['handler_type'] === 'schedule') {
                 $now = time();
                 // AR3-1: recurrence-раскрытие — единая точка в EventManager.
@@ -321,6 +328,66 @@ class LLMManager {
         }
 
         return false;
+    }
+
+    /**
+     * Бот генерирует и создаёт опрос по команде (MLP-240). Возвращает true при успехе.
+     * Просит модель выдать вопрос + варианты построчно, парсит и создаёт через PollManager,
+     * затем постит карточку [[poll:id]] в чат от имени бота (появляется через realtime чата).
+     */
+    private function createPollFromCommand($command, $contextData): bool {
+        require_once __DIR__ . '/../PollManager.php';
+
+        $topic = trim($contextData['message'] ?? '');
+        $context = $this->buildContext(16);
+        $instruction = "\n\n" . ($command['system_prompt'] ?: "Придумай уместный опрос для чата.")
+            . "\n\nТЫ СОЗДАЁШЬ ОПРОС."
+            . ($topic !== '' ? "\nЗапрос пользователя: " . $topic : "\nТема не задана — придумай уместную по последним сообщениям чата.")
+            . "\n\nФОРМАТ ОТВЕТА СТРОГО (без markdown, без нумерации, без пояснений):\n"
+            . "Первая строка — вопрос опроса.\n"
+            . "Каждая следующая строка — один вариант ответа. Ровно 2–5 вариантов, по одному на строку.";
+        $context[] = [
+            'role' => 'user',
+            'content' => "[Система] Сгенерируй опрос строго в заданном формате." . $instruction,
+        ];
+
+        $raw = $this->askWithFallback($context, $this->systemPrompt);
+        $parsed = self::parsePoll($raw);
+        if (!$parsed) {
+            error_log('createPollFromCommand: не удалось распарсить опрос из ответа модели');
+            return false;
+        }
+
+        $pm = new \PollManager();
+        $pollId = $pm->create($this->botUserId, $parsed['question'], $parsed['options'], false, false);
+        if (!$pollId) return false;
+
+        $msgId = $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(), '[[poll:' . $pollId . ']]');
+        if ($msgId) $pm->attachMessage($pollId, (int)$msgId);
+        return true;
+    }
+
+    /**
+     * Pure: разобрать ответ модели в опрос. Первая непустая строка — вопрос,
+     * остальные — варианты (чистим возможную нумерацию/маркеры), 2–10 штук.
+     * null, если вопроса + минимум 2 вариантов не набралось.
+     */
+    public static function parsePoll(?string $raw): ?array {
+        if (!$raw) return null;
+        $lines = [];
+        foreach (explode("\n", $raw) as $l) {
+            $l = trim($l);
+            if ($l !== '') $lines[] = $l;
+        }
+        if (count($lines) < 3) return null; // вопрос + минимум 2 варианта
+        $question = array_shift($lines);
+        $options = array_map(function ($l) {
+            return trim(preg_replace('/^\s*(?:\d+[\.\)]|[-*•])\s*/u', '', $l));
+        }, $lines);
+        $options = array_values(array_filter($options, fn($o) => $o !== ''));
+        $options = array_slice($options, 0, 10);
+        if (count($options) < 2) return null;
+        return ['question' => $question, 'options' => $options];
     }
 
     private function askWithFallback($context, $prompt) {
