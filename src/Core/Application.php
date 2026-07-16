@@ -70,13 +70,23 @@ class Application {
         echo '<!-- APP_HEAD_STRINGS -->';
     }
     
+    /**
+     * Версия ассета для cache-busting: mtime файла вместо time() (A10).
+     * time() менял query на каждый запрос → браузерный кеш был фактически выключен.
+     * mtime меняется только при изменении файла — кеш работает, но сбрасывается при деплое.
+     */
+    private function assetVersion($path) {
+        $file = ($_SERVER['DOCUMENT_ROOT'] ?? '') . $path;
+        return is_file($file) ? filemtime($file) : time();
+    }
+
     public function finalize() {
         $content = ob_get_clean();
-        
+
         $headHtml = '';
         // Вывод CSS
         foreach ($this->css as $path) {
-            $headHtml .= '<link rel="stylesheet" href="' . $path . '?v=' . time() . '">' . PHP_EOL;
+            $headHtml .= '<link rel="stylesheet" href="' . $path . '?v=' . $this->assetVersion($path) . '">' . PHP_EOL;
         }
         
         // Вывод произвольных строк
@@ -89,7 +99,7 @@ class Application {
     
     public function showFooterScripts() {
         foreach ($this->js as $path) {
-            echo '<script src="' . $path . '?v=' . time() . '"></script>' . PHP_EOL;
+            echo '<script src="' . $path . '?v=' . $this->assetVersion($path) . '"></script>' . PHP_EOL;
         }
     }
 }
