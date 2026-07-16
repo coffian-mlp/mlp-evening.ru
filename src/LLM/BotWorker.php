@@ -29,6 +29,10 @@ class BotWorker {
 
     /** Один цикл: реактив → проактив → heartbeat. Под общим локом «один голос». */
     public function tick(): void {
+        // Синглтон ConfigManager живёт всё время процесса; в daemon-режиме без
+        // сброса кеша тик не увидит правок ai_*-опций из дашборда (AR2-1).
+        $this->config->flushCache();
+
         $res = $this->db->query("SELECT GET_LOCK('bot_worker', 0) AS ok");
         $row = $res ? $res->fetch_assoc() : null;
         if (!$row || (int)$row['ok'] !== 1) {

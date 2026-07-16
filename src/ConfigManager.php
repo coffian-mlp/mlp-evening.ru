@@ -34,6 +34,15 @@ class ConfigManager {
         }
     }
 
+    /**
+     * Сбросить request-scoped кеш опций.
+     * Нужно в долгоживущих процессах (daemon-воркер): без сброса синглтон
+     * держит опции с момента старта и не видит правок из дашборда (AR2-1).
+     */
+    public function flushCache(): void {
+        $this->cache = null;
+    }
+
     public function getOption($key, $default = null) {
         $this->loadAll();
         return array_key_exists($key, $this->cache) ? $this->cache[$key] : $default;
