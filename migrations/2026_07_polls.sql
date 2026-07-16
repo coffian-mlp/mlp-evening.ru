@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS `poll_options` (
   `id`        INT AUTO_INCREMENT PRIMARY KEY,
   `poll_id`   INT NOT NULL,
   `text`      VARCHAR(255) NOT NULL,
+  `image_url` VARCHAR(500) NULL,
   `position`  TINYINT NOT NULL DEFAULT 0,
   INDEX `idx_poll` (`poll_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

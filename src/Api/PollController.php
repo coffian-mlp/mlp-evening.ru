@@ -25,8 +25,15 @@ class PollController {
             sendResponse(false, "Недостаточно прав для создания опроса", 'error');
         }
         $question = trim($_POST['question'] ?? '');
-        $options  = $_POST['options'] ?? [];
-        if (!is_array($options)) $options = [];
+        // Варианты: options[] (текст) + опциональный параллельный option_images[] (URL превью).
+        $optTexts  = $_POST['options'] ?? [];
+        $optImages = $_POST['option_images'] ?? [];
+        if (!is_array($optTexts)) $optTexts = [];
+        if (!is_array($optImages)) $optImages = [];
+        $options = [];
+        foreach ($optTexts as $i => $t) {
+            $options[] = ['text' => (string)$t, 'image_url' => (string)($optImages[$i] ?? '')];
+        }
         $isMulti     = !empty($_POST['is_multi']);
         $isAnonymous = !empty($_POST['is_anonymous']);
 

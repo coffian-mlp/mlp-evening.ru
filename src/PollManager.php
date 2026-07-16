@@ -25,10 +25,19 @@ class PollManager {
      */
     public function create(int $userId, string $question, array $options, bool $isMulti = false, bool $isAnonymous = false, ?string $closesAt = null): int {
         $question = trim($question);
+        // Варианты: строка (только текст) ИЛИ ['text'=>, 'image_url'=>]. Валиден, если есть текст или картинка.
         $clean = [];
         foreach ($options as $o) {
-            $o = trim((string)$o);
-            if ($o !== '') $clean[] = $o;
+            if (is_array($o)) {
+                $text = trim((string)($o['text'] ?? ''));
+                $img  = trim((string)($o['image_url'] ?? ''));
+            } else {
+                $text = trim((string)$o);
+                $img  = '';
+            }
+            if ($text !== '' || $img !== '') {
+                $clean[] = ['text' => $text, 'image_url' => $img !== '' ? $img : null];
+            }
         }
         if ($question === '' || count($clean) < self::MIN_OPTIONS) return 0;
         $clean = array_slice($clean, 0, self::MAX_OPTIONS);
@@ -41,9 +50,9 @@ class PollManager {
             $stmt->execute();
             $pollId = (int)$this->db->insert_id;
 
-            $optStmt = $this->db->prepare("INSERT INTO poll_options (poll_id, text, position) VALUES (?, ?, ?)");
-            foreach ($clean as $pos => $text) {
-                $optStmt->bind_param("isi", $pollId, $text, $pos);
+            $optStmt = $this->db->prepare("INSERT INTO poll_options (poll_id, text, image_url, position) VALUES (?, ?, ?, ?)");
+            foreach ($clean as $pos => $opt) {
+                $optStmt->bind_param("issi", $pollId, $opt['text'], $opt['image_url'], $pos);
                 $optStmt->execute();
             }
             $this->db->commit();
@@ -76,7 +85,7 @@ class PollManager {
 
     private function options(int $pollId): array {
         $rows = [];
-        $stmt = $this->db->prepare("SELECT id, text, position FROM poll_options WHERE poll_id = ? ORDER BY position ASC");
+        $stmt = $this->db->prepare("SELECT id, text, image_url, position FROM poll_options WHERE poll_id = ? ORDER BY position ASC");
         $stmt->bind_param("i", $pollId);
         $stmt->execute();
         $res = $stmt->get_result();
@@ -119,6 +128,7 @@ class PollManager {
             $out[] = [
                 'id' => $oid,
                 'text' => $opt['text'],
+                'image_url' => $opt['image_url'] ?? null,
                 'votes' => $c,
                 'percent' => $totalVoters > 0 ? (int)round($c * 100 / $totalVoters) : 0,
             ];
