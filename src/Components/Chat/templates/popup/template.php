@@ -130,6 +130,9 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
                     <div style="display: flex; gap: 10px;">
                         <button type="button" id="mobile-sticker-btn" class="chat-format-btn" style="font-size: 20px;" title="Стикеры">😊</button>
                         <button type="button" id="mobile-upload-btn" class="chat-format-btn" style="font-size: 20px;" title="Загрузить">📎</button>
+                        <?php if (!empty($arResult['can_create_poll'])): ?>
+                        <button type="button" id="mobile-poll-btn" class="chat-format-btn" style="font-size: 20px;" title="Создать опрос">📊</button>
+                        <?php endif; ?>
                     </div>
                 </div>
             </form>
@@ -150,6 +153,9 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
                 <div class="toolbar-separator"></div>
                 <button type="button" class="chat-format-btn" id="sticker-btn" title="Стикеры">😊</button>
                 <button type="button" class="chat-format-btn" id="chat-upload-btn" title="Загрузить файл (Картинка/Док)">📎</button>
+                <?php if (!empty($arResult['can_create_poll'])): ?>
+                <button type="button" class="chat-format-btn" id="poll-btn" title="Создать опрос">📊</button>
+                <?php endif; ?>
             </div>
             <!-- Sticker Picker Container -->
             <div id="sticker-picker" class="sticker-picker" style="display: none;">

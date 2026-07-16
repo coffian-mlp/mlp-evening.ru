@@ -473,6 +473,12 @@ $(document).ready(function() {
                 });
             }
 
+            // Опросы: маркер [[poll:ID]] → точка монтирования виджета (MLP-239).
+            // Текст уже HTML-escaped, но [[poll:N]] спецсимволов не содержит и доживает целым.
+            text = text.replace(/\[\[poll:(\d+)\]\]/g, function(match, id) {
+                return `<div class="poll-widget" data-poll-id="${id}"></div>`;
+            });
+
             // New lines
             return text.replace(/\n/g, '<br>');
         }
@@ -678,7 +684,12 @@ $(document).ready(function() {
 
         const div = createMessageElement(data);
         chatMessages.appendChild(div);
-        
+
+        // Опросы: монтируем виджет на плейсхолдеры [[poll:ID]] (MLP-239).
+        if (window.PollWidget) {
+            div.querySelectorAll('.poll-widget[data-poll-id]').forEach(el => window.PollWidget.mount(el));
+        }
+
         // Scroll only if near bottom OR if I sent the message
         if (isNearBottom || isMyMessage) {
             scrollToBottom();
@@ -1026,6 +1037,13 @@ $(document).ready(function() {
              return;
         }
 
+        // Опросы: live-обновление карточки, не трогая само сообщение (MLP-239).
+        if (data.type === 'poll_vote' || data.type === 'poll_closed') {
+            const pw = document.querySelector(`.poll-widget[data-poll-id="${data.poll_id}"]`);
+            if (pw && window.PollWidget) window.PollWidget.update(pw, data);
+            return;
+        }
+
         if (data.type === 'delete') {
              const existingMsg = document.querySelector(`.chat-message[data-id="${data.id}"]`);
              if (existingMsg) {
@@ -1059,6 +1077,9 @@ $(document).ready(function() {
                 chatMessages.replaceChild(newMsg, existingMsg);
             } else {
                 chatMessages.appendChild(newMsg);
+            }
+            if (window.PollWidget) {
+                newMsg.querySelectorAll('.poll-widget[data-poll-id]').forEach(el => window.PollWidget.mount(el));
             }
         } else {
             appendMessage(data);
@@ -1129,6 +1150,11 @@ $(document).ready(function() {
                 } else {
                     // No messages yet? Append after button
                      chatMessages.appendChild(fragment);
+                }
+
+                // Опросы в подгруженной истории (mount идемпотентен — guard _pollMounted). MLP-239.
+                if (window.PollWidget) {
+                    chatMessages.querySelectorAll('.poll-widget[data-poll-id]').forEach(el => window.PollWidget.mount(el));
                 }
 
                 // Update oldest ID (from the first message in the batch, which is the oldest)
@@ -2091,11 +2117,18 @@ $(document).ready(function() {
         }
     });
 
+    // Кнопка «Создать опрос» (тулбар + мобильная) — открывает модалку виджета (MLP-239).
+    $(document).on('click', '#poll-btn, #mobile-poll-btn', function(e) {
+        e.preventDefault(); e.stopPropagation();
+        if (window.PollWidget) window.PollWidget.openCreateModal();
+    });
+
     $(document).on('click', '.chat-format-btn', function(e) {
         const id = $(this).attr('id');
         // Skip special buttons
         if (id === 'sticker-btn' || id === 'chat-upload-btn' || id === 'mobile-sticker-btn' || id === 'mobile-upload-btn') return;
-        
+        if (id === 'poll-btn' || id === 'mobile-poll-btn') return; // Опрос — отдельно (MLP-239)
+
         e.preventDefault();
         const format = $(this).data('format');
         const input = document.getElementById('chat-input'); 

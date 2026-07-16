@@ -58,7 +58,23 @@ class ChatComponent extends Component {
         
         // Передаем параметры режима (popup/local)
         $this->result['mode'] = $this->params['mode'] ?? 'local';
-        
+
+        // Виджет опросов монтируется внутри DOM чата — подключаем его ассеты вместе с чатом (MLP-239).
+        global $app;
+        $app->addCss('/src/Components/Poll/templates/default/style.css');
+        $app->addJs('/src/Components/Poll/templates/default/script.js');
+
+        // Право текущего пользователя создавать опросы (для кнопки в тулбаре).
+        $config = ConfigManager::getInstance();
+        $pollsRole = $config->getOption('polls_create_role', 'moderator');
+        $canCreatePoll = false;
+        if (Auth::check()) {
+            if ($pollsRole === 'all')       $canCreatePoll = true;
+            elseif ($pollsRole === 'admin') $canCreatePoll = Auth::isAdmin();
+            else                            $canCreatePoll = Auth::isModerator();
+        }
+        $this->result['can_create_poll'] = $canCreatePoll;
+
         // Подключаем шаблон
         $this->includeTemplate();
     }

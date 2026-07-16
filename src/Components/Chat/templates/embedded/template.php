@@ -158,6 +158,9 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
                     <div style="display: flex; gap: 10px;">
                         <button type="button" id="mobile-sticker-btn" class="chat-format-btn" style="font-size: 20px;" title="Стикеры">😊</button>
                         <button type="button" id="mobile-upload-btn" class="chat-format-btn" style="font-size: 20px;" title="Загрузить">📎</button>
+                        <?php if (!empty($arResult['can_create_poll'])): ?>
+                        <button type="button" id="mobile-poll-btn" class="chat-format-btn" style="font-size: 20px;" title="Создать опрос">📊</button>
+                        <?php endif; ?>
                     </div>
                 </div>
             </form>

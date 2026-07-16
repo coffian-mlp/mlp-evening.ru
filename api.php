@@ -111,6 +111,12 @@ try {
 
     // Public Actions
     if ($action === 'get_chat_input') {
+        // Право на кнопку «Создать опрос» при мягком входе (MLP-239).
+        $arResult = ['can_create_poll' => false];
+        if (Auth::check()) {
+            $pr = ConfigManager::getInstance()->getOption('polls_create_role', 'moderator');
+            $arResult['can_create_poll'] = ($pr === 'all') ? true : (($pr === 'admin') ? Auth::isAdmin() : Auth::isModerator());
+        }
         ob_start();
         include __DIR__ . '/src/Components/Chat/templates/embedded/input_area.php';
         $html = ob_get_clean();

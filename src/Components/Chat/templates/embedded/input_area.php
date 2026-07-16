@@ -15,6 +15,9 @@
         <div class="toolbar-separator"></div>
         <button type="button" class="chat-format-btn" id="sticker-btn" title="Стикеры">😊</button>
         <button type="button" class="chat-format-btn" id="chat-upload-btn" title="Загрузить файл (Картинка/Док)">📎</button>
+        <?php if (!empty($arResult['can_create_poll'])): ?>
+        <button type="button" class="chat-format-btn" id="poll-btn" title="Создать опрос">📊</button>
+        <?php endif; ?>
     </div>
     <!-- Sticker Picker Container -->
     <div id="sticker-picker" class="sticker-picker" style="display: none;">
