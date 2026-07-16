@@ -633,6 +633,19 @@ class LLMManager {
             ];
         }
 
+        // Закреплённое сообщение — фоновый контекст низкого приоритета (MLP-242).
+        $pinned = $this->chatManager->getPinnedMessage();
+        if ($pinned && !empty($pinned['raw_message'])) {
+            $raw = $pinned['raw_message'];
+            if (preg_match('/^\s*\[\[poll:\d+\]\]\s*$/', $raw)) {
+                $raw = '(в чате закреплён опрос)';
+            }
+            array_unshift($context, [
+                'role' => 'user',
+                'content' => "[Закреплено в чате, фоновый контекст низкого приоритета — учитывай только если по-настоящему уместно]: " . $raw,
+            ]);
+        }
+
         return $context;
     }
 

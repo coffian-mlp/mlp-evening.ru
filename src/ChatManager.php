@@ -393,6 +393,44 @@ class ChatManager {
         return null;
     }
 
+    // --- Закреплённое сообщение (MLP-242): одно активное на весь чат ---
+
+    /** Закрепить сообщение (снимает прошлое закрепление). Возвращает false, если цель не найдена/удалена. */
+    public function pinMessage(int $messageId): bool {
+        $chk = $this->db->prepare("SELECT id FROM chat_messages WHERE id = ? AND is_deleted = 0");
+        $chk->bind_param("i", $messageId);
+        $chk->execute();
+        if ($chk->get_result()->num_rows === 0) return false;
+
+        $this->db->query("UPDATE chat_messages SET is_pinned = 0 WHERE is_pinned = 1");
+        $stmt = $this->db->prepare("UPDATE chat_messages SET is_pinned = 1 WHERE id = ?");
+        $stmt->bind_param("i", $messageId);
+        $stmt->execute();
+
+        $this->broadcastPinned();
+        return true;
+    }
+
+    /** Снять текущее закрепление. */
+    public function unpinMessage(): bool {
+        $this->db->query("UPDATE chat_messages SET is_pinned = 0 WHERE is_pinned = 1");
+        $this->broadcastPinned();
+        return true;
+    }
+
+    /** Текущее закреплённое сообщение (готовое к выводу) или null. */
+    public function getPinnedMessage(): ?array {
+        $res = $this->db->query("SELECT id FROM chat_messages WHERE is_pinned = 1 AND is_deleted = 0 LIMIT 1");
+        if ($res && $row = $res->fetch_assoc()) {
+            return $this->getMessageById((int)$row['id']);
+        }
+        return null;
+    }
+
+    private function broadcastPinned(): void {
+        $this->broadcast(['type' => 'pin_update', 'pinned' => $this->getPinnedMessage()]);
+    }
+
     // ✨ Parse Markdown and Mentions (Safe after htmlspecialchars)
     private function parseMarkdown($text) {
         // 0. Blockquote: > text (standard Markdown style)

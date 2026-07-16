@@ -105,6 +105,9 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
         <div id="chat-search-results" class="chat-search-results"></div>
     </div>
     
+    <!-- Закреплённое сообщение (MLP-242) -->
+    <div id="chat-pinned-banner" class="chat-pinned-banner" style="display:none;"></div>
+
     <div class="chat-messages" id="chat-messages">
         <div class="chat-welcome">Добро пожаловать в Поняшный чат! 🦄<br>Не стесняйся, пиши!</div>
     </div>
@@ -190,6 +193,8 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
         <li data-action="purge" class="danger mod-only">🧹 Purge (50)</li>
         <li data-action="mute" class="warning mod-only">🤐 Мут (15м)</li>
         <li data-action="ban" class="danger mod-only">🔨 Бан (Навсегда)</li>
+        <li data-action="pin" class="mod-only">📌 Закрепить</li>
+        <li data-action="unpin" class="mod-only">📌 Открепить</li>
     <?php endif; ?>
 </ul>
 

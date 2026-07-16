@@ -999,15 +999,25 @@ $(document).ready(function() {
                     break;
                 case 'mute':
                     showChatInput(`Мут: ${contextTargetUsername}`, 'Выберите срок и причину:', 'mute', function(reason, minutes) {
-                        $.post('/api.php', { 
-                            action: 'mute_user', 
-                            user_id: contextTargetUserId, 
+                        $.post('/api.php', {
+                            action: 'mute_user',
+                            user_id: contextTargetUserId,
                             minutes: minutes,
                             reason: reason
                         }, function(res) {
                             showChatNotification(res.message, res.success ? 'success' : 'error');
                         }, 'json');
                     });
+                    break;
+                case 'pin':
+                    $.post('/api.php', { action: 'pin_message', message_id: contextTargetId }, function(res) {
+                        showChatNotification(res.message, res.success ? 'success' : 'error');
+                    }, 'json');
+                    break;
+                case 'unpin':
+                    $.post('/api.php', { action: 'unpin_message' }, function(res) {
+                        showChatNotification(res.message, res.success ? 'success' : 'error');
+                    }, 'json');
                     break;
             }
         });
@@ -1029,6 +1039,38 @@ $(document).ready(function() {
         }
     }
 
+    // --- Закреплённое сообщение (MLP-242) ---
+    function renderPinnedBanner(pinned) {
+        const banner = document.getElementById('chat-pinned-banner');
+        if (!banner) return;
+        if (!pinned) { banner.style.display = 'none'; banner.innerHTML = ''; return; }
+        const canUnpin = (window.currentUserRole === 'admin' || window.currentUserRole === 'moderator');
+        const body = String(pinned.message || '')
+            .replace(/\[\[poll:(\d+)\]\]/g, (m, id) => `<div class="poll-widget" data-poll-id="${id}"></div>`)
+            .replace(/\n/g, '<br>');
+        banner.innerHTML =
+            '<div class="pinned-inner">' +
+                '<span class="pinned-icon">📌</span>' +
+                '<div class="pinned-body">' +
+                    '<span class="pinned-author" style="color:' + (pinned.chat_color || '#ce93d8') + '">' + (pinned.username || '') + '</span> ' +
+                    '<span class="pinned-text">' + body + '</span>' +
+                '</div>' +
+                (canUnpin ? '<button class="pinned-unpin" title="Открепить">✕</button>' : '') +
+            '</div>';
+        banner.style.display = 'block';
+        if (window.PollWidget) banner.querySelectorAll('.poll-widget[data-poll-id]').forEach(el => window.PollWidget.mount(el));
+    }
+    function fetchPinned() {
+        $.post('/api.php', { action: 'get_pinned' }, function(res) {
+            if (res && res.success) renderPinnedBanner(res.data.pinned);
+        }, 'json');
+    }
+    $(document).on('click', '#chat-pinned-banner .pinned-unpin', function() {
+        $.post('/api.php', { action: 'unpin_message' }, function(res) {
+            showChatNotification(res.message, res.success ? 'success' : 'error');
+        }, 'json');
+    });
+
     // Unified Message Handler
     function processIncomingData(data) {
         // Handle specialized events
@@ -1041,6 +1083,12 @@ $(document).ready(function() {
         if (data.type === 'poll_vote' || data.type === 'poll_closed') {
             const pw = document.querySelector(`.poll-widget[data-poll-id="${data.poll_id}"]`);
             if (pw && window.PollWidget) window.PollWidget.update(pw, data);
+            return;
+        }
+
+        // Закреплённое сообщение: показать/обновить/скрыть баннер (MLP-242).
+        if (data.type === 'pin_update') {
+            renderPinnedBanner(data.pinned);
             return;
         }
 
@@ -1279,6 +1327,7 @@ $(document).ready(function() {
     // Initial Load
     // Always fetch history on load/reload
     fetchHistory();
+    fetchPinned(); // текущее закреплённое сообщение (MLP-242)
     initChatConnection();
     
     // Expose for updates

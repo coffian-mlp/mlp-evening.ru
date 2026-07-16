@@ -50,7 +50,7 @@ try {
         // CSRF: публичное чтение событий — без токена; всё остальное для залогиненных
         // проверяется строго (L4/MLP-229: убран прежний bypass для save/delete_event —
         // дашборд теперь шлёт window.csrfToken, проставленный в header.php).
-        if (in_array($action, ['get_public_events', 'get_poll'], true)) {
+        if (in_array($action, ['get_public_events', 'get_poll', 'get_pinned'], true)) {
             // публичное чтение — без CSRF
         } elseif ($isLoggedIn && !Auth::checkCsrfToken($csrfToken)) {
             echo json_encode([
@@ -540,7 +540,7 @@ try {
     }
 
     // Protected Actions
-    if (!$isLoggedIn && !in_array($action, ['login', 'register', 'forgot_password', 'reset_password_submit', 'social_login', 'get_messages', 'get_stickers', 'get_packs', 'get_public_events', 'get_poll'])) {
+    if (!$isLoggedIn && !in_array($action, ['login', 'register', 'forgot_password', 'reset_password_submit', 'social_login', 'get_messages', 'get_stickers', 'get_packs', 'get_public_events', 'get_poll', 'get_pinned'])) {
          Auth::requireApiLogin(); 
     }
 
@@ -638,6 +638,10 @@ try {
         'create_poll'       => ['role' => 'user',   'handler' => ['PollController', 'create'], 'file' => 'PollController'],
         'vote_poll'         => ['role' => 'user',   'handler' => ['PollController', 'vote'],   'file' => 'PollController'],
         'close_poll'        => ['role' => 'user',   'handler' => ['PollController', 'close'],  'file' => 'PollController'],
+        // Закреплённые сообщения (MLP-242): право модератора проверяет сам контроллер.
+        'get_pinned'        => ['role' => 'public', 'handler' => ['PinController', 'get'],   'file' => 'PinController'],
+        'pin_message'       => ['role' => 'user',   'handler' => ['PinController', 'pin'],   'file' => 'PinController'],
+        'unpin_message'     => ['role' => 'user',   'handler' => ['PinController', 'unpin'], 'file' => 'PinController'],
     ];
     if (isset($apiRoutes[$action])) {
         $route = $apiRoutes[$action];
