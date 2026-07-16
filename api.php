@@ -1282,6 +1282,14 @@ try {
                     }
                 }
 
+                // AR4-1: команда-опрос уважает polls_create_role — как и прямое создание.
+                // Нет прав → сбрасываем в обычное упоминание (Лира поболтает, опрос не создаст).
+                if ($matchedCommand && ($matchedCommand['handler_type'] ?? '') === 'poll') {
+                    $pr = ConfigManager::getInstance()->getOption('polls_create_role', 'moderator');
+                    $canPoll = ($pr === 'all') ? Auth::check() : (($pr === 'admin') ? Auth::isAdmin() : Auth::isModerator());
+                    if (!$canPoll) $matchedCommand = null;
+                }
+
                 // Диспетчеризация: очередь (воркер ответит) или inline-фоллбек (с lifelike-задержкой).
                 $mid = ($newMsgId === true) ? null : $newMsgId;
                 if ($matchedCommand) {
