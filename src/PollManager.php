@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/Database.php';
+require_once __DIR__ . '/CentrifugoService.php';
 
 /**
  * Владелец таблиц опросов (MLP-237): polls / poll_options / poll_votes.
@@ -147,6 +148,36 @@ class PollManager {
         return $ids;
     }
 
+    /**
+     * Голосующие по вариантам (для тултипа не-анонимных опросов) — паттерн реакций.
+     * Возвращает option_id => "ник|цвет|аватар;;ник|цвет|аватар".
+     */
+    public function getVotersByOption(int $pollId): array {
+        $out = [];
+        $stmt = $this->db->prepare(
+            "SELECT pv.option_id,
+                    GROUP_CONCAT(
+                        CONCAT_WS('|',
+                            COALESCE(NULLIF(u.nickname, ''), u.login),
+                            COALESCE(uo_color.option_value, ''),
+                            COALESCE(uo_avatar.option_value, '')
+                        ) SEPARATOR ';;'
+                    ) AS users_data
+             FROM poll_votes pv
+             LEFT JOIN users u ON pv.user_id = u.id
+             LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
+             LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
+             WHERE pv.poll_id = ?
+             GROUP BY pv.option_id");
+        $stmt->bind_param("i", $pollId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($r = $res->fetch_assoc()) {
+            $out[(int)$r['option_id']] = $r['users_data'];
+        }
+        return $out;
+    }
+
     public function hasVoted(int $pollId, int $userId): bool {
         $stmt = $this->db->prepare("SELECT 1 FROM poll_votes WHERE poll_id = ? AND user_id = ? LIMIT 1");
         $stmt->bind_param("ii", $pollId, $userId);
@@ -200,6 +231,10 @@ class PollManager {
                 }
             }
             $this->db->commit();
+            // Realtime у ВСЕХ путей голосования (API и бот): раньше broadcast был только
+            // в PollController, поэтому голос бота (через воркер) не обновлял карточку до F5.
+            $voters = empty($poll['is_anonymous']) ? $this->getVotersByOption($pollId) : null;
+            $this->broadcast(['type' => 'poll_vote', 'poll_id' => $pollId, 'results' => $this->getResults($pollId), 'voters' => $voters]);
             return true;
         } catch (\Throwable $e) {
             $this->db->rollback();
@@ -211,6 +246,19 @@ class PollManager {
     public function close(int $pollId): bool {
         $stmt = $this->db->prepare("UPDATE polls SET status = 'closed', closed_at = NOW() WHERE id = ? AND status = 'open'");
         $stmt->bind_param("i", $pollId);
-        return $stmt->execute() && $this->db->affected_rows > 0;
+        $ok = $stmt->execute() && $this->db->affected_rows > 0;
+        if ($ok) {
+            $this->broadcast(['type' => 'poll_closed', 'poll_id' => $pollId, 'results' => $this->getResults($pollId)]);
+        }
+        return $ok;
+    }
+
+    /** Realtime-рассылка события опроса (Centrifugo public:chat), как у реакций/сообщений. */
+    private function broadcast(array $data): void {
+        try {
+            (new CentrifugoService())->publish('public:chat', $data);
+        } catch (\Throwable $e) {
+            error_log('PollManager::broadcast ' . $e->getMessage());
+        }
     }
 }

@@ -378,7 +378,10 @@ class LLMManager {
 
         $numbered = [];
         foreach ($poll['options'] as $i => $opt) {
-            $numbered[] = ($i + 1) . '. ' . $opt['text'];
+            // Варианты бывают только с картинкой (без текста) — не показываем модели пустоту.
+            $label = trim((string)($opt['text'] ?? ''));
+            if ($label === '') $label = !empty($opt['image_url']) ? '(вариант с картинкой)' : '(без названия)';
+            $numbered[] = ($i + 1) . '. ' . $label;
         }
         $anon = !empty($poll['is_anonymous']);
 

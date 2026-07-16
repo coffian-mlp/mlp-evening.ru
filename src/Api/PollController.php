@@ -73,9 +73,15 @@ class PollController {
         if (!$pm->vote($pollId, $userId, $optionIds)) {
             sendResponse(false, "Не удалось проголосовать (опрос закрыт или неверный вариант)", 'error');
         }
+        // Realtime-broadcast делает PollManager::vote() — единый путь для API и бота.
+        $poll    = $pm->getPoll($pollId);
+        $results = $pm->getResults($pollId);
+        $voters  = empty($poll['is_anonymous']) ? $pm->getVotersByOption($pollId) : null;
+
         sendResponse(true, "Голос учтён", 'success', [
-            'results'  => $pm->getResults($pollId),
+            'results'  => $results,
             'my_votes' => $pm->getUserVotes($pollId, $userId),
+            'voters'   => $voters,
         ]);
     }
 
@@ -90,7 +96,7 @@ class PollController {
         if ((int)$poll['created_by'] !== (int)($_SESSION['user_id'] ?? 0) && !Auth::isModerator()) {
             sendResponse(false, "Access Denied", 'error');
         }
-        $pm->close($pollId);
+        $pm->close($pollId); // realtime poll_closed шлёт PollManager::close()
         sendResponse(true, "Опрос закрыт", 'success', ['results' => $pm->getResults($pollId)]);
     }
 
@@ -102,6 +108,9 @@ class PollController {
             sendResponse(false, "Опрос не найден", 'error');
         }
         $data = ['poll' => $poll, 'results' => $pm->getResults($pollId)];
+        if (empty($poll['is_anonymous'])) {
+            $data['voters'] = $pm->getVotersByOption($pollId);
+        }
         if (Auth::check()) {
             $data['my_votes'] = $pm->getUserVotes($pollId, (int)$_SESSION['user_id']);
         }
