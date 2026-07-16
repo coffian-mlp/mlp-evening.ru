@@ -6,7 +6,11 @@ use Database;
 use Auth;
 
 class DbAdminComponent extends Component {
-    
+
+    /** Допустимые операторы фильтра (AR3-5: единый список для view и CSV). */
+    private const VALID_OPERATORS = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'BETWEEN'];
+
+
     public function executeComponent() {
         if (!Auth::isAdmin()) {
             echo "Access Denied";
@@ -123,8 +127,7 @@ class DbAdminComponent extends Component {
             $val = $params['filter_value'];
 
             // Validate operator whitelist
-            $validOps = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'BETWEEN'];
-            if (!in_array($op, $validOps)) $op = '=';
+            if (!in_array($op, self::VALID_OPERATORS, true)) $op = '=';
 
             if ($op === 'LIKE') {
                 $where = "WHERE `$col` LIKE ?";
@@ -357,8 +360,7 @@ class DbAdminComponent extends Component {
             $col = $db->real_escape_string($params['filter_column']);
             $op = $params['filter_operator'];
             $val = $db->real_escape_string($params['filter_value']);
-            $validOps = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'BETWEEN'];
-            if (!in_array($op, $validOps)) $op = '=';
+            if (!in_array($op, self::VALID_OPERATORS, true)) $op = '=';
             
             if ($op === 'LIKE') {
                  $sql = "SELECT * FROM `$table` WHERE `$col` LIKE '%$val%'";

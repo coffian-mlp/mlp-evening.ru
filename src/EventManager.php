@@ -23,28 +23,24 @@ class EventManager {
 
     /** Все события как есть (для recurrence-раскрытия в BotWorker/LLMManager). */
     public function getAllRaw(): array {
-        $rows = [];
-        $res = $this->db->query("SELECT * FROM events");
-        while ($res && $row = $res->fetch_assoc()) {
-            $rows[] = $row;
-        }
-        return $rows;
+        return $this->fetch('*', false);
     }
 
     /** Все события, отсортированные по времени начала (админка). */
     public function getAllOrdered(): array {
-        $rows = [];
-        $res = $this->db->query("SELECT * FROM events ORDER BY start_time ASC");
-        while ($res && $row = $res->fetch_assoc()) {
-            $rows[] = $row;
-        }
-        return $rows;
+        return $this->fetch('*', true);
     }
 
     /** Публичный набор полей для календаря (без служебных). */
     public function getPublic(): array {
+        return $this->fetch('id, title, description, start_time, duration_minutes, is_recurring, recurrence_rule, use_playlist, color', true);
+    }
+
+    /** Единая выборка событий (AR3-4). $columns — внутренняя константа, не пользовательский ввод. */
+    private function fetch(string $columns, bool $ordered): array {
         $rows = [];
-        $res = $this->db->query("SELECT id, title, description, start_time, duration_minutes, is_recurring, recurrence_rule, use_playlist, color FROM events ORDER BY start_time ASC");
+        $sql = "SELECT $columns FROM events" . ($ordered ? " ORDER BY start_time ASC" : "");
+        $res = $this->db->query($sql);
         while ($res && $row = $res->fetch_assoc()) {
             $rows[] = $row;
         }
