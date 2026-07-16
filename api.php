@@ -50,7 +50,7 @@ try {
         // CSRF: публичное чтение событий — без токена; всё остальное для залогиненных
         // проверяется строго (L4/MLP-229: убран прежний bypass для save/delete_event —
         // дашборд теперь шлёт window.csrfToken, проставленный в header.php).
-        if ($action === 'get_public_events') {
+        if (in_array($action, ['get_public_events', 'get_poll'], true)) {
             // публичное чтение — без CSRF
         } elseif ($isLoggedIn && !Auth::checkCsrfToken($csrfToken)) {
             echo json_encode([
@@ -534,7 +534,7 @@ try {
     }
 
     // Protected Actions
-    if (!$isLoggedIn && !in_array($action, ['login', 'register', 'forgot_password', 'reset_password_submit', 'social_login', 'get_messages', 'get_stickers', 'get_packs', 'get_public_events'])) { 
+    if (!$isLoggedIn && !in_array($action, ['login', 'register', 'forgot_password', 'reset_password_submit', 'social_login', 'get_messages', 'get_stickers', 'get_packs', 'get_public_events', 'get_poll'])) {
          Auth::requireApiLogin(); 
     }
 
@@ -624,15 +624,20 @@ try {
     // --- Тонкий роутер (MLP-229): action → роль → менеджер. Каркас; пока только события.
     // Остальные actions обрабатываются легаси-switch ниже — мигрировать «при касании».
     $apiRoutes = [
-        'get_public_events' => ['role' => 'public', 'handler' => ['EventController', 'getPublic']],
-        'save_event'        => ['role' => 'admin',  'handler' => ['EventController', 'save']],
-        'delete_event'      => ['role' => 'admin',  'handler' => ['EventController', 'delete']],
+        'get_public_events' => ['role' => 'public', 'handler' => ['EventController', 'getPublic'], 'file' => 'EventController'],
+        'save_event'        => ['role' => 'admin',  'handler' => ['EventController', 'save'],      'file' => 'EventController'],
+        'delete_event'      => ['role' => 'admin',  'handler' => ['EventController', 'delete'],    'file' => 'EventController'],
+        // Опросы (MLP-238): create_poll тонко гейтит сам контроллер (конфиг polls_create_role).
+        'get_poll'          => ['role' => 'public', 'handler' => ['PollController', 'get'],    'file' => 'PollController'],
+        'create_poll'       => ['role' => 'user',   'handler' => ['PollController', 'create'], 'file' => 'PollController'],
+        'vote_poll'         => ['role' => 'user',   'handler' => ['PollController', 'vote'],   'file' => 'PollController'],
+        'close_poll'        => ['role' => 'user',   'handler' => ['PollController', 'close'],  'file' => 'PollController'],
     ];
     if (isset($apiRoutes[$action])) {
         $route = $apiRoutes[$action];
         if ($route['role'] === 'admin')     Auth::requireApiAdmin();
         elseif ($route['role'] === 'user')  Auth::requireApiLogin();
-        require_once __DIR__ . '/src/Api/EventController.php';
+        require_once __DIR__ . '/src/Api/' . $route['file'] . '.php';
         call_user_func($route['handler']); // хендлер отвечает через sendResponse и завершает
         exit();
     }
@@ -670,6 +675,14 @@ try {
                 $limit = (int)$_POST['chat_rate_limit'];
                 if ($limit < 0) $limit = 0;
                 $config->setOption('chat_rate_limit', $limit);
+            }
+
+            // Кто может создавать опросы (MLP-238)
+            if (isset($_POST['polls_create_role'])) {
+                $pr = $_POST['polls_create_role'];
+                if (in_array($pr, ['admin', 'moderator', 'all'], true)) {
+                    $config->setOption('polls_create_role', $pr);
+                }
             }
             
             // Telegram Settings

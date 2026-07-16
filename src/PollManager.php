@@ -126,6 +126,17 @@ class PollManager {
         return ['total_voters' => $totalVoters, 'options' => $out];
     }
 
+    /** Варианты, за которые проголосовал пользователь (для подсветки в UI). */
+    public function getUserVotes(int $pollId, int $userId): array {
+        $ids = [];
+        $stmt = $this->db->prepare("SELECT option_id FROM poll_votes WHERE poll_id = ? AND user_id = ?");
+        $stmt->bind_param("ii", $pollId, $userId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($r = $res->fetch_assoc()) $ids[] = (int)$r['option_id'];
+        return $ids;
+    }
+
     public function hasVoted(int $pollId, int $userId): bool {
         $stmt = $this->db->prepare("SELECT 1 FROM poll_votes WHERE poll_id = ? AND user_id = ? LIMIT 1");
         $stmt->bind_param("ii", $pollId, $userId);

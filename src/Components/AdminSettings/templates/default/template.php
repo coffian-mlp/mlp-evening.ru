@@ -45,6 +45,15 @@ $config = $arResult['config']; // Helper
         <span style="color: #666; font-size: 0.9em;">(0 = отключено)</span>
 
         <br><br>
+        <label for="polls_create_role" style="display: block; margin-bottom: 5px; font-weight: bold;">📊 Кто может создавать опросы:</label>
+        <?php $pollsRole = $config->getOption('polls_create_role', 'moderator'); ?>
+        <select id="polls_create_role" name="polls_create_role" style="padding: 6px;">
+            <option value="admin" <?= $pollsRole === 'admin' ? 'selected' : '' ?>>Только админы</option>
+            <option value="moderator" <?= $pollsRole === 'moderator' ? 'selected' : '' ?>>Модераторы и админы</option>
+            <option value="all" <?= $pollsRole === 'all' ? 'selected' : '' ?>>Все залогиненные</option>
+        </select>
+
+        <br><br>
         <button type="submit" class="btn-primary">Сохранить режим</button>
     </form>
 </div>
