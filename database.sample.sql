@@ -93,7 +93,8 @@ CREATE TABLE IF NOT EXISTS `chat_messages` (
     `is_deleted` TINYINT(1) DEFAULT 0,
     `deleted_at` DATETIME DEFAULT NULL,
     `quoted_msg_ids` JSON DEFAULT NULL,
-    INDEX (`created_at`)
+    INDEX (`created_at`),
+    INDEX `idx_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
