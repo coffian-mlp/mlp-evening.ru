@@ -4,6 +4,7 @@ require_once __DIR__ . '/../ConfigManager.php';
 require_once __DIR__ . '/../ChatManager.php';
 require_once __DIR__ . '/../Database.php';
 require_once __DIR__ . '/../UserManager.php';
+require_once __DIR__ . '/../EventManager.php';
 require_once __DIR__ . '/OpenRouterProvider.php';
 require_once __DIR__ . '/RouterAIProvider.php';
 require_once __DIR__ . '/OpenAIProvider.php';
@@ -248,15 +249,8 @@ class LLMManager {
             $context = $this->buildContext(24);
             
             if ($command['handler_type'] === 'schedule') {
-                $db = Database::getInstance()->getConnection();
-                $stmt = $db->prepare("SELECT * FROM events");
-                $stmt->execute();
-                $res = $stmt->get_result();
-                $events = [];
-                while ($row = $res->fetch_assoc()) {
-                    $events[] = $row;
-                }
-                
+                $events = (new EventManager())->getAllRaw();
+
                 $now = time();
                 $horizon = $now + 86400 * 7;
                 $expandedEvents = [];

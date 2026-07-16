@@ -47,21 +47,18 @@ try {
         
         $action = $_POST['action'] ?? '';
         
-        // Skip CSRF check for public event fetching
+        // CSRF: публичное чтение событий — без токена; всё остальное для залогиненных
+        // проверяется строго (L4/MLP-229: убран прежний bypass для save/delete_event —
+        // дашборд теперь шлёт window.csrfToken, проставленный в header.php).
         if ($action === 'get_public_events') {
-            // let it pass
+            // публичное чтение — без CSRF
         } elseif ($isLoggedIn && !Auth::checkCsrfToken($csrfToken)) {
-            // Разрешаем сохранение и удаление события администратору
-            if (($action === 'save_event' || $action === 'delete_event') && Auth::isAdmin()) {
-                // let it pass
-            } else {
-                 echo json_encode([
-                    'success' => false, 
-                    'message' => 'Ошибка безопасности. Обнови страничку!', 
-                    'type' => 'error'
-                ]);
-                exit();
-            }
+            echo json_encode([
+                'success' => false,
+                'message' => 'Ошибка безопасности. Обнови страничку!',
+                'type' => 'error'
+            ]);
+            exit();
         }
     }
 
@@ -623,6 +620,22 @@ try {
         }
     }
 
+
+    // --- Тонкий роутер (MLP-229): action → роль → менеджер. Каркас; пока только события.
+    // Остальные actions обрабатываются легаси-switch ниже — мигрировать «при касании».
+    $apiRoutes = [
+        'get_public_events' => ['role' => 'public', 'handler' => ['EventController', 'getPublic']],
+        'save_event'        => ['role' => 'admin',  'handler' => ['EventController', 'save']],
+        'delete_event'      => ['role' => 'admin',  'handler' => ['EventController', 'delete']],
+    ];
+    if (isset($apiRoutes[$action])) {
+        $route = $apiRoutes[$action];
+        if ($route['role'] === 'admin')     Auth::requireApiAdmin();
+        elseif ($route['role'] === 'user')  Auth::requireApiLogin();
+        require_once __DIR__ . '/src/Api/EventController.php';
+        call_user_func($route['handler']); // хендлер отвечает через sendResponse и завершает
+        exit();
+    }
 
     switch ($action) {
         case 'update_settings':
@@ -1492,100 +1505,9 @@ try {
             }
             break;
             
-        case 'save_event':
-            Auth::requireApiAdmin();
-            
-            $id = (int)($_POST['id'] ?? 0);
-            $title = trim($_POST['title'] ?? '');
-            $description = trim($_POST['description'] ?? '');
-            $start_time_utc = trim($_POST['start_time_utc'] ?? '');
-            $duration_minutes = (int)($_POST['duration_minutes'] ?? 60);
-            $is_recurring = (int)($_POST['is_recurring'] ?? 0);
-            $recurrence_rule = trim($_POST['recurrence_rule'] ?? '');
-            $use_playlist = (int)($_POST['use_playlist'] ?? 0);
-            $generate_new_playlist = (int)($_POST['generate_new_playlist'] ?? 0);
-            $color = trim($_POST['color'] ?? '#6d2f8e');
+        // События (save_event / delete_event / get_public_events) обрабатываются
+        // тонким роутером выше (MLP-229) — здесь их больше нет.
 
-            if (empty($title) || empty($start_time_utc)) {
-                sendResponse(false, "Заголовок и время начала обязательны", 'error');
-            }
-
-            if ($duration_minutes < 1) $duration_minutes = 60;
-
-            $db = Database::getInstance()->getConnection();
-
-            // Валидация: Только одно регулярное событие может генерировать/использовать плейлист
-            if ($is_recurring && ($use_playlist || $generate_new_playlist)) {
-                $checkQuery = "SELECT id FROM events WHERE is_recurring = 1 AND (use_playlist = 1 OR generate_new_playlist = 1)";
-                if ($id > 0) {
-                    $checkQuery .= " AND id != " . $id;
-                }
-                $res = $db->query($checkQuery);
-                if ($res && $res->num_rows > 0) {
-                    sendResponse(false, "Уже есть другое регулярное событие, работающее с плейлистами!", 'error');
-                }
-            }
-
-            if ($id > 0) {
-                // Update
-                $stmt = $db->prepare("UPDATE events SET title=?, description=?, start_time=?, duration_minutes=?, is_recurring=?, recurrence_rule=?, use_playlist=?, generate_new_playlist=?, color=? WHERE id=?");
-                $stmt->bind_param("sssiisissi", $title, $description, $start_time_utc, $duration_minutes, $is_recurring, $recurrence_rule, $use_playlist, $generate_new_playlist, $color, $id);
-                if ($stmt->execute()) {
-                    sendResponse(true, "Событие обновлено!");
-                } else {
-                    sendResponse(false, "Ошибка обновления события", 'error');
-                }
-            } else {
-                // Insert
-                $stmt = $db->prepare("INSERT INTO events (title, description, start_time, duration_minutes, is_recurring, recurrence_rule, use_playlist, generate_new_playlist, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->bind_param("sssiisiss", $title, $description, $start_time_utc, $duration_minutes, $is_recurring, $recurrence_rule, $use_playlist, $generate_new_playlist, $color);
-                if ($stmt->execute()) {
-                    sendResponse(true, "Событие добавлено!");
-                } else {
-                    sendResponse(false, "Ошибка создания события", 'error');
-                }
-            }
-            break;
-
-        case 'delete_event':
-            Auth::requireApiAdmin();
-            
-            $id = (int)($_POST['id'] ?? 0);
-            if (!$id) sendResponse(false, "ID не указан", 'error');
-            
-            $db = Database::getInstance()->getConnection();
-            $stmt = $db->prepare("DELETE FROM events WHERE id=?");
-            $stmt->bind_param("i", $id);
-            if ($stmt->execute()) {
-                sendResponse(true, "Событие удалено!");
-            } else {
-                sendResponse(false, "Ошибка удаления события", 'error');
-            }
-            break;
-
-        case 'get_public_events':
-            // Public endpoint
-            $db = Database::getInstance()->getConnection();
-            $stmt = $db->prepare("SELECT id, title, description, start_time, duration_minutes, is_recurring, recurrence_rule, use_playlist, color FROM events ORDER BY start_time ASC");
-            $stmt->execute();
-            $res = $stmt->get_result();
-            
-            $events = [];
-            while ($row = $res->fetch_assoc()) {
-                $events[] = $row;
-            }
-
-            // Send current playlist if required
-            $manager = new EpisodeManager();
-            $playlistHtml = '';
-            
-            // To make it simple, we just send the raw array of playlist for the frontend to render, or pre-rendered HTML
-            $playlist = $manager->getSavedPlaylist(); 
-            // wait, getSavedPlaylist returns episodes. The frontend can render them.
-            
-            sendResponse(true, "События загружены", 'success', ['events' => $events, 'playlist' => $playlist]);
-            break;
-            
         default:
             sendResponse(false, "❌ Неизвестное действие: $action", 'error');
     }

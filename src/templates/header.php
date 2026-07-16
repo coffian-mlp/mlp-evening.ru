@@ -42,6 +42,8 @@ global $app;
         // Pass PHP session data to JS
         window.currentUserId = <?= isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'null' ?>;
         window.currentUserRole = "<?= isset($_SESSION['role']) ? $_SESSION['role'] : '' ?>";
+        // CSRF-токен глобально (L4/MLP-229): нужен формам дашборда (события и т.п.)
+        window.csrfToken = <?= isset($_SESSION['user_id']) ? json_encode(Auth::generateCsrfToken()) : 'null' ?>;
         // Pass server time (seconds) to calculate clock skew
         window.serverTime = <?= time() ?>;
         

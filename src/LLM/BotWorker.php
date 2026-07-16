@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../ConfigManager.php';
 require_once __DIR__ . '/../Database.php';
 require_once __DIR__ . '/../BotCommandManager.php';
+require_once __DIR__ . '/../EventManager.php';
 require_once __DIR__ . '/LLMManager.php';
 require_once __DIR__ . '/JobQueue.php';
 require_once __DIR__ . '/ReplyPolicy.php';
@@ -21,6 +22,7 @@ class BotWorker {
     private $queue;
     private $llm;
     private $commands;
+    private $events;
 
     public function __construct() {
         $this->config   = ConfigManager::getInstance();
@@ -28,6 +30,7 @@ class BotWorker {
         $this->queue    = new JobQueue();
         $this->llm      = new LLMManager();
         $this->commands = new BotCommandManager();
+        $this->events   = new EventManager();
     }
 
     /** Один цикл: реактив → проактив → heartbeat. Под общим локом «один голос». */
@@ -180,11 +183,7 @@ class BotWorker {
         $announcedJson = $this->config->getOption('announced_events', '{}');
         $announced = json_decode($announcedJson, true) ?: [];
 
-        $stmt = $this->db->prepare("SELECT * FROM events");
-        $stmt->execute();
-        $res = $stmt->get_result();
-        $events = [];
-        while ($row = $res->fetch_assoc()) $events[] = $row;
+        $events = $this->events->getAllRaw();
 
         $now = time();
         $horizon = $now + 86400 * 7;

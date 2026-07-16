@@ -3,8 +3,8 @@
 namespace Components\AdminEvents;
 
 use Core\Component;
-use Database;
 use Auth;
+use EventManager;
 
 class AdminEventsComponent extends Component {
     public function executeComponent() {
@@ -12,18 +12,15 @@ class AdminEventsComponent extends Component {
             return;
         }
 
-        $db = Database::getInstance()->getConnection();
-        $stmt = $db->prepare("SELECT * FROM events ORDER BY start_time ASC");
-        $stmt->execute();
-        $res = $stmt->get_result();
-        
+        require_once $_SERVER['DOCUMENT_ROOT'] . '/src/EventManager.php';
+
         $events = [];
-        while ($row = $res->fetch_assoc()) {
+        foreach ((new EventManager())->getAllOrdered() as $row) {
             // Конвертируем UTC из базы в MSK для удобного отображения и редактирования в админке
             $dt = new \DateTime($row['start_time'], new \DateTimeZone('UTC'));
             $dt->setTimezone(new \DateTimeZone('Europe/Moscow'));
             $row['start_time_msk'] = $dt->format('Y-m-d H:i');
-            
+
             $events[] = $row;
         }
 
