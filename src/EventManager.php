@@ -63,6 +63,40 @@ class EventManager {
         return $stmt->get_result()->num_rows > 0;
     }
 
+    /**
+     * Раскрыть повторяющиеся события в список occurrence'ов на горизонт $horizonDays (AR3-1).
+     * Единая точка recurrence-раскрытия (раньше дублировалось в BotWorker и LLMManager).
+     * Базовое вхождение включается всегда (в т.ч. прошедшее — потребитель фильтрует сам по
+     * real_start_time/endTime). Повторы daily/weekly — пока в пределах горизонта. Каждый
+     * occurrence получает `real_start_time` (UTC ts) и `run_id` ("<id>_<ts>"). Отсортировано.
+     * $now — для детерминизма/тестов; по умолчанию текущее время.
+     */
+    public static function expandOccurrences(array $rawEvents, int $horizonDays = 7, ?int $now = null): array {
+        $now = $now ?? time();
+        $horizon = $now + 86400 * $horizonDays;
+        $out = [];
+        foreach ($rawEvents as $evt) {
+            if (empty($evt['start_time'])) continue; // без даты — не occurrence (strtotime(' UTC') дал бы «сейчас»)
+            $start = strtotime($evt['start_time'] . ' UTC');
+            if ($start === false) continue;
+            $out[] = array_merge($evt, ['real_start_time' => $start, 'run_id' => ($evt['id'] ?? '') . '_' . $start]);
+            if (!empty($evt['is_recurring'])) {
+                $next = $start;
+                while ($next < $horizon) {
+                    $rule = $evt['recurrence_rule'] ?? '';
+                    if ($rule === 'daily')       $next += 86400;
+                    elseif ($rule === 'weekly')  $next += 86400 * 7;
+                    else break;
+                    if ($next < $horizon) {
+                        $out[] = array_merge($evt, ['real_start_time' => $next, 'run_id' => ($evt['id'] ?? '') . '_' . $next]);
+                    }
+                }
+            }
+        }
+        usort($out, static fn($a, $b) => $a['real_start_time'] <=> $b['real_start_time']);
+        return $out;
+    }
+
     public function create(array $d): bool {
         $stmt = $this->db->prepare("INSERT INTO events (title, description, start_time, duration_minutes, is_recurring, recurrence_rule, use_playlist, generate_new_playlist, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->bind_param(

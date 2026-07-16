@@ -249,38 +249,11 @@ class LLMManager {
             $context = $this->buildContext(24);
             
             if ($command['handler_type'] === 'schedule') {
-                $events = (new EventManager())->getAllRaw();
-
                 $now = time();
-                $horizon = $now + 86400 * 7;
-                $expandedEvents = [];
-                
-                foreach ($events as $evt) {
-                    $utcStart = strtotime($evt['start_time'] . ' UTC');
-                    if ($utcStart > $now || $evt['is_recurring']) {
-                        $expandedEvents[] = array_merge($evt, ['real_start_time' => $utcStart]);
-                    }
-                    if ($evt['is_recurring']) {
-                        $nextDate = $utcStart;
-                        while ($nextDate < $horizon) {
-                            if ($evt['recurrence_rule'] === 'daily') {
-                                $nextDate += 86400;
-                            } elseif ($evt['recurrence_rule'] === 'weekly') {
-                                $nextDate += 86400 * 7;
-                            } else {
-                                break;
-                            }
-                            if ($nextDate < $horizon) {
-                                $expandedEvents[] = array_merge($evt, ['real_start_time' => $nextDate]);
-                            }
-                        }
-                    }
-                }
-                
-                usort($expandedEvents, function($a, $b) {
-                    return $a['real_start_time'] <=> $b['real_start_time'];
-                });
-                
+                // AR3-1: recurrence-раскрытие — единая точка в EventManager.
+                $em = new EventManager();
+                $expandedEvents = EventManager::expandOccurrences($em->getAllRaw(), 7, $now);
+
                 $event = null;
                 foreach ($expandedEvents as $evt) {
                     $endTime = $evt['real_start_time'] + ($evt['duration_minutes'] * 60);

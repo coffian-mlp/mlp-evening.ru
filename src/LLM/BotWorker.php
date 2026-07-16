@@ -183,27 +183,9 @@ class BotWorker {
         $announcedJson = $this->config->getOption('announced_events', '{}');
         $announced = json_decode($announcedJson, true) ?: [];
 
-        $events = $this->events->getAllRaw();
-
         $now = time();
-        $horizon = $now + 86400 * 7;
-        $expanded = [];
-        foreach ($events as $evt) {
-            $utcStart = strtotime($evt['start_time'] . ' UTC');
-            $expanded[] = array_merge($evt, ['real_start_time' => $utcStart, 'run_id' => $evt['id'] . '_' . $utcStart]);
-            if ($evt['is_recurring']) {
-                $next = $utcStart;
-                while ($next < $horizon) {
-                    if ($evt['recurrence_rule'] === 'daily')      $next += 86400;
-                    elseif ($evt['recurrence_rule'] === 'weekly') $next += 86400 * 7;
-                    else break;
-                    if ($next < $horizon) {
-                        $expanded[] = array_merge($evt, ['real_start_time' => $next, 'run_id' => $evt['id'] . '_' . $next]);
-                    }
-                }
-            }
-        }
-        usort($expanded, static fn($a, $b) => $a['real_start_time'] <=> $b['real_start_time']);
+        // AR3-1: recurrence-раскрытие — единая точка в EventManager.
+        $expanded = EventManager::expandOccurrences($this->events->getAllRaw(), 7, $now);
 
         $scheduleCmd = $this->scheduleCommandRow();
         $sent = false;
