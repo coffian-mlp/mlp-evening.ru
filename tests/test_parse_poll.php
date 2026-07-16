@@ -46,5 +46,23 @@ $many = "Вопрос?\n" . implode("\n", array_map(fn($i) => "Вариант $i
 $p = LLMManager::parsePoll($many);
 ok(count($p['options']) === 10, '15 вариантов обрезаны до 10');
 
+echo "\n== parseUserPollSpec: явная заявка пользователя (основной режим) ==\n";
+$s = LLMManager::parseUserPollSpec('/опрос Кто лучшая пони? Варианты: я, Лира, Твайлайт, Фоновая Пони 271, Чейнджлин 60189');
+ok($s !== null, 'явная заявка распознана');
+ok($s['question'] === 'Кто лучшая пони?', 'вопрос выделен');
+ok($s['options'] === ['я', 'Лира', 'Твайлайт', 'Фоновая Пони 271', 'Чейнджлин 60189'], '5 вариантов, многословные сохранены');
+
+ok(LLMManager::parseUserPollSpec('опрос Вопрос? Варианты: a, b')['question'] === 'Вопрос?', 'работает без слэша');
+ok(LLMManager::parseUserPollSpec('/poll Q? Варианты: x, y') !== null, 'алиас /poll');
+$dash = LLMManager::parseUserPollSpec('/опрос Тема - Варианты - раз, два, три');
+ok($dash !== null && count($dash['options']) === 3, 'разделитель через тире');
+$nl = LLMManager::parseUserPollSpec("/опрос Вопрос? Варианты:\nпервый\nвторой");
+ok($nl !== null && $nl['options'] === ['первый', 'второй'], 'варианты с переносами строк');
+
+echo "\n== parseUserPollSpec: нет явных вариантов → null (уходим в генерацию Лирой) ==\n";
+ok(LLMManager::parseUserPollSpec('/опрос') === null, 'голая команда → null');
+ok(LLMManager::parseUserPollSpec('/опрос придумай что-нибудь про погоду') === null, 'тема без «Варианты:» → null');
+ok(LLMManager::parseUserPollSpec('/опрос Вопрос? Варианты: только один') === null, '1 вариант → null');
+
 echo "\n" . ($fail === 0 ? "ALL PASS\n" : "FAILURES: $fail\n");
 exit($fail === 0 ? 0 : 1);

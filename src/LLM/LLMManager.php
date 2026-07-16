@@ -337,8 +337,59 @@ class LLMManager {
      */
     private function createPollFromCommand($command, $contextData): bool {
         require_once __DIR__ . '/../PollManager.php';
+        $message = (string)($contextData['message'] ?? '');
 
-        $topic = trim($contextData['message'] ?? '');
+        // ОСНОВНОЙ режим: пользователь задал опрос явно —
+        // «/опрос Кто лучшая пони? Варианты: я, Лира, Твайлайт, ...».
+        $spec = self::parseUserPollSpec($message);
+        if ($spec) {
+            $question = $spec['question'];
+            $options  = $spec['options'];
+        } else {
+            // Фолбэк: варианты не заданы — Лира придумывает опрос сама.
+            $gen = $this->generatePoll($command, $message);
+            if (!$gen) {
+                error_log('createPollFromCommand: варианты не заданы и модель не сгенерировала опрос');
+                return false;
+            }
+            $question = $gen['question'];
+            $options  = $gen['options'];
+        }
+
+        $pm = new \PollManager();
+        $pollId = $pm->create($this->botUserId, $question, $options, false, false);
+        if (!$pollId) return false;
+
+        $msgId = $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(), '[[poll:' . $pollId . ']]');
+        if ($msgId) $pm->attachMessage($pollId, (int)$msgId);
+        return true;
+    }
+
+    /**
+     * Pure: разобрать явную заявку на опрос из сообщения пользователя.
+     * Формат: «[/опрос] Вопрос? Варианты: a, b, c» (разделитель «варианты[:/-]»,
+     * варианты — через запятую/перенос строки/;). Возвращает null, если явной заявки нет.
+     */
+    public static function parseUserPollSpec(string $message): ?array {
+        // Срезаем ведущую команду (/опрос, /poll — со слэшем или без).
+        $s = preg_replace('/^\s*\/?(?:опрос|poll)\b\s*/iu', '', trim($message));
+        // Разделитель «Варианты:» / «Варианты -» и т.п.
+        if (!preg_match('/^(.*?)\s*вариант[а-яё]*\s*[:\-—]\s*(.+)$/isu', $s, $m)) {
+            return null;
+        }
+        $question = trim($m[1]);
+        $options = [];
+        foreach (preg_split('/[,\n;]+/u', $m[2]) as $p) {
+            $p = trim($p);
+            if ($p !== '') $options[] = $p;
+        }
+        if ($question === '' || count($options) < 2) return null;
+        return ['question' => $question, 'options' => array_slice($options, 0, 10)];
+    }
+
+    /** Фолбэк: Лира сама генерирует опрос (когда варианты не заданы). */
+    private function generatePoll($command, string $topic): ?array {
+        $topic = trim($topic);
         $context = $this->buildContext(16);
         $instruction = "\n\n" . ($command['system_prompt'] ?: "Придумай уместный опрос для чата.")
             . "\n\nТЫ СОЗДАЁШЬ ОПРОС."
@@ -350,21 +401,7 @@ class LLMManager {
             'role' => 'user',
             'content' => "[Система] Сгенерируй опрос строго в заданном формате." . $instruction,
         ];
-
-        $raw = $this->askWithFallback($context, $this->systemPrompt);
-        $parsed = self::parsePoll($raw);
-        if (!$parsed) {
-            error_log('createPollFromCommand: не удалось распарсить опрос из ответа модели');
-            return false;
-        }
-
-        $pm = new \PollManager();
-        $pollId = $pm->create($this->botUserId, $parsed['question'], $parsed['options'], false, false);
-        if (!$pollId) return false;
-
-        $msgId = $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(), '[[poll:' . $pollId . ']]');
-        if ($msgId) $pm->attachMessage($pollId, (int)$msgId);
-        return true;
+        return self::parsePoll($this->askWithFallback($context, $this->systemPrompt));
     }
 
     /**
