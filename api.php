@@ -439,8 +439,8 @@ try {
         if (empty($token) || empty($password)) {
             sendResponse(false, "Неверные данные", 'error');
         }
-        if (mb_strlen($password) < 6) {
-            sendResponse(false, "Пароль слишком короткий", 'error');
+        if ($pwErr = Auth::validatePasswordPolicy($password)) {
+            sendResponse(false, $pwErr, 'error');
         }
 
         $userManager = new UserManager();
@@ -479,7 +479,7 @@ try {
 
         // 2. Валидация данных
         if (mb_strlen($login) < 3) sendResponse(false, "Логин слишком короткий (нужно хотя бы 3 символа)", 'error');
-        if (mb_strlen($password) < 6) sendResponse(false, "Пароль слишком короткий (нужно хотя бы 6 символов)", 'error');
+        if ($pwErr = Auth::validatePasswordPolicy($password)) sendResponse(false, $pwErr, 'error');
         
         if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             sendResponse(false, "Некорректный формат Email", 'error');
@@ -608,7 +608,7 @@ try {
         }
         
         if (!empty($_POST['password'])) {
-            if (mb_strlen($_POST['password']) < 6) sendResponse(false, "Пароль слишком короткий", 'error');
+            if ($pwErr = Auth::validatePasswordPolicy($_POST['password'])) sendResponse(false, $pwErr, 'error');
             $data['password'] = $_POST['password'];
         }
 
@@ -962,7 +962,7 @@ try {
                 if (!empty($id)) {
                     // Update
                     if (!empty($password)) {
-                        if (mb_strlen($password) < 6) sendResponse(false, "Пароль слишком короткий", 'error');
+                        if ($pwErr = Auth::validatePasswordPolicy($password)) sendResponse(false, $pwErr, 'error');
                         $data['password'] = $password;
                     }
                     
@@ -972,7 +972,7 @@ try {
                 } else {
                     // Create
                     if (empty($password)) sendResponse(false, "Для нового пользователя нужен пароль", 'error');
-                    if (mb_strlen($password) < 6) sendResponse(false, "Пароль слишком короткий", 'error');
+                    if ($pwErr = Auth::validatePasswordPolicy($password)) sendResponse(false, $pwErr, 'error');
                     
                     $newId = $userManager->createUser($login, $password, $role, $nickname);
                     

@@ -233,6 +233,32 @@ class Auth {
         return hash_equals($_SESSION['csrf_token'], $token);
     }
 
+    // --- Password Policy (L5) ---
+
+    /** Минимум символов в пароле. */
+    const PASSWORD_MIN = 8;
+    /** Максимум в БАЙТАХ: bcrypt молча режет всё после 72 байт — не даём завести такой пароль. */
+    const PASSWORD_MAX_BYTES = 72;
+
+    /**
+     * Единая проверка политики пароля (L5).
+     * Возвращает текст ошибки для пользователя или null, если пароль валиден.
+     * Сложность (классы символов) намеренно не требуем — по современным
+     * рекомендациям длина важнее навязанной сложности.
+     */
+    public static function validatePasswordPolicy($password): ?string {
+        if (!is_string($password) || $password === '') {
+            return "Введите пароль";
+        }
+        if (mb_strlen($password) < self::PASSWORD_MIN) {
+            return "Пароль слишком короткий (нужно хотя бы " . self::PASSWORD_MIN . " символов)";
+        }
+        if (strlen($password) > self::PASSWORD_MAX_BYTES) {
+            return "Пароль слишком длинный (максимум " . self::PASSWORD_MAX_BYTES . " байт)";
+        }
+        return null;
+    }
+
     // --- Brute Force Protection ---
 
     public static function getIp() {
