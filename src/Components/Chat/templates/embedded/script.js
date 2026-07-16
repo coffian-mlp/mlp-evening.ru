@@ -2110,6 +2110,9 @@ $(document).ready(function() {
 
     // Close on click outside
     $(window).on('click', function(e) {
+        // stickerPicker объявлен в scope обработчика кнопки — здесь запрашиваем локально,
+        // иначе ReferenceError на любом клике до window (вскрылось модалкой опроса, MLP-239).
+        const stickerPicker = $('#sticker-picker');
         if (stickerPicker.is(':visible')) {
             if (!$(e.target).closest('#sticker-picker').length && !$(e.target).closest('#sticker-btn').length) {
                 stickerPicker.fadeOut(200);
