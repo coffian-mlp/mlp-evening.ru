@@ -24,11 +24,15 @@ if (isset($_GET['db_action']) || (isset($_POST['db_action']) && $_POST['db_actio
 
     // Handle Update Row (POST)
     if (isset($_POST['db_action']) && $_POST['db_action'] === 'update_row' && isset($_POST['table'])) {
-        // We need to route this correctly. The current DbAdminComponent::executeComponent handles $_GET['db_action'].
-        // Let's hack it slightly by merging POST into GET for the component logic, or refactor.
-        // Better: let's invoke a specific method if public, but executeComponent checks Auth and logic.
-        // Let's rely on executeComponent handling it, but we need to ensure it sees the action.
-        $_GET['db_action'] = 'update_row'; // Force action for component
+        // MLP-243: CSRF на мутацию БД (эндпоинт вне api.php, свой гейт).
+        $csrf = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_POST['csrf_token'] ?? '';
+        if (!Auth::checkCsrfToken($csrf)) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Ошибка безопасности. Обнови страничку!']);
+            exit;
+        }
+        // Компонент читает $_GET['db_action'] — прокидываем POST в GET.
+        $_GET['db_action'] = 'update_row';
         $_GET['table'] = $_POST['table'];
         $dbAdmin->executeComponent();
         exit;

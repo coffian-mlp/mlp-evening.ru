@@ -11,6 +11,7 @@
             <h3 class="dashboard-title" id="command-form-title">➕ Добавить Команду</h3>
             <form action="/dashboard/index.php" method="post" id="bot-command-form">
                 <input type="hidden" name="action" value="create_command" id="command-form-action">
+                <input type="hidden" name="csrf_token" value="<?= \Auth::generateCsrfToken() ?>">
                 <input type="hidden" name="id" id="command-id" value="0">
                 
                 <div class="form-group">
@@ -93,6 +94,7 @@
                                     <button class="btn-xs btn-warning" data-cmd="<?= htmlspecialchars(json_encode($cmd), ENT_QUOTES, 'UTF-8') ?>" onclick="editCommand(JSON.parse(this.dataset.cmd))">✏️</button>
                                     <form action="/dashboard/index.php" method="post" class="bot-command-delete-form" style="display: inline-block;" onsubmit="return confirm('Точно удалить?');">
                                         <input type="hidden" name="action" value="delete_command">
+                                        <input type="hidden" name="csrf_token" value="<?= \Auth::generateCsrfToken() ?>">
                                         <input type="hidden" name="id" value="<?= $cmd['id'] ?>">
                                         <button type="submit" class="btn-xs btn-danger">🗑</button>
                                     </form>

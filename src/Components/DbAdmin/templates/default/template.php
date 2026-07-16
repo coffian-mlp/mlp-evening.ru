@@ -217,6 +217,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         fetch(window.location.href.split('?')[0] + '?db_action=update_row&table=' + document.getElementById('edit_table_name').value, {
             method: 'POST',
+            headers: { 'X-CSRF-Token': window.csrfToken || '' }, // MLP-243: CSRF на мутацию БД
             body: formData
         })
         .then(r => r.json())

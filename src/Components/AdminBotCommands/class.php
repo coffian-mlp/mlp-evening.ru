@@ -17,6 +17,11 @@ class AdminBotCommandsComponent extends Component {
 
         // Handle forms
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+            // MLP-243: CSRF на мутации команд бота (эндпоинт вне api.php).
+            if (!Auth::checkCsrfToken($_POST['csrf_token'] ?? '')) {
+                echo "Ошибка безопасности. Обнови страничку!";
+                return;
+            }
             $action = $_POST['action'];
 
             if ($action === 'create_command' || $action === 'edit_command') {
