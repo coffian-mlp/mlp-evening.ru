@@ -76,12 +76,14 @@ class CentrifugoService {
     }
 
     public function generateToken($userId, $exp = 0) {
-        $header = ['typ' => 'JWT', 'alg' => 'HS256'];
-        $payload = ['sub' => (string)$userId];
-        if ($exp) {
-            $payload['exp'] = $exp;
+        // Токен Centrifugo всегда с ограниченным сроком: без exp подключение
+        // жило бы вечно (R5). Если срок не передан — сутки по умолчанию.
+        if (!$exp) {
+            $exp = time() + 86400;
         }
-        
+        $header = ['typ' => 'JWT', 'alg' => 'HS256'];
+        $payload = ['sub' => (string)$userId, 'exp' => $exp];
+
         $segments = [];
         $segments[] = $this->urlSafeB64Encode(json_encode($header));
         $segments[] = $this->urlSafeB64Encode(json_encode($payload));
