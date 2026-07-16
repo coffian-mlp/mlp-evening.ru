@@ -69,10 +69,53 @@ class DbAdminComponent extends Component {
         $this->includeTemplate();
     }
 
-    private function buildWhereClause($db, $params) {
+    /**
+     * H3: динамический whitelist из схемы. Имена таблиц/колонок нельзя
+     * параметризовать в SQL — их подставляют в backticks, поэтому единственная
+     * защита от identifier-injection: сверять с реальной схемой перед подстановкой.
+     */
+    private function validTables($db): array {
+        $tables = [];
+        $res = $db->query("SHOW TABLES");
+        while ($res && $row = $res->fetch_array()) {
+            $tables[] = $row[0];
+        }
+        return $tables;
+    }
+
+    private function isValidTable($db, $table): bool {
+        return self::isKnown($table, $this->validTables($db));
+    }
+
+    /** Pure: имя есть в whitelist (строгое сравнение — отсекает wildcard/injection). */
+    public static function isKnown($name, array $whitelist): bool {
+        return is_string($name) && $name !== '' && in_array($name, $whitelist, true);
+    }
+
+    /** Pure: оставить только поля, чьи ключи — реальные колонки таблицы (H3). */
+    public static function keepKnownColumns(array $data, array $validCols): array {
+        return array_intersect_key($data, array_flip($validCols));
+    }
+
+    /** Список колонок таблицы. $table ДОЛЖЕН быть предварительно провалидирован isValidTable(). */
+    private function validColumns($db, $table): array {
+        $cols = [];
+        $res = $db->query("SHOW COLUMNS FROM `$table`");
+        while ($res && $c = $res->fetch_assoc()) {
+            $cols[] = $c['Field'];
+        }
+        return $cols;
+    }
+
+    private function buildWhereClause($db, $params, array $validCols = []) {
         $where = "";
         $types = "";
         $values = [];
+
+        // H3: колонку фильтра принимаем только если она есть в схеме таблицы.
+        if ($validCols && !self::isKnown($params['filter_column'] ?? '', $validCols)) {
+            return [$where, $types, $values]; // неизвестная колонка → фильтр игнорируем
+        }
 
         if (!empty($params['filter_column']) && isset($params['filter_value']) && $params['filter_value'] !== '') {
             $col = $db->real_escape_string($params['filter_column']);
@@ -111,6 +154,10 @@ class DbAdminComponent extends Component {
     }
 
     private function ajaxGetRow($db, $table) {
+        if (!$this->isValidTable($db, $table)) {
+            echo json_encode(['success' => false, 'message' => 'Invalid table']);
+            return;
+        }
         $pk = $this->getPrimaryKey($db, $table);
         if (!$pk) {
             echo json_encode(['success' => false, 'message' => 'No primary key found']);
@@ -145,6 +192,10 @@ class DbAdminComponent extends Component {
     }
 
     private function ajaxUpdateRow($db, $table) {
+        if (!$this->isValidTable($db, $table)) {
+            echo json_encode(['success' => false, 'message' => 'Invalid table']);
+            return;
+        }
         $pk = $this->getPrimaryKey($db, $table);
         if (!$pk) {
             echo json_encode(['success' => false, 'message' => 'No primary key found']);
@@ -163,11 +214,15 @@ class DbAdminComponent extends Component {
             if ($key !== '__pk_value' && $key !== 'db_action' && $key !== 'table') {
                 // If value is empty string, check if we should set it to NULL?
                 // For now, let's treat empty string as empty string, unless standard practice.
-                // However, for nullable fields, empty string might mean NULL. 
+                // However, for nullable fields, empty string might mean NULL.
                 // Let's stick to string for now.
                 $data[$key] = $val;
             }
         }
+
+        // H3: обновляем только колонки, реально существующие в таблице —
+        // имена колонок идут ключами $_POST и подставляются в backticks.
+        $data = self::keepKnownColumns($data, $this->validColumns($db, $table));
 
         if (empty($data)) {
             echo json_encode(['success' => false, 'message' => 'No data to update']);
@@ -227,14 +282,14 @@ class DbAdminComponent extends Component {
         $limit = 50;
         $offset = ($page - 1) * $limit;
 
-        // Build Filter
-        list($where, $types, $values) = $this->buildWhereClause($db, $_GET);
-
         // Get columns first (needed for filter dropdown even if empty result)
         $colRes = $db->query("SHOW COLUMNS FROM `$table`");
         while ($col = $colRes->fetch_assoc()) {
             $this->result['columns'][] = $col['Field'];
         }
+
+        // Build Filter (H3: колонку фильтра сверяем со схемой таблицы)
+        list($where, $types, $values) = $this->buildWhereClause($db, $_GET, $this->result['columns']);
 
         // Count total with filter
         $countSql = "SELECT COUNT(*) as cnt FROM `$table` $where";
@@ -276,7 +331,7 @@ class DbAdminComponent extends Component {
         while ($row = $stmt->fetch_array()) {
             $validTables[] = $row[0];
         }
-        if (!in_array($table, $validTables)) die("Invalid table");
+        if (!in_array($table, $validTables, true)) die("Invalid table");
 
         // Headers
         header('Content-Type: text/csv; charset=utf-8');
@@ -284,8 +339,9 @@ class DbAdminComponent extends Component {
         $output = fopen('php://output', 'w');
         fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF)); // BOM
 
-        // Build Filter
-        list($where, $types, $values) = $this->buildWhereClause($db, $params);
+        // Build Filter (H3: колонку фильтра сверяем со схемой таблицы)
+        $validCols = $this->validColumns($db, $table);
+        list($where, $types, $values) = $this->buildWhereClause($db, $params, $validCols);
 
         // Stream Query
         // Note: Prepared statements with unbuffered results in MySQLi are tricky.
