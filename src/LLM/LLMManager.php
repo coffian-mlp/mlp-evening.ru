@@ -368,6 +368,71 @@ class LLMManager {
     }
 
     /**
+     * Бот голосует в опросе и пишет реплику (MLP-241). Выбор и текст — на модели.
+     * Анонимные опросы: модели явно велено НЕ раскрывать выбор. Возвращает true, если проголосовал.
+     */
+    public function voteOnPoll(array $poll): bool {
+        if (empty($poll['options'])) return false;
+        require_once __DIR__ . '/../PollManager.php';
+        $pm = new \PollManager();
+
+        $numbered = [];
+        foreach ($poll['options'] as $i => $opt) {
+            $numbered[] = ($i + 1) . '. ' . $opt['text'];
+        }
+        $anon = !empty($poll['is_anonymous']);
+
+        $context = $this->buildContext(12);
+        $context[] = ['role' => 'user', 'content' =>
+            "[Система] В чате идёт опрос — проголосуй и отреагируй в своём стиле.\n"
+            . "Вопрос: " . $poll['question'] . "\n"
+            . "Варианты:\n" . implode("\n", $numbered) . "\n\n"
+            . "ФОРМАТ ОТВЕТА СТРОГО:\n"
+            . "1) Первая строка — ТОЛЬКО номер выбранного варианта (одна цифра).\n"
+            . "2) Со второй строки — короткая живая реплика в чат про опрос и свои размышления.\n"
+            . ($anon
+                ? "ВАЖНО: опрос АНОНИМНЫЙ. В реплике НЕ раскрывай, какой вариант выбрала — пиши уклончиво (например, «свой голос уже тихонько оставила»).\n"
+                : "В реплике можешь упомянуть, за что голосуешь.\n")
+            . "Примеры тона (не копируй дословно): «О, голосование! Дайте-ка подумать...», "
+            . "«Так, мнение мятной пони тоже важно!», «Ого, тут выбирают — не могу пройти мимо!», "
+            . "«Голосовалочка! Обожаю такие штуки.»"
+        ];
+
+        $raw = $this->askWithFallback($context, $this->systemPrompt);
+        $parsed = self::parseBotVote($raw, count($poll['options']));
+
+        $idx = $parsed['index'];
+        if ($idx === null) $idx = rand(0, count($poll['options']) - 1); // модель не дала чёткий номер — выбираем сами, но участвуем
+
+        $optionId = (int)$poll['options'][$idx]['id'];
+        $pm->vote((int)$poll['id'], $this->botUserId, [$optionId]);
+
+        if ($parsed['comment'] !== '') {
+            $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(), $parsed['comment']);
+        }
+        return true;
+    }
+
+    /**
+     * Pure: разобрать ответ бота о голосовании. Строка-«только число» (1..N) — выбор варианта
+     * (индекс 0-based), остальные строки — реплика. index=null, если чёткого числа нет.
+     */
+    public static function parseBotVote(?string $raw, int $optionCount): array {
+        $index = null;
+        $comment = [];
+        foreach (explode("\n", (string)$raw) as $line) {
+            $t = trim($line);
+            if ($t === '') continue;
+            if ($index === null && preg_match('/^(\d+)[\.\)]?$/u', $t, $m)) {
+                $n = (int)$m[1];
+                if ($n >= 1 && $n <= $optionCount) { $index = $n - 1; continue; }
+            }
+            $comment[] = $t;
+        }
+        return ['index' => $index, 'comment' => trim(implode("\n", $comment))];
+    }
+
+    /**
      * Pure: разобрать ответ модели в опрос. Первая непустая строка — вопрос,
      * остальные — варианты (чистим возможную нумерацию/маркеры), 2–10 штук.
      * null, если вопроса + минимум 2 вариантов не набралось.

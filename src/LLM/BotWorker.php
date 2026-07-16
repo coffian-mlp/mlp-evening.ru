@@ -4,6 +4,7 @@ require_once __DIR__ . '/../ConfigManager.php';
 require_once __DIR__ . '/../Database.php';
 require_once __DIR__ . '/../BotCommandManager.php';
 require_once __DIR__ . '/../EventManager.php';
+require_once __DIR__ . '/../PollManager.php';
 require_once __DIR__ . '/LLMManager.php';
 require_once __DIR__ . '/JobQueue.php';
 require_once __DIR__ . '/ReplyPolicy.php';
@@ -23,6 +24,7 @@ class BotWorker {
     private $llm;
     private $commands;
     private $events;
+    private $polls;
 
     public function __construct() {
         $this->config   = ConfigManager::getInstance();
@@ -31,6 +33,7 @@ class BotWorker {
         $this->llm      = new LLMManager();
         $this->commands = new BotCommandManager();
         $this->events   = new EventManager();
+        $this->polls    = new PollManager();
     }
 
     /** Один цикл: реактив → проактив → heartbeat. Под общим локом «один голос». */
@@ -47,6 +50,7 @@ class BotWorker {
         // reactive и proactive изолированы: сбой одного (напр. миграция ещё не прогнана) не роняет другой.
         try { $this->reactive(); }  catch (\Throwable $e) { error_log('BotWorker reactive error: ' . $e->getMessage()); }
         try { $this->proactive(); } catch (\Throwable $e) { error_log('BotWorker proactive error: ' . $e->getMessage()); }
+        try { $this->pollParticipation(); } catch (\Throwable $e) { error_log('BotWorker poll error: ' . $e->getMessage()); }
         try { $this->config->setOption('bot_worker_heartbeat', (string)time()); } catch (\Throwable $e) {}
         try { $this->queue->purgeOld(24); } catch (\Throwable $e) {}
         $this->db->query("SELECT RELEASE_LOCK('bot_worker')");
@@ -231,6 +235,23 @@ class BotWorker {
             'message' => $message,
             'command' => $scheduleCmd,
         ]);
+    }
+
+    // ---------------- Опросы (бот голосует) ----------------
+
+    /** Бот голосует в одном ещё не отголосованном активном опросе за тик + пишет реплику (MLP-241). */
+    private function pollParticipation(): void {
+        if (!$this->llm->isEnabled()) return;
+        $botId = $this->llm->getBotUserId();
+        $now = time();
+        foreach ($this->polls->listActive() as $row) {
+            $created = strtotime(($row['created_at'] ?? '') . ' UTC');
+            if ($created && $created > $now - 20) continue;        // не пялиться на свежие (<20с) — дать людям первыми
+            $pollId = (int)$row['id'];
+            if ($this->polls->hasVoted($pollId, $botId)) continue; // уже голосовал
+            $poll = $this->polls->getPoll($pollId);
+            if ($poll && $this->llm->voteOnPoll($poll)) return;    // один опрос за тик — не спамим
+        }
     }
 
     private function scheduleCommandRow(): array {
