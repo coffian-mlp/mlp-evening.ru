@@ -68,7 +68,7 @@
             return '' +
                 '<div class="poll-option' + (mine ? ' poll-option-mine' : '') + (closed ? ' poll-option-closed' : '') + '" ' +
                      'data-option-id="' + esc(opt.id) + '">' +
-                    '<div class="poll-option-bar" style="width:' + (opt.percent || 0) + '%"></div>' +
+                    '<div class="poll-option-barwrap"><div class="poll-option-bar" style="width:' + (opt.percent || 0) + '%"></div></div>' +
                     '<div class="poll-option-content">' +
                         img +
                         '<span class="poll-option-text">' + esc(opt.text) + '</span>' +
