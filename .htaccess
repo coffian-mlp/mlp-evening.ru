@@ -20,3 +20,25 @@ Options -Indexes
     Deny from all
 </Files>
 
+# 4. Безопасность: непубличные пути закрыты от прямого доступа из браузера (2026-07-16).
+#    Раньше migrations/*.sql отдавались сырым текстом (утечка схемы), а tests/*.php
+#    исполнялись через веб. Ассеты компонентов (/src/.../*.js|*.css) остаются доступны.
+
+# 4.1 Служебные каталоги без публичных ресурсов — целиком 403.
+RedirectMatch 403 (?i)^/(migrations|tests|scripts|dev_knowledge|docs|logs|cache)(/|$)
+
+# 4.2 В /src/ наружу нужны только ассеты компонентов; исходники PHP — закрыть.
+RedirectMatch 403 (?i)^/src/.*\.(php|inc|sql|md)$
+
+# 4.3 CLI-скрипты в корне запускаются только из командной строки.
+<FilesMatch "^(migrate|bot_worker|cron_llm)\.php$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# 4.4 Сырые файлы данных/дампы в корне — не для веба.
+<FilesMatch "\.(sql|log|md|sample)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
