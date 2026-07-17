@@ -49,13 +49,17 @@ CREATE TABLE IF NOT EXISTS `users` (
   `login` varchar(50) NOT NULL UNIQUE,
   `nickname` varchar(50) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
+  `email` varchar(255) DEFAULT NULL,
   `role` varchar(20) NOT NULL DEFAULT 'user',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   `is_banned` tinyint(1) DEFAULT 0,
   `muted_until` datetime DEFAULT NULL,
   `ban_reason` varchar(255) DEFAULT NULL,
   `last_seen` datetime DEFAULT NULL,
+  `reset_token_hash` varchar(255) DEFAULT NULL,
+  `reset_token_expires` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `email` (`email`),
   KEY `idx_last_seen` (`last_seen`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -67,8 +71,8 @@ CREATE TABLE IF NOT EXISTS `users` (
 -- Password: password (hash below is for 'password')
 
 INSERT INTO `users` (`login`, `password_hash`, `role`) VALUES
-('admin', '$2y$10$n.9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9', 'admin'),
-('Twilight', '$2y$10$n.9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9/9', 'user');
+('admin', '$2y$12$xbTeXVNhkGwJUjNwcLHa1O/rqVyxOu/YeJpzdqb85pbFkMFQe7GgS', 'admin'),
+('Twilight', '$2y$12$xbTeXVNhkGwJUjNwcLHa1O/rqVyxOu/YeJpzdqb85pbFkMFQe7GgS', 'user');
 
 INSERT INTO `site_options` (`key_name`, `value`) VALUES
 ('ai_bot_user_id', '2'),
@@ -320,7 +324,7 @@ CREATE TABLE IF NOT EXISTS `bot_commands` (
     `id` int(11) NOT NULL AUTO_INCREMENT,
     `command_prefix` varchar(50) NOT NULL COMMENT 'Например /schedule',
     `description` varchar(255) NOT NULL COMMENT 'Описание для админки',
-    `handler_type` enum('text','schedule') NOT NULL DEFAULT 'text',
+    `handler_type` enum('text','schedule','poll') NOT NULL DEFAULT 'text',
     `system_prompt` text COMMENT 'Шаблон промпта для ИИ',
     `is_active` tinyint(1) NOT NULL DEFAULT '1',
     PRIMARY KEY (`id`),
@@ -334,6 +338,13 @@ INSERT IGNORE INTO `bot_commands` (`command_prefix`, `description`, `handler_typ
 -- Добавляем алиас /расписание
 INSERT IGNORE INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`) VALUES
 ('/расписание', 'Алиас расписания', 'schedule', 'То же, что и /schedule', 1);
+
+-- MLP-240: команда «создать опрос». См. migrations/2026_07_bot_commands_poll.sql
+INSERT IGNORE INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`) VALUES
+('/опрос', 'Лира создаёт опрос по теме', 'poll', 'Ты — Лира, придумай весёлый и уместный опрос для чата в своём стиле. Тема — из запроса пользователя, либо по последним сообщениям, если тема не задана. Вопрос — короткий и живой, варианты — остроумные, но понятные.', 1);
+
+INSERT IGNORE INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`) VALUES
+('/poll', 'Алиас команды опроса', 'poll', 'То же, что /опрос.', 1);
 
 -- MLP-223 (remember-me): persistent-token «запомнить меня». См. migrations/2026_07_auth_tokens.sql
 CREATE TABLE IF NOT EXISTS `auth_tokens` (
@@ -382,4 +393,23 @@ CREATE TABLE IF NOT EXISTS `poll_votes` (
   UNIQUE KEY `uniq_vote` (`poll_id`,`user_id`,`option_id`),
   INDEX `idx_poll` (`poll_id`),
   INDEX `idx_poll_user` (`poll_id`,`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- BOT-QUEUE: очередь задач Лиры. См. migrations/2026_07_bot_queue.sql
+--
+
+CREATE TABLE IF NOT EXISTS `llm_jobs` (
+  `id`         BIGINT       NOT NULL AUTO_INCREMENT,
+  `type`       ENUM('mention','greeting','dynamic_command') NOT NULL,
+  `payload`    JSON         NOT NULL COMMENT 'message, message_id, user_id, username, quoted_ids, command',
+  `run_after`  DATETIME     NOT NULL COMMENT 'когда можно исполнять (lifelike-задержка)',
+  `status`     ENUM('pending','processing','done','failed') NOT NULL DEFAULT 'pending',
+  `attempts`   TINYINT      NOT NULL DEFAULT 0,
+  `created_at` DATETIME     NOT NULL,
+  `claimed_at` DATETIME     NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_due` (`status`, `run_after`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
