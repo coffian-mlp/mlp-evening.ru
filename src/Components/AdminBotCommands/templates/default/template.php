@@ -10,8 +10,8 @@ use Domain\Auth;
     <div style="flex: 1; max-width: 400px;">
         <div class="card" id="command-form-card">
             <h3 class="dashboard-title" id="command-form-title">➕ Добавить Команду</h3>
-            <form action="/dashboard/index.php" method="post" id="bot-command-form">
-                <input type="hidden" name="action" value="create_command" id="command-form-action">
+            <form action="/api.php" method="post" id="bot-command-form">
+                <input type="hidden" name="action" value="save_bot_command">
                 <input type="hidden" name="csrf_token" value="<?= Auth::generateCsrfToken() ?>">
                 <input type="hidden" name="id" id="command-id" value="0">
                 
@@ -93,8 +93,8 @@ use Domain\Auth;
                                 </td>
                                 <td style="text-align: right;">
                                     <button class="btn-xs btn-warning" data-cmd="<?= htmlspecialchars(json_encode($cmd), ENT_QUOTES, 'UTF-8') ?>" onclick="editCommand(JSON.parse(this.dataset.cmd))">✏️</button>
-                                    <form action="/dashboard/index.php" method="post" class="bot-command-delete-form" style="display: inline-block;" onsubmit="return confirm('Точно удалить?');">
-                                        <input type="hidden" name="action" value="delete_command">
+                                    <form action="/api.php" method="post" class="bot-command-delete-form" style="display: inline-block;">
+                                        <input type="hidden" name="action" value="delete_bot_command">
                                         <input type="hidden" name="csrf_token" value="<?= Auth::generateCsrfToken() ?>">
                                         <input type="hidden" name="id" value="<?= $cmd['id'] ?>">
                                         <button type="submit" class="btn-xs btn-danger">🗑</button>
@@ -112,7 +112,6 @@ use Domain\Auth;
 <script>
 function editCommand(cmd) {
     document.getElementById('command-form-title').innerText = '✏️ Редактировать Команду';
-    document.getElementById('command-form-action').value = 'edit_command';
     document.getElementById('command-id').value = cmd.id;
     document.getElementById('command_prefix').value = cmd.command_prefix;
     document.getElementById('command_description').value = cmd.description;
@@ -127,7 +126,6 @@ function editCommand(cmd) {
 
 function resetCommandForm() {
     document.getElementById('command-form-title').innerText = '➕ Добавить Команду';
-    document.getElementById('command-form-action').value = 'create_command';
     document.getElementById('command-id').value = '0';
     document.getElementById('command_prefix').value = '';
     document.getElementById('command_description').value = '';

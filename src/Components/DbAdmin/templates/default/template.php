@@ -1,4 +1,5 @@
 <?php
+use Domain\Auth;
 /**
  * @var array $arResult
  */
@@ -36,19 +37,18 @@
                     </h3>
                     
                     <div class="actions">
-                        <?php
-                            // Build export link with current filters
-                            $exportParams = ['db_action' => 'export', 'table' => $arResult['current_table']];
-                            if (!empty($arResult['filter']['column'])) {
-                                $exportParams['filter_column'] = $arResult['filter']['column'];
-                                $exportParams['filter_operator'] = $arResult['filter']['operator'];
-                                $exportParams['filter_value'] = $arResult['filter']['value'];
-                            }
-                            $exportUrl = '?' . http_build_query($exportParams);
-                        ?>
-                        <a href="<?= $exportUrl ?>" target="_blank" class="btn-primary" style="text-decoration: none; display: inline-block;">
-                            ⬇️ Экспорт CSV
-                        </a>
+                        <!-- MLP-255: экспорт — POST на api.php (CSV скачивается и из POST-формы) -->
+                        <form id="db-export-form" method="post" action="/api.php" target="_blank" style="display: inline-block;">
+                            <input type="hidden" name="action" value="db_export">
+                            <input type="hidden" name="csrf_token" value="<?= Auth::generateCsrfToken() ?>">
+                            <input type="hidden" name="table" value="<?= htmlspecialchars($arResult['current_table']) ?>">
+                            <?php if (!empty($arResult['filter']['column'])): ?>
+                                <input type="hidden" name="filter_column" value="<?= htmlspecialchars($arResult['filter']['column']) ?>">
+                                <input type="hidden" name="filter_operator" value="<?= htmlspecialchars($arResult['filter']['operator']) ?>">
+                                <input type="hidden" name="filter_value" value="<?= htmlspecialchars($arResult['filter']['value']) ?>">
+                            <?php endif; ?>
+                            <button type="submit" class="btn-primary">⬇️ Экспорт CSV</button>
+                        </form>
                     </div>
                 </div>
 
@@ -178,7 +178,7 @@
         <span class="close-modal" onclick="document.getElementById('db-edit-modal').style.display='none'">&times;</span>
         <h3>📝 Редактировать запись</h3>
         <form id="db-edit-form">
-            <input type="hidden" name="db_action" value="update_row">
+            <input type="hidden" name="action" value="db_update_row">
             <input type="hidden" name="table" id="edit_table_name">
             <input type="hidden" name="__pk_value" id="edit_pk_value">
             
@@ -215,7 +215,8 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.disabled = true;
         btn.innerText = 'Сохранение...';
 
-        fetch(window.location.href.split('?')[0] + '?db_action=update_row&table=' + document.getElementById('edit_table_name').value, {
+        // MLP-255: транспорт через api.php (action=db_update_row в hidden-поле формы)
+        fetch('/api.php', {
             method: 'POST',
             headers: { 'X-CSRF-Token': window.csrfToken || '' }, // MLP-243: CSRF на мутацию БД
             body: formData
@@ -265,8 +266,12 @@ function openEditModal(table, id) {
     document.getElementById('edit_table_name').value = table;
     document.getElementById('edit_pk_value').value = id;
 
-    // Fetch Row Data
-    fetch(window.location.href.split('?')[0] + `?db_action=get_row&table=${table}&id=${id}`)
+    // Fetch Row Data (MLP-255: POST на api.php)
+    fetch('/api.php', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': window.csrfToken || '' },
+        body: new URLSearchParams({ action: 'db_get_row', table: table, id: id })
+    })
         .then(r => r.json())
         .then(res => {
             if (!res.success) {

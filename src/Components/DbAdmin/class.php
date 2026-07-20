@@ -21,18 +21,9 @@ class DbAdminComponent extends Component {
         
         $action = $_GET['db_action'] ?? 'list';
         $table = $_GET['table'] ?? '';
-        
-        // --- API ACTION: GET ROW FOR EDIT ---
-        if ($action === 'get_row' && $table) {
-            $this->ajaxGetRow($db, $table);
-            exit;
-        }
 
-        // --- API ACTION: UPDATE ROW ---
-        if ($action === 'update_row' && $table) {
-            $this->ajaxUpdateRow($db, $table);
-            exit;
-        }
+        // get_row / update_row / export — через api.php (MLP-255: Api\DbAdminController);
+        // здесь остался только рендер списка/просмотра (GET-навигация по вкладке).
 
         // --- VIEW LOGIC ---
         $this->result['action'] = $action;
@@ -156,7 +147,8 @@ class DbAdminComponent extends Component {
         return [$where, $types, $values];
     }
 
-    private function ajaxGetRow($db, $table) {
+    /** MLP-255: public + $id параметром — зовётся из Api\DbAdminController (POST). */
+    public function ajaxGetRow($db, $table, $id = null) {
         if (!$this->isValidTable($db, $table)) {
             echo json_encode(['success' => false, 'message' => 'Invalid table']);
             return;
@@ -167,7 +159,6 @@ class DbAdminComponent extends Component {
             return;
         }
 
-        $id = $_GET['id'] ?? null;
         if (!$id) {
             echo json_encode(['success' => false, 'message' => 'No ID provided']);
             return;
@@ -194,7 +185,8 @@ class DbAdminComponent extends Component {
         }
     }
 
-    private function ajaxUpdateRow($db, $table) {
+    /** MLP-255: public — зовётся из Api\DbAdminController (POST на api.php). */
+    public function ajaxUpdateRow($db, $table) {
         if (!$this->isValidTable($db, $table)) {
             echo json_encode(['success' => false, 'message' => 'Invalid table']);
             return;
@@ -212,9 +204,11 @@ class DbAdminComponent extends Component {
         }
 
         // Filter out internal fields
+        // MLP-255: + action/csrf_token (транспорт через api.php). Побочное ограничение:
+        // колонку таблицы с именем 'action' через модалку не отредактировать.
         $data = [];
         foreach ($_POST as $key => $val) {
-            if ($key !== '__pk_value' && $key !== 'db_action' && $key !== 'table') {
+            if (!in_array($key, ['__pk_value', 'db_action', 'table', 'action', 'csrf_token'], true)) {
                 // If value is empty string, check if we should set it to NULL?
                 // For now, let's treat empty string as empty string, unless standard practice.
                 // However, for nullable fields, empty string might mean NULL.

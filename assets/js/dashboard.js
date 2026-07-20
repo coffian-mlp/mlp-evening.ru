@@ -75,7 +75,11 @@ $(document).ready(function() {
 
     // --- AJAX обработка форм (Dashboard + User Modal + Mod Modals) ---
     // Исключаем специальные формы, у которых есть свои обработчики
-    $("form").not('#profile-form, #add-sticker-form, #create-pack-form, #zip-import-form, #edit-pack-form, #bot-command-form, .bot-command-delete-form').on("submit", function(e) {
+    // MLP-255: #bot-command-form теперь тоже ходит в /api.php через этот обработчик.
+    // Исключены формы DbAdmin: у #db-edit-form свой fetch (раньше двойной сабмит),
+    // .db-filter-form — обычная GET-навигация (перехват ломал фильтр ошибкой JSON),
+    // #db-export-form — скачивание CSV (не JSON).
+    $("form").not('#profile-form, #add-sticker-form, #create-pack-form, #zip-import-form, #edit-pack-form, .bot-command-delete-form, #db-edit-form, #db-export-form, .db-filter-form').on("submit", function(e) {
         e.preventDefault(); 
         
         var $form = $(this);
@@ -148,6 +152,21 @@ $(document).ready(function() {
                      $btn.prop("disabled", false).text(originalText);
                 }
             }
+        });
+    });
+
+    // --- Удаление команды бота (MLP-255): confirm + AJAX на /api.php ---
+    $('.bot-command-delete-form').on('submit', function(e) {
+        e.preventDefault();
+        if (!confirm('Точно удалить?')) return;
+        $.post('/api.php', $(this).serialize(), function(res) {
+            if (res.success) {
+                location.reload();
+            } else {
+                window.showFlashMessage(res.message, res.type);
+            }
+        }, 'json').fail(function() {
+            window.showFlashMessage('❌ Ошибка соединения', 'error');
         });
     });
 

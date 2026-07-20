@@ -6,39 +6,7 @@ require_once __DIR__ . '/../init.php';
 // 🔒 ЗАЩИТА: Только для авторизованных
 Auth::requireAdmin();
 
-// --- DB API ACTIONS (Must be before output) ---
-if (isset($_GET['db_action']) || (isset($_POST['db_action']) && $_POST['db_action'] === 'update_row')) {
-    require_once __DIR__ . '/../src/Components/DbAdmin/class.php';
-    $dbAdmin = new \Components\DbAdmin\DbAdminComponent('DbAdmin', 'default', []);
-    
-    // Handle Export (GET)
-    if (isset($_GET['db_action']) && $_GET['db_action'] === 'export' && isset($_GET['table'])) {
-        $dbAdmin->exportCsv($_GET['table'], $_GET);
-        exit;
-    }
-    
-    // Handle Get Row (GET)
-    if (isset($_GET['db_action']) && $_GET['db_action'] === 'get_row' && isset($_GET['table'])) {
-        $dbAdmin->executeComponent(); // This handles get_row internally and exits
-        exit;
-    }
-
-    // Handle Update Row (POST)
-    if (isset($_POST['db_action']) && $_POST['db_action'] === 'update_row' && isset($_POST['table'])) {
-        // MLP-243: CSRF на мутацию БД (эндпоинт вне api.php, свой гейт).
-        $csrf = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_POST['csrf_token'] ?? '';
-        if (!Auth::checkCsrfToken($csrf)) {
-            header('Content-Type: application/json');
-            echo json_encode(['success' => false, 'message' => 'Ошибка безопасности. Обнови страничку!']);
-            exit;
-        }
-        // Компонент читает $_GET['db_action'] — прокидываем POST в GET.
-        $_GET['db_action'] = 'update_row';
-        $_GET['table'] = $_POST['table'];
-        $dbAdmin->executeComponent();
-        exit;
-    }
-}
+// DB-операции (get_row/update_row/export) — через api.php (MLP-255: Api\DbAdminController).
 
 $app->setTitle('Dashboard - MLP Evening');
 $app->addCss('/assets/css/dashboard.css');
