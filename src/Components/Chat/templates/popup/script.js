@@ -1966,7 +1966,8 @@ $(document).ready(function() {
         }
 
         stickers.forEach(s => {
-            const img = $(`<img src="${escapeHtml(s.image_url)}" class="picker-sticker" title=":${escapeHtml(s.code)}:" draggable="false">`);
+            // MLP-258: в сетке — превью (thumb) с lazy; зум и отправка — оригинал
+            const img = $(`<img src="${escapeHtml(s.thumb_url || s.image_url)}" loading="lazy" class="picker-sticker" title=":${escapeHtml(s.code)}:" draggable="false">`);
             
             // --- Smart Click/Hold Logic ---
             let startX = 0;

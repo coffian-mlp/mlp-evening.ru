@@ -1,0 +1,14 @@
+# MLP-258: HTTP-кеш для загруженных картинок (стикеры/превью/аватарки).
+# На проде статику отдаёт nginx со своим кешем (30 дней, конфиг вне git) —
+# этот файл — фоллбек для Apache-окружений (локалка, будущие переезды).
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.(png|jpe?g|gif|webp)$">
+        Header set Cache-Control "public, max-age=2592000"
+    </FilesMatch>
+</IfModule>
+
+# Ничего исполняемого из upload/ не отдаём
+<FilesMatch "\.(php|phtml|phar)$">
+    Require all denied
+</FilesMatch>
