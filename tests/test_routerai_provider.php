@@ -1,4 +1,5 @@
 <?php
+use LLM\RouterAIProvider;
 /**
  * Смоук-тест провайдера RouterAI.
  *
@@ -25,8 +26,8 @@ function check($cond, $label) {
 }
 
 echo "== Offline: контракт класса ==\n";
-check(class_exists('RouterAIProvider'), 'класс RouterAIProvider загружается');
-check(in_array('LLMProviderInterface', class_implements('RouterAIProvider')), 'реализует LLMProviderInterface');
+check(class_exists(RouterAIProvider::class), 'класс RouterAIProvider загружается');
+check(in_array('LLM\\LLMProviderInterface', class_implements(RouterAIProvider::class)), 'реализует LLMProviderInterface');
 
 // Пустой ключ должен выбрасывать исключение до сетевого вызова.
 $threw = false;

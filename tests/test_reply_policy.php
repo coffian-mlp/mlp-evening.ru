@@ -1,4 +1,5 @@
 <?php
+use LLM\ReplyPolicy;
 /**
  * Юнит-тест ReplyPolicy — адаптивный дебаунс/анти-спам бота (без БД).
  * Запуск: php tests/test_reply_policy.php

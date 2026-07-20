@@ -1,5 +1,9 @@
 <?php
 
+namespace LLM;
+
+use ConfigManager;
+
 /**
  * Преобразует картинки из сообщений чата в мультимодальный формат OpenAI-совместимого API
  * (content-массив с частями type=text / type=image_url), чтобы vision-модели «видели» вложения.

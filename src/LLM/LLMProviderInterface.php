@@ -1,5 +1,7 @@
 <?php
 
+namespace LLM;
+
 interface LLMProviderInterface {
     /**
      * Отправляет запрос к LLM и возвращает ответ.

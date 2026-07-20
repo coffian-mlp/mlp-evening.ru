@@ -1,5 +1,9 @@
 <?php
 
+namespace Social;
+
+use ConfigManager;
+
 
 class TelegramProvider implements SocialProvider {
     private $botToken;

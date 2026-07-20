@@ -1,5 +1,9 @@
 <?php
 
+namespace LLM;
+
+use Exception;
+
 
 class CliUtilityProvider implements LLMProviderInterface {
     private $commandTemplate;

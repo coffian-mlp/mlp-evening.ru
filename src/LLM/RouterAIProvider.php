@@ -1,5 +1,9 @@
 <?php
 
+namespace LLM;
+
+use Exception;
+
 
 /**
  * RouterAI (routerai.ru) — российский агрегатор LLM с OpenAI-совместимым API.

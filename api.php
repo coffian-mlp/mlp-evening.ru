@@ -2,6 +2,10 @@
 
 require_once __DIR__ . '/autoload.php'; // MLP-248: классы — только автозагрузкой
 
+use LLM\BotDispatch;
+use Social\SocialAuthService;
+use Social\TelegramProvider;
+
 // Отключаем вывод ошибок в поток вывода по умолчанию, но позволяем включить через конфиг
 $debugMode = ConfigManager::getInstance()->getOption('debug_mode', 0);
 if ($debugMode) {

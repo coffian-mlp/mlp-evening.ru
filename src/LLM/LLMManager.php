@@ -1,5 +1,14 @@
 <?php
 
+namespace LLM;
+
+use ChatManager;
+use ConfigManager;
+use Database;
+use EventManager;
+use Exception;
+use UserManager;
+
 
 class LLMManager {
     private $providers = [];

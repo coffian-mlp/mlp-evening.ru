@@ -74,7 +74,7 @@ function scan_global_classes(string $base): array {
 
 $found = scan_global_classes($base);
 $missing = array_diff_key($found, $map);
-check(count($found) >= 30, 'скан нашёл классы (' . count($found) . ' шт., ожидалось ≥ 30)');
+check(count($found) > 0 && count($found) === count($map), 'скан согласован с classmap (' . count($found) . ' глобальных классов)');
 check(empty($missing), 'все найденные глобальные классы есть в classmap' . ($missing ? ' (нет: ' . implode(', ', array_keys($missing)) . ')' : ''));
 
 $stale = array_diff_key($map, $found);

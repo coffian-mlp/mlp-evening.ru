@@ -1,5 +1,12 @@
 <?php
 
+namespace Social;
+
+use Auth;
+use Database;
+use Exception;
+use UserManager;
+
 
 class SocialAuthService {
     private $db;

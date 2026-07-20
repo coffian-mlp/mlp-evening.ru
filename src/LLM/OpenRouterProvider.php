@@ -1,5 +1,9 @@
 <?php
 
+namespace LLM;
+
+use Exception;
+
 
 class OpenRouterProvider implements LLMProviderInterface {
     private $apiKey;

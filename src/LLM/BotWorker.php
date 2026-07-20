@@ -1,5 +1,13 @@
 <?php
 
+namespace LLM;
+
+use BotCommandManager;
+use ConfigManager;
+use Database;
+use EventManager;
+use PollManager;
+
 
 /**
  * Единый «голос» бота: реактив (очередь ответов) + проактив (спонтанные + анонсы по таймеру).

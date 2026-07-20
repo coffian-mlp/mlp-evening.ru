@@ -1,5 +1,9 @@
 <?php
 
+namespace LLM;
+
+use Exception;
+
 
 class GigaChatProvider implements LLMProviderInterface {
     private $authKey;

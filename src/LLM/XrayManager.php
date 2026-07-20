@@ -1,5 +1,7 @@
 <?php
 
+namespace LLM;
+
 class XrayManager {
     private $xrayPath;
     private $configPath;

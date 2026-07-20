@@ -1,4 +1,5 @@
 <?php
+use LLM\ReactionParser;
 /**
  * Юнит-тест ReactionParser::extract() — извлечение маркера реакции из ответа бота.
  * Запуск: php tests/test_reaction_parser.php

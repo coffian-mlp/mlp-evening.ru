@@ -1,5 +1,9 @@
 <?php
 
+namespace LLM;
+
+use Exception;
+
 
 class OpenAIProvider implements LLMProviderInterface {
     private $apiKey;

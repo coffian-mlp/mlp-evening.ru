@@ -1,4 +1,5 @@
 <?php
+use LLM\ResponseSanitizer;
 /**
  * Юнит-тест ResponseSanitizer::clean() — guard против «прорыва системных сообщений» в чат.
  * Кейсы взяты из реальных прорвавшихся сообщений бота (chat_messages, user_id=12).

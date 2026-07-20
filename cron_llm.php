@@ -1,4 +1,5 @@
 <?php
+use LLM\BotWorker;
 /**
  * Cron-вход бота Лиры.
  *

@@ -27,27 +27,4 @@ return [
     'StickerManager'    => 'StickerManager.php',
     'UploadManager'     => 'UploadManager.php',
     'UserManager'       => 'UserManager.php',
-
-    // src/LLM/
-    'BotDispatch'          => 'LLM/BotDispatch.php',
-    'BotWorker'            => 'LLM/BotWorker.php',
-    'CliUtilityProvider'   => 'LLM/CliUtilityProvider.php',
-    'GigaChatProvider'     => 'LLM/GigaChatProvider.php',
-    'JobQueue'             => 'LLM/JobQueue.php',
-    'LLMManager'           => 'LLM/LLMManager.php',
-    'LLMProviderInterface' => 'LLM/LLMProviderInterface.php',
-    'OpenAIProvider'       => 'LLM/OpenAIProvider.php',
-    'OpenRouterProvider'   => 'LLM/OpenRouterProvider.php',
-    'ReactionParser'       => 'LLM/ReactionParser.php',
-    'ReplyPolicy'          => 'LLM/ReplyPolicy.php',
-    'ResponseSanitizer'    => 'LLM/ResponseSanitizer.php',
-    'RouterAIProvider'     => 'LLM/RouterAIProvider.php',
-    'VisionFormatter'      => 'LLM/VisionFormatter.php',
-    'XrayManager'          => 'LLM/XrayManager.php',
-    'YandexGPTProvider'    => 'LLM/YandexGPTProvider.php',
-
-    // src/Social/
-    'SocialAuthService' => 'Social/SocialAuthService.php',
-    'SocialProvider'    => 'Social/SocialProvider.php',
-    'TelegramProvider'  => 'Social/TelegramProvider.php',
 ];

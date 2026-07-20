@@ -1,5 +1,7 @@
 <?php
 
+namespace Social;
+
 interface SocialProvider {
     /**
      * Возвращает уникальный идентификатор провайдера (telegram, discord, vk)

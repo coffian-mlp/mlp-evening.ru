@@ -1,5 +1,9 @@
 <?php
 
+namespace LLM;
+
+use Exception;
+
 
 class YandexGPTProvider implements LLMProviderInterface {
     private $apiKey;

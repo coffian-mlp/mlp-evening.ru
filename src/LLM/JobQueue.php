@@ -1,5 +1,9 @@
 <?php
 
+namespace LLM;
+
+use Database;
+
 
 /**
  * Очередь задач бота (таблица llm_jobs). Тонкая обёртка над mysqli.

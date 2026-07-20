@@ -1,4 +1,5 @@
 <?php
+use LLM\VisionFormatter;
 /**
  * Юнит-тест VisionFormatter::expand() — разворачивание картинок чата в мультимодальный формат.
  * Запуск: php tests/test_vision_formatter.php
