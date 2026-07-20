@@ -561,6 +561,12 @@ $(document).ready(function() {
              actionsHtml += `<button class="chat-action-btn mod-menu-btn" title="Модерация">⚡</button>`;
         }
 
+        // Закреп: одна кнопка по состоянию (MLP-253, вынесено из контекстного меню).
+        const isModUser = (window.currentUserRole === 'admin' || window.currentUserRole === 'moderator');
+        if (isModUser && !data.deleted) {
+             actionsHtml += `<button class="chat-action-btn pin-btn" title="Закрепить">📌</button>`;
+        }
+
         let editedMark = '';
         if (data.edited_at) {
             const editDate = new Date(data.edited_at);
@@ -793,6 +799,11 @@ $(document).ready(function() {
     let contextTargetUserId = null;
 
     if (contextMenu.length) {
+        // MLP-253: меню живёт в body — внутри контейнеров чата absolute-координаты
+        // страницы ломались о positioned/overflow-предков (Firefox на index.php:
+        // меню улетало за клип и «не открывалось»).
+        contextMenu.appendTo('body');
+
         // Show Menu
         function showContextMenu(e, targetMsgEl) {
             e.preventDefault();
@@ -802,9 +813,9 @@ $(document).ready(function() {
             contextTargetUsername = targetMsgEl.find('.username').text();
             contextTargetUserId = targetMsgEl.data('userId');
 
-            // Position
-            let x = e.pageX;
-            let y = e.pageY;
+            // Position: вьюпорт-координаты (меню position:fixed, MLP-253)
+            let x = e.clientX;
+            let y = e.clientY;
             
             // Hide Punish options if not allowed
             const targetRole = targetMsgEl.data('userRole') || 'user';
@@ -876,22 +887,11 @@ $(document).ready(function() {
 
             const windowHeight = $(window).height();
             const windowWidth = $(window).width();
-            const scrollTop = $(window).scrollTop();
 
-            // Vertical Flip
-            if ((y - scrollTop + menuHeight) > windowHeight) {
-                // If triggered by button, move ABOVE button
-                if ($(e.target).hasClass('mod-menu-btn')) {
-                     y = $(e.target).offset().top - menuHeight;
-                } else {
-                     y -= menuHeight;
-                }
-            }
-            
-            // Horizontal Flip (if needed, though unlikely for chat width)
-            if ((x + menuWidth) > windowWidth) {
-                x -= menuWidth;
-            }
+            // Clamp во вьюпорт (MLP-253): надёжнее флипа — высокое меню у нижних
+            // сообщений прижимается к краю, а не уезжает за экран.
+            x = Math.max(8, Math.min(x, windowWidth - menuWidth - 8));
+            y = Math.max(8, Math.min(y, windowHeight - menuHeight - 8));
 
             contextMenu.css({
                 top: y + 'px',
@@ -1001,16 +1001,6 @@ $(document).ready(function() {
                         }, 'json');
                     });
                     break;
-                case 'pin':
-                    $.post('/api.php', { action: 'pin_message', message_id: contextTargetId }, function(res) {
-                        showChatNotification(res.message, res.success ? 'success' : 'error');
-                    }, 'json');
-                    break;
-                case 'unpin':
-                    $.post('/api.php', { action: 'unpin_message' }, function(res) {
-                        showChatNotification(res.message, res.success ? 'success' : 'error');
-                    }, 'json');
-                    break;
             }
         });
     }
@@ -1031,10 +1021,30 @@ $(document).ready(function() {
         }
     }
 
-    // --- Закреплённое сообщение (MLP-242) ---
+    // --- Закреплённое сообщение (MLP-242; кнопка-переключатель — MLP-253) ---
+    let currentPinnedId = null;
+    function updatePinButtons() {
+        document.querySelectorAll('.pin-btn').forEach(btn => {
+            const msgId = btn.closest('.chat-message')?.dataset.id;
+            const isPinned = currentPinnedId && msgId == currentPinnedId;
+            btn.classList.toggle('active', !!isPinned);
+            btn.title = isPinned ? 'Открепить' : 'Закрепить';
+        });
+    }
+    $(document).on('click', '.pin-btn', function() {
+        const msgId = $(this).closest('.chat-message').data('id');
+        const params = (currentPinnedId && msgId == currentPinnedId)
+            ? { action: 'unpin_message' }
+            : { action: 'pin_message', message_id: msgId };
+        $.post('/api.php', params, function(res) {
+            showChatNotification(res.message, res.success ? 'success' : 'error');
+        }, 'json');
+    });
     function renderPinnedBanner(pinned) {
         const banner = document.getElementById('chat-pinned-banner');
         if (!banner) return;
+        currentPinnedId = pinned ? (pinned.id ?? null) : null;
+        updatePinButtons();
         if (!pinned) { banner.style.display = 'none'; banner.innerHTML = ''; return; }
         const canUnpin = (window.currentUserRole === 'admin' || window.currentUserRole === 'moderator');
         // message уже отрендерен и экранирован на бэке; здесь — только маркер опроса и переносы.
