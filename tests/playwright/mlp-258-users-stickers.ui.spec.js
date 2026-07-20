@@ -51,7 +51,8 @@ test('админ: список стикеров постраничный, пре
   await page.goto(BASE + '/dashboard/#tab-stickers', { waitUntil: 'domcontentloaded' });
 
   const rows = page.locator('#stickers-table tbody tr');
-  await expect(rows.first()).toBeVisible({ timeout: 15000 });
+  // Ждём именно данные (строку «Загрузка...» не считаем)
+  await expect(page.locator('#stickers-table tbody img').first()).toBeAttached({ timeout: 15000 });
   const n = await rows.count();
   expect(n, 'на странице не больше 50 строк').toBeLessThanOrEqual(50);
 
