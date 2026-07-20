@@ -152,52 +152,7 @@ try {
         sendResponse(true, "Loaded", 'success', ['html' => $html, 'user_data' => $userData]);
     }
 
-    if ($action === 'captcha_start') {
-        $captcha = new CaptchaManager();
-        $data = $captcha->start();
-        sendResponse(true, "Капча начата", 'success', $data);
-    }
-
-    if ($action === 'captcha_check') {
-        $captcha = new CaptchaManager();
-        $answer = $_POST['answer'] ?? '';
-        $result = $captcha->checkAnswer($answer);
-        
-        if ($result['success']) {
-            sendResponse(true, "Верно!", 'success', $result);
-        } else {
-            sendResponse(false, $result['message'], 'error');
-        }
-    }
-
-    if ($action === 'heartbeat') {
-        $sessionId = session_id(); // Ensure session is started (usually is in global init)
-        $userId = $_SESSION['user_id'] ?? null;
-        $ip = $_SERVER['REMOTE_ADDR'] ?? '';
-        $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
-        
-        $online = new OnlineManager();
-        $online->beat($sessionId, $userId, $ip, $ua);
-        
-        // Return detailed stats (default window 3 mins)
-        $stats = $online->getOnlineStats(3);
-        
-        // 1% chance to cleanup old sessions (> 1 hour)
-        if (rand(1, 100) === 1) {
-            $online->cleanup(60);
-        }
-        
-        sendResponse(true, "Beat", 'success', ['online_stats' => $stats]);
-    }
-
-    if ($action === 'leave') {
-        $sessionId = session_id();
-        $online = new OnlineManager();
-        $online->removeSession($sessionId);
-        // No response needed usually for beacon, but we output valid JSON just in case
-        echo json_encode(['success' => true]);
-        exit();
-    }
+    // captcha_start/captcha_check, heartbeat/leave — в тонком роутере (MLP-245).
 
     if ($action === 'social_login') {
 
@@ -536,7 +491,9 @@ try {
     }
 
     // Protected Actions
-    if (!$isLoggedIn && !in_array($action, ['login', 'register', 'forgot_password', 'reset_password_submit', 'social_login', 'get_messages', 'get_stickers', 'get_packs', 'get_public_events', 'get_poll', 'get_pinned'])) {
+    // captcha_*/heartbeat/leave: публичные, обрабатывались до этого гейта — после
+    // переезда в роутер (MLP-245) числятся в whitelist явно.
+    if (!$isLoggedIn && !in_array($action, ['login', 'register', 'forgot_password', 'reset_password_submit', 'social_login', 'get_messages', 'get_stickers', 'get_packs', 'get_public_events', 'get_poll', 'get_pinned', 'captcha_start', 'captcha_check', 'heartbeat', 'leave'])) {
          Auth::requireApiLogin(); 
     }
 
@@ -638,6 +595,11 @@ try {
         'get_pinned'        => ['role' => 'public', 'handler' => [\Api\PinController::class, 'get']],
         'pin_message'       => ['role' => 'user',   'handler' => [\Api\PinController::class, 'pin']],
         'unpin_message'     => ['role' => 'user',   'handler' => [\Api\PinController::class, 'unpin']],
+        // Капча и онлайн-присутствие (MLP-245): публичные, CSRF-гейт выше как раньше.
+        'captcha_start'     => ['role' => 'public', 'handler' => [\Api\CaptchaController::class, 'start']],
+        'captcha_check'     => ['role' => 'public', 'handler' => [\Api\CaptchaController::class, 'check']],
+        'heartbeat'         => ['role' => 'public', 'handler' => [\Api\OnlineController::class, 'beat']],
+        'leave'             => ['role' => 'public', 'handler' => [\Api\OnlineController::class, 'leave']],
     ];
     if (isset($apiRoutes[$action])) {
         $route = $apiRoutes[$action];
