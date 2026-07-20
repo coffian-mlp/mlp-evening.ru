@@ -22,7 +22,7 @@ $(document).ready(function() {
             loadAuditLogs();
         }
         if (target === '#tab-stickers') {
-            loadStickers();
+            loadStickers(1); // MLP-258: вкладка всегда открывается с первой страницы
         }
     });
 
@@ -359,7 +359,7 @@ function loadUsers() {
                             <td>${status}</td>
                             <td>${u.created_at ? u.created_at : '-'}</td>
                             <td style="text-align: right;">
-                                <button class="btn-warning" onclick='editUser(${JSON.stringify(u)})' style="padding: 5px 10px; font-size: 0.9em;">✏️</button>
+                                <button class="btn-warning" data-user="${escapeHtml(JSON.stringify(u))}" onclick="editUser(JSON.parse(this.dataset.user))" style="padding: 5px 10px; font-size: 0.9em;">✏️</button>
                                 <button class="btn-danger" onclick="deleteUser(${u.id})" style="padding: 5px 10px; font-size: 0.9em;" title="Удалить">🗑️</button>
                                 ${u.is_banned == 1 
                                     ? `<button class="btn-primary" onclick="unbanUser(${u.id})" style="padding: 5px 10px; font-size: 0.9em;" title="Разбанить">🕊️</button>`
@@ -488,14 +488,19 @@ function openUserModal() {
     $('#user_id').val('');
     $('#user_login').val('');
     $('#user_nickname').val('');
+    $('#user_email').val('');
     $('#user_avatar_file').val('');
     $('#user_avatar_url').val('');
     $('#user_chat_color').val('#6d2f8e');
     $('#user_password').val('');
     $('#user_role').val('user');
     $('#user_font_preference').val('open_sans'); // Default font
+    $('#user_font_scale').val(100);
+    $('#user_font_scale_value').text('100%');
+    $('#user-meta').hide();
+    $('#user-socials-list').html('<small style="color:#999;">—</small>');
     $('#user-modal-title').text('Новый пони');
-    
+
     // Init Pickers
     if (window.initColorPickers) window.initColorPickers();
     // Update active swatch manually for default
@@ -531,31 +536,79 @@ function editUser(user) {
     $('#user_id').val(user.id);
     $('#user_login').val(user.login);
     $('#user_nickname').val(user.nickname);
+    $('#user_email').val(user.email || '');
     $('#user_avatar_file').val('');
     $('#user_avatar_url').val(user.avatar_url || '');
     $('#user_chat_color').val(user.chat_color || '#6d2f8e');
     $('#user_password').val('');
     $('#user_role').val(user.role);
     $('#user-modal-title').text('Редактировать пони');
-    
-    // Получаем опции пользователя, чтобы заполнить шрифт
-    // Нам нужно сделать отдельный запрос, так как в общем списке юзеров опций нет
+
+    // MLP-258: дата регистрации + статусы (read-only)
+    var created = user.created_at ? String(user.created_at).slice(0, 10) : '';
+    $('#user-meta-created').text(created ? '📅 С нами с ' + created : '');
+    var badges = '';
+    if (parseInt(user.is_banned, 10) === 1) {
+        badges += '<span class="badge badge-ban" title="' + escapeHtml(user.ban_reason || '') + '">🔨 Забанен</span>';
+    }
+    if (user.muted_until && new Date(user.muted_until.replace(' ', 'T') + 'Z') > new Date()) {
+        badges += '<span class="badge badge-mute">🤐 Мут до ' + escapeHtml(user.muted_until) + ' UTC</span>';
+    }
+    if (!badges) badges = '<span class="badge badge-ok">✔ Активен</span>';
+    $('#user-meta-badges').html(badges);
+    $('#user-meta').css('display', 'flex');
+
+    // Получаем опции пользователя (шрифт + размер шрифта).
+    // Сначала сбрасываем слайдер — иначе при медленном/упавшем запросе
+    // сохранится значение ПРЕДЫДУЩЕГО открытого юзера (ревью MLP-258).
+    $('#user_font_scale').val(100);
+    $('#user_font_scale_value').text('100%');
     $.post('/api.php', { action: 'get_user_options', user_id: user.id }, function(res) {
         if (res.success) {
-            var font = res.data.options.font_preference || 'open_sans';
-            $('#user_font_preference').val(font);
+            $('#user_font_preference').val(res.data.options.font_preference || 'open_sans');
+            var scale = parseInt(res.data.options.font_scale, 10) || 100;
+            $('#user_font_scale').val(scale);
+            $('#user_font_scale_value').text(scale + '%');
         } else {
-            // Fallback
             $('#user_font_preference').val('open_sans');
         }
     }, 'json');
-    
+
+    // MLP-258: соц-привязки с кнопкой отвязать
+    loadUserSocials(user.id);
+
     // Init Pickers
     if (window.initColorPickers) window.initColorPickers();
     // Update active swatch
     const color = user.chat_color || '#6d2f8e';
     $('.color-picker-ui .color-swatch').removeClass('active');
     $(`.color-picker-ui .color-swatch[data-color="${color}"]`).addClass('active');
+}
+
+// MLP-258: соц-привязки в карточке пользователя
+function loadUserSocials(userId) {
+    var $box = $('#user-socials-list');
+    $box.html('<small style="color:#999;">Загрузка...</small>');
+    $.post('/api.php', { action: 'get_user_socials_admin', user_id: userId }, function(res) {
+        if (!res.success || !res.data.socials || res.data.socials.length === 0) {
+            $box.html('<small style="color:#999;">Нет привязок</small>');
+            return;
+        }
+        $box.empty();
+        res.data.socials.forEach(function(s) {
+            var label = escapeHtml(s.provider) + (s.username ? ' (@' + escapeHtml(s.username) + ')' : '');
+            var $item = $('<div class="user-social-item"><span>🔗 ' + label + '</span></div>');
+            var $btn = $('<button type="button" class="btn-xs btn-danger" title="Отвязать">×</button>').click(function() {
+                if (!confirm('Отвязать ' + s.provider + ' у этого пользователя?\nЕсли пони входила только через соцсеть — задайте ей пароль, иначе вход станет недоступен.')) return;
+                $.post('/api.php', { action: 'unlink_social_admin', user_id: userId, provider: s.provider }, function(r) {
+                    window.showFlashMessage(r.message, r.type);
+                    if (r.success) loadUserSocials(userId);
+                }, 'json');
+            });
+            $item.append($btn);
+            $box.append($item);
+        });
+    }, 'json');
 }
 
 
@@ -611,25 +664,38 @@ function unmuteUser(id) {
 
 // --- Stickers Logic ---
 
-function loadStickers() {
+// MLP-258: серверная пагинация (по 50) + превью с lazy + серверный фильтр по паку
+var stickersPage = 1;
+var stickersPackId = null;
+var STICKERS_PER_PAGE = 50;
+
+function loadStickers(page, skipPacks) {
+    if (page) stickersPage = page;
     var $tbody = $('#stickers-table tbody');
     $tbody.html('<tr><td colspan="4" style="text-align:center;">Загрузка...</td></tr>');
-    
-    // Also refresh packs list to stay sync
-    loadPacks();
 
-    $.post('/api.php', { action: 'get_stickers' }, function(res) {
+    // Also refresh packs list to stay sync (кроме кликов по пак-фильтру)
+    if (!skipPacks) loadPacks();
+
+    $.post('/api.php', {
+        action: 'get_stickers',
+        limit: STICKERS_PER_PAGE,
+        offset: (stickersPage - 1) * STICKERS_PER_PAGE,
+        pack_id: stickersPackId || ''
+    }, function(res) {
         if (res.success) {
             $tbody.empty();
             if (res.data.stickers.length === 0) {
                 $tbody.html('<tr><td colspan="4" style="text-align:center;">Нет стикеров</td></tr>');
+                renderStickersPagination(res.data.total || 0);
                 return;
             }
-            
+
             res.data.stickers.forEach(function(s) {
+                var imgSrc = s.thumb_url || s.image_url;
                 var row = `
                     <tr>
-                        <td><img src="${escapeHtml(s.image_url)}" class="sticker-preview-img" style="height: 32px; vertical-align: middle;"></td>
+                        <td><img src="${escapeHtml(imgSrc)}" loading="lazy" class="sticker-preview-img" style="height: 32px; vertical-align: middle;"></td>
                         <td>:${escapeHtml(s.code)}:</td>
                         <td><small>${escapeHtml(s.pack_name || 'default')}</small></td>
                         <td style="text-align: right;">
@@ -639,12 +705,32 @@ function loadStickers() {
                 `;
                 $tbody.append(row);
             });
+            renderStickersPagination(res.data.total || res.data.stickers.length);
         } else {
             $tbody.html(`<tr><td colspan="4" style="text-align:center; color:red;">Ошибка: ${escapeHtml(res.message)}</td></tr>`);
         }
     }, 'json').fail(function(xhr, status, error) {
          $tbody.html(`<tr><td colspan="4" style="text-align:center; color:red;">AJAX Error: ${escapeHtml(error)}</td></tr>`);
     });
+}
+
+function renderStickersPagination(total) {
+    var totalPages = Math.max(1, Math.ceil(total / STICKERS_PER_PAGE));
+    var $box = $('#stickers-pagination');
+    if (!$box.length) {
+        $box = $('<div id="stickers-pagination" style="margin-top:10px; display:flex; gap:8px; justify-content:center; align-items:center;"></div>');
+        $('#stickers-table').after($box);
+    }
+    $box.empty();
+    if (totalPages <= 1) return;
+
+    if (stickersPage > 1) {
+        $box.append($('<button class="btn-xs">←</button>').click(function() { loadStickers(stickersPage - 1); }));
+    }
+    $box.append(`<span style="padding:0 6px;">Стр. ${stickersPage} из ${totalPages} <small style="color:#999;">(${total} стикеров)</small></span>`);
+    if (stickersPage < totalPages) {
+        $box.append($('<button class="btn-xs">→</button>').click(function() { loadStickers(stickersPage + 1); }));
+    }
 }
 
 function loadPacks() {
@@ -683,16 +769,24 @@ function loadPacks() {
                     window.currentPackId = p.id;
                     
                     // Highlight active item
-                    $('.pack-item').removeClass('active');
-                    item.addClass('active');
-                    
-                    // Filter table (Visual only for now)
-                    $('#stickers-table tbody tr').show().filter(function() {
-                        var text = $(this).find('td:nth-child(3)').text();
-                        return text !== p.name;
-                    }).hide();
-                    $('#current-pack-label').text(`(${p.name})`);
+                    // MLP-258: фильтр по паку — серверный (список постраничный,
+                    // клиентское скрытие фильтровало бы только текущие 50 строк).
+                    // Повторный клик по активному паку сбрасывает фильтр.
+                    if (stickersPackId === p.id) {
+                        stickersPackId = null;
+                        $('.pack-item').removeClass('active');
+                        $('#current-pack-label').text('');
+                    } else {
+                        stickersPackId = p.id;
+                        $('.pack-item').removeClass('active');
+                        item.addClass('active');
+                        $('#current-pack-label').text(`(${p.name})`);
+                    }
+                    loadStickers(1, true);
                 });
+
+                // Восстанавливаем активный пак после пере-рендера списка
+                if (stickersPackId === p.id) item.addClass('active');
 
                 // Edit Action
                 item.find('.edit-pack-btn').click(function(e) {

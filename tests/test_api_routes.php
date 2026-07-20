@@ -56,6 +56,9 @@ $expected = [
     'get_audit_logs'      => 'admin',
     'save_user'           => 'admin',
     'delete_user'         => 'admin',
+    // MLP-258: соц-привязки из карточки пользователя
+    'get_user_socials_admin' => 'admin',
+    'unlink_social_admin'    => 'admin',
     // MLP-255: модерация (было: Auth::isModerator() в ветках)
     'ban_user'            => 'moderator',
     'unban_user'          => 'moderator',

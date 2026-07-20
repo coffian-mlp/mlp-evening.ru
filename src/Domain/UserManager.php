@@ -154,14 +154,20 @@ class UserManager {
         }
 
         if (isset($data['email'])) {
-            // Check uniqueness
-            $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
-            $stmt->bind_param("si", $data['email'], $id);
-            $stmt->execute();
-            if ($stmt->get_result()->num_rows > 0) {
-                throw new Exception("Этот Email уже используется другой пони.");
+            // MLP-258 (ревью): пустой email → NULL, как в createUser — иначе '' упирается
+            // в UNIQUE-индекс и второй юзер без email не сохраняется.
+            if ($data['email'] === '') $data['email'] = null;
+
+            if ($data['email'] !== null) {
+                // Check uniqueness
+                $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
+                $stmt->bind_param("si", $data['email'], $id);
+                $stmt->execute();
+                if ($stmt->get_result()->num_rows > 0) {
+                    throw new Exception("Этот Email уже используется другой пони.");
+                }
+                $stmt->close();
             }
-            $stmt->close();
 
             $updates[] = "email = ?";
             $types .= "s";

@@ -41,71 +41,96 @@
      Ideally, they should be part of this component. Let's move user-related modals here.
 -->
 
-<!-- User Modal -->
+<!-- User Modal (MLP-258: шире, две колонки, все поля профиля) -->
 <div id="user-modal" class="modal-overlay">
-    <div class="modal-content">
+    <div class="modal-content user-modal-wide">
         <span class="close-modal" onclick="closeUserModal()">&times;</span>
         <h3 id="user-modal-title">Пользователь</h3>
+
+        <!-- Read-only: дата и статусы (заполняет openUserModal) -->
+        <div id="user-meta" class="user-meta-row" style="display:none;">
+            <span id="user-meta-created"></span>
+            <span id="user-meta-badges"></span>
+        </div>
+
         <form id="user-form" action="/api.php" method="post">
             <input type="hidden" name="action" value="save_user">
             <input type="hidden" name="user_id" id="user_id">
-            
-            <div class="form-group">
-                <label class="form-label">Логин (для входа)</label>
-                <input type="text" name="login" id="user_login" class="form-input" required>
-            </div>
 
-            <div class="form-group">
-                <label class="form-label">Никнейм (в чате)</label>
-                <input type="text" name="nickname" id="user_nickname" class="form-input" placeholder="Если пусто, будет как логин">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Роль</label>
-                <select name="role" id="user_role" class="form-input">
-                    <option value="user">Пользователь</option>
-                    <option value="moderator">Модератор</option>
-                    <option value="admin">Администратор</option>
-                </select>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Аватар</label>
-                <input type="file" name="avatar_file" id="user_avatar_file" class="form-input" accept="image/jpeg,image/png,image/gif,image/webp">
-                <input type="text" name="avatar_url" id="user_avatar_url" class="form-input" placeholder="Или ссылка..." style="margin-top: 5px;">
-            </div>
+            <div class="user-form-grid">
+                <div class="form-group">
+                    <label class="form-label">Логин (для входа)</label>
+                    <input type="text" name="login" id="user_login" class="form-input" required>
+                </div>
 
-            <div class="form-group">
-                <label class="form-label">Цвет ника</label>
-                <div class="color-picker-ui">
-                    <input type="hidden" name="chat_color" id="user_chat_color" value="#6d2f8e">
-                    <div class="manual-input-wrapper">
-                        <span style="font-size: 0.9em; color: #666;">HEX:</span>
-                        <input type="text" class="color-manual-input" placeholder="#HEX..." maxlength="7">
+                <div class="form-group">
+                    <label class="form-label">Никнейм (в чате)</label>
+                    <input type="text" name="nickname" id="user_nickname" class="form-input" placeholder="Если пусто, будет как логин">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" name="email" id="user_email" class="form-input" placeholder="Для восстановления пароля">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Роль</label>
+                    <select name="role" id="user_role" class="form-input">
+                        <option value="user">Пользователь</option>
+                        <option value="moderator">Модератор</option>
+                        <option value="admin">Администратор</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Аватар</label>
+                    <input type="file" name="avatar_file" id="user_avatar_file" class="form-input" accept="image/jpeg,image/png,image/gif,image/webp">
+                    <input type="text" name="avatar_url" id="user_avatar_url" class="form-input" placeholder="Или ссылка..." style="margin-top: 5px;">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Цвет ника</label>
+                    <div class="color-picker-ui">
+                        <input type="hidden" name="chat_color" id="user_chat_color" value="#6d2f8e">
+                        <div class="manual-input-wrapper">
+                            <span style="font-size: 0.9em; color: #666;">HEX:</span>
+                            <input type="text" class="color-manual-input" placeholder="#HEX..." maxlength="7">
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="form-group">
-                <label class="form-label">Шрифт интерфейса</label>
-                <select name="font_preference" id="user_font_preference" class="form-input">
-                    <option value="open_sans">Open Sans (Стандартный)</option>
-                    <option value="fira">Fira Sans (Четкий)</option>
-                    <option value="pt">PT Sans (Строгий)</option>
-                    <option value="rubik">Rubik (Мягкий)</option>
-                    <option value="inter">Inter (Современный)</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label class="form-label">Пароль</label>
-                <div class="password-wrapper">
-                    <input type="password" name="password" id="user_password" class="form-input" placeholder="Пусто = не менять">
-                    <button type="button" class="password-toggle-btn">👁️</button>
+                <div class="form-group">
+                    <label class="form-label">Шрифт интерфейса</label>
+                    <select name="font_preference" id="user_font_preference" class="form-input">
+                        <option value="open_sans">Open Sans (Стандартный)</option>
+                        <option value="fira">Fira Sans (Четкий)</option>
+                        <option value="pt">PT Sans (Строгий)</option>
+                        <option value="rubik">Rubik (Мягкий)</option>
+                        <option value="inter">Inter (Современный)</option>
+                    </select>
                 </div>
-                <small style="color: #777;">Заполните только если хотите сменить.</small>
+
+                <div class="form-group">
+                    <label class="form-label">Размер шрифта: <span id="user_font_scale_value">100%</span></label>
+                    <input type="range" name="font_scale" id="user_font_scale" class="form-input" min="50" max="150" step="5" value="100"
+                           oninput="document.getElementById('user_font_scale_value').innerText = this.value + '%'">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Пароль</label>
+                    <div class="password-wrapper">
+                        <input type="password" name="password" id="user_password" class="form-input" placeholder="Пусто = не менять">
+                        <button type="button" class="password-toggle-btn">👁️</button>
+                    </div>
+                    <small style="color: #777;">Заполните только если хотите сменить.</small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Соцсети</label>
+                    <div id="user-socials-list"><small style="color:#999;">—</small></div>
+                </div>
             </div>
-            
+
             <button type="submit" class="btn-primary" style="width:100%">💾 Сохранить</button>
         </form>
     </div>

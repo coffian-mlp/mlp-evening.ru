@@ -54,6 +54,11 @@ class UserAdminController {
         $nickname = trim($_POST['nickname'] ?? '');
         $role = $_POST['role'] ?? 'user';
         $password = $_POST['password'] ?? '';
+        // MLP-258: email из карточки ('' = снять email; уникальность проверяет updateUser)
+        $email = isset($_POST['email']) ? trim($_POST['email']) : null;
+        if ($email !== null && $email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            sendResponse(false, "Некорректный формат Email", 'error');
+        }
 
         // New fields & Uploads
         $chat_color = trim($_POST['chat_color'] ?? '');
@@ -89,6 +94,9 @@ class UserAdminController {
                 'font_preference' => $font_preference,
                 'font_scale' => $font_scale
             ];
+            if ($email !== null) {
+                $data['email'] = $email;
+            }
 
             if (!empty($id)) {
                 // Update
@@ -105,7 +113,8 @@ class UserAdminController {
                 if (empty($password)) sendResponse(false, "Для нового пользователя нужен пароль", 'error');
                 if ($pwErr = Auth::validatePasswordPolicy($password)) sendResponse(false, $pwErr, 'error');
 
-                $newId = $userManager->createUser($login, $password, $role, $nickname);
+                // MLP-258 (ревью): email из карточки участвует и в создании
+                $newId = $userManager->createUser($login, $password, $role, $nickname, $email ?? '');
 
                 // Доп. поля (опции) — отдельным updateUser, как и раньше
                 $userManager->updateUser($newId, [
@@ -119,6 +128,28 @@ class UserAdminController {
             }
         } catch (\Exception $e) {
             sendResponse(false, $e->getMessage(), 'error');
+        }
+    }
+
+    /** Соц-привязки произвольного пользователя (admin, MLP-258). */
+    public static function getUserSocials(): void {
+        $targetUserId = (int)($_POST['user_id'] ?? 0);
+        if (!$targetUserId) sendResponse(false, "ID не указан", 'error');
+
+        $socials = (new UserManager())->getUserSocials($targetUserId);
+        sendResponse(true, "Соцсети получены", 'success', ['socials' => $socials]);
+    }
+
+    /** Отвязать соцсеть у произвольного пользователя (admin, MLP-258). */
+    public static function unlinkSocial(): void {
+        $targetUserId = (int)($_POST['user_id'] ?? 0);
+        $provider = trim($_POST['provider'] ?? '');
+        if (!$targetUserId || $provider === '') sendResponse(false, "Данные неполные", 'error');
+
+        if ((new UserManager())->unlinkSocial($targetUserId, $provider)) {
+            sendResponse(true, "Аккаунт отвязан");
+        } else {
+            sendResponse(false, "Привязка не найдена", 'error');
         }
     }
 

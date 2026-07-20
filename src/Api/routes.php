@@ -39,6 +39,9 @@ return [
     'get_audit_logs'     => ['role' => 'admin', 'handler' => [\Api\UserAdminController::class, 'getAuditLogs']],
     'save_user'          => ['role' => 'admin', 'handler' => [\Api\UserAdminController::class, 'save']],
     'delete_user'        => ['role' => 'admin', 'handler' => [\Api\UserAdminController::class, 'delete']],
+    // Соц-привязки из карточки пользователя (MLP-258; профильные get_user_socials/unlink_social — про СВОЕГО юзера)
+    'get_user_socials_admin' => ['role' => 'admin', 'handler' => [\Api\UserAdminController::class, 'getUserSocials']],
+    'unlink_social_admin'    => ['role' => 'admin', 'handler' => [\Api\UserAdminController::class, 'unlinkSocial']],
     // Модерация (MLP-255): иерархия ролей — внутри контроллера.
     'ban_user'           => ['role' => 'moderator', 'handler' => [\Api\ModerationController::class, 'ban']],
     'unban_user'         => ['role' => 'moderator', 'handler' => [\Api\ModerationController::class, 'unban']],
