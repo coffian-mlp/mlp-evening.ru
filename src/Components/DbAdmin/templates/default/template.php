@@ -3,6 +3,25 @@ use Domain\Auth;
 /**
  * @var array $arResult
  */
+
+// MLP-257: текущее состояние просмотра (фильтры + сортировка) для ссылок
+// пагинации/сортировки и hidden-полей экспорта — одна сборка, ноль рассинхрона.
+$dbViewParams = ['db_action' => 'view', 'table' => $arResult['current_table']];
+foreach (($arResult['filters'] ?? []) as $f) {
+    $dbViewParams['filter_col'][] = $f['col'];
+    $dbViewParams['filter_op'][]  = $f['op'];
+    $dbViewParams['filter_val'][] = $f['val'];
+}
+$dbSort = $arResult['sort'] ?? ['col' => '', 'dir' => 'asc'];
+if ($dbSort['col'] !== '') {
+    $dbViewParams['sort'] = $dbSort['col'];
+    $dbViewParams['dir']  = $dbSort['dir'];
+}
+
+/** Ссылка просмотра с переопределением параметров (page/sort и т.п.). */
+$dbViewUrl = function (array $override = []) use ($dbViewParams): string {
+    return '?' . http_build_query(array_merge($dbViewParams, $override)) . '#tab-database';
+};
 ?>
 <div class="db-admin-container">
 
@@ -37,53 +56,79 @@ use Domain\Auth;
                     </h3>
                     
                     <div class="actions">
-                        <!-- MLP-255: экспорт — POST на api.php (CSV скачивается и из POST-формы) -->
+                        <!-- MLP-255: экспорт — POST на api.php; MLP-257: переносит ВСЕ фильтры и сортировку -->
                         <form id="db-export-form" method="post" action="/api.php" target="_blank" style="display: inline-block;">
                             <input type="hidden" name="action" value="db_export">
                             <input type="hidden" name="csrf_token" value="<?= Auth::generateCsrfToken() ?>">
                             <input type="hidden" name="table" value="<?= htmlspecialchars($arResult['current_table']) ?>">
-                            <?php if (!empty($arResult['filter']['column'])): ?>
-                                <input type="hidden" name="filter_column" value="<?= htmlspecialchars($arResult['filter']['column']) ?>">
-                                <input type="hidden" name="filter_operator" value="<?= htmlspecialchars($arResult['filter']['operator']) ?>">
-                                <input type="hidden" name="filter_value" value="<?= htmlspecialchars($arResult['filter']['value']) ?>">
+                            <?php foreach (($arResult['filters'] ?? []) as $f): ?>
+                                <input type="hidden" name="filter_col[]" value="<?= htmlspecialchars($f['col']) ?>">
+                                <input type="hidden" name="filter_op[]" value="<?= htmlspecialchars($f['op']) ?>">
+                                <input type="hidden" name="filter_val[]" value="<?= htmlspecialchars($f['val']) ?>">
+                            <?php endforeach; ?>
+                            <?php if ($dbSort['col'] !== ''): ?>
+                                <input type="hidden" name="sort" value="<?= htmlspecialchars($dbSort['col']) ?>">
+                                <input type="hidden" name="dir" value="<?= htmlspecialchars($dbSort['dir']) ?>">
                             <?php endif; ?>
                             <button type="submit" class="btn-primary">⬇️ Экспорт CSV</button>
                         </form>
                     </div>
                 </div>
 
-                <!-- Filter Form -->
+                <!-- Filter Form (MLP-257: несколько условий, AND) -->
+                <?php
+                    // Строки формы: активные условия + одна пустая для ввода нового
+                    $filterRows = $arResult['filters'] ?? [];
+                    $filterRows[] = ['col' => '', 'op' => '=', 'val' => ''];
+                    $dbOperators = ['=' => '=', 'LIKE' => 'LIKE %...%', '!=' => '!=', '>' => '>', '<' => '<', '>=' => '>=', '<=' => '<=', 'BETWEEN' => 'BETWEEN (min,max)'];
+                ?>
                 <form method="get" action="" class="db-filter-form">
                     <input type="hidden" name="db_action" value="view">
                     <input type="hidden" name="table" value="<?= htmlspecialchars($arResult['current_table']) ?>">
-                    
-                    <span class="db-filter-label">Фильтр:</span>
-                    
-                    <select name="filter_column" class="form-input db-filter-select">
-                        <option value="">-- Колонка --</option>
-                        <?php foreach ($arResult['columns'] as $col): ?>
-                            <option value="<?= htmlspecialchars($col) ?>" <?= ($arResult['filter']['column'] === $col) ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($col) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-
-                    <select name="filter_operator" class="form-input db-filter-select" style="min-width: 80px;">
-                        <option value="=" <?= ($arResult['filter']['operator'] === '=') ? 'selected' : '' ?>>=</option>
-                        <option value="LIKE" <?= ($arResult['filter']['operator'] === 'LIKE') ? 'selected' : '' ?>>LIKE %...%</option>
-                        <option value="!=" <?= ($arResult['filter']['operator'] === '!=') ? 'selected' : '' ?>>!=</option>
-                        <option value=">" <?= ($arResult['filter']['operator'] === '>') ? 'selected' : '' ?>>&gt;</option>
-                        <option value="<" <?= ($arResult['filter']['operator'] === '<') ? 'selected' : '' ?>>&lt;</option>
-                        <option value="BETWEEN" <?= ($arResult['filter']['operator'] === 'BETWEEN') ? 'selected' : '' ?>>BETWEEN (min,max)</option>
-                    </select>
-
-                    <input type="text" name="filter_value" value="<?= htmlspecialchars($arResult['filter']['value']) ?>" class="form-input db-filter-input" placeholder="Значение...">
-
-                    <button type="submit" class="btn-primary db-filter-btn">🔍 Найти</button>
-                    
-                    <?php if (!empty($arResult['filter']['column'])): ?>
-                        <a href="?db_action=view&table=<?= $arResult['current_table'] ?>#tab-database" class="db-filter-reset" title="Сбросить">❌</a>
+                    <?php if ($dbSort['col'] !== ''): ?>
+                        <input type="hidden" name="sort" value="<?= htmlspecialchars($dbSort['col']) ?>">
+                        <input type="hidden" name="dir" value="<?= htmlspecialchars($dbSort['dir']) ?>">
                     <?php endif; ?>
+
+                    <span class="db-filter-label">Фильтры (И):</span>
+
+                    <div id="db-filter-rows" style="display: flex; flex-direction: column; gap: 6px; flex: 1;">
+                        <?php foreach ($filterRows as $i => $row): ?>
+                            <div class="db-filter-row" style="display: flex; gap: 8px; align-items: center;">
+                                <select name="filter_col[]" class="form-input db-filter-select">
+                                    <option value="">-- Колонка --</option>
+                                    <?php foreach ($arResult['columns'] as $col): ?>
+                                        <option value="<?= htmlspecialchars($col) ?>" <?= ($row['col'] === $col) ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($col) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+
+                                <select name="filter_op[]" class="form-input db-filter-select" style="min-width: 80px;">
+                                    <?php foreach ($dbOperators as $opVal => $opLabel): ?>
+                                        <option value="<?= htmlspecialchars($opVal) ?>" <?= ($row['op'] === $opVal) ? 'selected' : '' ?>><?= htmlspecialchars($opLabel) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+
+                                <input type="text" name="filter_val[]" value="<?= htmlspecialchars($row['val']) ?>" class="form-input db-filter-input" placeholder="Значение...">
+
+                                <button type="button" class="btn-xs btn-danger db-filter-remove" title="Убрать условие" onclick="dbRemoveFilterRow(this)">×</button>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <button type="button" class="btn-xs" onclick="dbAddFilterRow()" title="Ещё условие">➕</button>
+                        <button type="submit" class="btn-primary db-filter-btn">🔍 Найти</button>
+                        <?php if (!empty($arResult['filters'])): ?>
+                            <?php
+                                // Сброс убирает фильтры, но сохраняет сортировку (ревью MLP-257)
+                                $resetParams = ['db_action' => 'view', 'table' => $arResult['current_table']];
+                                if ($dbSort['col'] !== '') { $resetParams['sort'] = $dbSort['col']; $resetParams['dir'] = $dbSort['dir']; }
+                            ?>
+                            <a href="?<?= htmlspecialchars(http_build_query($resetParams)) ?>#tab-database" class="db-filter-reset" title="Сбросить фильтры">❌</a>
+                        <?php endif; ?>
+                    </div>
                 </form>
             </div>
 
@@ -93,7 +138,18 @@ use Domain\Auth;
                         <tr>
                             <th style="width: 50px;">🔧</th>
                             <?php foreach ($arResult['columns'] as $col): ?>
-                                <th><?= htmlspecialchars($col) ?></th>
+                                <?php
+                                    // MLP-257: серверная сортировка — повторный клик переключает направление
+                                    $isSorted = ($dbSort['col'] === $col);
+                                    $nextDir = ($isSorted && $dbSort['dir'] === 'asc') ? 'desc' : 'asc';
+                                    $indicator = $isSorted ? ($dbSort['dir'] === 'asc' ? ' ▲' : ' ▼') : '';
+                                ?>
+                                <th class="db-sortable">
+                                    <a href="<?= htmlspecialchars($dbViewUrl(['sort' => $col, 'dir' => $nextDir, 'page' => 1])) ?>"
+                                       style="color: inherit; text-decoration: none;">
+                                        <?= htmlspecialchars($col) ?><?= $indicator ?>
+                                    </a>
+                                </th>
                             <?php endforeach; ?>
                         </tr>
                     </thead>
@@ -131,32 +187,18 @@ use Domain\Auth;
             <!-- Pagination -->
             <?php if ($arResult['pagination']['total_pages'] > 1): ?>
                 <div class="pagination" style="margin-top: 15px; display: flex; gap: 5px; justify-content: center;">
-                    <?php 
+                    <?php
                     $cur = $arResult['pagination']['current'];
                     $total = $arResult['pagination']['total_pages'];
-                    $tbl = $arResult['current_table'];
-                    
-                    // Build query params for pagination links (preserve filter)
-                    $baseParams = ['db_action' => 'view', 'table' => $tbl];
-                    if (!empty($arResult['filter']['column'])) {
-                        $baseParams['filter_column'] = $arResult['filter']['column'];
-                        $baseParams['filter_operator'] = $arResult['filter']['operator'];
-                        $baseParams['filter_value'] = $arResult['filter']['value'];
-                    }
-                    
-                    // Simple logic: prev, current, next
-                    if ($cur > 1): 
-                        $prevParams = array_merge($baseParams, ['page' => $cur - 1]);
-                    ?>
-                        <a href="?<?= http_build_query($prevParams) ?>#tab-database" class="btn-xs">←</a>
+                    // MLP-257: ссылки страниц переносят все фильтры и сортировку ($dbViewUrl)
+                    if ($cur > 1): ?>
+                        <a href="<?= htmlspecialchars($dbViewUrl(['page' => $cur - 1])) ?>" class="btn-xs">←</a>
                     <?php endif; ?>
-                    
+
                     <span style="padding: 5px 10px;">Стр. <?= $cur ?> из <?= $total ?></span>
-                    
-                    <?php if ($cur < $total): 
-                        $nextParams = array_merge($baseParams, ['page' => $cur + 1]);
-                    ?>
-                        <a href="?<?= http_build_query($nextParams) ?>#tab-database" class="btn-xs">→</a>
+
+                    <?php if ($cur < $total): ?>
+                        <a href="<?= htmlspecialchars($dbViewUrl(['page' => $cur + 1])) ?>" class="btn-xs">→</a>
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
@@ -194,6 +236,28 @@ use Domain\Auth;
 </div>
 
 <script>
+// MLP-257: динамические строки мультифильтра
+function dbAddFilterRow() {
+    var rows = document.getElementById('db-filter-rows');
+    var row = rows.querySelector('.db-filter-row').cloneNode(true);
+    row.querySelector('select[name="filter_col[]"]').selectedIndex = 0;
+    row.querySelector('select[name="filter_op[]"]').selectedIndex = 0;
+    row.querySelector('input[name="filter_val[]"]').value = '';
+    rows.appendChild(row);
+}
+function dbRemoveFilterRow(btn) {
+    var rows = document.getElementById('db-filter-rows');
+    var row = btn.closest('.db-filter-row');
+    if (rows.querySelectorAll('.db-filter-row').length > 1) {
+        row.remove();
+    } else {
+        // последняя строка — просто очищаем
+        row.querySelector('select[name="filter_col[]"]').selectedIndex = 0;
+        row.querySelector('select[name="filter_op[]"]').selectedIndex = 0;
+        row.querySelector('input[name="filter_val[]"]').value = '';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // Edit Button Click Handler
     document.querySelectorAll('.edit-row-btn').forEach(btn => {
