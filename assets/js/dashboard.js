@@ -26,7 +26,7 @@ $(document).ready(function() {
         }
     });
 
-    // --- Проверка хеша при загрузке ---
+    // --- Открытие вкладки по хешу (при загрузке и при смене хеша) ---
     // MLP-256: мапа старых хешей (закладки до перегруппировки 10 → 7 вкладок)
     var legacyTabs = {
         '#tab-playlist': '#tab-episodes',
@@ -36,17 +36,22 @@ $(document).ready(function() {
         '#tab-controls': '#tab-settings',
         '#tab-bot-commands': '#tab-bot'
     };
+    function activateTabFromHash() {
+        if (!window.location.hash) return;
+        var hash = legacyTabs[window.location.hash] || window.location.hash;
+        var $targetTile = $('.nav-tile[data-target="' + hash + '"]');
+        if ($targetTile.length && !$targetTile.hasClass('active')) {
+            $targetTile.click();
+        }
+    }
     if (window.location.hash) {
         setTimeout(function() {
             window.scrollTo(0, 0);
         }, 1);
-
-        var hash = legacyTabs[window.location.hash] || window.location.hash;
-        var $targetTile = $('.nav-tile[data-target="' + hash + '"]');
-        if ($targetTile.length) {
-            $targetTile.click();
-        }
+        activateTabFromHash();
     }
+    // MLP-256: смена хеша в открытой странице тоже переключает вкладку
+    window.addEventListener('hashchange', activateTabFromHash);
 
     // --- Логика поиска по таблице серий ---
     $("#searchInput").on("keyup", function() {
