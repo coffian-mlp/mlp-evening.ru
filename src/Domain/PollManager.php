@@ -77,6 +77,7 @@ class PollManager {
     // ---------------- Чтение ----------------
 
     public function getPoll(int $id): ?array {
+        $this->closeExpired(); // MLP-251: ленивое закрытие до чтения (голос в просроченный → false)
         $stmt = $this->db->prepare("SELECT * FROM polls WHERE id = ?");
         $stmt->bind_param("i", $id);
         $stmt->execute();
@@ -196,6 +197,7 @@ class PollManager {
     }
 
     public function listActive(): array {
+        $this->closeExpired(); // MLP-251: просроченные не считаются активными
         $rows = [];
         $res = $this->db->query("SELECT * FROM polls WHERE status = 'open' ORDER BY id DESC");
         while ($res && $r = $res->fetch_assoc()) $rows[] = $r;
@@ -243,6 +245,23 @@ class PollManager {
             error_log('PollManager::vote ' . $e->getMessage());
             return false;
         }
+    }
+
+    /**
+     * Авто-закрытие просроченных опросов (closes_at в прошлом) — MLP-251.
+     * Единый путь через close(): статус + closed_at + realtime poll_closed.
+     * Дёргается лениво при чтении (getPoll/listActive) и тиком воркера.
+     */
+    public function closeExpired(): int {
+        $ids = [];
+        $res = $this->db->query("SELECT id FROM polls WHERE status = 'open' AND closes_at IS NOT NULL AND closes_at <= NOW()");
+        while ($res && $r = $res->fetch_assoc()) {
+            $ids[] = (int)$r['id'];
+        }
+        foreach ($ids as $id) {
+            $this->close($id);
+        }
+        return count($ids);
     }
 
     public function close(int $pollId): bool {
