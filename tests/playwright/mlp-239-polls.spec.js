@@ -58,7 +58,9 @@ test('admin: create → get → vote → close (MLP_ADMIN=1)', async () => {
   const created = await (await ctx.post('/api.php', {
     form: {
       action: 'create_poll', csrf_token: csrf, question: marker,
-      'options[]': 'Вариант А', 'options[]': 'Вариант Б',
+      // Индексы обязательны: дублирующийся ключ 'options[]' в JS-объекте
+      // затирал первый вариант — уходил один option, create падал.
+      'options[0]': 'Вариант А', 'options[1]': 'Вариант Б',
       is_multi: '0', is_anonymous: '0',
     },
     headers: { 'X-CSRF-Token': csrf },
