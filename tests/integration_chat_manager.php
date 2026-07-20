@@ -14,8 +14,6 @@ require_once __DIR__ . '/integration_helpers.php';
 
 $conn = it_require_db();
 
-require_once __DIR__ . '/../src/UserManager.php';
-require_once __DIR__ . '/../src/ChatManager.php';
 
 $um = new UserManager();
 $cm = new ChatManager();

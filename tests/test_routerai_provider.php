@@ -11,7 +11,7 @@
  * Ключ НЕ хранится в коде и не коммитится — передаётся аргументом.
  */
 
-require_once __DIR__ . '/../src/LLM/RouterAIProvider.php';
+require_once __DIR__ . '/../autoload.php'; // MLP-248: классы — автозагрузкой
 
 $failures = 0;
 function check($cond, $label) {

@@ -1,6 +1,5 @@
 <?php
 
-require_once __DIR__ . '/../ChatManager.php';
 
 /**
  * API закреплённых сообщений (MLP-242) — срез тонкого роутера api.php.

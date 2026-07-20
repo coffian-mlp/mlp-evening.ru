@@ -1,7 +1,5 @@
 <?php
 
-require_once __DIR__ . '/../EventManager.php';
-require_once __DIR__ . '/../EpisodeManager.php';
 
 /**
  * Обработчики API-действий для событий (MLP-229) — первый срез, вынесенный из

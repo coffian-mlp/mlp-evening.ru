@@ -1,7 +1,5 @@
 <?php
 
-require_once __DIR__ . '/../ConfigManager.php';
-require_once __DIR__ . '/JobQueue.php';
 
 /**
  * Продюсер реактивных триггеров бота. Решает: положить в очередь (воркер ответит)
@@ -14,7 +12,6 @@ class BotDispatch {
 
     /** Диспетчеризация триггера: очередь или inline (с lifelike-задержкой). */
     public static function dispatch(string $type, array $payload): void {
-        require_once __DIR__ . '/LLMManager.php';
 
         // ГЕЙТ: на обычное сообщение бот реагирует, ТОЛЬКО если к нему обратились
         // (@упоминание, алиас, цитата). Иначе — молчим (не ставим задачу, не отвечаем).

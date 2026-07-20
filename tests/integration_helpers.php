@@ -11,6 +11,8 @@
  * итог — "ALL PASS" (exit 0) либо "FAIL: N" (exit 1).
  */
 
+require_once __DIR__ . '/../autoload.php'; // MLP-248: классы — автозагрузкой
+
 function it_config(): ?array {
     $path = __DIR__ . '/../config.php';
     if (!file_exists($path)) {

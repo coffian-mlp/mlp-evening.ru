@@ -1,8 +1,5 @@
 <?php
 
-require_once __DIR__ . '/../PollManager.php';
-require_once __DIR__ . '/../ChatManager.php';
-require_once __DIR__ . '/../ConfigManager.php';
 
 /**
  * API-действия опросов (MLP-238) — второй срез тонкого роутера api.php.

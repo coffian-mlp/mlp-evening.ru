@@ -1,9 +1,5 @@
 <?php
 
-require_once __DIR__ . '/Database.php';
-require_once __DIR__ . '/UserManager.php';
-require_once __DIR__ . '/ConfigManager.php';
-require_once __DIR__ . '/CentrifugoService.php';
 
 class ChatManager {
     private $db;

@@ -12,7 +12,6 @@ class AdminBotCommandsComponent extends Component {
             return;
         }
 
-        require_once $_SERVER['DOCUMENT_ROOT'] . '/src/BotCommandManager.php';
         $commands = new BotCommandManager();
 
         // Handle forms

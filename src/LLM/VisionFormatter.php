@@ -21,7 +21,6 @@ class VisionFormatter {
 
     /** Развернуть картинки в messages, если включено ai_send_images. Иначе — вернуть как есть. */
     public static function maybeExpand(array $messages): array {
-        require_once __DIR__ . '/../ConfigManager.php';
         $c = ConfigManager::getInstance();
         if (!$c->getOption('ai_send_images', 1)) {
             return $messages;

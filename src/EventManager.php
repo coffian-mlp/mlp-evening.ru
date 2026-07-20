@@ -1,6 +1,5 @@
 <?php
 
-require_once __DIR__ . '/Database.php';
 
 /**
  * Владелец таблицы `events` (MLP-229).

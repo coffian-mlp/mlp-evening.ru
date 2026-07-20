@@ -1,14 +1,5 @@
 <?php
 
-require_once __DIR__ . '/../ConfigManager.php';
-require_once __DIR__ . '/../Database.php';
-require_once __DIR__ . '/../BotCommandManager.php';
-require_once __DIR__ . '/../EventManager.php';
-require_once __DIR__ . '/../PollManager.php';
-require_once __DIR__ . '/LLMManager.php';
-require_once __DIR__ . '/JobQueue.php';
-require_once __DIR__ . '/ReplyPolicy.php';
-require_once __DIR__ . '/ReactionParser.php';
 
 /**
  * Единый «голос» бота: реактив (очередь ответов) + проактив (спонтанные + анонсы по таймеру).
@@ -212,7 +203,6 @@ class BotWorker {
             if ($minsSinceEnd >= 0 && $minsSinceEnd <= 10 && empty($announced[$runId]['finished'])) {
                 $msg = "Спасибо всем за просмотр! Вечерок подошёл к концу.";
                 if (!empty($evt['generate_new_playlist'])) {
-                    require_once __DIR__ . '/../EpisodeManager.php';
                     (new \EpisodeManager())->regeneratePlaylist();
                     $msg .= " А вот и расписание на следующий раз! Напиши об этом в чат в своём стиле.";
                 } else {

@@ -1,9 +1,8 @@
 <?php
 // chat_stream.php - SSE endpoint for chat messages
 
-require_once __DIR__ . '/src/ChatManager.php';
-require_once __DIR__ . '/src/Auth.php';
-require_once __DIR__ . '/src/UserManager.php';
+require_once __DIR__ . '/autoload.php'; // MLP-248
+
 
 // Disable time limit for long-running script (or set to reasonable value like 60s for shared hosting)
 set_time_limit(0); 

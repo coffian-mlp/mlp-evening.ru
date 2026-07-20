@@ -1,7 +1,8 @@
 <?php
 
+require_once __DIR__ . '/autoload.php'; // MLP-248: классы — только автозагрузкой
+
 // Отключаем вывод ошибок в поток вывода по умолчанию, но позволяем включить через конфиг
-require_once __DIR__ . '/src/ConfigManager.php';
 $debugMode = ConfigManager::getInstance()->getOption('debug_mode', 0);
 if ($debugMode) {
     ini_set('display_errors', 1);
@@ -12,14 +13,6 @@ if ($debugMode) {
     error_reporting(E_ALL); // Логируем все, но не выводим
 }
 
-require_once __DIR__ . '/src/EpisodeManager.php';
-require_once __DIR__ . '/src/Auth.php';
-require_once __DIR__ . '/src/ChatManager.php';
-require_once __DIR__ . '/src/UserManager.php';
-require_once __DIR__ . '/src/BotCommandManager.php';
-require_once __DIR__ . '/src/StickerManager.php';
-require_once __DIR__ . '/src/UploadManager.php';
-require_once __DIR__ . '/src/Mailer.php'; // Подключаем Mailer
 
 header('Content-Type: application/json');
 
@@ -144,14 +137,12 @@ try {
     }
 
     if ($action === 'captcha_start') {
-        require_once __DIR__ . '/src/CaptchaManager.php';
         $captcha = new CaptchaManager();
         $data = $captcha->start();
         sendResponse(true, "Капча начата", 'success', $data);
     }
 
     if ($action === 'captcha_check') {
-        require_once __DIR__ . '/src/CaptchaManager.php';
         $captcha = new CaptchaManager();
         $answer = $_POST['answer'] ?? '';
         $result = $captcha->checkAnswer($answer);
@@ -169,7 +160,6 @@ try {
         $ip = $_SERVER['REMOTE_ADDR'] ?? '';
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
         
-        require_once __DIR__ . '/src/OnlineManager.php';
         $online = new OnlineManager();
         $online->beat($sessionId, $userId, $ip, $ua);
         
@@ -186,7 +176,6 @@ try {
 
     if ($action === 'leave') {
         $sessionId = session_id();
-        require_once __DIR__ . '/src/OnlineManager.php';
         $online = new OnlineManager();
         $online->removeSession($sessionId);
         // No response needed usually for beacon, but we output valid JSON just in case
@@ -195,8 +184,6 @@ try {
     }
 
     if ($action === 'social_login') {
-        require_once __DIR__ . '/src/Social/SocialAuthService.php';
-        require_once __DIR__ . '/src/Social/TelegramProvider.php';
 
         $providerName = $_POST['provider'] ?? '';
         $data = $_POST['data'] ?? [];
@@ -240,7 +227,6 @@ try {
             set_time_limit(0);
             ignore_user_abort(true);
             
-            require_once __DIR__ . '/src/LLM/BotDispatch.php';
             BotDispatch::dispatch('greeting', ['username' => $_SESSION['username'] ?? 'Гость']);
 
             exit();
@@ -255,7 +241,6 @@ try {
             sendResponse(false, "Сначала нужно войти на сайт!", 'error');
         }
 
-        require_once __DIR__ . '/src/Social/TelegramProvider.php';
         
         $providerName = $_POST['provider'] ?? '';
         $data = $_POST['data'] ?? [];
@@ -315,7 +300,6 @@ try {
          }
          
          if ($status === 'captcha_needed') {
-             require_once __DIR__ . '/src/CaptchaManager.php';
              $captcha = new CaptchaManager();
              
              if (!$captcha->isCompleted()) {
@@ -369,7 +353,6 @@ try {
              set_time_limit(0);
              ignore_user_abort(true);
              
-             require_once __DIR__ . '/src/LLM/BotDispatch.php';
              BotDispatch::dispatch('greeting', ['username' => $username]);
 
              exit();
@@ -378,7 +361,6 @@ try {
              
              // Check if we hit a threshold where captcha needs to be reset to force re-verification
              if ($newCount === 3 || $newCount === 6) {
-                 require_once __DIR__ . '/src/CaptchaManager.php';
                  $captcha = new CaptchaManager();
                  $captcha->reset();
              }
@@ -474,7 +456,6 @@ try {
         $password = $_POST['password'] ?? '';
         
         // 1. Проверка Капчи
-        require_once __DIR__ . '/src/CaptchaManager.php';
         $captcha = new CaptchaManager();
         
         if (!$captcha->isCompleted()) {
@@ -526,7 +507,6 @@ try {
                 set_time_limit(0);
                 ignore_user_abort(true);
                 
-                require_once __DIR__ . '/src/LLM/BotDispatch.php';
                 BotDispatch::dispatch('greeting', ['username' => $login]);
 
                 exit();
@@ -630,24 +610,23 @@ try {
     // --- Тонкий роутер (MLP-229): action → роль → менеджер. Каркас; пока только события.
     // Остальные actions обрабатываются легаси-switch ниже — мигрировать «при касании».
     $apiRoutes = [
-        'get_public_events' => ['role' => 'public', 'handler' => ['EventController', 'getPublic'], 'file' => 'EventController'],
-        'save_event'        => ['role' => 'admin',  'handler' => ['EventController', 'save'],      'file' => 'EventController'],
-        'delete_event'      => ['role' => 'admin',  'handler' => ['EventController', 'delete'],    'file' => 'EventController'],
+        'get_public_events' => ['role' => 'public', 'handler' => ['EventController', 'getPublic']],
+        'save_event'        => ['role' => 'admin',  'handler' => ['EventController', 'save']],
+        'delete_event'      => ['role' => 'admin',  'handler' => ['EventController', 'delete']],
         // Опросы (MLP-238): create_poll тонко гейтит сам контроллер (конфиг polls_create_role).
-        'get_poll'          => ['role' => 'public', 'handler' => ['PollController', 'get'],    'file' => 'PollController'],
-        'create_poll'       => ['role' => 'user',   'handler' => ['PollController', 'create'], 'file' => 'PollController'],
-        'vote_poll'         => ['role' => 'user',   'handler' => ['PollController', 'vote'],   'file' => 'PollController'],
-        'close_poll'        => ['role' => 'user',   'handler' => ['PollController', 'close'],  'file' => 'PollController'],
+        'get_poll'          => ['role' => 'public', 'handler' => ['PollController', 'get']],
+        'create_poll'       => ['role' => 'user',   'handler' => ['PollController', 'create']],
+        'vote_poll'         => ['role' => 'user',   'handler' => ['PollController', 'vote']],
+        'close_poll'        => ['role' => 'user',   'handler' => ['PollController', 'close']],
         // Закреплённые сообщения (MLP-242): право модератора проверяет сам контроллер.
-        'get_pinned'        => ['role' => 'public', 'handler' => ['PinController', 'get'],   'file' => 'PinController'],
-        'pin_message'       => ['role' => 'user',   'handler' => ['PinController', 'pin'],   'file' => 'PinController'],
-        'unpin_message'     => ['role' => 'user',   'handler' => ['PinController', 'unpin'], 'file' => 'PinController'],
+        'get_pinned'        => ['role' => 'public', 'handler' => ['PinController', 'get']],
+        'pin_message'       => ['role' => 'user',   'handler' => ['PinController', 'pin']],
+        'unpin_message'     => ['role' => 'user',   'handler' => ['PinController', 'unpin']],
     ];
     if (isset($apiRoutes[$action])) {
         $route = $apiRoutes[$action];
         if ($route['role'] === 'admin')     Auth::requireApiAdmin();
         elseif ($route['role'] === 'user')  Auth::requireApiLogin();
-        require_once __DIR__ . '/src/Api/' . $route['file'] . '.php';
         call_user_func($route['handler']); // хендлер отвечает через sendResponse и завершает
         exit();
     }
@@ -1267,7 +1246,6 @@ try {
                 session_write_close();
                 
                 // Быстрое (без LLM) определение: команда или обычное упоминание.
-                require_once __DIR__ . '/src/LLM/BotDispatch.php';
                 $db = Database::getInstance()->getConnection();
                 $matchedCommand = null;
 

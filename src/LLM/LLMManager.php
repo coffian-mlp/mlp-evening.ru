@@ -1,17 +1,5 @@
 <?php
 
-require_once __DIR__ . '/../ConfigManager.php';
-require_once __DIR__ . '/../ChatManager.php';
-require_once __DIR__ . '/../Database.php';
-require_once __DIR__ . '/../UserManager.php';
-require_once __DIR__ . '/../EventManager.php';
-require_once __DIR__ . '/OpenRouterProvider.php';
-require_once __DIR__ . '/RouterAIProvider.php';
-require_once __DIR__ . '/OpenAIProvider.php';
-require_once __DIR__ . '/ResponseSanitizer.php';
-require_once __DIR__ . '/YandexGPTProvider.php';
-require_once __DIR__ . '/GigaChatProvider.php';
-require_once __DIR__ . '/XrayManager.php';
 
 class LLMManager {
     private $providers = [];
@@ -284,7 +272,6 @@ class LLMManager {
                     $additionalPrompt .= "- Описание: {$event['description']}\n";
                     
                     if ($event['use_playlist'] || $event['generate_new_playlist']) {
-                        require_once __DIR__ . '/../EpisodeManager.php';
                         $epManager = new \EpisodeManager();
                         $playlist = $epManager->getSavedPlaylist();
                         if (!empty($playlist)) {
@@ -336,7 +323,6 @@ class LLMManager {
      * затем постит карточку [[poll:id]] в чат от имени бота (появляется через realtime чата).
      */
     private function createPollFromCommand($command, $contextData): bool {
-        require_once __DIR__ . '/../PollManager.php';
         $message = (string)($contextData['message'] ?? '');
 
         // ОСНОВНОЙ режим: пользователь задал опрос явно —
@@ -410,7 +396,6 @@ class LLMManager {
      */
     public function voteOnPoll(array $poll): bool {
         if (empty($poll['options'])) return false;
-        require_once __DIR__ . '/../PollManager.php';
         $pm = new \PollManager();
 
         $numbered = [];

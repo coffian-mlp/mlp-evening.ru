@@ -1,6 +1,5 @@
 <?php
 
-require_once __DIR__ . '/LLMProviderInterface.php';
 
 class YandexGPTProvider implements LLMProviderInterface {
     private $apiKey;

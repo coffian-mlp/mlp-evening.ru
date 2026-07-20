@@ -12,7 +12,6 @@ class AdminEventsComponent extends Component {
             return;
         }
 
-        require_once $_SERVER['DOCUMENT_ROOT'] . '/src/EventManager.php';
 
         $events = [];
         foreach ((new EventManager())->getAllOrdered() as $row) {

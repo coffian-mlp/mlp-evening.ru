@@ -12,7 +12,6 @@ require_once __DIR__ . '/integration_helpers.php';
 
 $conn = it_require_db();
 
-require_once __DIR__ . '/../src/ConfigManager.php';
 
 $key = 'it_opt_' . getmypid();
 $cm  = ConfigManager::getInstance();

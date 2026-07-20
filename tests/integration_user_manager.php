@@ -13,7 +13,6 @@ require_once __DIR__ . '/integration_helpers.php';
 
 $conn = it_require_db();
 
-require_once __DIR__ . '/../src/UserManager.php';
 
 $login = 'it_user_' . getmypid();
 $um = new UserManager();

@@ -1,7 +1,5 @@
 <?php
 
-require_once __DIR__ . '/SocialProvider.php';
-require_once __DIR__ . '/../ConfigManager.php';
 
 class TelegramProvider implements SocialProvider {
     private $botToken;

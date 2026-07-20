@@ -1,8 +1,7 @@
 <?php
+require_once __DIR__ . '/autoload.php'; // MLP-248
+
 $pageTitle = 'Восстановление пароля - MLP-evening.ru';
-require_once __DIR__ . '/src/ConfigManager.php';
-require_once __DIR__ . '/src/Auth.php';
-require_once __DIR__ . '/src/UserManager.php';
 
 // Проверяем токен
 $token = $_GET['token'] ?? '';

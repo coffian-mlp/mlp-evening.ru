@@ -1,6 +1,5 @@
 <?php
 
-require_once __DIR__ . '/ConfigManager.php';
 
 class CentrifugoService {
     private $apiUrl;

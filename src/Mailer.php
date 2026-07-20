@@ -1,6 +1,5 @@
 <?php
 
-require_once __DIR__ . '/ConfigManager.php';
 
 class Mailer {
     private $fromEmail;
@@ -69,7 +68,6 @@ class Mailer {
 
         // Проверяем: Включен ли SMTP в базе?
         if ($configManager->getOption('smtp_enabled', 0)) {
-            require_once __DIR__ . '/SimpleSMTP.php';
             
             try {
                 $smtp = new SimpleSMTP(

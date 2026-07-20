@@ -1,6 +1,5 @@
 <?php
 
-require_once __DIR__ . '/LLMProviderInterface.php';
 
 /**
  * RouterAI (routerai.ru) — российский агрегатор LLM с OpenAI-совместимым API.
@@ -31,7 +30,6 @@ class RouterAIProvider implements LLMProviderInterface {
 
         $messages = array_merge($messages, $messagesContext);
 
-        require_once __DIR__ . '/VisionFormatter.php';
         $messages = VisionFormatter::maybeExpand($messages); // vision: развернуть картинки в image_url
 
         $data = [

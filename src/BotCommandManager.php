@@ -1,6 +1,5 @@
 <?php
 
-require_once __DIR__ . '/Database.php';
 
 /**
  * Владелец таблицы `bot_commands` (A3, MLP-228).
