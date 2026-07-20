@@ -42,9 +42,25 @@ class Auth {
 
     public static function requireLogin() {
         if (!self::check()) {
-            header('Location: /');
+            // MLP-256: неавторизованных ведём на страницу входа с возвратом обратно.
+            $target = self::sanitizeLocalRedirect($_SERVER['REQUEST_URI'] ?? null);
+            header('Location: /login.php' . ($target ? '?redirect=' . urlencode($target) : ''));
             exit();
         }
+    }
+
+    /**
+     * Валидация redirect-параметра страницы входа (MLP-256): принимаем только
+     * локальные пути — начинающиеся с одиночного «/», без схемы, «//», обратных
+     * слэшей и управляющих символов (защита от open redirect и header injection).
+     * Возвращает путь как есть или null, если значение непригодно.
+     */
+    public static function sanitizeLocalRedirect($raw): ?string {
+        if (!is_string($raw) || $raw === '' || $raw[0] !== '/') return null;
+        if (isset($raw[1]) && ($raw[1] === '/' || $raw[1] === '\\')) return null; // //host, /\host
+        if (preg_match('/[\x00-\x1F\x7F]/', $raw)) return null; // CR/LF и прочие управляющие
+        if (str_contains($raw, '\\')) return null;
+        return $raw;
     }
 
     public static function isAdmin() {

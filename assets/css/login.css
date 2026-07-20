@@ -1,0 +1,20 @@
+/* MLP-256: страница входа /login.php — центрированная карточка на общем фоне */
+
+.login-page main,
+.login-page .login-page-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 6vh 20px 40px;
+}
+
+.login-page-card {
+    width: 100%;
+    max-width: 400px;
+    background: rgba(30, 30, 40, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    padding: 28px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+}
