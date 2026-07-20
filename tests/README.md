@@ -8,27 +8,9 @@
 
 ## Быстрый старт (полный контур)
 
-`config.php` (нет в git) для Docker-контура — ровно такой (креды из `docker-compose.yml`;
-голый `cp config.sample.php` даст нерабочие креды и все интеграционные тесты уйдут в SKIP):
-
-```php
-<?php
-return [
-    'db' => [
-        'host' => 'db',              // сервис из docker-compose.yml — по нему же
-        'name' => 'coffian_eplist',  // guard отличает тестовый контур от прода
-        'user' => 'coffian_eplist',
-        'pass' => 'HmyV4b2z',
-        'charset' => 'utf8mb4'
-    ],
-    'chat' => [
-        'driver' => 'sse',
-        'centrifugo_api_url' => 'http://127.0.0.1:8000/api',
-        'centrifugo_api_key' => '',  // пусто = broadcast не ходит в сеть
-        'centrifugo_secret'  => '',
-    ]
-];
-```
+Конфигурация — `.env` в корне (нет в git): `cp .env.example .env`, для Docker-контура
+дефолты из примера подходят как есть (host `db`, креды совпадают с docker-compose,
+`CENTRIFUGO_API_KEY` пустой = realtime не ходит в сеть). Его же читает docker-compose.
 
 ```bash
 docker compose up -d db php       # только БД и PHP: nginx/centrifugo не нужны
@@ -53,7 +35,7 @@ docker compose exec php php tests/run_all.php  # все тесты
 (`RUN_ALL_TIMEOUT`, дефолт 120 с) → FAIL.
 
 **Guard боевой БД:** интеграционные тесты пишут в БД, поэтому запускаются
-только когда `config.php` указывает на host `db` (Docker-контур). На любом
+только когда `DB_HOST=db` (Docker-контур). На любом
 другом хосте (в т.ч. на проде, куда тесты попадают через git pull) — SKIP.
 Осознанный обход: `IT_ALLOW_DB=1`.
 
@@ -61,12 +43,12 @@ docker compose exec php php tests/run_all.php  # все тесты
 скипнутся. Полная проверка — только внутри php-контейнера (Linux,
 чувствительная к регистру ФС — важно для автозагрузчика PSR-4).
 
-## Автозагрузка (MLP-248)
+## Автозагрузка (MLP-248/249)
 
-Классы проекта грузятся через `autoload.php` (PSR-4 от `src/` + `src/classmap.php`
-для глобальных). `integration_helpers.php` подключает его сам; юнит-тестам чистых
-классов достаточно `require_once __DIR__ . '/../autoload.php'`. Новый глобальный
-класс обязан попасть в classmap — иначе упадёт `test_autoload.php` (скан-гард).
+Классы проекта грузятся через `autoload.php` — чистый PSR-4 от `src/`
+(namespace = путь, имя файла = класс). `integration_helpers.php` подключает его
+сам; юнит-тестам чистых классов достаточно `require_once __DIR__ . '/../autoload.php'`.
+Конформность стережёт `test_autoload.php`: класс без namespace или мимо пути = FAIL.
 
 ## Интеграционные тесты: правила
 

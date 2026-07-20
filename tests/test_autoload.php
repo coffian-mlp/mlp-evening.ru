@@ -12,8 +12,8 @@
  * Запуск: php tests/run_all.php или php tests/test_autoload.php
  */
 
-if (!file_exists(__DIR__ . '/../config.php')) {
-    echo "SKIP: config.php отсутствует (классы требуют config при загрузке)\n";
+if (!file_exists(__DIR__ . '/../.env') && !file_exists(__DIR__ . '/../config.php')) {
+    echo "SKIP: нет .env/config.php (классы требуют config при загрузке)\n";
     exit(0);
 }
 

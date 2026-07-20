@@ -5,6 +5,7 @@ playwright-report/
 
 # Боевые конфиги (создаются из *.sample.*, содержат секреты — не коммитим)
 config.php
+.env
 centrifugo_config.json
 # VLESS/Xray: бинарники и конфиг с секретами — НЕ коммитим (провижн вне git), см. MLP-221
 src/LLM/bin/

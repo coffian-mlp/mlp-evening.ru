@@ -36,7 +36,12 @@ function migration_pending(array $allBasenames, array $appliedBasenames): array 
 }
 
 function migrate_connect() {
-    $config = require __DIR__ . '/config.php';
+    require_once __DIR__ . '/autoload.php';
+    $config = ['db' => [
+        'host' => \Infra\Env::get('DB_HOST'), 'name' => \Infra\Env::get('DB_NAME'),
+        'user' => \Infra\Env::get('DB_USER'), 'pass' => \Infra\Env::get('DB_PASS'),
+        'charset' => \Infra\Env::get('DB_CHARSET', 'utf8mb4'),
+    ]];
     $c = $config['db'];
     $db = new mysqli($c['host'], $c['user'], $c['pass'], $c['name']);
     if ($db->connect_error) {

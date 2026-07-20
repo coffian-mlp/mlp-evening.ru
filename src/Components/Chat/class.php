@@ -36,10 +36,8 @@ class ChatComponent extends Component {
             'stickers' => $stickersByPack
         ];
         
-        // 3. Конфигурация чата (Centrifugo / SSE)
-        $appConfig = require $_SERVER['DOCUMENT_ROOT'] . '/config.php';
-        $chatConfig = $appConfig['chat'] ?? [];
-        $chatDriver = $chatConfig['driver'] ?? 'sse';
+        // 3. Конфигурация чата (Centrifugo / SSE) — из .env (MLP-252)
+        $chatDriver = \Infra\Env::get('CHAT_DRIVER', 'sse');
         
         $this->result['chat_driver'] = $chatDriver;
         $this->result['centrifugo_token'] = '';

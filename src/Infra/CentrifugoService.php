@@ -9,19 +9,11 @@ class CentrifugoService {
     private $secret;
 
     public function __construct() {
-        // Мы берем конфиг напрямую, т.к. ConfigManager работает с БД (site_options), 
-        // а это системные настройки.
-        // Но подожди, ConfigManager у нас синглтон для site_options.
-        // А файловый конфиг мы читаем где? Обычно require config.php.
-        // Давайте сделаем метод загрузки файлового конфига или просто прочитаем его здесь.
-        
-        $config = require __DIR__ . '/../../config.php';
-        
-        // Fallback to defaults if missing
-        $chatConfig = $config['chat'] ?? [];
-        $this->apiUrl = $chatConfig['centrifugo_api_url'] ?? 'http://centrifugo:8000/api';
-        $this->apiKey = $chatConfig['centrifugo_api_key'] ?? '';
-        $this->secret = $chatConfig['centrifugo_secret'] ?? '';
+        // Системные настройки окружения — из .env (MLP-252), не из site_options
+        // (ConfigManager — про БД-опции, а это инфраструктура).
+        $this->apiUrl = Env::get('CENTRIFUGO_API_URL', 'http://centrifugo:8000/api');
+        $this->apiKey = Env::get('CENTRIFUGO_API_KEY', '');
+        $this->secret = Env::get('CENTRIFUGO_SECRET', '');
     }
 
     public function publish($channel, $data) {

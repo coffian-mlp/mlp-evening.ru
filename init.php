@@ -4,14 +4,11 @@ use Infra\ConfigManager;
 // init.php - Bootstrap файла
 ob_start(); // Start Output Buffering for asset injection
 
-// 1. Подключение конфигов
-require_once __DIR__ . '/config.php';
-
-// 2. Автозагрузка классов (MLP-248, ADR-7): чистый PSR-4 от src/.
+// 1. Автозагрузка классов (MLP-248, ADR-7): чистый PSR-4 от src/.
 // Ручной require_once классов запрещён (architecture.md, §13).
 require_once __DIR__ . '/autoload.php';
 
-// 3. Инициализация сессии
+// 2. Инициализация сессии
 Auth::check();
 Auth::tryRememberLogin(); // remember-me: авто-вход по cookie, если сессии нет (MLP-223)
 

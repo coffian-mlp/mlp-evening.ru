@@ -177,6 +177,7 @@
 - [x] **Фаза 3. Перекладка по группам** (MLP-249) — `Api\` → `LLM\`/`Social\` → `Infra/` → `Domain/`, каждая группа: тесты в Docker + деплой + прод-смоук. Classmap упразднён — чистый PSR-4. Адверсариальное ревью поймало 4 латентных бага путей/имен — исправлены хотфиксом. *(18.07.2026)*
 - [x] Auth-хвосты (MLP-250): AR2-2 — Auth ходит в users через UserManager (владелец таблицы); AR2-3 — GC истёкших `auth_tokens` (~1% запросов). *(18.07.2026)*
 - [x] Авто-закрытие опросов по `closes_at` (MLP-251): лениво при чтении + страховка тиком воркера, realtime poll_closed. *(18.07.2026)*
+- [x] Конфиг в `.env` (MLP-252, AR5-1): единый источник для PHP (`Infra\Env`) и docker-compose; `config.php` упразднён (fallback на один релиз), креды ушли из git. *(18.07.2026)*
 - [x] Срез api.php (MLP-245): captcha_start/check + heartbeat/leave → `Api\CaptchaController`/`Api\OnlineController` (тонкий роутер: 11 actions). *(18.07.2026)*
 
 ### v4.9.0 «Меню Эквестрии» (в планах) — мост к CMS

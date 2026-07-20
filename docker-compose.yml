@@ -29,10 +29,11 @@ services:
     image: mysql:5.7
     platform: linux/amd64
     environment:
-      MYSQL_DATABASE: coffian_eplist
-      MYSQL_USER: coffian_eplist
-      MYSQL_PASSWORD: HmyV4b2z
-      MYSQL_ROOT_PASSWORD: root_password_secret
+      # Креды — из .env в корне проекта (compose читает его нативно); AR5-1/MLP-252.
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASS}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS}
     volumes:
       - db_data:/var/lib/mysql
       # Магия! Этот файл автоматически выполнится при первом запуске контейнера,

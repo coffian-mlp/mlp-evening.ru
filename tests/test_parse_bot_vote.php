@@ -9,8 +9,8 @@ use LLM\LLMManager;
  * Запуск: php tests/test_parse_bot_vote.php
  */
 
-if (!file_exists(__DIR__ . '/../config.php')) {
-    echo "SKIP: config.php отсутствует (нужен для загрузки LLMManager)\n";
+if (!file_exists(__DIR__ . '/../.env') && !file_exists(__DIR__ . '/../config.php')) {
+    echo "SKIP: нет .env/config.php (нужен для загрузки LLMManager)\n";
     exit(0);
 }
 

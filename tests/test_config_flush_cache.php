@@ -15,8 +15,8 @@ use Infra\ConfigManager;
 
 // ConfigManager тянет Database.php, а тот на верхнем уровне требует config.php.
 // На чистом клоне без конфига тест нечего запускать — мягко пропускаем.
-if (!file_exists(__DIR__ . '/../config.php')) {
-    echo "SKIP: config.php отсутствует (нужен для загрузки Database.php)\n";
+if (!file_exists(__DIR__ . '/../.env') && !file_exists(__DIR__ . '/../config.php')) {
+    echo "SKIP: нет .env/config.php (нужен для загрузки Database.php)\n";
     exit(0);
 }
 

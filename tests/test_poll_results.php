@@ -9,8 +9,8 @@ use Domain\PollManager;
  * Запуск: php tests/test_poll_results.php
  */
 
-if (!file_exists(__DIR__ . '/../config.php')) {
-    echo "SKIP: config.php отсутствует (нужен для загрузки Database.php)\n";
+if (!file_exists(__DIR__ . '/../.env') && !file_exists(__DIR__ . '/../config.php')) {
+    echo "SKIP: нет .env/config.php (нужен для загрузки Database.php)\n";
     exit(0);
 }
 

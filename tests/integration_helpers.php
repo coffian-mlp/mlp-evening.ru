@@ -15,11 +15,16 @@ use Infra\Database;
 require_once __DIR__ . '/../autoload.php'; // MLP-248: классы — автозагрузкой
 
 function it_config(): ?array {
-    $path = __DIR__ . '/../config.php';
-    if (!file_exists($path)) {
+    if (!\Infra\Env::available()) {
         return null;
     }
-    return require $path;
+    return ['db' => [
+        'host'    => \Infra\Env::get('DB_HOST'),
+        'name'    => \Infra\Env::get('DB_NAME'),
+        'user'    => \Infra\Env::get('DB_USER'),
+        'pass'    => \Infra\Env::get('DB_PASS'),
+        'charset' => \Infra\Env::get('DB_CHARSET', 'utf8mb4'),
+    ]];
 }
 
 /**
@@ -74,7 +79,7 @@ function it_env_guard(): ?string {
     $cfg = it_config();
     $host = $cfg['db']['host'] ?? '';
     if ($host !== 'db') {
-        return "config.php указывает на host '{$host}' — не Docker-контур; интеграционные тесты пишут в БД"
+        return "config.php указывает на host '{$host}' (.env/config) — не Docker-контур; интеграционные тесты пишут в БД"
             . ' и запрещены вне тестовой среды (обход: IT_ALLOW_DB=1, только если уверен)';
     }
     return null;
