@@ -77,9 +77,7 @@ try {
     }
 
     $action = $_POST['action'] ?? '';
-    $manager = new EpisodeManager();
-    // Lazy load ChatManager only when needed
-    
+
     function sendResponse($success, $message, $type = 'success', $data = []) {
         echo json_encode([
             'success' => $success,
@@ -90,33 +88,7 @@ try {
         exit();
     }
 
-    // --- Moderation Hierarchy Helper ---
-    function checkHierarchy($targetUserId) {
-        // Self-check
-        if ($targetUserId == $_SESSION['user_id']) {
-            return "Нельзя применять санкции к самому себе!";
-        }
-
-        $um = new UserManager();
-        $target = $um->getUserById($targetUserId);
-        if (!$target) return "Пользователь не найден.";
-
-        $actorRole = $_SESSION['role'] ?? 'user';
-        $targetRole = $target['role'];
-
-        if ($actorRole === 'admin') {
-            if ($targetRole === 'admin') return "Администратор неприкосновенен!";
-            return true; // Admin can moderate everyone else
-        }
-
-        if ($actorRole === 'moderator') {
-            if ($targetRole === 'admin') return "Это Администратор. Не шали!";
-            if ($targetRole === 'moderator') return "Модераторы не могут трогать своих коллег.";
-            return true; // Can moderate users
-        }
-
-        return "У вас нет прав модератора.";
-    }
+    // checkHierarchy переехала в Api\ModerationController (MLP-255).
 
     // Public Actions
     if ($action === 'get_chat_input') {
@@ -580,289 +552,35 @@ try {
     }
 
 
-    // --- Тонкий роутер (MLP-229): action → роль → менеджер. Каркас; пока только события.
-    // Остальные actions обрабатываются легаси-switch ниже — мигрировать «при касании».
-    $apiRoutes = [
-        'get_public_events' => ['role' => 'public', 'handler' => [\Api\EventController::class, 'getPublic']],
-        'save_event'        => ['role' => 'admin',  'handler' => [\Api\EventController::class, 'save']],
-        'delete_event'      => ['role' => 'admin',  'handler' => [\Api\EventController::class, 'delete']],
-        // Опросы (MLP-238): create_poll тонко гейтит сам контроллер (конфиг polls_create_role).
-        'get_poll'          => ['role' => 'public', 'handler' => [\Api\PollController::class, 'get']],
-        'create_poll'       => ['role' => 'user',   'handler' => [\Api\PollController::class, 'create']],
-        'vote_poll'         => ['role' => 'user',   'handler' => [\Api\PollController::class, 'vote']],
-        'close_poll'        => ['role' => 'user',   'handler' => [\Api\PollController::class, 'close']],
-        // Закреплённые сообщения (MLP-242): право модератора проверяет сам контроллер.
-        'get_pinned'        => ['role' => 'public', 'handler' => [\Api\PinController::class, 'get']],
-        'pin_message'       => ['role' => 'user',   'handler' => [\Api\PinController::class, 'pin']],
-        'unpin_message'     => ['role' => 'user',   'handler' => [\Api\PinController::class, 'unpin']],
-        // Капча и онлайн-присутствие (MLP-245): публичные, CSRF-гейт выше как раньше.
-        'captcha_start'     => ['role' => 'public', 'handler' => [\Api\CaptchaController::class, 'start']],
-        'captcha_check'     => ['role' => 'public', 'handler' => [\Api\CaptchaController::class, 'check']],
-        'heartbeat'         => ['role' => 'public', 'handler' => [\Api\OnlineController::class, 'beat']],
-        'leave'             => ['role' => 'public', 'handler' => [\Api\OnlineController::class, 'leave']],
-    ];
+    // --- Тонкий роутер (MLP-229/255): action → роль → контроллер.
+    // Карта — в src/Api/routes.php (отдельный файл, чтобы её видели тесты).
+    $apiRoutes = require __DIR__ . '/src/Api/routes.php';
     if (isset($apiRoutes[$action])) {
         $route = $apiRoutes[$action];
-        if ($route['role'] === 'admin')     Auth::requireApiAdmin();
-        elseif ($route['role'] === 'user')  Auth::requireApiLogin();
+        if ($route['role'] === 'admin') {
+            Auth::requireApiAdmin();
+        } elseif ($route['role'] === 'moderator') {
+            // MLP-255: третий уровень иерархии user < moderator < admin.
+            Auth::requireApiLogin();
+            if (!Auth::isModerator()) sendResponse(false, "Недостаточно прав!", 'error');
+        } elseif ($route['role'] === 'user') {
+            Auth::requireApiLogin();
+        }
         call_user_func($route['handler']); // хендлер отвечает через sendResponse и завершает
         exit();
     }
 
+    // ГРАНИЦА (MLP-255): в switch остались только чат (сообщения/реакции/поиск/
+    // upload) и auth/профиль (logout, user_options, соцсети). Админский пласт
+    // целиком в тонком роутере выше. Новые actions — ТОЛЬКО в src/Api/routes.php.
     switch ($action) {
-        case 'update_settings':
-            Auth::requireApiAdmin();
-            $config = ConfigManager::getInstance();
-            
-            // --- System Settings ---
-            if (isset($_POST['debug_mode'])) {
-                $config->setOption('debug_mode', (int)$_POST['debug_mode']);
-            }
-
-            if (isset($_POST['stream_url'])) {
-                $url = trim($_POST['stream_url']);
-                // Простейшая валидация
-                if (filter_var($url, FILTER_VALIDATE_URL)) {
-                    $config->setOption('stream_url', $url);
-                    // Не возвращаем сразу, вдруг еще настройки есть
-                } else {
-                    sendResponse(false, "❌ Некорректный формат ссылки.", 'error');
-                }
-            }
-            
-            if (isset($_POST['chat_mode'])) {
-                $mode = $_POST['chat_mode'];
-                $validModes = ['local', 'none'];
-                if (in_array($mode, $validModes)) {
-                    $config->setOption('chat_mode', $mode);
-                }
-            }
-            
-            if (isset($_POST['chat_rate_limit'])) {
-                $limit = (int)$_POST['chat_rate_limit'];
-                if ($limit < 0) $limit = 0;
-                $config->setOption('chat_rate_limit', $limit);
-            }
-
-            // Кто может создавать опросы (MLP-238)
-            if (isset($_POST['polls_create_role'])) {
-                $pr = $_POST['polls_create_role'];
-                if (in_array($pr, ['admin', 'moderator', 'all'], true)) {
-                    $config->setOption('polls_create_role', $pr);
-                }
-            }
-            
-            // Telegram Settings
-            // В форме есть hidden input, так что ключ всегда придет, если это форма Telegram.
-            // Если сохраняем другую форму, ключа не будет, и настройку не трогаем.
-            if (isset($_POST['telegram_auth_enabled'])) {
-                $config->setOption('telegram_auth_enabled', (int)$_POST['telegram_auth_enabled']);
-            }
-            
-            if (isset($_POST['telegram_bot_token'])) {
-                $config->setOption('telegram_bot_token', trim($_POST['telegram_bot_token']));
-            }
-            if (isset($_POST['telegram_bot_username'])) {
-                $config->setOption('telegram_bot_username', trim($_POST['telegram_bot_username']));
-            }
-
-            // AI Settings
-            if (isset($_POST['ai_bot_user_id'])) {
-                $config->setOption('ai_bot_user_id', (int)$_POST['ai_bot_user_id']);
-            }
-            if (isset($_POST['ai_enabled'])) {
-                $config->setOption('ai_enabled', (int)$_POST['ai_enabled']);
-            }
-            if (isset($_POST['ai_system_prompt'])) {
-                $config->setOption('ai_system_prompt', trim($_POST['ai_system_prompt']));
-            }
-            if (isset($_POST['ai_aliases'])) {
-                $config->setOption('ai_aliases', trim($_POST['ai_aliases']));
-            }
-            if (isset($_POST['ai_proxy_url'])) {
-                $config->setOption('ai_proxy_url', trim($_POST['ai_proxy_url']));
-            }
-            if (isset($_POST['ai_primary_provider'])) {
-                $config->setOption('ai_primary_provider', trim($_POST['ai_primary_provider']));
-            }
-            
-            // AI Providers
-            if (isset($_POST['ai_openai_key'])) {
-                $config->setOption('ai_openai_key', trim($_POST['ai_openai_key']));
-            }
-            if (isset($_POST['ai_openai_base_url'])) {
-                $config->setOption('ai_openai_base_url', trim($_POST['ai_openai_base_url']));
-            }
-            if (isset($_POST['ai_openai_model'])) {
-                $config->setOption('ai_openai_model', trim($_POST['ai_openai_model']));
-            }
-            
-            if (isset($_POST['ai_openrouter_key'])) {
-                $config->setOption('ai_openrouter_key', trim($_POST['ai_openrouter_key']));
-            }
-            if (isset($_POST['ai_openrouter_model'])) {
-                $config->setOption('ai_openrouter_model', trim($_POST['ai_openrouter_model']));
-            }
-
-            if (isset($_POST['ai_routerai_key'])) {
-                $config->setOption('ai_routerai_key', trim($_POST['ai_routerai_key']));
-            }
-            if (isset($_POST['ai_routerai_model'])) {
-                $config->setOption('ai_routerai_model', trim($_POST['ai_routerai_model']));
-            }
-
-            if (isset($_POST['ai_yandex_key'])) {
-                $config->setOption('ai_yandex_key', trim($_POST['ai_yandex_key']));
-            }
-            if (isset($_POST['ai_yandex_folder_id'])) {
-                $config->setOption('ai_yandex_folder_id', trim($_POST['ai_yandex_folder_id']));
-            }
-
-            if (isset($_POST['ai_gigachat_key'])) {
-                $config->setOption('ai_gigachat_key', trim($_POST['ai_gigachat_key']));
-            }
-
-            // --- Очередь и поведение бота (BOT-QUEUE) ---
-            if (isset($_POST['ai_use_queue'])) {
-                $config->setOption('ai_use_queue', (int)$_POST['ai_use_queue']);
-            }
-            if (isset($_POST['ai_worker_mode'])) {
-                $mode = trim($_POST['ai_worker_mode']);
-                if (in_array($mode, ['auto', 'cron', 'daemon', 'inline'], true)) {
-                    $config->setOption('ai_worker_mode', $mode);
-                }
-            }
-            foreach (['ai_debounce_window', 'ai_delay_min', 'ai_delay_max', 'ai_spam_threshold', 'ai_reply_min_gap', 'ai_worker_poll', 'ai_proactive_interval'] as $k) {
-                if (isset($_POST[$k])) {
-                    $config->setOption($k, max(0, (int)$_POST[$k]));
-                }
-            }
-            if (isset($_POST['ai_send_images'])) {
-                $config->setOption('ai_send_images', (int)$_POST['ai_send_images']);
-            }
-            if (isset($_POST['ai_public_base_url'])) {
-                $config->setOption('ai_public_base_url', trim($_POST['ai_public_base_url']));
-            }
-            if (isset($_POST['ai_reactions'])) {
-                $config->setOption('ai_reactions', (int)$_POST['ai_reactions']);
-            }
-
-            // SMTP Settings
-            if (isset($_POST['smtp_enabled'])) {
-                $config->setOption('smtp_enabled', (int)$_POST['smtp_enabled']);
-            }
-            if (isset($_POST['smtp_host'])) {
-                $config->setOption('smtp_host', trim($_POST['smtp_host']));
-            }
-            if (isset($_POST['smtp_port'])) {
-                $config->setOption('smtp_port', (int)$_POST['smtp_port']);
-            }
-            if (isset($_POST['smtp_user'])) {
-                $config->setOption('smtp_user', trim($_POST['smtp_user']));
-            }
-            if (isset($_POST['smtp_pass'])) {
-                $config->setOption('smtp_pass', trim($_POST['smtp_pass']));
-            }
-            if (isset($_POST['smtp_from_name'])) {
-                $config->setOption('smtp_from_name', trim($_POST['smtp_from_name']));
-            }
-            
-            sendResponse(true, "✅ Настройки обновлены!");
-            break;
-
-        case 'regenerate_playlist':
-            Auth::requireApiAdmin();
-            $playlist = $manager->regeneratePlaylist();
-            sendResponse(true, "🎲 Новый плейлист успешно сгенерирован и сохранен!", 'success', ['reload' => true]);
-            break;
-
-        case 'vote':
-            Auth::requireApiAdmin();
-            if (!empty($_POST['episode_id'])) {
-                $manager->voteForEpisode($_POST['episode_id']);
-                sendResponse(true, "✅ Голос за эпизод #{$_POST['episode_id']} принят!");
-            } else {
-                sendResponse(false, "❌ Не указан ID эпизода.", 'error');
-            }
-            break;
-
-        case 'mark_watched':
-            Auth::requireApiAdmin();
-            if (!empty($_POST['ids'])) {
-                $ids = explode(',', $_POST['ids']);
-                $ids = array_filter($ids, 'is_numeric');
-                if (!empty($ids)) {
-                    $manager->markAsWatched($ids);
-                    
-                    // Сразу генерируем новый плейлист на следующий раз
-                    $manager->regeneratePlaylist();
-                    
-                    sendResponse(true, "✅ Плейлист отмечен и сгенерирован новый!", 'success', ['reload' => true]);
-                } else {
-                    sendResponse(false, "❌ Некорректный список ID.", 'error');
-                }
-            }
-            break;
-
-        case 'clear_votes':
-            Auth::requireApiAdmin();
-            $manager->clearWannaWatch();
-            sendResponse(true, "🗑️ Все голоса (Wanna Watch) сброшены.");
-            break;
-
-        case 'reset_times_watched':
-            Auth::requireApiAdmin();
-            $manager->resetTimesWatched();
-            sendResponse(true, "🔄 Счетчики просмотров (TIMES_WATCHED) сброшены!");
-            break;
-
-        case 'clear_watching_log':
-            Auth::requireApiAdmin();
-            $manager->clearWatchingNowLog();
-            sendResponse(true, "🗑️ Лог истории просмотров очищен.");
-            break;
-
+        // update_settings и плейлист-actions — в тонком роутере (MLP-255).
         case 'logout':
             Auth::logout();
             sendResponse(true, "До скорой встречи!", 'success', ['reload' => true]); 
             break;
 
-        // --- User Management (Admin Only) ---
-        case 'get_users':
-            Auth::requireApiAdmin();
-            
-            $userManager = new UserManager();
-            $users = $userManager->getAllUsers(); // Now returns users with chat_color and avatar_url joined
-            sendResponse(true, "Список получен", 'success', ['users' => $users]);
-            break;
-
-        case 'get_user_options':
-            Auth::requireApiAdmin();
-            
-            $targetUserId = (int)($_POST['user_id'] ?? 0);
-            if (!$targetUserId) sendResponse(false, "ID не указан", 'error');
-            
-            $userManager = new UserManager();
-            $options = $userManager->getUserOptions($targetUserId);
-            
-            sendResponse(true, "Опции получены", 'success', ['options' => $options]);
-            break;
-
-        case 'get_audit_logs':
-            Auth::requireApiAdmin();
-            
-            $userManager = new UserManager();
-            $logs = $userManager->getAuditLogs();
-            
-            // Format dates for JS
-            foreach ($logs as &$log) {
-                 if ($log['created_at']) {
-                    $log['created_at'] = date('Y-m-d H:i:s', strtotime($log['created_at']));
-                }
-            }
-            
-            sendResponse(true, "Логи получены", 'success', ['logs' => $logs]);
-            break;
+        // get_users / get_user_options / get_audit_logs — в тонком роутере (MLP-255).
 
         case 'get_user_socials':
             $userId = $_SESSION['user_id'];
@@ -908,208 +626,14 @@ try {
             }
             break;
 
-        case 'save_user':
-            Auth::requireApiAdmin();
-            
-            $userManager = new UserManager();
-            $id = $_POST['user_id'] ?? ''; 
-            $login = trim($_POST['login'] ?? '');
-            $nickname = trim($_POST['nickname'] ?? '');
-            $role = $_POST['role'] ?? 'user';
-            $password = $_POST['password'] ?? '';
-            
-            // New fields & Uploads
-            $chat_color = trim($_POST['chat_color'] ?? '');
-            $font_preference = trim($_POST['font_preference'] ?? 'open_sans');
-            $font_scale = (int)($_POST['font_scale'] ?? 100);
-            $raw_avatar_url = trim($_POST['avatar_url'] ?? '');
-            $avatar_url = $raw_avatar_url; // Default
-            
-            try {
-                $uploadManager = new UploadManager();
-                // 1. File
-                if (isset($_FILES['avatar_file']) && $_FILES['avatar_file']['error'] !== UPLOAD_ERR_NO_FILE) {
-                    $avatar_url = $uploadManager->uploadFromPost($_FILES['avatar_file']);
-                }
-                // 2. URL Download
-                elseif (!empty($raw_avatar_url) && strpos($raw_avatar_url, '/upload/avatars/') !== 0 && filter_var($raw_avatar_url, FILTER_VALIDATE_URL)) {
-                    $avatar_url = $uploadManager->uploadFromUrl($raw_avatar_url);
-                }
-            } catch (Exception $e) {
-                sendResponse(false, "Аватар: " . $e->getMessage(), 'error');
-            }
-            
-            if (empty($login)) sendResponse(false, "Логин обязателен", 'error');
-            if (empty($nickname)) $nickname = $login; 
-            
-            try {
-                $data = [
-                    'login' => $login,
-                    'nickname' => $nickname,
-                    'role' => $role,
-                    'avatar_url' => $avatar_url,
-                    'chat_color' => $chat_color,
-                    'font_preference' => $font_preference,
-                    'font_scale' => $font_scale
-                ];
-
-                if (!empty($id)) {
-                    // Update
-                    if (!empty($password)) {
-                        if ($pwErr = Auth::validatePasswordPolicy($password)) sendResponse(false, $pwErr, 'error');
-                        $data['password'] = $password;
-                    }
-                    
-                    // UserManager::updateUser will handle option splitting internally!
-                    $userManager->updateUser($id, $data);
-                    sendResponse(true, "Пользователь обновлен");
-                } else {
-                    // Create
-                    if (empty($password)) sendResponse(false, "Для нового пользователя нужен пароль", 'error');
-                    if ($pwErr = Auth::validatePasswordPolicy($password)) sendResponse(false, $pwErr, 'error');
-                    
-                    $newId = $userManager->createUser($login, $password, $role, $nickname);
-                    
-                    // Update extra fields (options)
-                    // We can reuse updateUser logic or just call it directly for options
-                    $userManager->updateUser($newId, [
-                        'avatar_url' => $avatar_url,
-                        'chat_color' => $chat_color,
-                        'font_preference' => $font_preference,
-                        'font_scale' => $font_scale
-                    ]);
-                    
-                    sendResponse(true, "Пользователь создан");
-                }
-            } catch (Exception $e) {
-                sendResponse(false, $e->getMessage(), 'error');
-            }
-            break;
-
-        case 'delete_user':
-            Auth::requireApiAdmin();
-            
-            $id = $_POST['user_id'] ?? '';
-            if (empty($id)) sendResponse(false, "ID не указан", 'error');
-            
-            // Не даем удалить самого себя
-            if ($id == $_SESSION['user_id']) {
-                sendResponse(false, "Нельзя удалить самого себя!", 'error');
-            }
-            
-            $userManager = new UserManager();
-            if ($userManager->deleteUser($id)) {
-                sendResponse(true, "Пользователь удален");
-            } else {
-                sendResponse(false, "Ошибка удаления", 'error');
-            }
-            break;
+        // save_user / delete_user — в тонком роутере (MLP-255).
 
         // --- Moderation Actions ---
         
-        case 'ban_user':
-            if (!Auth::isModerator()) sendResponse(false, "Недостаточно прав!", 'error');
-            
-            $targetId = (int)($_POST['user_id'] ?? 0);
-            $reason = trim($_POST['reason'] ?? 'Нарушение правил');
-            
-            if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
-            
-            // Hierarchy Check
-            $check = checkHierarchy($targetId);
-            if ($check !== true) sendResponse(false, $check, 'error');
-            
-            $userManager = new UserManager();
-            if ($userManager->banUser($targetId, $reason, $_SESSION['user_id'])) {
-                sendResponse(true, "Пользователь забанен! 🔨");
-            } else {
-                sendResponse(false, "Ошибка при бане пользователя.", 'error');
-            }
-            break;
+        // Модерация (ban/unban/mute/unmute/purge_messages) — в тонком роутере (MLP-255),
+        // включая переезд checkHierarchy в Api\ModerationController.
 
-        case 'unban_user':
-            if (!Auth::isModerator()) sendResponse(false, "Недостаточно прав!", 'error');
-            
-            $targetId = (int)($_POST['user_id'] ?? 0);
-            if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
-
-            // Hierarchy Check
-            $check = checkHierarchy($targetId);
-            if ($check !== true) sendResponse(false, $check, 'error');
-
-            $userManager = new UserManager();
-            if ($userManager->unbanUser($targetId, $_SESSION['user_id'])) {
-                sendResponse(true, "Пользователь разбанен! 🕊️");
-            } else {
-                sendResponse(false, "Ошибка при разбане.", 'error');
-            }
-            break;
-
-        case 'mute_user':
-            if (!Auth::isModerator()) sendResponse(false, "Недостаточно прав!", 'error');
-            
-            $targetId = (int)($_POST['user_id'] ?? 0);
-            $minutes = (int)($_POST['minutes'] ?? 15);
-            $reason = trim($_POST['reason'] ?? 'Нарушение правил');
-            
-            if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
-            
-            // Hierarchy Check
-            $check = checkHierarchy($targetId);
-            if ($check !== true) sendResponse(false, $check, 'error');
-            
-            if ($minutes < 1) $minutes = 15;
-            
-            $userManager = new UserManager();
-            if ($userManager->muteUser($targetId, $minutes, $_SESSION['user_id'], $reason)) {
-                sendResponse(true, "Пользователь заглушен на $minutes мин. 🤐");
-            } else {
-                sendResponse(false, "Ошибка при муте.", 'error');
-            }
-            break;
-            
-        case 'unmute_user':
-             if (!Auth::isModerator()) sendResponse(false, "Недостаточно прав!", 'error');
-            
-            $targetId = (int)($_POST['user_id'] ?? 0);
-            if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
-
-            // Hierarchy Check
-            $check = checkHierarchy($targetId);
-            if ($check !== true) sendResponse(false, $check, 'error');
-
-            $userManager = new UserManager();
-            if ($userManager->unmuteUser($targetId, $_SESSION['user_id'])) {
-                sendResponse(true, "Голос возвращен! 🗣️");
-            } else {
-                sendResponse(false, "Ошибка при снятии мута.", 'error');
-            }
-            break;
-
-        case 'purge_messages':
-            if (!Auth::isModerator()) sendResponse(false, "Недостаточно прав!", 'error');
-            
-            $targetId = (int)($_POST['user_id'] ?? 0);
-            $count = (int)($_POST['count'] ?? 50);
-            if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
-            
-            // Hierarchy Check
-            $check = checkHierarchy($targetId);
-            if ($check !== true) sendResponse(false, $check, 'error');
-
-            if ($count > 100) $count = 100;
-            if ($count < 1) $count = 1;
-            
-            $chat = new ChatManager();
-            $deletedCount = $chat->purgeMessages($targetId, $count);
-            
-            $userManager = new UserManager();
-            $userManager->logAction($_SESSION['user_id'], 'purge', $targetId, "Deleted $deletedCount messages");
-            
-            sendResponse(true, "Удалено $deletedCount сообщений! 🧹");
-            break;
-
-        case 'get_messages':
+                case 'get_messages':
             $limit = (int)($_POST['limit'] ?? 50);
             $beforeId = isset($_POST['before_id']) ? (int)$_POST['before_id'] : null;
             
@@ -1344,154 +868,8 @@ try {
             }
             break;
 
-        // --- Stickers ---
+        // Стикеры и паки — в тонком роутере (MLP-255).
 
-        case 'get_packs':
-            $sm = new StickerManager();
-            $packs = $sm->getAllPacks();
-            sendResponse(true, "Паки получены", 'success', ['packs' => $packs]);
-            break;
-
-        case 'create_pack':
-            Auth::requireApiAdmin();
-            $code = trim($_POST['code'] ?? '');
-            $name = trim($_POST['name'] ?? '');
-            $iconUrl = null;
-            
-            if (empty($code) || empty($name)) sendResponse(false, "Код и имя обязательны", 'error');
-            
-            try {
-                // Upload Icon if provided
-                if (isset($_FILES['icon_file']) && $_FILES['icon_file']['error'] !== UPLOAD_ERR_NO_FILE) {
-                    $uploadManager = new UploadManager('icon');
-                    $iconUrl = $uploadManager->uploadFromPost($_FILES['icon_file']);
-                }
-
-                $sm = new StickerManager();
-                if ($sm->createPack($code, $name, $iconUrl)) {
-                    sendResponse(true, "Пак создан! 🎉");
-                } else {
-                    sendResponse(false, "Ошибка (возможно, такой код уже есть)", 'error');
-                }
-            } catch (Exception $e) {
-                sendResponse(false, $e->getMessage(), 'error');
-            }
-            break;
-
-        case 'update_pack':
-            Auth::requireApiAdmin();
-            $id = (int)($_POST['id'] ?? 0);
-            $code = trim($_POST['code'] ?? '');
-            $name = trim($_POST['name'] ?? '');
-            $iconUrl = null;
-            
-            if (!$id || empty($code) || empty($name)) sendResponse(false, "Данные неполные", 'error');
-            
-            try {
-                // Upload Icon if provided
-                if (isset($_FILES['icon_file']) && $_FILES['icon_file']['error'] !== UPLOAD_ERR_NO_FILE) {
-                    $uploadManager = new UploadManager('icon');
-                    $iconUrl = $uploadManager->uploadFromPost($_FILES['icon_file']);
-                }
-
-                $sm = new StickerManager();
-                if ($sm->updatePack($id, $code, $name, $iconUrl)) {
-                    sendResponse(true, "Пак обновлен!");
-                } else {
-                    sendResponse(false, "Ошибка обновления", 'error');
-                }
-            } catch (Exception $e) {
-                sendResponse(false, $e->getMessage(), 'error');
-            }
-            break;
-
-        case 'delete_pack':
-            Auth::requireApiAdmin();
-            $id = (int)($_POST['id'] ?? 0);
-            if (!$id) sendResponse(false, "ID не указан", 'error');
-            
-            $sm = new StickerManager();
-            if ($sm->deletePack($id)) {
-                sendResponse(true, "Пак и все его стикеры удалены 🗑️");
-            } else {
-                sendResponse(false, "Ошибка удаления", 'error');
-            }
-            break;
-
-        case 'get_stickers':
-            $sm = new StickerManager();
-            $stickers = $sm->getAllStickers(true);
-            sendResponse(true, "Стикеры получены", 'success', ['stickers' => $stickers]);
-            break;
-
-        case 'add_sticker':
-            Auth::requireApiAdmin();
-            
-            $code = trim($_POST['code'] ?? '');
-            $packId = (int)($_POST['pack_id'] ?? 0);
-            $url = trim($_POST['image_url'] ?? '');
-            
-            if (empty($code)) sendResponse(false, "Код обязателен", 'error');
-            if (!$packId) sendResponse(false, "Выберите пак!", 'error');
-
-            try {
-                $uploadManager = new UploadManager('sticker');
-                
-                // 1. File Upload
-                if (isset($_FILES['image_file']) && $_FILES['image_file']['error'] !== UPLOAD_ERR_NO_FILE) {
-                    $url = $uploadManager->uploadFromPost($_FILES['image_file']);
-                }
-                // 2. URL Download
-                elseif (!empty($url) && strpos($url, '/upload/stickers/') !== 0 && filter_var($url, FILTER_VALIDATE_URL)) {
-                     $url = $uploadManager->uploadFromUrl($url);
-                }
-
-                if (empty($url)) sendResponse(false, "Нужно загрузить файл или указать ссылку", 'error');
-
-                $sm = new StickerManager();
-                $id = $sm->addSticker($code, $url, $packId);
-                sendResponse(true, "Стикер :$code: добавлен!", 'success', ['id' => $id, 'url' => $url]);
-                
-            } catch (Exception $e) {
-                sendResponse(false, $e->getMessage(), 'error');
-            }
-            break;
-
-        case 'import_zip_stickers':
-            Auth::requireApiAdmin();
-            
-            $packId = (int)($_POST['pack_id'] ?? 0);
-            if (!$packId) sendResponse(false, "Пак не выбран", 'error');
-            if (!isset($_FILES['zip_file'])) sendResponse(false, "Архив не загружен", 'error');
-
-            try {
-                $file = $_FILES['zip_file'];
-                if ($file['error'] !== UPLOAD_ERR_OK) throw new Exception("Ошибка загрузки файла");
-                if (pathinfo($file['name'], PATHINFO_EXTENSION) !== 'zip') throw new Exception("Только ZIP архивы!");
-
-                $sm = new StickerManager();
-                $count = $sm->importFromZip($packId, $file['tmp_name']);
-                
-                sendResponse(true, "Успешно импортировано $count стикеров! 📦✨");
-            } catch (Exception $e) {
-                sendResponse(false, "ZIP Import Error: " . $e->getMessage(), 'error');
-            }
-            break;
-
-        case 'delete_sticker':
-            Auth::requireApiAdmin();
-            
-            $id = (int)($_POST['id'] ?? 0);
-            if (!$id) sendResponse(false, "ID не указан", 'error');
-            
-            $sm = new StickerManager();
-            if ($sm->deleteSticker($id)) {
-                sendResponse(true, "Стикер удален 🗑️");
-            } else {
-                sendResponse(false, "Ошибка удаления", 'error');
-            }
-            break;
-            
         // События (save_event / delete_event / get_public_events) обрабатываются
         // тонким роутером выше (MLP-229) — здесь их больше нет.
 

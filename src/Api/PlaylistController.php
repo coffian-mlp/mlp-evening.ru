@@ -1,0 +1,69 @@
+<?php
+
+namespace Api;
+
+use Domain\EpisodeManager;
+
+/**
+ * Обработчики API-действий для плейлиста и статистики просмотров (MLP-255) —
+ * перенос из legacy-switch api.php в тонкий роутер. Ответы — глобальной
+ * sendResponse() (api.php); роль (admin) проверяет роутер ДО вызова.
+ */
+class PlaylistController {
+
+    /** Сгенерировать и сохранить новый плейлист (admin). */
+    public static function regenerate(): void {
+        (new EpisodeManager())->regeneratePlaylist();
+        sendResponse(true, "🎲 Новый плейлист успешно сгенерирован и сохранен!", 'success', ['reload' => true]);
+    }
+
+    /** Ручной голос за эпизод (admin). Бывший action vote. */
+    public static function vote(): void {
+        if (!empty($_POST['episode_id'])) {
+            (new EpisodeManager())->voteForEpisode($_POST['episode_id']);
+            sendResponse(true, "✅ Голос за эпизод #{$_POST['episode_id']} принят!");
+        } else {
+            sendResponse(false, "❌ Не указан ID эпизода.", 'error');
+        }
+    }
+
+    /** Отметить эпизоды просмотренными и сразу сгенерировать новый плейлист (admin). */
+    public static function markWatched(): void {
+        if (!empty($_POST['ids'])) {
+            $ids = explode(',', $_POST['ids']);
+            $ids = array_filter($ids, 'is_numeric');
+            if (!empty($ids)) {
+                $manager = new EpisodeManager();
+                $manager->markAsWatched($ids);
+
+                // Сразу генерируем новый плейлист на следующий раз
+                $manager->regeneratePlaylist();
+
+                sendResponse(true, "✅ Плейлист отмечен и сгенерирован новый!", 'success', ['reload' => true]);
+            } else {
+                sendResponse(false, "❌ Некорректный список ID.", 'error');
+            }
+        }
+        // Отличие от исходной ветки: там пустой ids давал пустое тело ответа —
+        // теперь явная ошибка (Fail Fast).
+        sendResponse(false, "❌ Не указан список ID.", 'error');
+    }
+
+    /** Сбросить голоса Wanna Watch (admin). */
+    public static function clearVotes(): void {
+        (new EpisodeManager())->clearWannaWatch();
+        sendResponse(true, "🗑️ Все голоса (Wanna Watch) сброшены.");
+    }
+
+    /** Сбросить счётчики просмотров (admin). */
+    public static function resetTimesWatched(): void {
+        (new EpisodeManager())->resetTimesWatched();
+        sendResponse(true, "🔄 Счетчики просмотров (TIMES_WATCHED) сброшены!");
+    }
+
+    /** Очистить лог истории просмотров (admin). */
+    public static function clearWatchingLog(): void {
+        (new EpisodeManager())->clearWatchingNowLog();
+        sendResponse(true, "🗑️ Лог истории просмотров очищен.");
+    }
+}

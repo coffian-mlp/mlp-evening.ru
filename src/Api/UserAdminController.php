@@ -1,0 +1,142 @@
+<?php
+
+namespace Api;
+
+use Domain\Auth;
+use Domain\UserManager;
+use Infra\UploadManager;
+
+/**
+ * Обработчики API-действий администрирования пользователей (MLP-255) —
+ * перенос из legacy-switch api.php в тонкий роутер. Ответы — глобальной
+ * sendResponse() (api.php); роль (admin) проверяет роутер ДО вызова.
+ */
+class UserAdminController {
+
+    /** Список всех пользователей (admin). */
+    public static function getUsers(): void {
+        $userManager = new UserManager();
+        $users = $userManager->getAllUsers(); // с chat_color и avatar_url из user_options
+        sendResponse(true, "Список получен", 'success', ['users' => $users]);
+    }
+
+    /** Опции произвольного пользователя (admin). */
+    public static function getUserOptions(): void {
+        $targetUserId = (int)($_POST['user_id'] ?? 0);
+        if (!$targetUserId) sendResponse(false, "ID не указан", 'error');
+
+        $userManager = new UserManager();
+        $options = $userManager->getUserOptions($targetUserId);
+
+        sendResponse(true, "Опции получены", 'success', ['options' => $options]);
+    }
+
+    /** Журнал действий модераторов (admin). */
+    public static function getAuditLogs(): void {
+        $userManager = new UserManager();
+        $logs = $userManager->getAuditLogs();
+
+        // Format dates for JS
+        foreach ($logs as &$log) {
+            if ($log['created_at']) {
+                $log['created_at'] = date('Y-m-d H:i:s', strtotime($log['created_at']));
+            }
+        }
+
+        sendResponse(true, "Логи получены", 'success', ['logs' => $logs]);
+    }
+
+    /** Создать/обновить пользователя из карточки дашборда (admin). */
+    public static function save(): void {
+        $userManager = new UserManager();
+        $id = $_POST['user_id'] ?? '';
+        $login = trim($_POST['login'] ?? '');
+        $nickname = trim($_POST['nickname'] ?? '');
+        $role = $_POST['role'] ?? 'user';
+        $password = $_POST['password'] ?? '';
+
+        // New fields & Uploads
+        $chat_color = trim($_POST['chat_color'] ?? '');
+        $font_preference = trim($_POST['font_preference'] ?? 'open_sans');
+        $font_scale = (int)($_POST['font_scale'] ?? 100);
+        $raw_avatar_url = trim($_POST['avatar_url'] ?? '');
+        $avatar_url = $raw_avatar_url; // Default
+
+        try {
+            $uploadManager = new UploadManager();
+            // 1. File
+            if (isset($_FILES['avatar_file']) && $_FILES['avatar_file']['error'] !== UPLOAD_ERR_NO_FILE) {
+                $avatar_url = $uploadManager->uploadFromPost($_FILES['avatar_file']);
+            }
+            // 2. URL Download
+            elseif (!empty($raw_avatar_url) && strpos($raw_avatar_url, '/upload/avatars/') !== 0 && filter_var($raw_avatar_url, FILTER_VALIDATE_URL)) {
+                $avatar_url = $uploadManager->uploadFromUrl($raw_avatar_url);
+            }
+        } catch (\Exception $e) {
+            sendResponse(false, "Аватар: " . $e->getMessage(), 'error');
+        }
+
+        if (empty($login)) sendResponse(false, "Логин обязателен", 'error');
+        if (empty($nickname)) $nickname = $login;
+
+        try {
+            $data = [
+                'login' => $login,
+                'nickname' => $nickname,
+                'role' => $role,
+                'avatar_url' => $avatar_url,
+                'chat_color' => $chat_color,
+                'font_preference' => $font_preference,
+                'font_scale' => $font_scale
+            ];
+
+            if (!empty($id)) {
+                // Update
+                if (!empty($password)) {
+                    if ($pwErr = Auth::validatePasswordPolicy($password)) sendResponse(false, $pwErr, 'error');
+                    $data['password'] = $password;
+                }
+
+                // UserManager::updateUser сам раскладывает поля users/user_options
+                $userManager->updateUser($id, $data);
+                sendResponse(true, "Пользователь обновлен");
+            } else {
+                // Create
+                if (empty($password)) sendResponse(false, "Для нового пользователя нужен пароль", 'error');
+                if ($pwErr = Auth::validatePasswordPolicy($password)) sendResponse(false, $pwErr, 'error');
+
+                $newId = $userManager->createUser($login, $password, $role, $nickname);
+
+                // Доп. поля (опции) — отдельным updateUser, как и раньше
+                $userManager->updateUser($newId, [
+                    'avatar_url' => $avatar_url,
+                    'chat_color' => $chat_color,
+                    'font_preference' => $font_preference,
+                    'font_scale' => $font_scale
+                ]);
+
+                sendResponse(true, "Пользователь создан");
+            }
+        } catch (\Exception $e) {
+            sendResponse(false, $e->getMessage(), 'error');
+        }
+    }
+
+    /** Удалить пользователя (admin). Самоудаление запрещено. */
+    public static function delete(): void {
+        $id = $_POST['user_id'] ?? '';
+        if (empty($id)) sendResponse(false, "ID не указан", 'error');
+
+        // Не даем удалить самого себя
+        if ($id == $_SESSION['user_id']) {
+            sendResponse(false, "Нельзя удалить самого себя!", 'error');
+        }
+
+        $userManager = new UserManager();
+        if ($userManager->deleteUser($id)) {
+            sendResponse(true, "Пользователь удален");
+        } else {
+            sendResponse(false, "Ошибка удаления", 'error');
+        }
+    }
+}
