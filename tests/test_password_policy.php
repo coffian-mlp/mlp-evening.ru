@@ -1,4 +1,5 @@
 <?php
+use Domain\Auth;
 /**
  * Юнит-тест Auth::validatePasswordPolicy() — L5 (MLP-232).
  * Политика: min 8 символов, max 72 БАЙТА (лимит bcrypt), без обязательной сложности.
@@ -13,7 +14,7 @@ if (!file_exists(__DIR__ . '/../config.php')) {
     exit(0);
 }
 
-require_once __DIR__ . '/../src/Auth.php';
+require_once __DIR__ . '/../autoload.php';
 
 $fail = 0;
 function ok($cond, $label) {

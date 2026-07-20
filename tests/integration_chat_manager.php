@@ -1,4 +1,6 @@
 <?php
+use Domain\UserManager;
+use Domain\ChatManager;
 /**
  * Интеграционный тест ChatManager с реальной БД (MLP-247, T-06, AC-2).
  *

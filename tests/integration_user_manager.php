@@ -1,4 +1,5 @@
 <?php
+use Domain\UserManager;
 /**
  * Интеграционный тест UserManager с реальной БД (MLP-247, T-05, AC-2).
  *

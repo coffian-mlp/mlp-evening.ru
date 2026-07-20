@@ -3,8 +3,8 @@
 namespace Components\AdminEvents;
 
 use Core\Component;
-use Auth;
-use EventManager;
+use Domain\Auth;
+use Domain\EventManager;
 
 class AdminEventsComponent extends Component {
     public function executeComponent() {

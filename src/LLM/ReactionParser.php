@@ -2,7 +2,7 @@
 
 namespace LLM;
 
-use ChatManager;
+use Domain\ChatManager;
 
 /**
  * Извлекает маркер реакции из ответа модели: [РЕАКЦИЯ: type] (или REACT/REACTION).

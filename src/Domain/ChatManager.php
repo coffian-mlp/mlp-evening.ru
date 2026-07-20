@@ -1,4 +1,8 @@
 <?php
+
+namespace Domain;
+
+use Exception;
 use Infra\Database;
 use Infra\ConfigManager;
 use Infra\CentrifugoService;

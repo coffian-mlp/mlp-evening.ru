@@ -2,8 +2,8 @@
 namespace Components\AdminPlaylist;
 
 use Core\Component;
-use EpisodeManager;
-use Auth;
+use Domain\EpisodeManager;
+use Domain\Auth;
 
 class AdminPlaylistComponent extends Component {
     public function executeComponent() {

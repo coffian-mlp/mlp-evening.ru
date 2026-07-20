@@ -2,8 +2,8 @@
 namespace Components\AdminBotCommands;
 
 use Core\Component;
-use Auth;
-use BotCommandManager;
+use Domain\Auth;
+use Domain\BotCommandManager;
 
 class AdminBotCommandsComponent extends Component {
     public function executeComponent() {

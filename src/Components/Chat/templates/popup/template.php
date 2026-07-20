@@ -1,4 +1,5 @@
 <?php
+use Domain\Auth;
 if (!defined("B_PROLOG_INCLUDED") && !defined("bg.jpg")) { 
     // Защита от прямого вызова, если бы мы были в Битриксе. 
     // Но у нас свой путь. 

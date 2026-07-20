@@ -2,12 +2,12 @@
 
 namespace LLM;
 
-use ChatManager;
+use Domain\ChatManager;
 use Infra\ConfigManager;
 use Infra\Database;
-use EventManager;
+use Domain\EventManager;
 use Exception;
-use UserManager;
+use Domain\UserManager;
 
 
 class LLMManager {

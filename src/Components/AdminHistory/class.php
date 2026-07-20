@@ -2,8 +2,8 @@
 namespace Components\AdminHistory;
 
 use Core\Component;
-use EpisodeManager;
-use Auth;
+use Domain\EpisodeManager;
+use Domain\Auth;
 
 class AdminHistoryComponent extends Component {
     public function executeComponent() {

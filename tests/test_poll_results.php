@@ -1,4 +1,5 @@
 <?php
+use Domain\PollManager;
 /**
  * Юнит-тест PollManager::computeResults() — MLP-237.
  * Подсчёт голосов и процентов (доля от числа уникальных проголосовавших).
@@ -13,7 +14,7 @@ if (!file_exists(__DIR__ . '/../config.php')) {
     exit(0);
 }
 
-require_once __DIR__ . '/../src/PollManager.php';
+require_once __DIR__ . '/../autoload.php';
 
 $fail = 0;
 function ok($cond, $label) {

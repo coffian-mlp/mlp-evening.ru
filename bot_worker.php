@@ -20,12 +20,15 @@ if (php_sapi_name() !== 'cli') { http_response_code(404); exit; }
 
 require_once __DIR__ . '/autoload.php'; // MLP-248
 
-// Демон живёт дольше деплоя (git pull): прогреваем весь classmap эагерно,
+// Демон живёт дольше деплоя (git pull): прогреваем классы эагерно,
 // чтобы лениво догруженный ПОСЛЕ pull класс не смешал старую и новую версии кода.
-foreach (array_keys(require __DIR__ . '/src/classmap.php') as $preloadClass) {
-    class_exists($preloadClass) || interface_exists($preloadClass);
+foreach (['Core', 'Infra', 'Domain', 'LLM', 'Social', 'Api'] as $preloadDir) {
+    foreach (glob(__DIR__ . "/src/{$preloadDir}/*.php") as $preloadFile) {
+        $preloadClass = $preloadDir . '\\' . basename($preloadFile, '.php');
+        class_exists($preloadClass) || interface_exists($preloadClass);
+    }
 }
-unset($preloadClass);
+unset($preloadDir, $preloadFile, $preloadClass);
 
 
 $config = ConfigManager::getInstance();

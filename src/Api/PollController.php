@@ -2,10 +2,10 @@
 
 namespace Api;
 
-use Auth;
-use ChatManager;
+use Domain\Auth;
+use Domain\ChatManager;
 use Infra\ConfigManager;
-use PollManager;
+use Domain\PollManager;
 
 
 /**

@@ -1,4 +1,5 @@
 <?php
+use Domain\Auth;
 use Infra\ConfigManager;
 /**
  * Интеграционный смоук bootstrap'а (MLP-247, T-03, AC-3).
@@ -31,10 +32,10 @@ check(class_exists('Core\\Application'), 'Core\\Application загружен');
 check(class_exists('Core\\Component'), 'Core\\Component загружен');
 check(class_exists('Infra\\Database'), 'Infra\\Database загружен');
 check(class_exists('Infra\\ConfigManager'), 'Infra\\ConfigManager загружен');
-check(class_exists('Auth'), 'Auth загружен');
-check(class_exists('UserManager'), 'UserManager загружен');
-check(class_exists('EpisodeManager'), 'EpisodeManager загружен');
-check(class_exists('StickerManager'), 'StickerManager загружен');
+check(class_exists('Domain\\Auth'), 'Domain\\Auth загружен');
+check(class_exists('Domain\\UserManager'), 'Domain\\UserManager загружен');
+check(class_exists('Domain\\EpisodeManager'), 'Domain\\EpisodeManager загружен');
+check(class_exists('Domain\\StickerManager'), 'Domain\\StickerManager загружен');
 check(class_exists('Infra\\CentrifugoService'), 'Infra\\CentrifugoService загружен');
 
 global $app;

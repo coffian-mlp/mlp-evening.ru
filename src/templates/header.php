@@ -1,4 +1,6 @@
 <?php
+use Domain\Auth;
+use Domain\UserManager;
 // src/templates/header.php
 global $app;
 ?>

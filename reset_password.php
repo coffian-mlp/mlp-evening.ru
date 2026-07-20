@@ -1,4 +1,6 @@
 <?php
+use Domain\Auth;
+use Domain\UserManager;
 require_once __DIR__ . '/autoload.php'; // MLP-248
 
 $pageTitle = 'Восстановление пароля - MLP-evening.ru';

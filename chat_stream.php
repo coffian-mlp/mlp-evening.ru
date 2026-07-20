@@ -1,4 +1,7 @@
 <?php
+use Domain\Auth;
+use Domain\UserManager;
+use Domain\ChatManager;
 // chat_stream.php - SSE endpoint for chat messages
 
 require_once __DIR__ . '/autoload.php'; // MLP-248

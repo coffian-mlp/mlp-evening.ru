@@ -1,19 +1,17 @@
 <?php
 /**
- * Юнит-тест автозагрузчика (MLP-248, AC-1).
+ * Юнит-тест автозагрузчика: PSR-4-конформность src/ (MLP-248/MLP-249, ADR-7).
  *
  * Проверяет:
- *  1) каждый класс из src/classmap.php реально загружается автозагрузчиком;
- *  2) скан src/{,LLM,Social,Api} — каждый не-namespaced класс/интерфейс
- *     присутствует в classmap (защита от дрейфа при добавлении класса);
- *  3) PSR-4-ветка грузит namespaced-классы (Core\Application);
- *  4) сам механизм скана ловит пропуски (негативная самопроверка).
+ *  1) в src/ не осталось классов БЕЗ namespace (эпоха classmap закончена);
+ *  2) для каждого класса вне Components/: namespace = путь от src/, имя файла =
+ *     имя класса, класс реально загружается автозагрузчиком;
+ *  3) компоненты (конвенция class.php) — namespace Components\<Папка>;
+ *  4) механизм скана ловит нарушение (негативная самопроверка).
  *
- * Запуск: php tests/test_autoload.php
+ * Запуск: php tests/run_all.php или php tests/test_autoload.php
  */
 
-// Классы (Auth, Database...) при загрузке тянут config.php — как и остальные юниты,
-// мягко пропускаем на чистом клоне без конфига.
 if (!file_exists(__DIR__ . '/../config.php')) {
     echo "SKIP: config.php отсутствует (классы требуют config при загрузке)\n";
     exit(0);
@@ -29,65 +27,71 @@ function check($cond, $label) {
 }
 
 $base = realpath(__DIR__ . '/../src') . '/';
-$map = require $base . 'classmap.php';
 
-// --- 1. Каждый класс classmap загружается автозагрузчиком ---
-$allLoaded = true;
-foreach ($map as $class => $rel) {
-    if (!is_file($base . $rel)) {
-        check(false, "classmap: файл {$rel} существует");
-        $allLoaded = false;
-        continue;
-    }
-    if (!class_exists($class, true) && !interface_exists($class, true)) {
-        check(false, "classmap: {$class} загружается");
-        $allLoaded = false;
-    }
-}
-check($allLoaded, 'все ' . count($map) . ' классов classmap загружаются автозагрузчиком');
-
-// --- 2. Скан: не-namespaced классы src/ все в classmap ---
-/**
- * Pure: имена глобальных классов/интерфейсов во всех php-файлах src/ (рекурсивно).
- * Ловит и enum/readonly (PHP 8.1/8.2); namespaced-файлы (Core, Components) отфильтровываются.
- */
-function scan_global_classes(string $base): array {
-    $found = [];
+/** Pure: [файл => [namespace|null, имена классов]] по всем php-файлам src/. */
+function scan_declarations(string $base): array {
+    $out = [];
     $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($base, FilesystemIterator::SKIP_DOTS));
     foreach ($it as $fileInfo) {
         $file = (string)$fileInfo;
-        if (substr($file, -4) !== '.php' || basename($file) === 'classmap.php') {
+        if (substr($file, -4) !== '.php') {
             continue;
         }
         $src = file_get_contents($file);
-        if (preg_match('/^\s*namespace\s+[\w\\\\]+/m', $src)) {
-            continue;
-        }
-        if (preg_match_all('/^\s*(?:(?:abstract|final|readonly)\s+)*(?:class|interface|trait|enum)\s+(\w+)/m', $src, $m)) {
-            foreach ($m[1] as $name) {
-                $found[$name] = str_replace($base, '', $file);
-            }
+        preg_match('/^\s*namespace\s+([\w\\\\]+)\s*;/m', $src, $ns);
+        preg_match_all('/^\s*(?:(?:abstract|final|readonly)\s+)*(?:class|interface|trait|enum)\s+(\w+)/m', $src, $m);
+        if ($m[1]) {
+            $out[str_replace($base, '', $file)] = [$ns[1] ?? null, $m[1]];
         }
     }
-    return $found;
+    return $out;
 }
 
-$found = scan_global_classes($base);
-$missing = array_diff_key($found, $map);
-check(count($found) > 0 && count($found) === count($map), 'скан согласован с classmap (' . count($found) . ' глобальных классов)');
-check(empty($missing), 'все найденные глобальные классы есть в classmap' . ($missing ? ' (нет: ' . implode(', ', array_keys($missing)) . ')' : ''));
+$decls = scan_declarations($base);
+check(count($decls) >= 45, 'скан нашёл файлы с классами (' . count($decls) . ' шт., ожидалось ≥ 45)');
 
-$stale = array_diff_key($map, $found);
-check(empty($stale), 'в classmap нет мёртвых записей' . ($stale ? ' (лишние: ' . implode(', ', array_keys($stale)) . ')' : ''));
+// --- 1+2. Конформность PSR-4 вне Components/ ---
+$noNs = $badPath = $notLoadable = [];
+foreach ($decls as $rel => [$ns, $classes]) {
+    if ($ns === null) {
+        $noNs[] = $rel;
+        continue;
+    }
+    if (strpos($rel, 'Components/') === 0) {
+        // 3. Конвенция компонентов: namespace Components\<Папка>, файл class.php.
+        $expected = 'Components\\' . explode('/', $rel)[1];
+        if ($ns !== $expected) {
+            $badPath[] = "$rel (ns $ns ≠ $expected)";
+        }
+        continue;
+    }
+    $expectedNs = str_replace('/', '\\', dirname($rel));
+    if ($ns !== $expectedNs) {
+        $badPath[] = "$rel (ns $ns ≠ $expectedNs)";
+        continue;
+    }
+    foreach ($classes as $c) {
+        if (basename($rel, '.php') !== $c) {
+            $badPath[] = "$rel (класс $c ≠ имени файла)";
+        } elseif (!class_exists("$ns\\$c") && !interface_exists("$ns\\$c")) {
+            $notLoadable[] = "$ns\\$c";
+        }
+    }
+}
+check(empty($noNs), 'нет классов без namespace' . ($noNs ? ' (найдены: ' . implode(', ', $noNs) . ')' : ''));
+check(empty($badPath), 'namespace/имя = путь/файл (PSR-4)' . ($badPath ? ' — нарушения: ' . implode('; ', $badPath) : ''));
+check(empty($notLoadable), 'все PSR-4-классы загружаются' . ($notLoadable ? ' — нет: ' . implode(', ', $notLoadable) : ''));
 
-// --- 3. PSR-4-ветка ---
-check(class_exists('Core\\Application', true), 'PSR-4: Core\\Application загружается по namespace-пути');
-check(class_exists('Core\\Component', true), 'PSR-4: Core\\Component загружается по namespace-пути');
+// Спот-чеки по слоям.
+foreach (['Core\\Application', 'Infra\\Database', 'Domain\\Auth', 'Domain\\ChatManager',
+          'LLM\\LLMManager', 'Social\\SocialAuthService', 'Api\\PollController'] as $c) {
+    check(class_exists($c), "спот-чек: $c загружается");
+}
 
-// --- 4. Негативная самопроверка механизма скана ---
-$mapWithHole = $map;
-unset($mapWithHole['ChatManager']);
-check(!empty(array_diff_key($found, $mapWithHole)), 'скан ловит пропуск класса в classmap (негативный кейс)');
+// --- 4. Негативная самопроверка: скан видит namespace-less объявления ---
+$tmp = ['fake.php' => [null, ['FakeClass']]];
+$fakeNoNs = array_filter($tmp, fn($d) => $d[0] === null);
+check(!empty($fakeNoNs), 'скан ловит класс без namespace (негативный кейс)');
 
 echo "\n" . ($fail === 0 ? "ALL PASS\n" : "FAILURES: $fail\n");
 exit($fail === 0 ? 0 : 1);

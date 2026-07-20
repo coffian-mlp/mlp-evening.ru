@@ -2,11 +2,11 @@
 
 namespace LLM;
 
-use BotCommandManager;
+use Domain\BotCommandManager;
 use Infra\ConfigManager;
 use Infra\Database;
-use EventManager;
-use PollManager;
+use Domain\EventManager;
+use Domain\PollManager;
 
 
 /**

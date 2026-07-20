@@ -1,5 +1,7 @@
 <?php
 
+namespace Domain;
+
 class CaptchaManager {
     private const SESSION_KEY = 'captcha_state';
     

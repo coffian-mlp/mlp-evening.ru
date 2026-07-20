@@ -1,4 +1,12 @@
 <?php
+use Domain\Auth;
+use Domain\UserManager;
+use Domain\ChatManager;
+use Domain\EpisodeManager;
+use Domain\StickerManager;
+use Domain\BotCommandManager;
+use Domain\CaptchaManager;
+use Domain\OnlineManager;
 use Infra\Database;
 use Infra\ConfigManager;
 use Infra\Mailer;

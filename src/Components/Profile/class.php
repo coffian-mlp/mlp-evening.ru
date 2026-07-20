@@ -2,8 +2,8 @@
 namespace Components\Profile;
 
 use Core\Component;
-use Auth;
-use UserManager;
+use Domain\Auth;
+use Domain\UserManager;
 use Infra\ConfigManager;
 
 class ProfileComponent extends Component {

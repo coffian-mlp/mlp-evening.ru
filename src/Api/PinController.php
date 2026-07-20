@@ -2,8 +2,8 @@
 
 namespace Api;
 
-use Auth;
-use ChatManager;
+use Domain\Auth;
+use Domain\ChatManager;
 
 
 /**

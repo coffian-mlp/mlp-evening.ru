@@ -2,8 +2,8 @@
 namespace Components\AdminStickers;
 
 use Core\Component;
-use StickerManager;
-use Auth;
+use Domain\StickerManager;
+use Domain\Auth;
 
 class AdminStickersComponent extends Component {
     public function executeComponent() {

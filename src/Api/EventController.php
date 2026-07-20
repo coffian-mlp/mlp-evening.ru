@@ -2,8 +2,8 @@
 
 namespace Api;
 
-use EventManager;
-use EpisodeManager;
+use Domain\EventManager;
+use Domain\EpisodeManager;
 
 
 /**

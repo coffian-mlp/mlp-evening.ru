@@ -2,8 +2,8 @@
 namespace Components\AdminUsers;
 
 use Core\Component;
-use UserManager;
-use Auth;
+use Domain\UserManager;
+use Domain\Auth;
 
 class AdminUsersComponent extends Component {
     public function executeComponent() {

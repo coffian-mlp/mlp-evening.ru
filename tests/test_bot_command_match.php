@@ -1,4 +1,5 @@
 <?php
+use Domain\BotCommandManager;
 /**
  * Юнит-тест BotCommandManager::matchCommand() — A3 (MLP-228).
  * Сопоставление сообщения с активной командой бота (pure-логика, вынесена из api.php).
@@ -13,7 +14,7 @@ if (!file_exists(__DIR__ . '/../config.php')) {
     exit(0);
 }
 
-require_once __DIR__ . '/../src/BotCommandManager.php';
+require_once __DIR__ . '/../autoload.php';
 
 $fail = 0;
 function ok($cond, $label) {

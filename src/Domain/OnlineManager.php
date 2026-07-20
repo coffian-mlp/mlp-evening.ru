@@ -1,4 +1,6 @@
 <?php
+
+namespace Domain;
 use Infra\Database;
 use Infra\ConfigManager;
 

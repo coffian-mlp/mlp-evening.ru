@@ -3,7 +3,7 @@ namespace Components\AdminSettings;
 
 use Core\Component;
 use Infra\ConfigManager;
-use Auth;
+use Domain\Auth;
 
 class AdminSettingsComponent extends Component {
     public function executeComponent() {

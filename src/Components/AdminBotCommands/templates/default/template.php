@@ -1,4 +1,5 @@
 <?php
+use Domain\Auth;
 /**
  * @var array $arResult
  */

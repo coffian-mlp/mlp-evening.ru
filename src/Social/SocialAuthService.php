@@ -2,10 +2,10 @@
 
 namespace Social;
 
-use Auth;
+use Domain\Auth;
 use Infra\Database;
 use Exception;
-use UserManager;
+use Domain\UserManager;
 
 
 class SocialAuthService {

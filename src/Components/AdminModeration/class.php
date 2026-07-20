@@ -2,7 +2,7 @@
 namespace Components\AdminModeration;
 
 use Core\Component;
-use Auth;
+use Domain\Auth;
 
 class AdminModerationComponent extends Component {
     public function executeComponent() {

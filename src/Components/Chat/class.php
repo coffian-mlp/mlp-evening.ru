@@ -2,9 +2,9 @@
 namespace Components\Chat;
 
 use Core\Component;
-use Auth;
-use UserManager;
-use StickerManager;
+use Domain\Auth;
+use Domain\UserManager;
+use Domain\StickerManager;
 use Infra\CentrifugoService;
 use Infra\ConfigManager;
 

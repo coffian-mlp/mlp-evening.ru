@@ -1,4 +1,5 @@
 <?php
+use Domain\Auth;
 use Infra\ConfigManager;
 // init.php - Bootstrap файла
 ob_start(); // Start Output Buffering for asset injection
