@@ -27,11 +27,29 @@ class BotDispatch {
             }
         }
 
+        // Троттл приветствий (MLP-254): если этому пользователю уже здоровались
+        // в пределах ai_greeting_cooldown (сек, 0 = выкл) — молчим ДО очереди и
+        // до LLM: ни задачи, ни запроса токенов. Вход-выход-вход — не повод для
+        // шестнадцати «добро пожаловать» подряд.
+        if ($type === 'greeting') {
+            $cooldown = (int)ConfigManager::getInstance()->getOption('ai_greeting_cooldown', 600);
+            $username = (string)($payload['username'] ?? '');
+            if ($cooldown > 0 && $username !== ''
+                && (new JobQueue())->hasRecentByUsername('greeting', $username, $cooldown)) {
+                return;
+            }
+        }
+
         if (self::shouldQueue()) {
             (new JobQueue())->enqueue($type, $payload, self::delaySeconds());
             return;
         }
         // Inline-фоллбек: прежнее поведение — «раздумье» + синхронная обработка.
+        // Приветствие журналируем в llm_jobs (done) ДО обработки — троттл видит
+        // его сразу, даже пока Лира «думает» (гонка вход-выход-вход закрыта).
+        if ($type === 'greeting') {
+            (new JobQueue())->logDone($type, $payload);
+        }
         if (function_exists('set_time_limit')) { @set_time_limit(0); }
         @ignore_user_abort(true);
         sleep(self::delaySeconds());

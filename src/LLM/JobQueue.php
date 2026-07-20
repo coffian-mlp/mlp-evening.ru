@@ -92,6 +92,38 @@ class JobQueue {
         return $jobs;
     }
 
+    /**
+     * Была ли недавняя задача типа $type для пользователя $username (MLP-254).
+     * Смотрит payload.username по всем статусам (pending считается: поздороваться
+     * уже решили). Для троттла приветствий — LLM-запрос не должен даже создаваться.
+     */
+    public function hasRecentByUsername(string $type, string $username, int $seconds): bool {
+        $stmt = $this->db->prepare(
+            "SELECT 1 FROM llm_jobs
+             WHERE type = ? AND created_at > DATE_SUB(NOW(), INTERVAL ? SECOND)
+               AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.username')) = ?
+             LIMIT 1"
+        );
+        $stmt->bind_param('sis', $type, $seconds, $username);
+        $stmt->execute();
+        return $stmt->get_result()->num_rows > 0;
+    }
+
+    /**
+     * Журнальная запись задачи, обработанной inline (MLP-254): статус сразу done.
+     * Даёт троттлу единое состояние независимо от пути (очередь/inline)
+     * и приближает «единый путь через llm_jobs» (TODO: проактив).
+     */
+    public function logDone(string $type, array $payload): void {
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
+        $stmt = $this->db->prepare(
+            "INSERT INTO llm_jobs (type, payload, run_after, status, created_at, claimed_at)
+             VALUES (?, ?, NOW(), 'done', NOW(), NOW())"
+        );
+        $stmt->bind_param('ss', $type, $json);
+        $stmt->execute();
+    }
+
     /** Есть ли созревшие задачи (для heartbeat/inline-решений). */
     public function hasDue(): bool {
         $res = $this->db->query("SELECT 1 FROM llm_jobs WHERE status='pending' AND run_after <= NOW() LIMIT 1");
