@@ -12,9 +12,10 @@ body {
 }
 
 .dashboard-layout .container {
-    max-width: 1200px;
+    /* MLP-256: полная ширина — дашборду тесно в 1200px (таблицы БД, пользователи) */
+    max-width: none;
     margin: 0 auto 50px;
-    padding: 0 20px;
+    padding: 0 32px;
 }
 
 /* === Header === */
@@ -25,9 +26,10 @@ body {
 }
 
 .main-header .header-content {
-    max-width: 1200px;
+    /* MLP-256: шапка согласована с полноширинным контентом */
+    max-width: none;
     margin: 0 auto;
-    padding: 0 20px;
+    padding: 0 32px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -72,30 +74,36 @@ body {
     color: #ffcccc;
 }
 
-/* === Navigation Grid === */
+/* === Navigation (MLP-256: компактный однострочный таб-бар вместо плиток) === */
 .nav-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 10px;
     margin-bottom: 30px;
+    overflow-x: auto; /* на узких экранах табы скроллятся, не ломая строку */
+    scrollbar-width: thin;
 }
 
 .nav-tile {
     background: rgba(255, 255, 255, 0.1);
-    padding: 20px;
-    border-radius: 12px;
+    padding: 10px 18px;
+    border-radius: 10px;
     text-align: center;
     cursor: pointer;
     transition: all 0.3s ease;
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: #ccc;
     backdrop-filter: blur(5px);
-    display: block; /* Восстанавливаем блочность для грида */
+    display: flex;              /* иконка и подпись в одну строку */
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .nav-tile:hover {
     background: rgba(255, 255, 255, 0.2);
-    transform: translateY(-5px);
+    transform: translateY(-2px);
     color: #fff;
 }
 
@@ -107,14 +115,14 @@ body {
 }
 
 .nav-tile .icon {
-    font-size: 2.5em;
-    margin-bottom: 10px;
-    display: block; /* Иконка сверху */
+    font-size: 1.25em;
+    margin-bottom: 0;
+    display: inline-block;
 }
 
 .nav-tile .label {
     font-weight: bold;
-    font-size: 1.1em;
+    font-size: 0.95em;
     font-family: 'Philosopher', sans-serif;
 }
 
@@ -468,10 +476,15 @@ option:checked {
 
 /* Responsive */
 @media (max-width: 768px) {
-    .nav-grid {
-        grid-template-columns: repeat(2, 1fr);
+    /* MLP-256: таб-бар остаётся строкой с горизонтальным скроллом; сжимаем отступы */
+    .nav-tile {
+        padding: 8px 12px;
     }
-    
+
+    .dashboard-layout .container {
+        padding: 0 12px;
+    }
+
     .main-header .header-content {
         flex-direction: column;
         gap: 15px;

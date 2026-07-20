@@ -15,10 +15,9 @@ $(document).ready(function() {
             window.location.hash = target;
         } 
 
+        // MLP-256: пользователи и модерация живут на одной вкладке
         if (target === '#tab-users') {
             loadUsers();
-        }
-        if (target === '#tab-moderation') {
             loadPunishedUsers();
             loadAuditLogs();
         }
@@ -28,12 +27,22 @@ $(document).ready(function() {
     });
 
     // --- Проверка хеша при загрузке ---
+    // MLP-256: мапа старых хешей (закладки до перегруппировки 10 → 7 вкладок)
+    var legacyTabs = {
+        '#tab-playlist': '#tab-episodes',
+        '#tab-library': '#tab-episodes',
+        '#tab-history': '#tab-episodes',
+        '#tab-moderation': '#tab-users',
+        '#tab-controls': '#tab-settings',
+        '#tab-bot-commands': '#tab-bot'
+    };
     if (window.location.hash) {
         setTimeout(function() {
             window.scrollTo(0, 0);
         }, 1);
-        
-        var $targetTile = $('.nav-tile[data-target="' + window.location.hash + '"]');
+
+        var hash = legacyTabs[window.location.hash] || window.location.hash;
+        var $targetTile = $('.nav-tile[data-target="' + hash + '"]');
         if ($targetTile.length) {
             $targetTile.click();
         }
@@ -126,8 +135,9 @@ $(document).ready(function() {
                     }
                     
                     if (action === 'clear_watching_log') {
-                        $("#tab-history table tr:not(:first)").remove();
-                        $("#tab-history table").append("<tr><td colspan='3' style='text-align:center; color:#999;'>История пуста (обновите страницу)</td></tr>");
+                        // MLP-256: таблица истории — по своему id (вкладки перегруппированы)
+                        $("#watch-history-table tr:not(:first)").remove();
+                        $("#watch-history-table").append("<tr><td colspan='3' style='text-align:center; color:#999;'>История пуста (обновите страницу)</td></tr>");
                     }
                     
                     if (action === 'save_user') {

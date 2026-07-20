@@ -84,7 +84,7 @@ class SocialAuthService {
         // А. Пользователь уже залогинен -> Привязываем к текущему
         if (Auth::check()) {
             $this->userManager->linkSocial($_SESSION['user_id'], $providerName, $socialUser);
-            return ['success' => true, 'message' => 'Аккаунт успешно привязан!', 'redirect' => '/dashboard.php#tab-profile']; // Предполагаемый редирект
+            return ['success' => true, 'message' => 'Аккаунт успешно привязан!', 'redirect' => '/']; // Предполагаемый редирект
         }
 
         // Б. Новый пользователь (Регистрация)

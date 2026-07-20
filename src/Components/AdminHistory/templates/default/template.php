@@ -12,7 +12,7 @@
         </form>
     </div>
     
-    <table class="dashboard-table">
+    <table class="dashboard-table" id="watch-history-table">
         <tr><th>Time ID</th><th>Ep ID</th><th>Title</th></tr>
         <?php foreach ($arResult['watchHistory'] as $row): ?>
             <tr>
