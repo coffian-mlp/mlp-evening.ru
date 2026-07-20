@@ -31,7 +31,7 @@ test.describe('MLP-253: контекстное меню чата', () => {
 
   for (const path of ['/', '/chat_popup.php']) {
     test(`меню по ПКМ открывается во вьюпорте: ${path}`, async () => {
-      await page.goto(path);
+      await page.goto(path, { waitUntil: 'domcontentloaded' });
       const messages = page.locator('.chat-message');
       await expect(messages.last()).toBeVisible({ timeout: 15000 });
 
@@ -59,7 +59,7 @@ test.describe('MLP-253: контекстное меню чата', () => {
   }
 
   test('меню в body, position fixed (страховка от клипа предками)', async () => {
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.chat-message').last()).toBeVisible({ timeout: 15000 });
     const info = await page.evaluate(() => {
       const m = document.getElementById('chat-context-menu');
