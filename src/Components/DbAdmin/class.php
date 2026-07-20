@@ -33,10 +33,14 @@ class DbAdminComponent extends Component {
         $this->result['rows'] = [];
         $this->result['error'] = null;
         $this->result['pagination'] = [];
-        $this->result['filter'] = [
-            'column' => $_GET['filter_column'] ?? '',
-            'operator' => $_GET['filter_operator'] ?? '=',
-            'value' => $_GET['filter_value'] ?? ''
+        // MLP-257: мультифильтр (AND) + серверная сортировка.
+        // sort/dir строго строками — массив в параметре не должен ронять рендер (ревью).
+        $sortCol = $_GET['sort'] ?? '';
+        $sortDir = $_GET['dir'] ?? '';
+        $this->result['filters'] = self::parseFilters($_GET);
+        $this->result['sort'] = [
+            'col' => is_string($sortCol) ? $sortCol : '',
+            'dir' => (is_string($sortDir) && strtolower($sortDir) === 'desc') ? 'desc' : 'asc',
         ];
 
         // 1. Get Table List
@@ -102,49 +106,96 @@ class DbAdminComponent extends Component {
         return $cols;
     }
 
-    private function buildWhereClause($db, $params, array $validCols = []) {
-        $where = "";
+    /**
+     * MLP-257: условия фильтра из запроса. Новый формат — параллельные массивы
+     * filter_col[]/filter_op[]/filter_val[]; legacy-одиночный
+     * filter_column/filter_operator/filter_value принимается для старых закладок.
+     * Пустые значения и рассинхрон длин отбрасываются. Pure — юнит-тестируется.
+     *
+     * @return array<int, array{col: string, op: string, val: string}>
+     */
+    public static function parseFilters(array $params): array {
+        $cols = $params['filter_col'] ?? [];
+        $ops  = $params['filter_op']  ?? [];
+        $vals = $params['filter_val'] ?? [];
+
+        // Legacy-одиночный фильтр (до MLP-257)
+        if (!$cols && !empty($params['filter_column'])) {
+            $cols = [$params['filter_column']];
+            $ops  = [$params['filter_operator'] ?? '='];
+            $vals = [$params['filter_value'] ?? ''];
+        }
+
+        if (!is_array($cols) || !is_array($ops) || !is_array($vals)) return [];
+
+        $conditions = [];
+        foreach ($cols as $i => $col) {
+            $val = $vals[$i] ?? null;
+            if (!is_string($col) || $col === '' || !is_string($val) || $val === '') continue;
+            $op = $ops[$i] ?? '=';
+            $conditions[] = ['col' => $col, 'op' => is_string($op) ? $op : '=', 'val' => $val];
+        }
+        return $conditions;
+    }
+
+    /**
+     * MLP-257: WHERE по набору условий (AND). Семантика прежнего одиночного
+     * фильтра сохранена: неизвестная колонка → условие игнорируется, оператор
+     * вне whitelist → '=', LIKE оборачивается %...%, BETWEEN ждёт «min,max»
+     * (иначе фоллбек '='). Идентификаторы — только точный whitelist (H3),
+     * значения — только плейсхолдеры. Pure — юнит-тестируется без БД.
+     *
+     * @return array{0: string, 1: string, 2: array} [WHERE-строка, types, values]
+     */
+    public static function buildWhere(array $conditions, array $validCols): array {
+        $parts = [];
         $types = "";
         $values = [];
 
-        // H3: колонку фильтра принимаем только если она есть в схеме таблицы.
-        if ($validCols && !self::isKnown($params['filter_column'] ?? '', $validCols)) {
-            return [$where, $types, $values]; // неизвестная колонка → фильтр игнорируем
-        }
+        foreach ($conditions as $c) {
+            $col = $c['col'] ?? '';
+            if (!self::isKnown($col, $validCols)) continue; // H3
 
-        if (!empty($params['filter_column']) && isset($params['filter_value']) && $params['filter_value'] !== '') {
-            $col = $db->real_escape_string($params['filter_column']);
-            $op = $params['filter_operator'];
-            $val = $params['filter_value'];
-
-            // Validate operator whitelist
+            $op = $c['op'] ?? '=';
             if (!in_array($op, self::VALID_OPERATORS, true)) $op = '=';
+            $val = $c['val'] ?? '';
 
             if ($op === 'LIKE') {
-                $where = "WHERE `$col` LIKE ?";
+                $parts[] = "`$col` LIKE ?";
                 $types .= "s";
                 $values[] = "%" . $val . "%";
             } elseif ($op === 'BETWEEN') {
-                // Expect value like "min,max"
-                $parts = explode(',', $val, 2);
-                if (count($parts) === 2) {
-                    $where = "WHERE `$col` BETWEEN ? AND ?";
+                $range = explode(',', $val, 2);
+                if (count($range) === 2) {
+                    $parts[] = "`$col` BETWEEN ? AND ?";
                     $types .= "ss";
-                    $values[] = trim($parts[0]);
-                    $values[] = trim($parts[1]);
+                    $values[] = trim($range[0]);
+                    $values[] = trim($range[1]);
                 } else {
-                    // Fallback if format invalid
-                    $where = "WHERE `$col` = ?";
+                    $parts[] = "`$col` = ?"; // фоллбек при кривом формате
                     $types .= "s";
                     $values[] = $val;
                 }
             } else {
-                $where = "WHERE `$col` $op ?";
+                $parts[] = "`$col` $op ?";
                 $types .= "s";
                 $values[] = $val;
             }
         }
+
+        $where = $parts ? 'WHERE ' . implode(' AND ', $parts) : '';
         return [$where, $types, $values];
+    }
+
+    /**
+     * MLP-257: ORDER BY по whitelist-колонке; направление строго ASC|DESC
+     * (дефолт ASC). Неизвестная колонка → пустая строка (без сортировки).
+     * Pure — юнит-тестируется.
+     */
+    public static function buildOrderBy(?string $col, ?string $dir, array $validCols): string {
+        if (!self::isKnown($col, $validCols)) return '';
+        $dir = strtoupper((string)$dir) === 'DESC' ? 'DESC' : 'ASC';
+        return "ORDER BY `$col` $dir";
     }
 
     /** MLP-255: public + $id параметром — зовётся из Api\DbAdminController (POST). */
@@ -276,6 +327,7 @@ class DbAdminComponent extends Component {
     private function fetchTableData($db, $table) {
         // Pagination
         $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+        if ($page < 1) $page = 1;
         $limit = 50;
         $offset = ($page - 1) * $limit;
 
@@ -285,38 +337,47 @@ class DbAdminComponent extends Component {
             $this->result['columns'][] = $col['Field'];
         }
 
-        // Build Filter (H3: колонку фильтра сверяем со схемой таблицы)
-        list($where, $types, $values) = $this->buildWhereClause($db, $_GET, $this->result['columns']);
+        // MLP-257: мультифильтр + сортировка — единые построители (те же, что у CSV)
+        list($where, $types, $values) = self::buildWhere($this->result['filters'], $this->result['columns']);
+        $orderBy = self::buildOrderBy($this->result['sort']['col'], $this->result['sort']['dir'], $this->result['columns']);
 
-        // Count total with filter
-        $countSql = "SELECT COUNT(*) as cnt FROM `$table` $where";
-        $stmt = $db->prepare($countSql);
-        if ($where) {
-            $stmt->bind_param($types, ...$values);
-        }
-        $stmt->execute();
-        $totalRows = $stmt->get_result()->fetch_assoc()['cnt'];
-        
-        // Fetch rows with filter
-        $sql = "SELECT * FROM `$table` $where LIMIT $limit OFFSET $offset";
-        $stmt = $db->prepare($sql);
-        if ($where) {
-            $stmt->bind_param($types, ...$values);
-        }
-        $stmt->execute();
-        $result = $stmt->get_result();
-        
-        if ($result) {
-            while ($row = $result->fetch_assoc()) {
-                $this->result['rows'][] = $row;
+        // MLP-257: несовместимая пара оператор/значение больше не роняет страницу
+        try {
+            // Count total with filter
+            $countSql = "SELECT COUNT(*) as cnt FROM `$table` $where";
+            $stmt = $db->prepare($countSql);
+            if ($where) {
+                $stmt->bind_param($types, ...$values);
             }
-        }
+            $stmt->execute();
+            $totalRows = $stmt->get_result()->fetch_assoc()['cnt'];
 
-        $this->result['pagination'] = [
-            'current' => $page,
-            'total_pages' => ceil($totalRows / $limit),
-            'total_rows' => $totalRows
-        ];
+            // Fetch rows with filter + sort
+            $sql = "SELECT * FROM `$table` $where $orderBy LIMIT $limit OFFSET $offset";
+            $stmt = $db->prepare($sql);
+            if ($where) {
+                $stmt->bind_param($types, ...$values);
+            }
+            $stmt->execute();
+            $result = $stmt->get_result();
+
+            if ($result) {
+                while ($row = $result->fetch_assoc()) {
+                    $this->result['rows'][] = $row;
+                }
+            }
+
+            $this->result['pagination'] = [
+                'current' => $page,
+                'total_pages' => ceil($totalRows / $limit),
+                'total_rows' => $totalRows
+            ];
+        } catch (\Throwable $e) {
+            error_log('DbAdmin fetchTableData: ' . $e->getMessage());
+            $this->result['error'] = 'Запрос не выполнился — проверь фильтры (оператор/значение).';
+            $this->result['rows'] = [];
+            $this->result['pagination'] = ['current' => 1, 'total_pages' => 0, 'total_rows' => 0];
+        }
     }
 
     public function exportCsv($table, $params = []) {
@@ -336,56 +397,41 @@ class DbAdminComponent extends Component {
         $output = fopen('php://output', 'w');
         fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF)); // BOM
 
-        // Build Filter (H3: колонку фильтра сверяем со схемой таблицы)
+        // MLP-257: те же построители, что у просмотра — экспорт видит ровно то,
+        // что на экране (мультифильтр + сортировка), и только через prepared
+        // statements (ручное экранирование значений ликвидировано).
+        // Компромисс: get_result() буферизует результат — для admin-масштаба
+        // приемлемо, зато без интерполяции значений в SQL.
         $validCols = $this->validColumns($db, $table);
-        list($where, $types, $values) = $this->buildWhereClause($db, $params, $validCols);
+        list($where, $types, $values) = self::buildWhere(self::parseFilters($params), $validCols);
+        // sort/dir строго строками (массив не должен ронять экспорт — ревью)
+        $sortCol = $params['sort'] ?? null;
+        $sortDir = $params['dir'] ?? null;
+        $orderBy = self::buildOrderBy(is_string($sortCol) ? $sortCol : null, is_string($sortDir) ? $sortDir : null, $validCols);
 
-        // Stream Query
-        // Note: Prepared statements with unbuffered results in MySQLi are tricky.
-        // We will use standard query here but carefully escape values since bind_param is hard with unbuffered.
-        // ACTUALLY, let's use prepared statement + get_result + fetch_row loop. 
-        // For huge exports, real_query + use_result is better, but requires manual escaping.
-        // Let's stick to safe manual escaping for export to keep it simple and safe enough for admins.
-        
-        $sql = "SELECT * FROM `$table` $where";
-        
-        // Re-construct SQL with escaped values because bind_param doesn't support unbuffered easily across all drivers
-        if ($where) {
-            $col = $db->real_escape_string($params['filter_column']);
-            $op = $params['filter_operator'];
-            $val = $db->real_escape_string($params['filter_value']);
-            if (!in_array($op, self::VALID_OPERATORS, true)) $op = '=';
-            
-            if ($op === 'LIKE') {
-                 $sql = "SELECT * FROM `$table` WHERE `$col` LIKE '%$val%'";
-            } elseif ($op === 'BETWEEN') {
-                 $parts = explode(',', $params['filter_value'], 2);
-                 if (count($parts) === 2) {
-                     $val1 = $db->real_escape_string(trim($parts[0]));
-                     $val2 = $db->real_escape_string(trim($parts[1]));
-                     $sql = "SELECT * FROM `$table` WHERE `$col` BETWEEN '$val1' AND '$val2'";
-                 } else {
-                     $val = $db->real_escape_string($params['filter_value']);
-                     $sql = "SELECT * FROM `$table` WHERE `$col` = '$val'";
-                 }
-            } else {
-                 $sql = "SELECT * FROM `$table` WHERE `$col` $op '$val'";
+        try {
+            $stmt = $db->prepare("SELECT * FROM `$table` $where $orderBy");
+            if ($where) {
+                $stmt->bind_param($types, ...$values);
             }
+            $stmt->execute();
+            $result = $stmt->get_result();
+
+            if ($result) {
+                $fields = $result->fetch_fields();
+                $headers = [];
+                foreach ($fields as $field) $headers[] = $field->name;
+                fputcsv($output, $headers);
+
+                while ($row = $result->fetch_row()) {
+                    fputcsv($output, $row);
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('DbAdmin exportCsv: ' . $e->getMessage());
+            fputcsv($output, ['Ошибка экспорта — проверь фильтры.']);
         }
 
-        $result = $db->query($sql, MYSQLI_USE_RESULT); // Unbuffered mode
-        
-        if ($result) {
-            $fields = $result->fetch_fields();
-            $headers = [];
-            foreach ($fields as $field) $headers[] = $field->name;
-            fputcsv($output, $headers);
-            
-            while ($row = $result->fetch_row()) {
-                fputcsv($output, $row);
-            }
-        }
-        
         fclose($output);
     }
 }
