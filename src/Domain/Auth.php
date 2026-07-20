@@ -87,14 +87,10 @@ class Auth {
     public static function login($login, $password) {
         self::ensureSession();
 
-        $db = Database::getInstance()->getConnection();
-        
-        $stmt = $db->prepare("SELECT id, login, nickname, password_hash, role FROM users WHERE login = ?");
-        $stmt->bind_param("s", $login);
-        $stmt->execute();
-        $res = $stmt->get_result();
+        // AR2-2 (MLP-250): users читаем через владельца таблицы (UserManager), не прямым SQL.
+        $row = (new UserManager())->getUserByLogin($login);
 
-        if ($res && $row = $res->fetch_assoc()) {
+        if ($row) {
             if (password_verify($password, $row['password_hash'])) {
                 session_regenerate_id(true); // M1: защита от session fixation
                 $_SESSION['user_id'] = $row['id'];
@@ -143,6 +139,10 @@ class Auth {
 
     /** Авто-вход по remember-cookie, если активной сессии нет. Ротирует токен (sliding expiry). */
     public static function tryRememberLogin() {
+        // AR2-3: ~1% запросов подчищает истёкшие токены (дешёвый DELETE по времени).
+        if (mt_rand(1, 100) === 1) {
+            self::gcExpiredTokens();
+        }
         if (self::check()) return;                       // уже вошёл
         if (empty($_COOKIE[self::REMEMBER_COOKIE])) return;
 
@@ -184,13 +184,20 @@ class Auth {
     }
 
     private static function fetchUserForSession($userId) {
-        $db = Database::getInstance()->getConnection();
-        $stmt = $db->prepare("SELECT id, login, nickname, role, is_banned FROM users WHERE id = ?");
-        $stmt->bind_param("i", $userId);
-        $stmt->execute();
-        $u = $stmt->get_result()->fetch_assoc();
-        if (!$u || $u['is_banned']) return null; // забаненных не авто-логиним
+        // AR2-2 (MLP-250): через владельца таблицы users.
+        $u = (new UserManager())->getUserById((int)$userId);
+        if (!$u || !empty($u['is_banned'])) return null; // забаненных не авто-логиним
         return $u;
+    }
+
+    /**
+     * GC истёкших remember-токенов (AR2-3, MLP-250): иначе auth_tokens растёт вечно —
+     * ротация чистит только по selector. Дёргается вероятностно из tryRememberLogin.
+     */
+    public static function gcExpiredTokens(): int {
+        $db = Database::getInstance()->getConnection();
+        $db->query("DELETE FROM auth_tokens WHERE expires_at < UTC_TIMESTAMP()");
+        return $db->affected_rows;
     }
 
     private static function deleteRememberToken($selector) {
