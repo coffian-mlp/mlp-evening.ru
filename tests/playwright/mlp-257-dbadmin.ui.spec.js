@@ -120,6 +120,23 @@ test('экспорт CSV уважает фильтры и сортировку, 
   expect(ids, 'порядок — по сортировке desc').toEqual(sorted);
 });
 
+test('мультифильтр UI: добавленная строка кликабельна (хотфикс cloneNode+custom-select)', async ({ page }) => {
+  await login(page);
+  await page.goto(dbUrl('sort=id&dir=asc'), { waitUntil: 'domcontentloaded' });
+
+  await page.click('.db-filter-form button[title="Ещё условие"]');
+  await expect(page.locator('.db-filter-row')).toHaveCount(2);
+
+  // Новая строка: кастомный селект открывается и выбирает значение
+  const newRow = page.locator('.db-filter-row').nth(1);
+  const colSelect = newRow.locator('.custom-select-wrapper').first();
+  await colSelect.locator('.select-selected').click();
+  await expect(colSelect.locator('.select-items')).toBeVisible();
+  await colSelect.locator('.select-items div', { hasText: 'id' }).first().click();
+  const chosen = await newRow.locator('select[name="filter_col[]"]').inputValue();
+  expect(chosen, 'выбор в клонированной строке применился').toBe('id');
+});
+
 test('устойчивость: legacy-фильтр работает, неизвестная колонка игнорируется (MLP-257)', async ({ page }) => {
   await login(page);
 

@@ -1227,3 +1227,24 @@ body, html {
     color: #ffd54f;
     text-shadow: 0 0 6px rgba(255, 213, 79, 0.7);
 }
+
+/* --- Закреплённое сообщение (MLP-242; хотфикс: стили жили в неподключаемом assets/css/chat.css) --- */
+.chat-pinned-banner {
+    flex-shrink: 0;
+    background: rgba(60, 45, 90, 0.55);
+    border-bottom: 1px solid rgba(160, 130, 210, 0.35);
+    backdrop-filter: blur(4px);
+    padding: 6px 12px;
+    font-size: 0.9em;
+    max-height: 33%;
+    overflow-y: auto;
+}
+.chat-pinned-banner .pinned-inner { display: flex; align-items: flex-start; gap: 8px; }
+.chat-pinned-banner .pinned-icon { flex-shrink: 0; opacity: 0.9; }
+.chat-pinned-banner .pinned-body { flex: 1; min-width: 0; word-break: break-word; }
+.chat-pinned-banner .pinned-author { font-weight: 600; }
+.chat-pinned-banner .pinned-unpin {
+    flex-shrink: 0; background: none; border: none; color: #caa;
+    cursor: pointer; font-size: 1em; line-height: 1; padding: 2px 4px;
+}
+.chat-pinned-banner .pinned-unpin:hover { color: #f0c0cc; }

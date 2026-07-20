@@ -237,13 +237,29 @@ $dbViewUrl = function (array $override = []) use ($dbViewParams): string {
 
 <script>
 // MLP-257: динамические строки мультифильтра
+// Хотфикс: селекты оборачиваются кастомным UI (main.js initCustomSelects) —
+// cloneNode копирует обёртку БЕЗ обработчиков (мёртвые селекторы). Раздеваем
+// клон до голых <select> и инициализируем заново.
 function dbAddFilterRow() {
     var rows = document.getElementById('db-filter-rows');
     var row = rows.querySelector('.db-filter-row').cloneNode(true);
+    row.querySelectorAll('.custom-select-wrapper').forEach(function(w) {
+        var sel = w.querySelector('select');
+        if (sel) w.parentNode.insertBefore(sel, w);
+        w.remove();
+    });
     row.querySelector('select[name="filter_col[]"]').selectedIndex = 0;
     row.querySelector('select[name="filter_op[]"]').selectedIndex = 0;
     row.querySelector('input[name="filter_val[]"]').value = '';
     rows.appendChild(row);
+    if (window.initCustomSelects) window.initCustomSelects();
+}
+function dbResetFilterSelect(sel) {
+    sel.selectedIndex = 0;
+    // Обновляем и видимую подпись кастомного UI
+    var wrapper = sel.closest('.custom-select-wrapper');
+    var label = wrapper && wrapper.querySelector('.select-selected');
+    if (label && sel.options.length) label.innerHTML = sel.options[0].innerHTML;
 }
 function dbRemoveFilterRow(btn) {
     var rows = document.getElementById('db-filter-rows');
@@ -252,8 +268,8 @@ function dbRemoveFilterRow(btn) {
         row.remove();
     } else {
         // последняя строка — просто очищаем
-        row.querySelector('select[name="filter_col[]"]').selectedIndex = 0;
-        row.querySelector('select[name="filter_op[]"]').selectedIndex = 0;
+        dbResetFilterSelect(row.querySelector('select[name="filter_col[]"]'));
+        dbResetFilterSelect(row.querySelector('select[name="filter_op[]"]'));
         row.querySelector('input[name="filter_val[]"]').value = '';
     }
 }
