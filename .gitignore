@@ -17,7 +17,10 @@ coffian_eplist.sql
 .cursor/
 .claude/
 docs/
-scripts/
+scripts/*
+# MLP-258: деплой-скрипты — в git (деплой = git pull), в отличие от AIDD-тулинга.
+# scripts/* вместо scripts/: из заигноренной ДИРЕКТОРИИ файл не ре-включить.
+!scripts/backfill_sticker_thumbs.php
 .cursorrules
 AIDD_PROCESS.md
 CLAUDE.md

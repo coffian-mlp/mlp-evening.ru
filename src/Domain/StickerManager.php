@@ -44,23 +44,101 @@ class StickerManager {
         return $map;
     }
 
-    public function addSticker($code, $imageUrl, $packId) {
+    public function addSticker($code, $imageUrl, $packId, $thumbUrl = null) {
         $code = trim($code, ':');
         $packId = (int)$packId;
-        
-        $stmt = $this->db->prepare("INSERT INTO chat_stickers (code, image_url, pack_id) VALUES (?, ?, ?)");
-        $stmt->bind_param("ssi", $code, $imageUrl, $packId);
-        
+
+        // MLP-258: thumb_url — превью (NULL = нет, фронт показывает оригинал)
+        $stmt = $this->db->prepare("INSERT INTO chat_stickers (code, image_url, pack_id, thumb_url) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("ssis", $code, $imageUrl, $packId, $thumbUrl);
+
         if ($stmt->execute()) {
             return $stmt->insert_id;
         }
         return false;
     }
 
+    /** MLP-258: страница стикеров для админ-списка (полный список — getAllStickers). */
+    public function getStickersPage(int $limit, int $offset, ?int $packId = null): array {
+        $limit = max(1, min(200, $limit));
+        $offset = max(0, $offset);
+
+        $where = $packId ? "WHERE s.pack_id = ?" : "";
+
+        $stmt = $this->db->prepare("SELECT COUNT(*) AS cnt FROM chat_stickers s $where");
+        if ($packId) $stmt->bind_param("i", $packId);
+        $stmt->execute();
+        $total = (int)($stmt->get_result()->fetch_assoc()['cnt'] ?? 0);
+
+        $stmt = $this->db->prepare(
+            "SELECT s.*, p.code as pack_code, p.name as pack_name
+             FROM chat_stickers s
+             LEFT JOIN sticker_packs p ON s.pack_id = p.id
+             $where
+             ORDER BY p.sort_order ASC, s.sort_order ASC, s.code ASC
+             LIMIT ? OFFSET ?"
+        );
+        if ($packId) {
+            $stmt->bind_param("iii", $packId, $limit, $offset);
+        } else {
+            $stmt->bind_param("ii", $limit, $offset);
+        }
+        $stmt->execute();
+        $res = $stmt->get_result();
+
+        $stickers = [];
+        while ($row = $res->fetch_assoc()) {
+            $stickers[] = $row;
+        }
+        return ['stickers' => $stickers, 'total' => $total];
+    }
+
     public function deleteSticker($id) {
+        // MLP-258: чистим и файлы (раньше файл оставался сиротой; превью — тоже).
+        // Общий файл (стикер-алиас по URL) не трогаем, пока на него ссылается другая запись.
+        $id = (int)$id;
+        $stmt = $this->db->prepare("SELECT image_url, thumb_url FROM chat_stickers WHERE id = ?");
+        $stmt->bind_param("i", $id);
+        $stmt->execute();
+        if ($row = $stmt->get_result()->fetch_assoc()) {
+            if (!$this->isFileShared($row['image_url'], $id)) $this->unlinkStickerFile($row['image_url']);
+            if (!$this->isFileShared($row['thumb_url'], $id)) $this->unlinkStickerFile($row['thumb_url']);
+        }
+
         $stmt = $this->db->prepare("DELETE FROM chat_stickers WHERE id = ?");
         $stmt->bind_param("i", $id);
         return $stmt->execute();
+    }
+
+    /** Файл используется другой записью (алиас по URL)? */
+    private function isFileShared(?string $webPath, int $excludeId): bool {
+        if (!$webPath) return false;
+        $stmt = $this->db->prepare("SELECT COUNT(*) AS cnt FROM chat_stickers WHERE (image_url = ? OR thumb_url = ?) AND id != ?");
+        $stmt->bind_param("ssi", $webPath, $webPath, $excludeId);
+        $stmt->execute();
+        return (int)($stmt->get_result()->fetch_assoc()['cnt'] ?? 0) > 0;
+    }
+
+    /** Файл используется стикером вне указанного пака? (для deletePack) */
+    private function isFileSharedOutsidePack(?string $webPath, int $packId): bool {
+        if (!$webPath) return false;
+        $stmt = $this->db->prepare("SELECT COUNT(*) AS cnt FROM chat_stickers WHERE (image_url = ? OR thumb_url = ?) AND pack_id != ?");
+        $stmt->bind_param("ssi", $webPath, $webPath, $packId);
+        $stmt->execute();
+        return (int)($stmt->get_result()->fetch_assoc()['cnt'] ?? 0) > 0;
+    }
+
+    /** Удаление файла стикера/превью — строго внутри /upload/stickers/ (анти-traversal). */
+    private function unlinkStickerFile(?string $webPath): void {
+        if (!$webPath || strpos($webPath, '/upload/stickers/') !== 0 || str_contains($webPath, '..')) {
+            return;
+        }
+        $root = dirname(__DIR__, 2);
+        $real = realpath($root . $webPath);
+        // Префикс с завершающим слэшем (ревью MLP-258): соседние каталоги/symlink не проходят
+        if ($real !== false && strpos($real, realpath($root . '/upload/stickers') . '/') === 0 && is_file($real)) {
+            @unlink($real);
+        }
     }
 
     // --- Packs Methods ---
@@ -97,17 +175,16 @@ class StickerManager {
     }
 
     public function deletePack($id) {
-        // 1. Сначала удаляем файлы всех стикеров в этом паке
-        $stmt = $this->db->prepare("SELECT image_url FROM chat_stickers WHERE pack_id = ?");
+        // 1. Сначала удаляем файлы всех стикеров в этом паке (MLP-258: и превью;
+        // файлы, на которые ссылаются стикеры вне пака, не трогаем)
+        $stmt = $this->db->prepare("SELECT id, image_url, thumb_url FROM chat_stickers WHERE pack_id = ?");
         $stmt->bind_param("i", $id);
         $stmt->execute();
         $res = $stmt->get_result();
-        
+
         while ($row = $res->fetch_assoc()) {
-            $path = __DIR__ . '/../..' . $row['image_url']; // image_url starts with /upload...
-            if (file_exists($path)) {
-                unlink($path);
-            }
+            if (!$this->isFileSharedOutsidePack($row['image_url'], (int)$id)) $this->unlinkStickerFile($row['image_url']);
+            if (!$this->isFileSharedOutsidePack($row['thumb_url'], (int)$id)) $this->unlinkStickerFile($row['thumb_url']);
         }
         $stmt->close();
 
@@ -177,8 +254,10 @@ class StickerManager {
                 
                 copy("zip://" . $zipFilePath . "#" . $filename, $targetPath);
 
-                // 4. Add to DB
-                $this->addSticker($stickerCode, '/upload/stickers/' . $newFilename, $packId);
+                // 4. Add to DB (MLP-258: с превью; null → фронт покажет оригинал)
+                $webPath = '/upload/stickers/' . $newFilename;
+                $thumbUrl = \Infra\Thumbnailer::createFor($webPath);
+                $this->addSticker($stickerCode, $webPath, $packId, $thumbUrl);
                 $count++;
             }
             $zip->close();

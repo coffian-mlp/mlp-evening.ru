@@ -22,9 +22,22 @@ class StickerController {
         sendResponse(true, "Паки получены", 'success', ['packs' => $packs]);
     }
 
-    /** Все стикеры (public — пикер чата). */
+    /**
+     * Стикеры (public — исторически; чат-пикер список не зовёт, инлайнит при рендере).
+     * MLP-258: опциональные limit/offset — постраничный режим для админ-списка
+     * (в ответ добавляется total); без параметров — прежний полный список.
+     */
     public static function getStickers(): void {
         $sm = new StickerManager();
+
+        if (isset($_POST['limit'])) {
+            $limit = (int)$_POST['limit'];
+            $offset = (int)($_POST['offset'] ?? 0);
+            $packId = (int)($_POST['pack_id'] ?? 0) ?: null;
+            $page = $sm->getStickersPage($limit, $offset, $packId);
+            sendResponse(true, "Стикеры получены", 'success', ['stickers' => $page['stickers'], 'total' => $page['total']]);
+        }
+
         $stickers = $sm->getAllStickers(true);
         sendResponse(true, "Стикеры получены", 'success', ['stickers' => $stickers]);
     }
@@ -118,9 +131,12 @@ class StickerController {
 
             if (empty($url)) sendResponse(false, "Нужно загрузить файл или указать ссылку", 'error');
 
+            // MLP-258: превью сразу при добавлении (null → фронт покажет оригинал)
+            $thumbUrl = \Infra\Thumbnailer::createFor($url);
+
             $sm = new StickerManager();
-            $id = $sm->addSticker($code, $url, $packId);
-            sendResponse(true, "Стикер :$code: добавлен!", 'success', ['id' => $id, 'url' => $url]);
+            $id = $sm->addSticker($code, $url, $packId, $thumbUrl);
+            sendResponse(true, "Стикер :$code: добавлен!", 'success', ['id' => $id, 'url' => $url, 'thumb_url' => $thumbUrl]);
 
         } catch (\Exception $e) {
             sendResponse(false, $e->getMessage(), 'error');

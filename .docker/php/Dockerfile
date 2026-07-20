@@ -2,11 +2,17 @@ FROM php:8.3-fpm
 
 # Устанавливаем системные зависимости и расширения PHP
 # Добавляем opcache для оптимизации производительности
+# MLP-258: + GD (webp/jpeg/png/gif/freetype) — превью стикеров, паритет с продом
 RUN apt-get update && apt-get install -y \
     git \
     unzip \
     libzip-dev \
-    && docker-php-ext-install mysqli pdo pdo_mysql zip opcache
+    libpng-dev \
+    libjpeg-dev \
+    libwebp-dev \
+    libfreetype6-dev \
+    && docker-php-ext-configure gd --with-jpeg --with-webp --with-freetype \
+    && docker-php-ext-install mysqli pdo pdo_mysql zip opcache gd
 
 # Рекомендуемые настройки для Opcache в продакшене
 RUN { \

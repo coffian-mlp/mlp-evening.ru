@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS `chat_stickers` (
   `pack_id` int(11) DEFAULT NULL,
   `code` varchar(50) NOT NULL COMMENT 'Код стикера без двоеточий',
   `image_url` varchar(255) NOT NULL,
+  `thumb_url` varchar(255) DEFAULT NULL COMMENT 'Превью 128px (MLP-258); NULL = показывать оригинал',
   `collection` varchar(50) DEFAULT 'default',
   `sort_order` int(11) DEFAULT '0',
   PRIMARY KEY (`id`),
