@@ -1,5 +1,7 @@
 <?php
 
+namespace Infra;
+
 
 class ConfigManager {
     private $db;

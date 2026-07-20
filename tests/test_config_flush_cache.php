@@ -1,4 +1,5 @@
 <?php
+use Infra\ConfigManager;
 /**
  * Юнит-тест ConfigManager::flushCache() — AR2-1 (MLP-227).
  *
@@ -19,7 +20,7 @@ if (!file_exists(__DIR__ . '/../config.php')) {
     exit(0);
 }
 
-require_once __DIR__ . '/../src/ConfigManager.php';
+require_once __DIR__ . '/../autoload.php';
 
 $fail = 0;
 function eq($got, $want, $label) {
@@ -53,7 +54,7 @@ class FakeDb {
 }
 
 // --- Сборка ConfigManager с подменённым $db (без конструктора/БД) ---
-$ref = new ReflectionClass('ConfigManager');
+$ref = new ReflectionClass(ConfigManager::class);
 $cm  = $ref->newInstanceWithoutConstructor();
 
 $dbProp = $ref->getProperty('db'); // PHP 8.1+: private доступно из reflection без setAccessible

@@ -5,8 +5,8 @@ use Core\Component;
 use Auth;
 use UserManager;
 use StickerManager;
-use CentrifugoService;
-use ConfigManager;
+use Infra\CentrifugoService;
+use Infra\ConfigManager;
 
 class ChatComponent extends Component {
     public function executeComponent() {

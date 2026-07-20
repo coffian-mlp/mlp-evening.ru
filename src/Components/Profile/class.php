@@ -4,7 +4,7 @@ namespace Components\Profile;
 use Core\Component;
 use Auth;
 use UserManager;
-use ConfigManager;
+use Infra\ConfigManager;
 
 class ProfileComponent extends Component {
     public function executeComponent() {

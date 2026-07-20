@@ -2,7 +2,7 @@
 
 namespace LLM;
 
-use ConfigManager;
+use Infra\ConfigManager;
 
 
 /**

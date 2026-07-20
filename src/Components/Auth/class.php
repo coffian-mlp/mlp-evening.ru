@@ -2,7 +2,7 @@
 namespace Components\Auth;
 
 use Core\Component;
-use ConfigManager;
+use Infra\ConfigManager;
 
 class AuthComponent extends Component {
     public function executeComponent() {

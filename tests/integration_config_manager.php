@@ -1,4 +1,5 @@
 <?php
+use Infra\ConfigManager;
 /**
  * Интеграционный тест ConfigManager с реальной БД (MLP-247, T-04, AC-2).
  *

@@ -2,7 +2,7 @@
 namespace Components\DbAdmin;
 
 use Core\Component;
-use Database;
+use Infra\Database;
 use Auth;
 
 class DbAdminComponent extends Component {

@@ -1,4 +1,5 @@
 <?php
+use Infra\ConfigManager;
 use LLM\BotWorker;
 /**
  * Cron-вход бота Лиры.

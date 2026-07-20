@@ -1,4 +1,5 @@
 <?php
+use Infra\ConfigManager;
 use LLM\BotWorker;
 /**
  * Точка входа воркера бота Лиры.

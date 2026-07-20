@@ -1,13 +1,17 @@
 <?php
 
-require_once __DIR__ . '/../config.php';
+namespace Infra;
+
+use mysqli;
+
+require_once __DIR__ . '/../../config.php';
 
 class Database {
     private static $instance = null;
     private $connection;
 
     private function __construct() {
-        $config = require __DIR__ . '/../config.php';
+        $config = require __DIR__ . '/../../config.php';
         $dbConfig = $config['db'];
 
         $this->connection = new mysqli(

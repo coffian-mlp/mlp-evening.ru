@@ -1,5 +1,7 @@
 <?php
 
+namespace Infra;
+
 
 class CentrifugoService {
     private $apiUrl;
@@ -13,7 +15,7 @@ class CentrifugoService {
         // А файловый конфиг мы читаем где? Обычно require config.php.
         // Давайте сделаем метод загрузки файлового конфига или просто прочитаем его здесь.
         
-        $config = require __DIR__ . '/../config.php';
+        $config = require __DIR__ . '/../../config.php';
         
         // Fallback to defaults if missing
         $chatConfig = $config['chat'] ?? [];

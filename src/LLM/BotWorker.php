@@ -3,8 +3,8 @@
 namespace LLM;
 
 use BotCommandManager;
-use ConfigManager;
-use Database;
+use Infra\ConfigManager;
+use Infra\Database;
 use EventManager;
 use PollManager;
 

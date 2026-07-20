@@ -1,4 +1,8 @@
 <?php
+use Infra\Database;
+use Infra\ConfigManager;
+use Infra\Mailer;
+use Infra\UploadManager;
 
 require_once __DIR__ . '/autoload.php'; // MLP-248: классы — только автозагрузкой
 

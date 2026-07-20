@@ -2,7 +2,7 @@
 namespace Components\VideoPlayer;
 
 use Core\Component;
-use ConfigManager;
+use Infra\ConfigManager;
 
 class VideoPlayerComponent extends Component {
     public function executeComponent() {

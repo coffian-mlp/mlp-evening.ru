@@ -2,7 +2,7 @@
 namespace Components\AdminSettings;
 
 use Core\Component;
-use ConfigManager;
+use Infra\ConfigManager;
 use Auth;
 
 class AdminSettingsComponent extends Component {

@@ -3,7 +3,7 @@
 namespace Social;
 
 use Auth;
-use Database;
+use Infra\Database;
 use Exception;
 use UserManager;
 

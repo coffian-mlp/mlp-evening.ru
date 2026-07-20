@@ -2,7 +2,7 @@
 
 namespace LLM;
 
-use ConfigManager;
+use Infra\ConfigManager;
 
 /**
  * Преобразует картинки из сообщений чата в мультимодальный формат OpenAI-совместимого API

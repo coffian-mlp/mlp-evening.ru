@@ -1,5 +1,9 @@
 <?php
 
+namespace Infra;
+
+use Exception;
+
 class SimpleSMTP {
     private $host;
     private $port;

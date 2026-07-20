@@ -1,4 +1,5 @@
 <?php
+use Infra\ConfigManager;
 /**
  * Интеграционный смоук bootstrap'а (MLP-247, T-03, AC-3).
  *
@@ -28,13 +29,13 @@ while (ob_get_level() > 0) {
 
 check(class_exists('Core\\Application'), 'Core\\Application загружен');
 check(class_exists('Core\\Component'), 'Core\\Component загружен');
-check(class_exists('Database'), 'Database загружен');
-check(class_exists('ConfigManager'), 'ConfigManager загружен');
+check(class_exists('Infra\\Database'), 'Infra\\Database загружен');
+check(class_exists('Infra\\ConfigManager'), 'Infra\\ConfigManager загружен');
 check(class_exists('Auth'), 'Auth загружен');
 check(class_exists('UserManager'), 'UserManager загружен');
 check(class_exists('EpisodeManager'), 'EpisodeManager загружен');
 check(class_exists('StickerManager'), 'StickerManager загружен');
-check(class_exists('CentrifugoService'), 'CentrifugoService загружен');
+check(class_exists('Infra\\CentrifugoService'), 'Infra\\CentrifugoService загружен');
 
 global $app;
 check($app instanceof \Core\Application, '$app — экземпляр Core\\Application');

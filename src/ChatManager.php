@@ -1,4 +1,7 @@
 <?php
+use Infra\Database;
+use Infra\ConfigManager;
+use Infra\CentrifugoService;
 
 
 class ChatManager {

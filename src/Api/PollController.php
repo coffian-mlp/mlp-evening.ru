@@ -4,7 +4,7 @@ namespace Api;
 
 use Auth;
 use ChatManager;
-use ConfigManager;
+use Infra\ConfigManager;
 use PollManager;
 
 

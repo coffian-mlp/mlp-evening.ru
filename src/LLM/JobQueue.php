@@ -2,7 +2,7 @@
 
 namespace LLM;
 
-use Database;
+use Infra\Database;
 
 
 /**

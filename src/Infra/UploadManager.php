@@ -1,5 +1,11 @@
 <?php
 
+namespace Infra;
+
+use finfo;
+
+use Exception;
+
 class UploadManager {
     private $uploadDir;
     private $allowedTypes = [];

@@ -2,7 +2,7 @@
 
 namespace Social;
 
-use ConfigManager;
+use Infra\ConfigManager;
 
 
 class TelegramProvider implements SocialProvider {
