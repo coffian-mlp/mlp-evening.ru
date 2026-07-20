@@ -11,6 +11,11 @@ module.exports = {
   projects: [
     { name: 'api', testIgnore: /\.ui\.spec\.js$/ },
     { name: 'chromium-ui', testMatch: /\.ui\.spec\.js$/, use: { browserName: 'chromium' } },
-    { name: 'firefox-ui', testMatch: /\.ui\.spec\.js$/, use: { browserName: 'firefox' } },
+    { name: 'firefox-ui', testMatch: /\.ui\.spec\.js$/, use: {
+      browserName: 'firefox',
+      // Локальная песочница выставляет системный прокси — Gecko его подхватывает
+      // (NS_ERROR_PROXY_CONNECTION_REFUSED), Chromium нет. Ходим напрямую.
+      launchOptions: { firefoxUserPrefs: { 'network.proxy.type': 0 } },
+    } },
   ],
 };

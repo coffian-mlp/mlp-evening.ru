@@ -1,6 +1,6 @@
 // Версия кеша = версия релиза (R11). Бампать при каждом релизе (см. release-чеклист):
 // смена имени заставляет activate-обработчик выбросить старый кеш ассетов на проде.
-const CACHE_VERSION = 'v4.8.0';
+const CACHE_VERSION = 'v4.8.1';
 const CACHE_NAME = 'mlp-evening-' + CACHE_VERSION;
 const ASSETS_TO_CACHE = [
     '/assets/css/main.css',
