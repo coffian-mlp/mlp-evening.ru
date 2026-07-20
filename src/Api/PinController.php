@@ -1,5 +1,10 @@
 <?php
 
+namespace Api;
+
+use Auth;
+use ChatManager;
+
 
 /**
  * API закреплённых сообщений (MLP-242) — срез тонкого роутера api.php.

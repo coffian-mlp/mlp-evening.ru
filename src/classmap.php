@@ -50,9 +50,4 @@ return [
     'SocialAuthService' => 'Social/SocialAuthService.php',
     'SocialProvider'    => 'Social/SocialProvider.php',
     'TelegramProvider'  => 'Social/TelegramProvider.php',
-
-    // src/Api/
-    'EventController' => 'Api/EventController.php',
-    'PinController'   => 'Api/PinController.php',
-    'PollController'  => 'Api/PollController.php',
 ];

@@ -610,18 +610,18 @@ try {
     // --- Тонкий роутер (MLP-229): action → роль → менеджер. Каркас; пока только события.
     // Остальные actions обрабатываются легаси-switch ниже — мигрировать «при касании».
     $apiRoutes = [
-        'get_public_events' => ['role' => 'public', 'handler' => ['EventController', 'getPublic']],
-        'save_event'        => ['role' => 'admin',  'handler' => ['EventController', 'save']],
-        'delete_event'      => ['role' => 'admin',  'handler' => ['EventController', 'delete']],
+        'get_public_events' => ['role' => 'public', 'handler' => [\Api\EventController::class, 'getPublic']],
+        'save_event'        => ['role' => 'admin',  'handler' => [\Api\EventController::class, 'save']],
+        'delete_event'      => ['role' => 'admin',  'handler' => [\Api\EventController::class, 'delete']],
         // Опросы (MLP-238): create_poll тонко гейтит сам контроллер (конфиг polls_create_role).
-        'get_poll'          => ['role' => 'public', 'handler' => ['PollController', 'get']],
-        'create_poll'       => ['role' => 'user',   'handler' => ['PollController', 'create']],
-        'vote_poll'         => ['role' => 'user',   'handler' => ['PollController', 'vote']],
-        'close_poll'        => ['role' => 'user',   'handler' => ['PollController', 'close']],
+        'get_poll'          => ['role' => 'public', 'handler' => [\Api\PollController::class, 'get']],
+        'create_poll'       => ['role' => 'user',   'handler' => [\Api\PollController::class, 'create']],
+        'vote_poll'         => ['role' => 'user',   'handler' => [\Api\PollController::class, 'vote']],
+        'close_poll'        => ['role' => 'user',   'handler' => [\Api\PollController::class, 'close']],
         // Закреплённые сообщения (MLP-242): право модератора проверяет сам контроллер.
-        'get_pinned'        => ['role' => 'public', 'handler' => ['PinController', 'get']],
-        'pin_message'       => ['role' => 'user',   'handler' => ['PinController', 'pin']],
-        'unpin_message'     => ['role' => 'user',   'handler' => ['PinController', 'unpin']],
+        'get_pinned'        => ['role' => 'public', 'handler' => [\Api\PinController::class, 'get']],
+        'pin_message'       => ['role' => 'user',   'handler' => [\Api\PinController::class, 'pin']],
+        'unpin_message'     => ['role' => 'user',   'handler' => [\Api\PinController::class, 'unpin']],
     ];
     if (isset($apiRoutes[$action])) {
         $route = $apiRoutes[$action];

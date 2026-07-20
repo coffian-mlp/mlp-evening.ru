@@ -1,5 +1,12 @@
 <?php
 
+namespace Api;
+
+use Auth;
+use ChatManager;
+use ConfigManager;
+use PollManager;
+
 
 /**
  * API-действия опросов (MLP-238) — второй срез тонкого роутера api.php.
