@@ -2,6 +2,8 @@
 
 namespace Domain;
 
+use ZipArchive;
+
 use Exception;
 use Infra\Database;
 
@@ -102,7 +104,7 @@ class StickerManager {
         $res = $stmt->get_result();
         
         while ($row = $res->fetch_assoc()) {
-            $path = __DIR__ . '/..' . $row['image_url']; // image_url starts with /upload...
+            $path = __DIR__ . '/../..' . $row['image_url']; // image_url starts with /upload...
             if (file_exists($path)) {
                 unlink($path);
             }
@@ -120,7 +122,7 @@ class StickerManager {
     public function importFromZip($packId, $zipFilePath) {
         $zip = new ZipArchive;
         if ($zip->open($zipFilePath) === TRUE) {
-            $uploadDir = __DIR__ . '/../upload/stickers/';
+            $uploadDir = __DIR__ . '/../../upload/stickers/';
             if (!file_exists($uploadDir)) mkdir($uploadDir, 0777, true);
 
             $count = 0;

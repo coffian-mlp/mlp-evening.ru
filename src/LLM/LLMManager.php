@@ -2,6 +2,9 @@
 
 namespace LLM;
 
+use Domain\EpisodeManager;
+use Domain\PollManager;
+
 use Domain\ChatManager;
 use Infra\ConfigManager;
 use Infra\Database;
@@ -281,7 +284,7 @@ class LLMManager {
                     $additionalPrompt .= "- Описание: {$event['description']}\n";
                     
                     if ($event['use_playlist'] || $event['generate_new_playlist']) {
-                        $epManager = new \EpisodeManager();
+                        $epManager = new EpisodeManager();
                         $playlist = $epManager->getSavedPlaylist();
                         if (!empty($playlist)) {
                             $additionalPrompt .= "- Плейлист серий: ";
@@ -351,7 +354,7 @@ class LLMManager {
             $options  = $gen['options'];
         }
 
-        $pm = new \PollManager();
+        $pm = new PollManager();
         $pollId = $pm->create($this->botUserId, $question, $options, false, false);
         if (!$pollId) return false;
 
@@ -405,7 +408,7 @@ class LLMManager {
      */
     public function voteOnPoll(array $poll): bool {
         if (empty($poll['options'])) return false;
-        $pm = new \PollManager();
+        $pm = new PollManager();
 
         $numbered = [];
         foreach ($poll['options'] as $i => $opt) {

@@ -47,7 +47,7 @@ class Mailer {
 
     private function send($to, $subject, $htmlMessage) {
         // --- 1. ЛОГИРОВАНИЕ (как резерв) ---
-        $logDir = __DIR__ . '/../logs';
+        $logDir = __DIR__ . '/../../logs';
         if (!is_dir($logDir)) {
             mkdir($logDir, 0777, true);
         }

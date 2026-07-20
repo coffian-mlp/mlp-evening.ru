@@ -16,7 +16,7 @@ class UploadManager {
         $this->context = $context;
         
         if ($context === 'chat') {
-             $this->uploadDir = __DIR__ . '/../upload/chat/';
+             $this->uploadDir = __DIR__ . '/../../upload/chat/';
              $this->maxSize = 30 * 1024 * 1024; // 30 MB
              // Expanded list for chat
              $this->allowedTypes = [
@@ -42,7 +42,7 @@ class UploadManager {
                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx'
              ];
         } elseif ($context === 'sticker') {
-             $this->uploadDir = __DIR__ . '/../upload/stickers/';
+             $this->uploadDir = __DIR__ . '/../../upload/stickers/';
              $this->maxSize = 2 * 1024 * 1024; // 2 MB max for stickers
              $this->allowedTypes = [
                 'image/jpeg' => 'jpg',
@@ -52,7 +52,7 @@ class UploadManager {
                 'image/webp' => 'webp'
             ];
         } elseif ($context === 'icon') {
-             $this->uploadDir = __DIR__ . '/../upload/icons/';
+             $this->uploadDir = __DIR__ . '/../../upload/icons/';
              $this->maxSize = 1 * 1024 * 1024; // 1 MB max for icons
              $this->allowedTypes = [
                 'image/jpeg' => 'jpg',
@@ -63,7 +63,7 @@ class UploadManager {
             ];
         } else {
              // Default Avatar
-             $this->uploadDir = __DIR__ . '/../upload/avatars/';
+             $this->uploadDir = __DIR__ . '/../../upload/avatars/';
              $this->maxSize = 5 * 1024 * 1024; // 5 MB
              $this->allowedTypes = [
                 'image/jpeg' => 'jpg',

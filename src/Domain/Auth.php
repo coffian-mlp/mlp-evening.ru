@@ -62,7 +62,7 @@ class Auth {
         self::requireLogin();
         if (!self::isAdmin()) {
             http_response_code(403);
-            require __DIR__ . '/../403.php'; 
+            require __DIR__ . '/../../403.php'; 
             exit();
         }
     }

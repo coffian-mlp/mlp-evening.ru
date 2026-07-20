@@ -11,7 +11,7 @@ class EpisodeManager {
 
     public function __construct() {
         $this->db = Database::getInstance()->getConnection();
-        $this->cacheFile = __DIR__ . '/../cache/episodes.json';
+        $this->cacheFile = __DIR__ . '/../../cache/episodes.json';
     }
 
     private function clearCache() {

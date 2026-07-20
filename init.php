@@ -7,7 +7,7 @@ ob_start(); // Start Output Buffering for asset injection
 // 1. Подключение конфигов
 require_once __DIR__ . '/config.php';
 
-// 2. Автозагрузка классов (MLP-248, ADR-7): PSR-4 от src/ + classmap.
+// 2. Автозагрузка классов (MLP-248, ADR-7): чистый PSR-4 от src/.
 // Ручной require_once классов запрещён (architecture.md, §13).
 require_once __DIR__ . '/autoload.php';
 

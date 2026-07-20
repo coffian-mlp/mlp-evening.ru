@@ -2,6 +2,8 @@
 
 namespace LLM;
 
+use Domain\EpisodeManager;
+
 use Domain\BotCommandManager;
 use Infra\ConfigManager;
 use Infra\Database;
@@ -211,7 +213,7 @@ class BotWorker {
             if ($minsSinceEnd >= 0 && $minsSinceEnd <= 10 && empty($announced[$runId]['finished'])) {
                 $msg = "Спасибо всем за просмотр! Вечерок подошёл к концу.";
                 if (!empty($evt['generate_new_playlist'])) {
-                    (new \EpisodeManager())->regeneratePlaylist();
+                    (new EpisodeManager())->regeneratePlaylist();
                     $msg .= " А вот и расписание на следующий раз! Напиши об этом в чат в своём стиле.";
                 } else {
                     $msg .= " Напиши об этом в чат тепло и дружелюбно.";

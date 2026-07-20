@@ -12,7 +12,7 @@ class UserManager {
 
     public function __construct() {
         $this->db = Database::getInstance()->getConnection();
-        $this->cacheDir = __DIR__ . '/../cache/users/';
+        $this->cacheDir = __DIR__ . '/../../cache/users/';
     }
 
     // --- Caching Helpers ---
