@@ -32,6 +32,18 @@ test('шапка: логотип прижат влево, меню за ним (
   expect(nav.x, 'меню правее логотипа').toBeGreaterThan(logo.x + logo.width - 1);
 });
 
+test('главная: сенобургер и логотип прижаты влево (MLP-260, space-between фикс)', async ({ page }) => {
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+
+  const burger = await page.locator('.video-container .site-burger-btn').boundingBox();
+  const logo = await page.locator('.video-container .header img.logo').boundingBox();
+  const viewport = page.viewportSize();
+
+  expect(burger.x, 'бургер у левого края').toBeLessThan(viewport.width * 0.1);
+  expect(logo.x, 'логотип сразу за бургером, не у правого края').toBeLessThan(viewport.width * 0.25);
+  expect(logo.x, 'логотип правее бургера').toBeGreaterThan(burger.x);
+});
+
 test('меню чата: пункта «Расписание» больше нет (MLP-260)', async ({ page }) => {
   await login(page);
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
