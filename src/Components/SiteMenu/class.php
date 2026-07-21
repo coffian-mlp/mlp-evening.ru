@@ -13,13 +13,19 @@ use Domain\MenuManager;
 class SiteMenuComponent extends Component {
 
     public function executeComponent() {
-        $mode = $this->templateName === 'header' ? 'header' : 'burger';
         $menu = new MenuManager();
 
-        $this->result['items'] = $menu->getTreeForViewer($mode);
-        // Для мобильной шапки: header-подача сворачивается в бургер → нужен burger-набор
-        if ($mode === 'header') {
+        // Подачи: 'header' — шапка страниц (горизонталь + мобильный бургер),
+        // 'burger' — только сенобургер, 'stream' — полоска главной (сенобургер
+        // всегда + горизонталь header-набора справа от лого; мобилка — CSS).
+        if ($this->templateName === 'header') {
+            $this->result['items'] = $menu->getTreeForViewer('header');
             $this->result['burger_items'] = $menu->getTreeForViewer('burger');
+        } elseif ($this->templateName === 'stream') {
+            $this->result['items'] = $menu->getTreeForViewer('burger');      // панель сенобургера
+            $this->result['nav_items'] = $menu->getTreeForViewer('header');  // горизонталь
+        } else {
+            $this->result['items'] = $menu->getTreeForViewer('burger');
         }
         $this->result['current_path'] = strtok($_SERVER['REQUEST_URI'] ?? '/', '?');
 

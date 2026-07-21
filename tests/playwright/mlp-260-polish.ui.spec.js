@@ -32,7 +32,7 @@ test('шапка: логотип прижат влево, меню за ним (
   expect(nav.x, 'меню правее логотипа').toBeGreaterThan(logo.x + logo.width - 1);
 });
 
-test('главная: сенобургер и логотип прижаты влево (MLP-260, space-between фикс)', async ({ page }) => {
+test('главная: сенобургер, лого, header-пункты в пустоте справа (MLP-260)', async ({ page }) => {
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
 
   const burger = await page.locator('.video-container .site-burger-btn').boundingBox();
@@ -42,6 +42,12 @@ test('главная: сенобургер и логотип прижаты вл
   expect(burger.x, 'бургер у левого края').toBeLessThan(viewport.width * 0.1);
   expect(logo.x, 'логотип сразу за бургером, не у правого края').toBeLessThan(viewport.width * 0.25);
   expect(logo.x, 'логотип правее бургера').toBeGreaterThan(burger.x);
+
+  // MLP-260: header-набор рендерится и на главной — горизонталью правее лого
+  const nav = page.locator('.video-container .site-nav-stream');
+  await expect(nav.locator('.site-nav-link', { hasText: 'Расписание' })).toBeVisible();
+  const navBox = await nav.boundingBox();
+  expect(navBox.x, 'горизонтальные пункты — правее логотипа').toBeGreaterThan(logo.x + logo.width - 1);
 });
 
 test('меню чата: пункта «Расписание» больше нет (MLP-260)', async ({ page }) => {

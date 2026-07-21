@@ -907,8 +907,16 @@ body.dashboard-layout {
 
 /* Главная: бургер в оверлее плеера, рядом с лого.
    justify-content: базовый .header (строка ~95) — space-between: с одним лого
-   это «влево», а с бургером+лого раскидывало их по краям (лого уезжал вправо). */
-.video-container .header { display: flex; align-items: center; gap: 10px; justify-content: flex-start; }
+   это «влево», а с бургером+лого раскидывало их по краям (лого уезжал вправо).
+   MLP-260: порядок — сенобургер, лого, горизонтальные header-пункты в пустоте. */
+.video-container .header { display: flex; align-items: center; gap: 12px; justify-content: flex-start; }
+.video-container .header .site-burger { order: 1; }
+.video-container .header > a { order: 2; flex-shrink: 0; }
+.video-container .header .site-nav-stream { order: 3; }
+.video-container .header .site-nav-stream .site-nav-link {
+    color: #d5cee2;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7); /* читаемость поверх плеера */
+}
 .video-container .header .site-burger-panel { left: 0; }
 
 /* Шапка: мобильная подача */
