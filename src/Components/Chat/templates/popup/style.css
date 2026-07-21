@@ -5,12 +5,17 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 15px; 
+    padding: 0 15px;
     background: var(--bg-darker);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     flex-shrink: 0;
     backdrop-filter: blur(5px);
     height: 60px;
+    /* MLP-260: backdrop-filter создаёт stacking-контекст с z auto — дропдаун
+       меню (z-index:100) был заперт внутри, и баннер закрепа (сосед с таким же
+       контекстом) рисовался поверх. Поднимаем контекст топ-бара целиком. */
+    position: relative;
+    z-index: 20;
 }
 
 /* User Menu in Chat Header */
