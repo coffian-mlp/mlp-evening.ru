@@ -732,6 +732,17 @@ class ChatManager {
         return $messages;
     }
 
+    /**
+     * Автор последнего живого сообщения (MLP-260): надёжный гейт для проактива
+     * бота «не писать, если последнее сообщение — моё» (проверка по контексту
+     * ломалась закрепом). null — чат пуст.
+     */
+    public function getLastMessageAuthorId(): ?int {
+        $res = $this->db->query("SELECT user_id FROM chat_messages WHERE is_deleted = 0 ORDER BY id DESC LIMIT 1");
+        $row = $res ? $res->fetch_assoc() : null;
+        return $row ? (int)$row['user_id'] : null;
+    }
+
     public function getMessages($limit = 50, $beforeId = null) {
         $limit = (int)$limit;
         

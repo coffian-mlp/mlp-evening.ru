@@ -122,7 +122,9 @@ class BotWorker {
         if ($decision['mode'] === 'single' && !empty($decision['quote_message_id'])) {
             $beforeId = (int)$decision['quote_message_id'] + 1;
         }
-        $context = $this->llm->buildReplyContext(24, null, $beforeId);
+        // MLP-260: длина контекста — из настроек (ai_context_messages, default 24)
+        $ctxLimit = max(4, min(100, (int)$this->config->getOption('ai_context_messages', 24)));
+        $context = $this->llm->buildReplyContext($ctxLimit, null, $beforeId);
         $raw = $this->llm->generateReply($context, ReplyPolicy::instruction($decision));
 
         // Бот может поставить реакцию вместо/вместе с текстом.

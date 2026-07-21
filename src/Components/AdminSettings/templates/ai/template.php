@@ -168,6 +168,19 @@ $config = $arResult['config']; // Helper
             </div>
         </div>
 
+        <div class="form-group" style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 130px;">
+                <label class="form-label">Тишина после приветствия, сек</label>
+                <input type="number" name="ai_greeting_cooldown" value="<?= htmlspecialchars($config->getOption('ai_greeting_cooldown', 600)) ?>" class="form-input">
+                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Повторный вход пони в этом окне — без приветствия (0 = здороваться всегда).</p>
+            </div>
+            <div style="flex: 1; min-width: 130px;">
+                <label class="form-label">Контекст, сообщений</label>
+                <input type="number" name="ai_context_messages" min="4" max="100" value="<?= htmlspecialchars($config->getOption('ai_context_messages', 24)) ?>" class="form-input">
+                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Сколько последних сообщений чата видит модель (4–100). Мощным моделям можно больше.</p>
+            </div>
+        </div>
+
         <div class="form-group" style="margin-top: 10px;">
             <label style="display: flex; align-items: center; cursor: pointer;">
                 <input type="hidden" name="ai_send_images" value="0">

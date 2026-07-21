@@ -184,7 +184,7 @@ class LLMManager {
                     }
                 }
 
-                $context = $this->buildContext(24);
+                $context = $this->buildContext($this->contextLimit());
                 $response = $this->askWithFallback($context, $this->systemPrompt);
                 
                 $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
@@ -196,19 +196,23 @@ class LLMManager {
                 }
             }
         } elseif ($triggerType === 'cron_spontaneous') {
-            // Get last 30 messages, but only if they were posted within the last 3 hours
-            $context = $this->buildContext(24, 3);
-            
+            // MLP-260: гейт «не говорить с самим собой» — по БД, а не по end($context):
+            // проверку по контексту ломал закреп (он подмешивался и в тишине).
+            if ($this->chatManager->getLastMessageAuthorId() === $this->botUserId) {
+                return false;
+            }
+
+            // Контекст БЕЗ закрепа: «мёртвый чат» оцениваем по реальным сообщениям —
+            // одинокий закреп раньше пробивал обе защиты и бот болтал о нём в пустоту.
+            $context = $this->buildContext($this->contextLimit(), 3, null, false);
+
             // If the chat has been dead for 3 hours (empty context), don't even ask the LLM
             if (empty($context)) {
                 return false;
             }
-            
-            // If the last message in the chat is from the bot itself, don't talk to yourself
-            $lastMsg = end($context);
-            if ($lastMsg && $lastMsg['role'] === 'assistant') {
-                return false;
-            }
+
+            // Закреп — только после гейтов, как фон
+            $context = $this->prependPinnedContext($context);
 
             $instruction = "Проанализируй последние сообщения. Если нужно что-то сказать (разрядить обстановку, ответить на вопрос, поддержать беседу) - напиши ответ. Если встревать не стоит - ответь ровно одним словом: SILENCE, но не нужно вообще молчать постоянно. Старайся поддерживать беседу в чате, даже если к тебе явно никто не обращается - это нормально.";
             // Инструкция как обычная реплика без префикса "[Система]" — префикс модель иногда выдавала эхом.
@@ -227,7 +231,7 @@ class LLMManager {
             }
         } elseif ($triggerType === 'greeting') {
             $userLogin = $contextData['username'] ?? 'Гость';
-            $context = $this->buildContext(24);
+            $context = $this->buildContext($this->contextLimit());
             
             $instruction = "Пользователь $userLogin только что зашел на сайт. Поздоровайся с ним, обязательно упомянув его по имени (например, '@$userLogin'). Будь краткой и приветливой.";
             // Инструкция как обычная реплика без префикса "[Система]" — префикс модель иногда выдавала эхом.
@@ -253,7 +257,7 @@ class LLMManager {
                 return $this->createPollFromCommand($command, $contextData);
             }
 
-            $context = $this->buildContext(24);
+            $context = $this->buildContext($this->contextLimit());
 
             if ($command['handler_type'] === 'schedule') {
                 $now = time();
@@ -600,7 +604,29 @@ class LLMManager {
         return $this->askWithFallback($context, $prompt);
     }
 
-    private function buildContext($limit = 24, $maxAgeHours = null, $beforeId = null) {
+    /** MLP-260: длина контекста — настройка админки (мощным моделям можно больше). */
+    private function contextLimit(): int {
+        $limit = (int)ConfigManager::getInstance()->getOption('ai_context_messages', 24);
+        return max(4, min(100, $limit));
+    }
+
+    /** Закреп — фоновый контекст низкого приоритета (MLP-242; вынесено из buildContext в MLP-260). */
+    private function prependPinnedContext(array $context): array {
+        $pinned = $this->chatManager->getPinnedMessage();
+        if ($pinned && !empty($pinned['raw_message'])) {
+            $raw = $pinned['raw_message'];
+            if (preg_match('/^\s*\[\[poll:\d+\]\]\s*$/', $raw)) {
+                $raw = '(в чате закреплён опрос)';
+            }
+            array_unshift($context, [
+                'role' => 'user',
+                'content' => "[Закреплено в чате, фоновый контекст низкого приоритета — учитывай только если по-настоящему уместно]: " . $raw,
+            ]);
+        }
+        return $context;
+    }
+
+    private function buildContext($limit = 24, $maxAgeHours = null, $beforeId = null, $includePinned = true) {
         // Fetch last N messages (при $beforeId — только сообщения старше этого id)
         $messages = $this->chatManager->getMessages($limit, $beforeId);
         $context = [];
@@ -630,17 +656,10 @@ class LLMManager {
             ];
         }
 
-        // Закреплённое сообщение — фоновый контекст низкого приоритета (MLP-242).
-        $pinned = $this->chatManager->getPinnedMessage();
-        if ($pinned && !empty($pinned['raw_message'])) {
-            $raw = $pinned['raw_message'];
-            if (preg_match('/^\s*\[\[poll:\d+\]\]\s*$/', $raw)) {
-                $raw = '(в чате закреплён опрос)';
-            }
-            array_unshift($context, [
-                'role' => 'user',
-                'content' => "[Закреплено в чате, фоновый контекст низкого приоритета — учитывай только если по-настоящему уместно]: " . $raw,
-            ]);
+        // Закреплённое сообщение — фоновый контекст (MLP-242); в проактиве
+        // подмешивается ПОСЛЕ гейтов (MLP-260), поэтому отключаемо.
+        if ($includePinned) {
+            $context = $this->prependPinnedContext($context);
         }
 
         return $context;

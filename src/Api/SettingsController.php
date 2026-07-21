@@ -136,7 +136,8 @@ class SettingsController {
                 $config->setOption('ai_worker_mode', $mode);
             }
         }
-        foreach (['ai_debounce_window', 'ai_delay_min', 'ai_delay_max', 'ai_spam_threshold', 'ai_reply_min_gap', 'ai_worker_poll', 'ai_proactive_interval'] as $k) {
+        // MLP-260: + ai_greeting_cooldown (MLP-254) и ai_context_messages — теперь настраиваются из админки
+        foreach (['ai_debounce_window', 'ai_delay_min', 'ai_delay_max', 'ai_spam_threshold', 'ai_reply_min_gap', 'ai_worker_poll', 'ai_proactive_interval', 'ai_greeting_cooldown', 'ai_context_messages'] as $k) {
             if (isset($_POST[$k])) {
                 $config->setOption($k, max(0, (int)$_POST[$k]));
             }

@@ -41,6 +41,9 @@ try {
     // Пустое сообщение не добавляется (error path).
     check($cm->addMessage($userId, 'Ит. Чат-Пони', '   ') === false, 'пустое сообщение отклонено');
 
+    // MLP-260: автор последнего живого сообщения — гейт проактива бота
+    check($cm->getLastMessageAuthorId() === $userId, 'getLastMessageAuthorId видит свежее сообщение теста');
+
     // --- Редактирование (своё, свежее — в пределах окна) ---
     $edited = $cm->editMessage($msgId, $userId, 'Отредактировано интеграционным тестом');
     check($edited !== false, 'editMessage редактирует своё свежее сообщение');
