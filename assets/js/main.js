@@ -1320,3 +1320,39 @@ $(document).on('click', '.password-toggle-btn', function(e) {
         btn.text('👁️');
     }
 });
+
+// === Меню сайта (MLP-259): сенобургер + дропдауны шапки ===
+// Делегированные обработчики — экземпляров меню на странице может быть два
+// (горизонталь шапки + мобильный бургер) или один (главная).
+$(document).on('click', '.site-burger-btn', function (e) {
+    e.stopPropagation();
+    var panel = $(this).siblings('.site-burger-panel')[0];
+    var open = panel.hasAttribute('hidden');
+    // Закрываем другие открытые панели
+    document.querySelectorAll('.site-burger-panel:not([hidden])').forEach(function (p) { p.setAttribute('hidden', ''); });
+    if (open) panel.removeAttribute('hidden'); else panel.setAttribute('hidden', '');
+    this.setAttribute('aria-expanded', open ? 'true' : 'false');
+});
+
+$(document).on('click', '.site-burger-parent, .site-nav-parent', function (e) {
+    e.stopPropagation();
+    var box = $(this).siblings('.site-burger-children, .site-nav-dropdown')[0];
+    var open = box.hasAttribute('hidden');
+    // Соседние дропдауны шапки закрываем (ревью L4); аккордеон бургера не трогаем
+    document.querySelectorAll('.site-nav-dropdown:not([hidden])').forEach(function (p) {
+        if (p !== box) p.setAttribute('hidden', '');
+    });
+    if (open) box.removeAttribute('hidden'); else box.setAttribute('hidden', '');
+    this.setAttribute('aria-expanded', open ? 'true' : 'false');
+});
+
+function siteMenuCloseAll() {
+    document.querySelectorAll('.site-burger-panel:not([hidden]), .site-nav-dropdown:not([hidden])')
+        .forEach(function (p) { p.setAttribute('hidden', ''); });
+    document.querySelectorAll('.site-burger-btn, .site-nav-parent, .site-burger-parent')
+        .forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
+}
+$(document).on('click', function () { siteMenuCloseAll(); });
+$(document).on('keydown', function (e) { if (e.key === 'Escape') siteMenuCloseAll(); });
+// Клик внутри панели не закрывает её (кроме перехода по ссылке)
+$(document).on('click', '.site-burger-panel', function (e) { e.stopPropagation(); });

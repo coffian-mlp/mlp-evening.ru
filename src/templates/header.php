@@ -71,7 +71,9 @@ global $app;
                     <img src="/assets/img/logo.png" class="logo" alt="MLP Evening Logo" />
                 </a>
             </div>
-            
+
+            <?php $app->includeComponent('SiteMenu', 'header'); // MLP-259 ?>
+
             <?php if (isset($_SESSION['user_id'])): ?>
                 <div class="user-area">
                     <span class="username">Привет, <?= htmlspecialchars($_SESSION['username']) ?>! 👋</span>

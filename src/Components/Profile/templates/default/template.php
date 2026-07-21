@@ -127,11 +127,7 @@
                 </button>
             </form>
             
-            <?php if ($arResult['is_admin']): ?>
-                 <a href="/dashboard/index.php" class="btn btn-outline-warning">
-                    🔧 Админка
-                 </a>
-            <?php endif; ?>
+            <!-- MLP-259: «Админка» переехала в меню сайта (пункт с visibility=admins) -->
         </div>
         
         <?php else: ?>

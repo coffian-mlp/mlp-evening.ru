@@ -10,6 +10,7 @@ require_once __DIR__ . '/src/templates/header.php';
 <div class="player-container">
     <div class="video-container">
         <div class="header">
+            <?php $app->includeComponent('SiteMenu', 'burger'); // MLP-259: сенобургер поверх плеера ?>
             <a title="MLP-evening.ru - Поняшный вечерок" href="/">
                 <img src="/assets/img/logo.png" class="logo" alt="MLP Evening Logo" />
             </a>
