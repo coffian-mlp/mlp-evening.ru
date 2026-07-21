@@ -71,6 +71,8 @@
                 <label style="cursor:pointer;"><input type="checkbox" name="show_in_header" id="menu_item_in_header" value="1" checked> Показывать в шапке</label>
                 <label style="cursor:pointer;"><input type="checkbox" name="show_in_burger" id="menu_item_in_burger" value="1" checked> Показывать в сенобургере</label>
                 <label style="cursor:pointer;"><input type="checkbox" name="is_active" id="menu_item_active" value="1" checked> Включён</label>
+                <small style="color:#999;">Шапка есть на /schedule, /login и в дашборде. На <b>главной</b> шапки нет —
+                там только сенобургер: пункт «только шапка» на главной не виден нигде.</small>
             </div>
 
             <button type="submit" class="btn-primary" style="width:100%">💾 Сохранить</button>
