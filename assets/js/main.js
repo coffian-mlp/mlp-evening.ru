@@ -185,6 +185,7 @@ $(document).ready(function() {
             b.setAttribute("class", "select-items select-hide");
             
             for (j = 0; j < selElmnt.length; j++) {
+                if (selElmnt.options[j].disabled) continue; // MLP-260: disabled-опции не кликабельны
                 c = document.createElement("DIV");
                 c.innerHTML = selElmnt.options[j].innerHTML;
                 
@@ -1356,3 +1357,26 @@ $(document).on('click', function () { siteMenuCloseAll(); });
 $(document).on('keydown', function (e) { if (e.key === 'Escape') siteMenuCloseAll(); });
 // Клик внутри панели не закрывает её (кроме перехода по ссылке)
 $(document).on('click', '.site-burger-panel', function (e) { e.stopPropagation(); });
+
+// Перестройка кастомного селекта после динамического заполнения options (MLP-260):
+// initCustomSelects строит UI по текущим option — AJAX-заполненные селекты
+// иначе навсегда показывают исходный placeholder («Загрузка...»).
+window.rebuildCustomSelect = function (selectEl) {
+    var $sel = $(selectEl);
+    var $wrapper = $sel.parent('.custom-select-wrapper');
+    if ($wrapper.length) {
+        $wrapper.children('.select-selected, .select-items').remove();
+        $sel.unwrap();
+    }
+    if (window.initCustomSelects) window.initCustomSelects();
+};
+
+// Синхронизация подписи кастомного селекта после программного .val() (MLP-260):
+// нативный select скрыт — без этого админ видит старую подпись и может
+// молча сохранить не то, что видит.
+window.syncCustomSelectLabel = function (selectEl) {
+    var $wrapper = $(selectEl).parent('.custom-select-wrapper');
+    if (!$wrapper.length) return;
+    var opt = selectEl.options[selectEl.selectedIndex];
+    $wrapper.children('.select-selected').html(opt ? opt.innerHTML : '');
+};

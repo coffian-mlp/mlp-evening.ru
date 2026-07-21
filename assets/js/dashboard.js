@@ -549,6 +549,7 @@ function editUser(user) {
     $('#user_chat_color').val(user.chat_color || '#6d2f8e');
     $('#user_password').val('');
     $('#user_role').val(user.role);
+    if (window.syncCustomSelectLabel) window.syncCustomSelectLabel(document.getElementById('user_role'));
     $('#user-modal-title').text('Редактировать пони');
 
     // MLP-258: дата регистрации + статусы (read-only)
@@ -579,6 +580,7 @@ function editUser(user) {
         } else {
             $('#user_font_preference').val('open_sans');
         }
+        if (window.syncCustomSelectLabel) window.syncCustomSelectLabel(document.getElementById('user_font_preference'));
     }, 'json');
 
     // MLP-258: соц-привязки с кнопкой отвязать
@@ -812,13 +814,19 @@ function loadPacks() {
                 // Dropdown Option
                 $select.append(`<option value="${p.id}">${escapeHtml(p.name)}</option>`);
             });
+
+            // MLP-260: кастомный UI селекта строился по placeholder'у «Загрузка...» —
+            // без перестройки он вечно показывает его и не даёт выбрать пак
+            if (window.rebuildCustomSelect) window.rebuildCustomSelect($select[0]);
         } else {
              $('#packs-list').html('<li style="color:red">Ошибка: ' + escapeHtml(res.message) + '</li>');
              $('#sticker-pack-select').html('<option>Ошибка загрузки</option>');
+             if (window.rebuildCustomSelect) window.rebuildCustomSelect($('#sticker-pack-select')[0]);
         }
     }, 'json').fail(function(xhr, status, error) {
          $('#packs-list').html('<li style="color:red">AJAX Error: ' + escapeHtml(error) + '</li>');
          $('#sticker-pack-select').html('<option>Сбой сети</option>');
+         if (window.rebuildCustomSelect) window.rebuildCustomSelect($('#sticker-pack-select')[0]);
     });
 }
 
@@ -919,6 +927,8 @@ function loadMenuItems() {
                 $parent.append(`<option value="${item.id}">${escapeHtml(item.title)}</option>`);
             }
         });
+        // MLP-260: перестроить кастомный UI после динамического заполнения
+        if (window.rebuildCustomSelect) window.rebuildCustomSelect($parent[0]);
     }, 'json');
 }
 
@@ -928,7 +938,9 @@ function openMenuItemModal(item) {
     $('#menu_item_title').val(item ? item.title : '');
     $('#menu_item_url').val(item && item.url ? item.url : '');
     $('#menu_item_parent').val(item && item.parent_id ? item.parent_id : '0');
+    if (window.syncCustomSelectLabel) window.syncCustomSelectLabel(document.getElementById('menu_item_parent'));
     $('#menu_item_visibility').val(item ? item.visibility : 'all');
+    if (window.syncCustomSelectLabel) window.syncCustomSelectLabel(document.getElementById('menu_item_visibility'));
     $('#menu_item_external').prop('checked', !!(item && parseInt(item.is_external, 10)));
     $('#menu_item_in_header').prop('checked', item ? !!parseInt(item.show_in_header, 10) : true);
     $('#menu_item_in_burger').prop('checked', item ? !!parseInt(item.show_in_burger, 10) : true);

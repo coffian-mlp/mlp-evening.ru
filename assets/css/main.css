@@ -915,3 +915,25 @@ body.dashboard-layout {
     .site-nav { display: none; }
     .site-header-burger { display: block; }
 }
+
+/* === Шапка страниц: базовые правила (MLP-260) ===
+   Раньше жили только в dashboard.css — страницы без него (например /login)
+   оставались без flex-раскладки, и логотип уезжал. Порядок: сенобургер,
+   логотип, пункты меню, пустое пространство; user-area прижата вправо. */
+.main-header {
+    background: transparent;
+    padding: 20px 0;
+    margin-bottom: 20px;
+}
+.main-header .header-content {
+    margin: 0 auto;
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+.main-header .site-header-burger { order: -1; } /* бургер первым */
+.main-header .logo-area { flex-shrink: 0; }
+.main-header .logo { height: 60px; width: auto; display: block; }
+.main-header .site-nav { flex: 1; justify-content: flex-start; }
+.main-header .user-area { margin-left: auto; flex-shrink: 0; }

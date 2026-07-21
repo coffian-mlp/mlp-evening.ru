@@ -26,13 +26,9 @@ body {
 }
 
 .main-header .header-content {
-    /* MLP-256: шапка согласована с полноширинным контентом */
+    /* MLP-256: шапка согласована с полноширинным контентом.
+       MLP-260: раскладка (flex/порядок) — в main.css, здесь только ширина. */
     max-width: none;
-    margin: 0 auto;
-    padding: 0 32px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
 }
 
 .main-header .logo {
@@ -532,5 +528,10 @@ option:checked {
     .main-header .header-content {
         flex-direction: column;
         gap: 15px;
+    }
+
+    /* MLP-260: в column-раскладке margin-left:auto (main.css) прижимал бы user-area вправо */
+    .main-header .user-area {
+        margin-left: 0;
     }
 }

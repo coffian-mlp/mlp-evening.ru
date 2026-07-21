@@ -100,7 +100,7 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
             <div class="chat-dropdown" style="position: relative; display: inline-block;">
                 <button class="icon-btn" id="chat-menu-btn" onclick="toggleChatMenu(event)" title="Меню чата">⚙️</button>
                 <div id="chat-dropdown-menu" class="chat-dropdown-content" style="display:none; position:absolute; right:0; background: var(--bg-dark); border:1px solid rgba(255,255,255,0.1); border-radius:5px; box-shadow:0 15px 50px rgba(0,0,0,0.6); backdrop-filter: blur(5px); z-index:100; min-width: 180px; padding: 5px 0;">
-                    <a href="#" onclick="window.open('/schedule.php', 'ScheduleWindow', 'width=800,height=700'); return false;" style="display:block; padding:8px 15px; color:#eee; text-decoration:none; white-space:nowrap;">📅 Расписание</a>
+                    <!-- MLP-260: «Расписание» переехало в меню сайта (сенобургер) -->
                     <a href="javascript:void(0)" id="chat-search-btn" style="display:block; padding:8px 15px; color:#eee; text-decoration:none; white-space:nowrap;">🔍 Поиск сообщений</a>
                     <a href="javascript:void(0)" id="toggle-title-alert" style="display:block; padding:8px 15px; color:#eee; text-decoration:none; white-space:nowrap;">🔔 Моргание вкладки</a>
                     <?php if ($arResult['mode'] !== 'popup'): ?>
