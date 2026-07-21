@@ -32,7 +32,7 @@ test('гость: /dashboard/ редиректит на /login.php с redirect (
   await expect(page.locator('#register-form-wrapper')).toHaveCount(0);
 });
 
-test('админ: вход с /login.php → дашборд, «Настройки» активны, 7 вкладок (MLP-256)', async ({ page }) => {
+test('админ: вход с /login.php → дашборд, «Настройки» активны, 8 вкладок (MLP-256/259)', async ({ page }) => {
   test.skip(!IS_ADMIN, 'нужен MLP_ADMIN=1');
   await page.goto(BASE + '/dashboard/', { waitUntil: 'domcontentloaded' }); // гость → login.php?redirect=/dashboard/
   await page.fill('#ajax-login-form input[name="username"]', LOGIN);
@@ -40,12 +40,12 @@ test('админ: вход с /login.php → дашборд, «Настройк�
   await page.click('#ajax-login-form button[type="submit"]');
 
   await page.waitForURL(/\/dashboard\//, { timeout: 15000, waitUntil: 'domcontentloaded' });
-  await expect(page.locator('.nav-tile')).toHaveCount(7);
+  await expect(page.locator('.nav-tile')).toHaveCount(8); // MLP-259: +«Меню»
   await expect(page.locator('.nav-tile.active .label')).toHaveText('Настройки');
   await expect(page.locator('#tab-settings')).toBeVisible();
 });
 
-test('админ: обход 7 вкладок, lazy-данные подгружаются (MLP-256)', async ({ page }) => {
+test('админ: обход 8 вкладок, lazy-данные подгружаются (MLP-256/259)', async ({ page }) => {
   test.skip(!IS_ADMIN, 'нужен MLP_ADMIN=1');
   await uiLogin(page);
   await page.goto(BASE + '/dashboard/', { waitUntil: 'domcontentloaded' });
@@ -65,7 +65,7 @@ test('админ: обход 7 вкладок, lazy-данные подгруж�
   await expect(page.locator('#tab-stickers')).toBeVisible();
 
   // Остальные вкладки: панель становится видимой, хеш пишется в URL
-  for (const tab of ['#tab-bot', '#tab-episodes', '#tab-events', '#tab-database', '#tab-settings']) {
+  for (const tab of ['#tab-bot', '#tab-episodes', '#tab-events', '#tab-menu', '#tab-database', '#tab-settings']) {
     await page.click(`.nav-tile[data-target="${tab}"]`);
     await expect(page.locator(tab)).toBeVisible();
     expect(page.url()).toContain(tab);
