@@ -60,6 +60,11 @@ return [
     // Команды бота (MLP-255): переезд с POST-обработчика dashboard/index.php.
     'save_bot_command'   => ['role' => 'admin', 'handler' => [\Api\BotCommandController::class, 'save']],
     'delete_bot_command' => ['role' => 'admin', 'handler' => [\Api\BotCommandController::class, 'delete']],
+    // Меню сайта (MLP-259).
+    'get_menu_items'     => ['role' => 'admin', 'handler' => [\Api\MenuController::class, 'getItems']],
+    'save_menu_item'     => ['role' => 'admin', 'handler' => [\Api\MenuController::class, 'save']],
+    'delete_menu_item'   => ['role' => 'admin', 'handler' => [\Api\MenuController::class, 'delete']],
+    'move_menu_item'     => ['role' => 'admin', 'handler' => [\Api\MenuController::class, 'move']],
     // Панель БД (MLP-255): переезд с db_action-блока dashboard/index.php.
     // db_export отдаёт CSV (не JSON) — заголовки переопределяет контроллер.
     'db_get_row'         => ['role' => 'admin', 'handler' => [\Api\DbAdminController::class, 'getRow']],

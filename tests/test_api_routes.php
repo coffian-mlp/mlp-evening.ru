@@ -59,6 +59,11 @@ $expected = [
     // MLP-258: соц-привязки из карточки пользователя
     'get_user_socials_admin' => 'admin',
     'unlink_social_admin'    => 'admin',
+    // MLP-259: меню сайта
+    'get_menu_items'      => 'admin',
+    'save_menu_item'      => 'admin',
+    'delete_menu_item'    => 'admin',
+    'move_menu_item'      => 'admin',
     // MLP-255: модерация (было: Auth::isModerator() в ветках)
     'ban_user'            => 'moderator',
     'unban_user'          => 'moderator',

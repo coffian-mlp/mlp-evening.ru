@@ -24,6 +24,9 @@ $(document).ready(function() {
         if (target === '#tab-stickers') {
             loadStickers(1); // MLP-258: вкладка всегда открывается с первой страницы
         }
+        if (target === '#tab-menu') {
+            loadMenuItems(); // MLP-259
+        }
     });
 
     // --- Открытие вкладки по хешу (при загрузке и при смене хеша) ---
@@ -149,6 +152,10 @@ $(document).ready(function() {
                     if (action === 'save_user') {
                         closeUserModal();
                         loadUsers();
+                    }
+                    if (action === 'save_menu_item') { // MLP-259
+                        closeModal('#menu-item-modal');
+                        loadMenuItems();
                     }
                     if (action === 'ban_user' || action === 'mute_user') {
                         closeModal('#ban-modal');
@@ -849,5 +856,103 @@ function deleteSticker(id) {
         if (res.success) {
             loadStickers();
         }
+    }, 'json');
+}
+
+// === Меню сайта (MLP-259) ===
+var menuItemsFlatCache = [];
+
+function loadMenuItems() {
+    var $tbody = $('#menu-items-table tbody');
+    $tbody.html('<tr><td colspan="7" style="text-align:center;">Загрузка...</td></tr>');
+
+    $.post('/api.php', { action: 'get_menu_items' }, function(res) {
+        if (!res.success) {
+            $tbody.html(`<tr><td colspan="7" style="text-align:center; color:red;">Ошибка: ${escapeHtml(res.message)}</td></tr>`);
+            return;
+        }
+        $tbody.empty();
+        menuItemsFlatCache = [];
+
+        var renderRow = function(item, isChild) {
+            menuItemsFlatCache.push(item);
+            var vis = { all: 'все', users: 'залогиненные', admins: 'админы' }[item.visibility] || item.visibility;
+            var podacha = [];
+            if (parseInt(item.show_in_header, 10)) podacha.push('шапка');
+            if (parseInt(item.show_in_burger, 10)) podacha.push('бургер');
+            var url = item.url
+                ? `<span style="font-family:monospace; font-size:0.9em;">${escapeHtml(item.url)}</span>${parseInt(item.is_external, 10) ? ' ↗' : ''}`
+                : '<em style="color:#999;">раскрывашка</em>';
+            var row = `
+                <tr data-id="${item.id}">
+                    <td>
+                        <button class="btn-xs" onclick="moveMenuItem(${item.id}, 'up')" title="Выше">↑</button>
+                        <button class="btn-xs" onclick="moveMenuItem(${item.id}, 'down')" title="Ниже">↓</button>
+                    </td>
+                    <td>${isChild ? '<span style="color:#999;">└─</span> ' : ''}${escapeHtml(item.title)}</td>
+                    <td>${url}</td>
+                    <td><small>${vis}</small></td>
+                    <td><small>${podacha.join(' + ') || '—'}</small></td>
+                    <td>${parseInt(item.is_active, 10) ? '<span style="color:#7bc47f;">вкл</span>' : '<span style="color:#999;">выкл</span>'}</td>
+                    <td style="text-align: right;">
+                        <button class="btn-xs btn-warning" data-item="${escapeHtml(JSON.stringify(item))}" onclick="openMenuItemModal(JSON.parse(this.dataset.item))">✏️</button>
+                        <button class="btn-xs btn-danger" onclick="deleteMenuItem(${item.id})">🗑</button>
+                    </td>
+                </tr>`;
+            $tbody.append(row);
+        };
+
+        if (!res.data.items.length) {
+            $tbody.html('<tr><td colspan="7" style="text-align:center;">Меню пустое — добавьте первый пункт</td></tr>');
+        }
+        res.data.items.forEach(function(item) {
+            renderRow(item, false);
+            (item.children || []).forEach(function(child) { renderRow(child, true); });
+        });
+
+        // Селект родителей: только корневые РАСКРЫВАШКИ (url пуст) — у родителя-ссылки
+        // дети не рендерятся на сайте (сервер такой выбор тоже отклонит)
+        var $parent = $('#menu_item_parent');
+        $parent.find('option:not([value="0"])').remove();
+        res.data.items.forEach(function(item) {
+            if (!item.url) {
+                $parent.append(`<option value="${item.id}">${escapeHtml(item.title)}</option>`);
+            }
+        });
+    }, 'json');
+}
+
+function openMenuItemModal(item) {
+    $('#menu-item-modal').css('display', 'flex').hide().fadeIn(200);
+    $('#menu_item_id').val(item ? item.id : '');
+    $('#menu_item_title').val(item ? item.title : '');
+    $('#menu_item_url').val(item && item.url ? item.url : '');
+    $('#menu_item_parent').val(item && item.parent_id ? item.parent_id : '0');
+    $('#menu_item_visibility').val(item ? item.visibility : 'all');
+    $('#menu_item_external').prop('checked', !!(item && parseInt(item.is_external, 10)));
+    $('#menu_item_in_header').prop('checked', item ? !!parseInt(item.show_in_header, 10) : true);
+    $('#menu_item_in_burger').prop('checked', item ? !!parseInt(item.show_in_burger, 10) : true);
+    $('#menu_item_active').prop('checked', item ? !!parseInt(item.is_active, 10) : true);
+    // Пункт с детьми не может стать чьим-то ребёнком — прячем селект;
+    // и себя из вариантов родителя убираем (ревью L3)
+    var hasChildren = item && menuItemsFlatCache.some(function(i) { return parseInt(i.parent_id, 10) === parseInt(item.id, 10); });
+    $('#menu_item_parent').closest('.form-group').toggle(!hasChildren);
+    $('#menu_item_parent option').prop('disabled', false);
+    if (item) $(`#menu_item_parent option[value="${item.id}"]`).prop('disabled', true);
+    $('#menu-item-modal-title').text(item ? 'Редактировать пункт' : 'Новый пункт меню');
+}
+
+function moveMenuItem(id, dir) {
+    $.post('/api.php', { action: 'move_menu_item', id: id, dir: dir }, function(res) {
+        if (res.success) loadMenuItems();
+        else window.showFlashMessage(res.message, res.type);
+    }, 'json');
+}
+
+function deleteMenuItem(id) {
+    if (!confirm('Удалить пункт меню? Его вложенные пункты поднимутся на верхний уровень.')) return;
+    $.post('/api.php', { action: 'delete_menu_item', id: id }, function(res) {
+        window.showFlashMessage(res.message, res.type);
+        if (res.success) loadMenuItems();
     }, 'json');
 }

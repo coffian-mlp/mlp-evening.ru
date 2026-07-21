@@ -47,6 +47,10 @@ require_once __DIR__ . '/../src/templates/header.php';
             <div class="icon">😊</div>
             <div class="label">Стикеры</div>
         </div>
+        <div class="nav-tile" data-target="#tab-menu">
+            <div class="icon">🧭</div>
+            <div class="label">Меню</div>
+        </div>
         <div class="nav-tile" data-target="#tab-database">
             <div class="icon">💾</div>
             <div class="label">База Данных</div>
@@ -88,7 +92,12 @@ require_once __DIR__ . '/../src/templates/header.php';
         <?php $app->includeComponent('AdminStickers'); ?>
     </div>
 
-    <!-- Вкладка 7: База Данных (id сохранён — серверные deep-links DbAdmin) -->
+    <!-- Вкладка 7: Меню сайта (MLP-259) -->
+    <div id="tab-menu" class="tab-content">
+        <?php $app->includeComponent('AdminMenu'); ?>
+    </div>
+
+    <!-- Вкладка 8: База Данных (id сохранён — серверные deep-links DbAdmin) -->
     <div id="tab-database" class="tab-content">
         <?php $app->includeComponent('DbAdmin'); ?>
     </div>
