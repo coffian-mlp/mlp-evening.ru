@@ -627,39 +627,64 @@ class LLMManager {
     }
 
     private function buildContext($limit = 24, $maxAgeHours = null, $beforeId = null, $includePinned = true) {
-        // Fetch last N messages (при $beforeId — только сообщения старше этого id)
-        $messages = $this->chatManager->getMessages($limit, $beforeId);
-        $context = [];
+        // MLP-269 (v2): бот ВИДИТ факт удаления (драма с массовой чисткой — повод
+        // отреагировать), но удалённые: (а) не занимают лимит живых сообщений,
+        // (б) не раскрывают содержимое (приватность — только автор и время),
+        // (в) серии схлопываются в один маркер «(удалено N сообщений)».
+        $fetchLimit = min(100, $limit * 2); // запас на удалённые сверх лимита живых
+        $messages = $this->chatManager->getMessages($fetchLimit, $beforeId);
 
         $currentTime = time();
 
-        foreach ($messages as $msg) {
-            // MLP-269: удалённые не попадают в контекст бота (у них нет raw_message —
-            // получались «пустышки», Лира ворчала на пустые сообщения и просыпался проактив).
-            if (!empty($msg['is_deleted'])) {
-                continue;
-            }
-            // Check message age if required
+        // Собираем от свежих к старым, пока не наберём $limit ЖИВЫХ.
+        $entries = [];
+        $alive = 0;
+        for ($i = count($messages) - 1; $i >= 0 && $alive < $limit; $i--) {
+            $msg = $messages[$i];
+
             if ($maxAgeHours !== null) {
                 $msgTime = strtotime($msg['created_at'] . ' UTC');
-                $hoursDiff = ($currentTime - $msgTime) / 3600;
-                if ($hoursDiff > $maxAgeHours) {
-                    continue; // Skip messages older than maxAgeHours
+                if (($currentTime - $msgTime) / 3600 > $maxAgeHours) {
+                    continue; // старше окна — пропускаем (и живые, и удалённые)
                 }
             }
 
-            $role = ($msg['user_id'] == $this->botUserId) ? 'assistant' : 'user';
             $time = date('H:i', strtotime($msg['created_at']));
-            $username = $msg['username'];
-            
-            // We format the content to include the username and time so the model knows who is speaking
-            $content = "[$time] $username: " . $msg['raw_message'];
-            
-            $context[] = [
-                'role' => $role,
-                'content' => $content
+            if (!empty($msg['is_deleted'])) {
+                $entries[] = ['deleted' => true, 'time' => $time, 'username' => $msg['username']];
+                continue; // маркер — вне лимита живых
+            }
+
+            $alive++;
+            $entries[] = [
+                'role' => ($msg['user_id'] == $this->botUserId) ? 'assistant' : 'user',
+                // Имя и время в тексте — чтобы модель знала, кто говорит.
+                'content' => "[$time] {$msg['username']}: " . $msg['raw_message'],
             ];
         }
+        $entries = array_reverse($entries); // обратно в хронологию
+
+        // Схлопываем подряд идущие маркеры удаления и строим итоговый контекст.
+        $context = [];
+        $run = [];
+        $flushRun = function () use (&$run, &$context) {
+            if (!$run) return;
+            $n = count($run);
+            $content = ($n === 1)
+                ? "[{$run[0]['time']}] (сообщение {$run[0]['username']} удалено)"
+                : "[{$run[0]['time']}–{$run[$n - 1]['time']}] (удалено $n сообщений)";
+            $context[] = ['role' => 'user', 'content' => $content];
+            $run = [];
+        };
+        foreach ($entries as $e) {
+            if (!empty($e['deleted'])) {
+                $run[] = $e;
+                continue;
+            }
+            $flushRun();
+            $context[] = $e;
+        }
+        $flushRun();
 
         // Закреплённое сообщение — фоновый контекст (MLP-242); в проактиве
         // подмешивается ПОСЛЕ гейтов (MLP-260), поэтому отключаемо.

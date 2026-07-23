@@ -2,9 +2,10 @@
 use Domain\ChatManager;
 use LLM\LLMManager;
 /**
- * Интеграционный тест контекста бота (MLP-269): удалённые сообщения
- * НЕ попадают в buildContext (раньше шли пустышками — у удалённых
- * getMessages не заполняет raw_message).
+ * Интеграционный тест контекста бота (MLP-269 v2): удалённые видны боту
+ * КАК ФАКТ («(сообщение X удалено)» / «(удалено N сообщений)» для серий),
+ * но их содержимое не раскрывается, они не занимают лимит живых, серии
+ * схлопываются. Пустышек «[HH:MM] Имя: » быть не должно.
  *
  * Запуск: docker compose exec php php tests/integration_bot_context.php
  */
@@ -14,10 +15,16 @@ $conn = it_require_db();
 
 $cm = new ChatManager();
 $marker = 'it_ctx_' . getmypid();
-$aliveId = $cm->addMessage(1, 'ИтПони', "живое $marker");
-$deadId  = $cm->addMessage(1, 'ИтПони', "мертвое $marker");
-check(is_int($aliveId) || $aliveId === true, 'живое сообщение создано');
-check($cm->deleteMessage((int)$deadId, 1, 'admin'), 'второе удалено (soft)');
+$ids = [];
+$ids[] = (int)$cm->addMessage(1, 'ИтПони', "живое-1 $marker");
+$ids[] = $d1 = (int)$cm->addMessage(1, 'ИтПони', "секрет-1 $marker");
+$ids[] = $d2 = (int)$cm->addMessage(1, 'ИтПони', "секрет-2 $marker");
+$ids[] = $d3 = (int)$cm->addMessage(1, 'ИтПони', "секрет-3 $marker");
+$ids[] = (int)$cm->addMessage(1, 'ИтПони', "живое-2 $marker");
+$ids[] = $d4 = (int)$cm->addMessage(1, 'ИтПони', "секрет-4 $marker");
+foreach ([$d1, $d2, $d3, $d4] as $id) {
+    check($cm->deleteMessage($id, 1, 'admin'), "удалено #$id");
+}
 
 try {
     $r = new ReflectionMethod(LLMManager::class, 'buildContext');
@@ -25,9 +32,11 @@ try {
     $ctx = $r->invoke(new LLMManager(), 10, null, null, false);
 
     $all = implode("\n", array_map(fn($c) => is_string($c['content']) ? $c['content'] : '', $ctx));
-    check(str_contains($all, "живое $marker"), 'живое сообщение в контексте');
-    check(!str_contains($all, "мертвое $marker"), 'удалённое сообщение НЕ в контексте');
-    check(!str_contains($all, 'Сообщение удалено'), 'плейсхолдер удаления не просочился');
+    check(str_contains($all, "живое-1 $marker") && str_contains($all, "живое-2 $marker"), 'живые сообщения в контексте');
+    check(!str_contains($all, 'секрет-'), 'содержимое удалённых НЕ раскрывается');
+    check(str_contains($all, '(удалено 3 сообщений)'), 'серия из 3 удалённых схлопнута в один маркер');
+    check((bool)preg_match('/\(сообщение [^)]+ удалено\)/u', $all), 'одиночное удаление — именной маркер (имя из users-джойна)');
+    check(!str_contains($all, 'Сообщение удалено</em>'), 'HTML-плейсхолдер не просочился');
 
     foreach ($ctx as $c) {
         if (preg_match('/^\[\d\d:\d\d\] [^:]+: $/u', $c['content'])) {
@@ -35,12 +44,17 @@ try {
         }
     }
     check(true, 'пустышек в контексте нет');
+
+    // Лимит живых: limit=4 (окно чтения 8 покрывает наши 6) — оба живых на месте,
+    // 4 маркера удалённых лимит не съели. NB: запас чтения = limit*2 (cap 100) —
+    // очень длинная серия удалённых может вытеснить старые живые (компромисс).
+    $ctx2 = $r->invoke(new LLMManager(), 4, null, null, false);
+    $all2 = implode("\n", array_map(fn($c) => $c['content'], $ctx2));
+    check(str_contains($all2, "живое-1 $marker") && str_contains($all2, "живое-2 $marker"), 'маркеры удалённых не занимают лимит живых');
 } finally {
     // Уборка: тестовые сообщения — физически (своя таблица под тестом, Docker-контур).
-    $stmt2 = $conn->prepare("DELETE FROM chat_messages WHERE id IN (?, ?)");
-    $a = (int)$aliveId; $d = (int)$deadId;
-    $stmt2->bind_param('ii', $a, $d);
-    $stmt2->execute();
+    $in = implode(',', array_map('intval', $ids));
+    $conn->query("DELETE FROM chat_messages WHERE id IN ($in)");
 }
 
 it_done();
