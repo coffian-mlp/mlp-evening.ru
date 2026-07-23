@@ -210,7 +210,7 @@
 
 Архитектура (все findings AR6 из ревью 23.07 + переносы; детали в `docs/tasklist/arch-2026-07-23.tasklist.md`):
 - [x] 🛡️ **MLP-261 / AR6-1 (HIGH, security):** утечка `$e->getMessage()` в JSON ликвидирована — `Core\UserError` (пользовательские тексты) + `respondCaught()` (системное → error_log); 14 catch-точек, включая найденную на ревью SocialAuthService. *(23.07.2026, прод 23e77de)*
-- [ ] 🗄️ **AR6-2 (HIGH):** `Core\FileCache` — промоция трёх файловых кешей (Episode/User/MenuManager).
+- [x] 🗄️ **MLP-263 / AR6-2:** `Core\FileCache` — три самописных кеша (Episode/User/MenuManager) сведены в один класс; пути файлов 1:1, LOCK_EX везде, анти-traversal ключей. *(23.07.2026)*
 - [ ] 🧬 **AR6-3 (HIGH):** общее ядро чата popup/embedded (~4800 строк JS, 24% дрейф) — **строго ДО UX-пака чата и аплоад-полировки**, чтобы не дублировать правки в два шаблона.
 - [x] 🔧 **MLP-262 / AR6-4 + AR6-9:** `Api\Response` (pure-ядро payload/classify + json/ok/fail/caught) — 133 вызова в 13 контроллерах мигрированы, глобальные функции остались делегатами для легаси api.php; `Auth::userId()/username()/role()` вместо 14 прямых чтений `$_SESSION`. *(23.07.2026)*
 - [ ] 🔪 **AR5-6 + AR6-5 + AR6-8:** срезы api.php — auth/profile/socials и чат (13 кейсов switch); общий хелпер «файл/URL → UploadManager» (3 копии); bind_social через менеджера.

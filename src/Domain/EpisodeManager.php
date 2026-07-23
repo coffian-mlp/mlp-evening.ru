@@ -1,23 +1,25 @@
 <?php
 
 namespace Domain;
+use Core\FileCache;
 use Infra\Database;
 use Infra\ConfigManager;
 
 
 class EpisodeManager {
+    private const CACHE_KEY = 'episodes';
+    private const CACHE_TTL = 2592000; // 30 дней
+
     private $db;
-    private $cacheFile;
+    private FileCache $cache;
 
     public function __construct() {
         $this->db = Database::getInstance()->getConnection();
-        $this->cacheFile = __DIR__ . '/../../cache/episodes.json';
+        $this->cache = new FileCache(); // cache/episodes.json — путь как до MLP-263
     }
 
     private function clearCache() {
-        if (file_exists($this->cacheFile)) {
-            unlink($this->cacheFile);
-        }
+        $this->cache->delete(self::CACHE_KEY);
     }
 
     public function getEveningPlaylist($limit = 8) {
@@ -200,18 +202,11 @@ class EpisodeManager {
     }
 
     public function getAllEpisodes() {
-        // 1. Try Cache (TTL 30 days)
-        if (file_exists($this->cacheFile)) {
-            if (time() - filemtime($this->cacheFile) < 2592000) { // 30 * 24 * 60 * 60
-                $json = file_get_contents($this->cacheFile);
-                if ($json) {
-                    $data = json_decode($json, true);
-                    if (is_array($data)) return $data;
-                }
-            }
+        $cached = $this->cache->get(self::CACHE_KEY, self::CACHE_TTL);
+        if ($cached !== null) {
+            return $cached;
         }
 
-        // 2. DB Query
         $query = "SELECT * FROM episode_list";
         $result = $this->db->query($query);
         $episodes = [];
@@ -221,12 +216,7 @@ class EpisodeManager {
             }
         }
 
-        // 3. Save Cache
-        if (!is_dir(dirname($this->cacheFile))) {
-            mkdir(dirname($this->cacheFile), 0777, true);
-        }
-        file_put_contents($this->cacheFile, json_encode($episodes));
-
+        $this->cache->set(self::CACHE_KEY, $episodes);
         return $episodes;
     }
 

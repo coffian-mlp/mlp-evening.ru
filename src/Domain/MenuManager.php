@@ -2,6 +2,7 @@
 
 namespace Domain;
 
+use Core\FileCache;
 use Infra\Database;
 
 /**
@@ -15,13 +16,15 @@ use Infra\Database;
  */
 class MenuManager {
 
-    private const CACHE_FILE = '/cache/menu.json';
+    private const CACHE_KEY = 'menu';
     private const CACHE_TTL = 60;
 
     private $db;
+    private FileCache $cache;
 
     public function __construct() {
         $this->db = Database::getInstance()->getConnection();
+        $this->cache = new FileCache(); // cache/menu.json — путь как до MLP-263
     }
 
     // --- Чтение ---
@@ -39,14 +42,13 @@ class MenuManager {
 
     /** Полное дерево активных пунктов (кешируется). */
     private function getFullTree(): array {
-        $file = dirname(__DIR__, 2) . self::CACHE_FILE;
-        if (is_file($file) && time() - filemtime($file) < self::CACHE_TTL) {
-            $cached = json_decode((string)file_get_contents($file), true);
-            if (is_array($cached)) return $cached;
+        $cached = $this->cache->get(self::CACHE_KEY, self::CACHE_TTL);
+        if ($cached !== null) {
+            return $cached;
         }
 
         $tree = self::buildTree(array_values(array_filter($this->fetchAll(), fn($r) => (int)$r['is_active'] === 1)));
-        @file_put_contents($file, json_encode($tree, JSON_UNESCAPED_UNICODE), LOCK_EX);
+        $this->cache->set(self::CACHE_KEY, $tree);
         return $tree;
     }
 
@@ -230,7 +232,6 @@ class MenuManager {
     }
 
     public function flushCache(): void {
-        $file = dirname(__DIR__, 2) . self::CACHE_FILE;
-        if (is_file($file)) @unlink($file);
+        $this->cache->delete(self::CACHE_KEY);
     }
 }

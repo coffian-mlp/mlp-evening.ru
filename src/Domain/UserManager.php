@@ -2,6 +2,7 @@
 
 namespace Domain;
 
+use Core\FileCache;
 use Core\UserError;
 use Exception;
 use Infra\Database;
@@ -9,36 +10,25 @@ use Infra\Database;
 
 class UserManager {
     private $db;
-    private $cacheDir;
+    private FileCache $cache;
 
     public function __construct() {
         $this->db = Database::getInstance()->getConnection();
-        $this->cacheDir = __DIR__ . '/../../cache/users/';
+        $this->cache = new FileCache('users'); // cache/users/<key>.json — пути как до MLP-263
     }
 
-    // --- Caching Helpers ---
+    // --- Caching Helpers (делегация в Core\FileCache, MLP-263) ---
 
     private function getCache($key, $ttl = 2592000) { // Default 30 days
-        $file = $this->cacheDir . $key . '.json';
-        if (file_exists($file)) {
-            if (time() - filemtime($file) < $ttl) {
-                $content = file_get_contents($file);
-                return $content ? json_decode($content, true) : null;
-            }
-        }
-        return null;
+        return $this->cache->get($key, $ttl);
     }
 
     private function setCache($key, $data) {
-        if (!is_dir($this->cacheDir)) {
-            mkdir($this->cacheDir, 0777, true);
-        }
-        file_put_contents($this->cacheDir . $key . '.json', json_encode($data));
+        $this->cache->set($key, (array)$data);
     }
 
     private function clearCache($key) {
-         $file = $this->cacheDir . $key . '.json';
-         if (file_exists($file)) unlink($file);
+        $this->cache->delete($key);
     }
 
     private function clearAllUsersCache() {
