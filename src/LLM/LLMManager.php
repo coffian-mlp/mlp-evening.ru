@@ -262,6 +262,11 @@ class LLMManager {
                 return $this->handleTodoCommand($command, $contextData);
             }
 
+            // Художница /нарисуй (MLP-274): генерация картинки в наивном стиле.
+            if ($command['handler_type'] === 'image') {
+                return $this->handleDrawCommand($command, $contextData);
+            }
+
             $context = $this->buildContext($this->contextLimit());
 
             if ($command['handler_type'] === 'schedule') {
@@ -789,6 +794,59 @@ class LLMManager {
         ];
         $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(),
             sprintf($confirmations[array_rand($confirmations)], $username, $id));
+        return true;
+    }
+
+    /**
+     * Команда /нарисуй (MLP-274): картинка в наивном «детском» стиле.
+     * system_prompt команды = стиль-префикс (редактируется в дашборде);
+     * дневной лимит ai_image_daily_limit (генерация дороже текста).
+     * $generator — инжект для тестов (callable(prompt): ?string).
+     */
+    private function handleDrawCommand(array $command, array $contextData, ?callable $generator = null): bool {
+        $message = (string)($contextData['message'] ?? '');
+        $prefix = ltrim((string)($command['command_prefix'] ?? 'нарисуй'), '/');
+        $subject = trim(preg_replace('/^\s*\/?' . preg_quote($prefix, '/') . '\s*/ui', '', $message));
+        $username = (string)($contextData['username'] ?? 'Гость');
+
+        if ($subject === '') {
+            $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(),
+                "@$username, а что рисовать-то? Скажи так: /нарисуй <что-нибудь> — и я возьмусь за кисть! 🎨");
+            return true;
+        }
+
+        $config = ConfigManager::getInstance();
+        $limit = (int)$config->getOption('ai_image_daily_limit', 20);
+        if ($limit > 0 && ImageGenerator::todayCount() >= $limit) {
+            $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(),
+                "@$username, у меня краски на сегодня закончились ($limit рисунков в день — потом копыта отваливаются). Приходи завтра! 🎨");
+            return true;
+        }
+
+        $stylePrefix = trim((string)($command['system_prompt'] ?? ''));
+        if ($stylePrefix === '') {
+            $stylePrefix = "A naive child's crayon drawing, wobbly uneven lines, smudges, drawn clumsily as if a pony held the crayon in her mouth, simple flat colors, paper texture, charming and silly. Subject:";
+        }
+        $prompt = $stylePrefix . ' ' . mb_substr($subject, 0, 500);
+
+        $generator = $generator ?? [ImageGenerator::class, 'generate'];
+        $url = $generator($prompt);
+
+        if ($url === null) {
+            $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(),
+                "@$username, кисть сломалась, мольберт упал... не вышло. Попробуй ещё раз чуть позже! 🎨");
+            return true;
+        }
+        ImageGenerator::bumpToday();
+
+        $captions = [
+            "@%s, вот! Рисовала копытом, так что не суди строго. 🎨\n![рисунок](%s)",
+            "@%s, та-дам! Кисть держала во рту, но вроде похоже? 🖌️\n![рисунок](%s)",
+            "@%s, готово! Бон-Бон говорит — «узнаваемо». Это комплимент? 🎨\n![рисунок](%s)",
+            "@%s, держи! Немного намазюкала за краями, но душу вложила. ✨\n![рисунок](%s)",
+        ];
+        $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(),
+            sprintf($captions[array_rand($captions)], $username, $url));
         return true;
     }
 

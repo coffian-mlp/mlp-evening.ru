@@ -195,6 +195,20 @@ $config = $arResult['config']; // Helper
             <input type="text" name="ai_public_base_url" value="<?= htmlspecialchars($config->getOption('ai_public_base_url', 'https://mlp-evening.ru')) ?>" class="form-input" placeholder="https://mlp-evening.ru">
         </div>
 
+        <!-- MLP-274: Лира-художница -->
+        <div style="display: flex; gap: 15px;">
+            <div class="form-group" style="flex: 2;">
+                <label class="form-label">Модель генерации картинок (/нарисуй, RouterAI)</label>
+                <input type="text" name="ai_image_model" value="<?= htmlspecialchars($config->getOption('ai_image_model', 'black-forest-labs/flux.2-klein-4b')) ?>" class="form-input" placeholder="black-forest-labs/flux.2-klein-4b">
+                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Стиль-промпт — в system_prompt команды /нарисуй (вкладка «Бот» → Команды).</p>
+            </div>
+            <div class="form-group" style="flex: 1;">
+                <label class="form-label">Лимит рисунков в день</label>
+                <input type="number" name="ai_image_daily_limit" value="<?= (int)$config->getOption('ai_image_daily_limit', 20) ?>" class="form-input" min="0">
+                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">0 = без лимита (не советую — тролли).</p>
+            </div>
+        </div>
+
         <!-- MLP-268: вспомогательная vision-модель, когда основная картинки не понимает -->
         <div class="form-group" style="margin-top: 10px;">
             <label style="display: flex; align-items: center; cursor: pointer;">

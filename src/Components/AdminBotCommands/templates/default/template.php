@@ -32,6 +32,7 @@ use Domain\Auth;
                         <option value="schedule">Расписание (Спец. логика)</option>
                         <option value="poll">Опрос (Спец. логика)</option>
                         <option value="todo">Беклог /todo (без LLM)</option>
+                        <option value="image">Картинка /нарисуй (генерация)</option>
                     </select>
                 </div>
 

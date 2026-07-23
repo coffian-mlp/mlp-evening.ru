@@ -161,6 +161,13 @@ class SettingsController {
         if (isset($_POST['ai_vision_model'])) {
             $config->setOption('ai_vision_model', trim($_POST['ai_vision_model']));
         }
+        // MLP-274: художница
+        if (isset($_POST['ai_image_model'])) {
+            $config->setOption('ai_image_model', trim($_POST['ai_image_model']));
+        }
+        if (isset($_POST['ai_image_daily_limit'])) {
+            $config->setOption('ai_image_daily_limit', max(0, (int)$_POST['ai_image_daily_limit']));
+        }
         if (isset($_POST['ai_reactions'])) {
             $config->setOption('ai_reactions', (int)$_POST['ai_reactions']);
         }
