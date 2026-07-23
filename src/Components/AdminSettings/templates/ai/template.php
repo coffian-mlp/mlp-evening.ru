@@ -187,7 +187,7 @@ $config = $arResult['config']; // Helper
                 <input type="checkbox" name="ai_send_images" value="1" <?= $config->getOption('ai_send_images', 1) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
                 Показывать боту картинки из чата (vision)
             </label>
-            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Ссылки на вложения-картинки отправляются модели как image_url. Работает только с vision-моделями (напр. gemini). Требует, чтобы картинки были доступны по публичному URL.</p>
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Главный выключатель. Vision-модель получает картинку напрямую (image_url); не-vision — текстовое описание от помощника (настройка ниже).</p>
         </div>
 
         <div class="form-group">
