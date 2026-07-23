@@ -86,6 +86,19 @@ $expected = [
     'db_get_row'          => 'admin',
     'db_update_row'       => 'admin',
     'db_export'           => 'admin',
+    // MLP-264: срез auth/profile/socials (было: if-цепочка + switch api.php;
+    // публичные и раньше были в guest-whitelist, user-гейт был requireApiLogin)
+    'login'                 => 'public',
+    'register'              => 'public',
+    'forgot_password'       => 'public',
+    'reset_password_submit' => 'public',
+    'social_login'          => 'public',
+    'logout'                => 'user',
+    'bind_social'           => 'user',
+    'update_profile'        => 'user',
+    'save_user_option'      => 'user',
+    'get_user_socials'      => 'user',
+    'unlink_social'         => 'user',
 ];
 
 echo "== Карта ролей: каждый action объявлен с гейтом «как было» ==\n";

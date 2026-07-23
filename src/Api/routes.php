@@ -21,6 +21,18 @@ return [
     'pin_message'       => ['role' => 'user',   'handler' => [\Api\PinController::class, 'pin']],
     'unpin_message'     => ['role' => 'user',   'handler' => [\Api\PinController::class, 'unpin']],
     // Капча и онлайн-присутствие (MLP-245): публичные, CSRF-гейт выше как раньше.
+    // Auth и профиль (MLP-264, срез AR5-6)
+    'login'                => ['role' => 'public', 'handler' => [\Api\AuthController::class, 'login']],
+    'register'             => ['role' => 'public', 'handler' => [\Api\AuthController::class, 'register']],
+    'forgot_password'      => ['role' => 'public', 'handler' => [\Api\AuthController::class, 'forgotPassword']],
+    'reset_password_submit'=> ['role' => 'public', 'handler' => [\Api\AuthController::class, 'resetPasswordSubmit']],
+    'social_login'         => ['role' => 'public', 'handler' => [\Api\AuthController::class, 'socialLogin']],
+    'logout'               => ['role' => 'user',   'handler' => [\Api\AuthController::class, 'logout']],
+    'bind_social'          => ['role' => 'user',   'handler' => [\Api\AuthController::class, 'bindSocial']],
+    'update_profile'       => ['role' => 'user',   'handler' => [\Api\ProfileController::class, 'update']],
+    'save_user_option'     => ['role' => 'user',   'handler' => [\Api\ProfileController::class, 'saveOption']],
+    'get_user_socials'     => ['role' => 'user',   'handler' => [\Api\ProfileController::class, 'getSocials']],
+    'unlink_social'        => ['role' => 'user',   'handler' => [\Api\ProfileController::class, 'unlinkSocial']],
     'captcha_start'     => ['role' => 'public', 'handler' => [\Api\CaptchaController::class, 'start']],
     'captcha_check'     => ['role' => 'public', 'handler' => [\Api\CaptchaController::class, 'check']],
     'heartbeat'         => ['role' => 'public', 'handler' => [\Api\OnlineController::class, 'beat']],

@@ -63,19 +63,11 @@ class UserAdminController {
         $chat_color = trim($_POST['chat_color'] ?? '');
         $font_preference = trim($_POST['font_preference'] ?? 'open_sans');
         $font_scale = (int)($_POST['font_scale'] ?? 100);
-        $raw_avatar_url = trim($_POST['avatar_url'] ?? '');
-        $avatar_url = $raw_avatar_url; // Default
-
         try {
-            $uploadManager = new UploadManager();
-            // 1. File
-            if (isset($_FILES['avatar_file']) && $_FILES['avatar_file']['error'] !== UPLOAD_ERR_NO_FILE) {
-                $avatar_url = $uploadManager->uploadFromPost($_FILES['avatar_file']);
-            }
-            // 2. URL Download
-            elseif (!empty($raw_avatar_url) && strpos($raw_avatar_url, '/upload/avatars/') !== 0 && filter_var($raw_avatar_url, FILTER_VALIDATE_URL)) {
-                $avatar_url = $uploadManager->uploadFromUrl($raw_avatar_url);
-            }
+            // AR6-5 (MLP-264): общий резолвер «файл приоритетнее URL».
+            $avatar_url = (new UploadManager())->resolveFromRequest(
+                'avatar_file', trim($_POST['avatar_url'] ?? ''), '/upload/avatars/'
+            );
         } catch (\Throwable $e) {
             Response::caught($e, "Аватар: ");
         }

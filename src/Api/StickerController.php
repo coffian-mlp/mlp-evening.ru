@@ -118,16 +118,8 @@ class StickerController {
         if (!$packId) Response::json(false, "Выберите пак!", 'error');
 
         try {
-            $uploadManager = new UploadManager('sticker');
-
-            // 1. File Upload
-            if (isset($_FILES['image_file']) && $_FILES['image_file']['error'] !== UPLOAD_ERR_NO_FILE) {
-                $url = $uploadManager->uploadFromPost($_FILES['image_file']);
-            }
-            // 2. URL Download
-            elseif (!empty($url) && strpos($url, '/upload/stickers/') !== 0 && filter_var($url, FILTER_VALIDATE_URL)) {
-                $url = $uploadManager->uploadFromUrl($url);
-            }
+            // AR6-5 (MLP-264): общий резолвер «файл приоритетнее URL».
+            $url = (new UploadManager('sticker'))->resolveFromRequest('image_file', $url, '/upload/stickers/');
 
             if (empty($url)) Response::json(false, "Нужно загрузить файл или указать ссылку", 'error');
 

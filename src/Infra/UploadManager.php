@@ -83,6 +83,28 @@ class UploadManager {
     }
 
     /**
+     * Общий резолвер «файл приоритетнее URL» (MLP-264, AR6-5) — 3 потребителя:
+     * профиль (аватар), админ-карточка юзера, добавление стикера.
+     *
+     * Порядок: (1) файл в $_FILES[$fileKey] → uploadFromPost; (2) уже локальный
+     * путь ($localPrefix) → как есть; (3) внешний валидный URL → uploadFromUrl;
+     * (4) непустая, но невалидная строка → UserError (раньше тихо сохранялась —
+     * находка MLP-261); (5) пусто → ''.
+     */
+    public function resolveFromRequest(string $fileKey, string $url, string $localPrefix): string {
+        if (isset($_FILES[$fileKey]) && $_FILES[$fileKey]['error'] !== UPLOAD_ERR_NO_FILE) {
+            return $this->uploadFromPost($_FILES[$fileKey]);
+        }
+        if ($url === '' || strpos($url, $localPrefix) === 0) {
+            return $url;
+        }
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            throw new UserError("Некорректная ссылка.");
+        }
+        return $this->uploadFromUrl($url);
+    }
+
+    /**
      * Загрузка файла из $_FILES
      */
     public function uploadFromPost($file) {

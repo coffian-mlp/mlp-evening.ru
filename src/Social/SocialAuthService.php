@@ -111,6 +111,14 @@ class SocialAuthService {
         }
     }
 
+    /** Занят ли provider_uid кем-либо (MLP-264, AR6-8 — SQL к user_socials только у владельца). */
+    public function isUidBound(string $provider, string $uid): bool {
+        $stmt = $this->db->prepare("SELECT user_id FROM user_socials WHERE provider = ? AND provider_uid = ?");
+        $stmt->bind_param("ss", $provider, $uid);
+        $stmt->execute();
+        return $stmt->get_result()->num_rows > 0;
+    }
+
     private function registerNewUser($provider, $data): int {
         // Генерируем логин
         // Попытка 1: Используем username из соцсети

@@ -213,7 +213,8 @@
 - [x] 🗄️ **MLP-263 / AR6-2:** `Core\FileCache` — три самописных кеша (Episode/User/MenuManager) сведены в один класс; пути файлов 1:1, LOCK_EX везде, анти-traversal ключей. *(23.07.2026)*
 - [ ] 🧬 **AR6-3 (HIGH):** общее ядро чата popup/embedded (~4800 строк JS, 24% дрейф) — **строго ДО UX-пака чата и аплоад-полировки**, чтобы не дублировать правки в два шаблона.
 - [x] 🔧 **MLP-262 / AR6-4 + AR6-9:** `Api\Response` (pure-ядро payload/classify + json/ok/fail/caught) — 133 вызова в 13 контроллерах мигрированы, глобальные функции остались делегатами для легаси api.php; `Auth::userId()/username()/role()` вместо 14 прямых чтений `$_SESSION`. *(23.07.2026)*
-- [ ] 🔪 **AR5-6 + AR6-5 + AR6-8:** срезы api.php — auth/profile/socials и чат (13 кейсов switch); общий хелпер «файл/URL → UploadManager» (3 копии); bind_social через менеджера.
+- [x] 🔪 **MLP-264 / AR5-6 (часть) + AR6-5 + AR6-8:** срез auth/profile/socials — 11 actions в AuthController/ProfileController, api.php 900→409 строк; резолвер «файл/URL» один на троих; bind_social через владельца; фикс тихого сохранения кривого avatar_url; выпилен PII-лог. *(23.07.2026)*
+- [ ] 🔪 **MLP-265 / AR5-6 (остаток):** чат-срез api.php — get_chat_input + 9 кейсов switch (messages/reactions/search/upload) в ChatController.
 - [ ] 🧹 **Мелкий арх-пак:** AR6-6 (StickerManager::setThumb для бэкфилла), AR6-7 (партиал nav.php в SiteMenu), AR6-10 (dashApi()-хелпер в dashboard.js), AR6-11 (контракты llm-bot/core + Env/Thumbnailer), AR6-12 (версионирование ассетов через хелпер, apple-touch-icon 180), выпил Env legacy-fallback.
 - [ ] ☀️ Светлая тема «Селестия» — решить: сюда или дальше.
 
