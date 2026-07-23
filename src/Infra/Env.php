@@ -10,8 +10,7 @@ namespace Infra;
  * снимаются. Ключи: DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_CHARSET,
  * CHAT_DRIVER, CENTRIFUGO_API_URL, CENTRIFUGO_API_KEY, CENTRIFUGO_SECRET.
  *
- * Переходный fallback (убрать в v4.9): если .env отсутствует, а config.php
- * есть — значения берутся из него (миграция прода без окна поломки).
+ * Legacy-fallback на config.php удалён (MLP-266): .env — единственный источник.
  */
 class Env {
     private static ?array $vars = null;
@@ -23,40 +22,14 @@ class Env {
         return self::$vars[$key] ?? $default;
     }
 
-    /** Есть ли конфигурация вообще (.env или legacy config.php). */
+    /** Есть ли конфигурация (.env). */
     public static function available(): bool {
-        $root = dirname(__DIR__, 2);
-        return is_file($root . '/.env') || is_file($root . '/config.php');
+        return is_file(dirname(__DIR__, 2) . '/.env');
     }
 
     private static function load(): array {
-        $root = dirname(__DIR__, 2);
-
-        $envFile = $root . '/.env';
-        if (is_file($envFile)) {
-            return self::parse((string)file_get_contents($envFile));
-        }
-
-        // Legacy fallback: config.php (return-массив) → плоские ключи.
-        $legacy = $root . '/config.php';
-        if (is_file($legacy)) {
-            $cfg = require $legacy;
-            $db = $cfg['db'] ?? [];
-            $chat = $cfg['chat'] ?? [];
-            return [
-                'DB_HOST'             => $db['host'] ?? null,
-                'DB_NAME'             => $db['name'] ?? null,
-                'DB_USER'             => $db['user'] ?? null,
-                'DB_PASS'             => $db['pass'] ?? null,
-                'DB_CHARSET'          => $db['charset'] ?? 'utf8mb4',
-                'CHAT_DRIVER'         => $chat['driver'] ?? 'sse',
-                'CENTRIFUGO_API_URL'  => $chat['centrifugo_api_url'] ?? null,
-                'CENTRIFUGO_API_KEY'  => $chat['centrifugo_api_key'] ?? null,
-                'CENTRIFUGO_SECRET'   => $chat['centrifugo_secret'] ?? null,
-            ];
-        }
-
-        return [];
+        $envFile = dirname(__DIR__, 2) . '/.env';
+        return is_file($envFile) ? self::parse((string)file_get_contents($envFile)) : [];
     }
 
     /** Pure: парсинг содержимого .env в массив (тестируется отдельно). */

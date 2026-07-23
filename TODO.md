@@ -215,7 +215,7 @@
 - [x] 🔧 **MLP-262 / AR6-4 + AR6-9:** `Api\Response` (pure-ядро payload/classify + json/ok/fail/caught) — 133 вызова в 13 контроллерах мигрированы, глобальные функции остались делегатами для легаси api.php; `Auth::userId()/username()/role()` вместо 14 прямых чтений `$_SESSION`. *(23.07.2026)*
 - [x] 🔪 **MLP-264 / AR5-6 (часть) + AR6-5 + AR6-8:** срез auth/profile/socials — 11 actions в AuthController/ProfileController, api.php 900→409 строк; резолвер «файл/URL» один на троих; bind_social через владельца; фикс тихого сохранения кривого avatar_url; выпилен PII-лог. *(23.07.2026)*
 - [x] 🔪 **MLP-265 / AR5-6 (финал):** чат-срез — 10 actions в ChatController, switch ликвидирован, api.php = 101 строка; Response::finish() (промоция fastcgi-паттерна). AR5-6 закрыт целиком. *(23.07.2026)*
-- [ ] 🧹 **Мелкий арх-пак:** AR6-6 (StickerManager::setThumb для бэкфилла), AR6-7 (партиал nav.php в SiteMenu), AR6-10 (dashApi()-хелпер в dashboard.js), AR6-11 (контракты llm-bot/core + Env/Thumbnailer), AR6-12 (версионирование ассетов через хелпер, apple-touch-icon 180), выпил Env legacy-fallback.
+- [x] 🧹 **MLP-266 / арх-пак:** AR6-6 (setThumb), AR6-7 (nav.php-партиал), AR6-11 (контракты догнали), AR6-12 (assetVersion-хелпер, apple-touch-icon 180), Env-fallback выпилен. AR6-10 (dashApi, декомпозиция менеджеров) — по касанию. *(23.07.2026)*
 - [ ] ☀️ Светлая тема «Селестия» — решить: сюда или дальше.
 
 ## ✨ Идеи на будущее (Backlog)

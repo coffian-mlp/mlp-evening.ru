@@ -17,10 +17,12 @@ if (PHP_SAPI !== 'cli') {
 
 require_once __DIR__ . '/../autoload.php';
 
+use Domain\StickerManager;
 use Infra\Database;
 use Infra\Thumbnailer;
 
 $db = Database::getInstance()->getConnection();
+$sm = new StickerManager(); // MLP-266 (AR6-6): запись thumb_url — через владельца
 
 $res = $db->query("SELECT id, image_url FROM chat_stickers WHERE thumb_url IS NULL");
 $total = $res->num_rows;
@@ -32,9 +34,8 @@ echo "Стикеров без превью: $total\n";
 while ($row = $res->fetch_assoc()) {
     $thumb = Thumbnailer::createFor($row['image_url']);
     if ($thumb !== null) {
-        $stmt = $db->prepare("UPDATE chat_stickers SET thumb_url = ? WHERE id = ?");
-        $stmt->bind_param("si", $thumb, $row['id']);
-        $stmt->execute();
+        // MLP-266 (AR6-6): запись — только через владельца таблицы.
+        $sm->setThumb((int)$row['id'], $thumb);
         $done++;
     } else {
         $skipped++; // аним. GIF / маленький / битый / нет GD — оригинал и так ок

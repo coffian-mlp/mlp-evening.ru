@@ -14,7 +14,7 @@ global $app;
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#2b1f43">
     <!-- iOS: standalone-режим и иконка на домашний экран (MLP-261) -->
-    <link rel="apple-touch-icon" href="/assets/img/icon-192.png">
+    <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="MLP Evening">
@@ -31,9 +31,9 @@ global $app;
     <meta property="og:locale" content="ru_RU">
     
     <!-- Fonts: Local Philosopher & Open Sans -->
-    <link rel="stylesheet" href="/assets/css/fonts.css?v=<?= file_exists($_SERVER['DOCUMENT_ROOT'] . '/assets/css/fonts.css') ? filemtime($_SERVER['DOCUMENT_ROOT'] . '/assets/css/fonts.css') : time() ?>">
+    <link rel="stylesheet" href="/assets/css/fonts.css?v=<?= $app->assetVersion('/assets/css/fonts.css') ?>">
 
-    <link rel="stylesheet" href="/assets/css/main.css?v=<?= file_exists($_SERVER['DOCUMENT_ROOT'] . '/assets/css/main.css') ? filemtime($_SERVER['DOCUMENT_ROOT'] . '/assets/css/main.css') : time() ?>">
+    <link rel="stylesheet" href="/assets/css/main.css?v=<?= $app->assetVersion('/assets/css/main.css') ?>">
     
     <!-- Application Assets (Component CSS) -->
     <?php $app->showHead(); ?>

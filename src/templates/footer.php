@@ -17,7 +17,7 @@ global $app;
     </div>
 
     <!-- Конец контента -->
-    <script src="/assets/js/main.js?v=<?= file_exists($_SERVER['DOCUMENT_ROOT'] . '/assets/js/main.js') ? filemtime($_SERVER['DOCUMENT_ROOT'] . '/assets/js/main.js') : time() ?>" charset="utf-8"></script>
+    <script src="/assets/js/main.js?v=<?= $app->assetVersion('/assets/js/main.js') ?>" charset="utf-8"></script>
     
     <!-- Application Assets (Component JS) -->
     <?php $app->showFooterScripts(); ?>

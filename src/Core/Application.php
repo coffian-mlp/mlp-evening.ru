@@ -75,7 +75,7 @@ class Application {
      * time() менял query на каждый запрос → браузерный кеш был фактически выключен.
      * mtime меняется только при изменении файла — кеш работает, но сбрасывается при деплое.
      */
-    private function assetVersion($path) {
+    public function assetVersion($path) { // public с MLP-266 (AR6-12): зовут header/footer.php
         $file = ($_SERVER['DOCUMENT_ROOT'] ?? '') . $path;
         return is_file($file) ? filemtime($file) : time();
     }

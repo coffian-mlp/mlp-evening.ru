@@ -163,6 +163,13 @@ class StickerManager {
         return false;
     }
 
+    /** Проставить превью стикеру (MLP-266, AR6-6) — для бэкфилла и регенераций. */
+    public function setThumb(int $id, ?string $thumbUrl): bool {
+        $stmt = $this->db->prepare("UPDATE chat_stickers SET thumb_url = ? WHERE id = ?");
+        $stmt->bind_param("si", $thumbUrl, $id);
+        return $stmt->execute();
+    }
+
     public function updatePack($id, $code, $name, $iconUrl = null) {
         if ($iconUrl !== null) {
             $stmt = $this->db->prepare("UPDATE sticker_packs SET code = ?, name = ?, icon_url = ? WHERE id = ?");
