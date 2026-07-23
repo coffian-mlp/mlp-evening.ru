@@ -148,6 +148,19 @@ class SettingsController {
         if (isset($_POST['ai_public_base_url'])) {
             $config->setOption('ai_public_base_url', trim($_POST['ai_public_base_url']));
         }
+        // MLP-268: вспомогательная vision-модель
+        if (isset($_POST['ai_main_is_vision'])) {
+            $config->setOption('ai_main_is_vision', (int)$_POST['ai_main_is_vision']);
+        }
+        if (isset($_POST['ai_vision_provider'])) {
+            $vp = $_POST['ai_vision_provider'];
+            if (in_array($vp, ['routerai', 'openrouter', 'openai'], true)) {
+                $config->setOption('ai_vision_provider', $vp);
+            }
+        }
+        if (isset($_POST['ai_vision_model'])) {
+            $config->setOption('ai_vision_model', trim($_POST['ai_vision_model']));
+        }
         if (isset($_POST['ai_reactions'])) {
             $config->setOption('ai_reactions', (int)$_POST['ai_reactions']);
         }

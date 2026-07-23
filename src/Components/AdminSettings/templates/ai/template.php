@@ -195,6 +195,34 @@ $config = $arResult['config']; // Helper
             <input type="text" name="ai_public_base_url" value="<?= htmlspecialchars($config->getOption('ai_public_base_url', 'https://mlp-evening.ru')) ?>" class="form-input" placeholder="https://mlp-evening.ru">
         </div>
 
+        <!-- MLP-268: вспомогательная vision-модель, когда основная картинки не понимает -->
+        <div class="form-group" style="margin-top: 10px;">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="hidden" name="ai_main_is_vision" value="0">
+                <input type="checkbox" name="ai_main_is_vision" value="1" <?= $config->getOption('ai_main_is_vision', 1) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                Основная модель понимает картинки (vision)
+            </label>
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Если выключено — картинки описывает вспомогательная vision-модель (ниже), и Лира получает текстовое описание вместо изображения. Описания кешируются на 7 дней.</p>
+        </div>
+
+        <div style="display: flex; gap: 15px;">
+            <div class="form-group" style="flex: 1;">
+                <label class="form-label">Провайдер vision-помощника</label>
+                <?php $vp = $config->getOption('ai_vision_provider', 'routerai'); ?>
+                <select name="ai_vision_provider" class="form-input">
+                    <option value="routerai" <?= $vp === 'routerai' ? 'selected' : '' ?>>RouterAI</option>
+                    <option value="openrouter" <?= $vp === 'openrouter' ? 'selected' : '' ?>>OpenRouter</option>
+                    <option value="openai" <?= $vp === 'openai' ? 'selected' : '' ?>>OpenAI-совместимый</option>
+                </select>
+                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Ключ берётся из настроек провайдера выше.</p>
+            </div>
+            <div class="form-group" style="flex: 1;">
+                <label class="form-label">Модель vision-помощника</label>
+                <input type="text" name="ai_vision_model" value="<?= htmlspecialchars($config->getOption('ai_vision_model', 'google/gemma-3-27b-it')) ?>" class="form-input" placeholder="google/gemma-3-27b-it">
+                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Быстрая и дешёвая: gemma-3-27b-it, gemini-2.5-flash-lite, glm-4.6v.</p>
+            </div>
+        </div>
+
         <div class="form-group" style="margin-top: 10px;">
             <label style="display: flex; align-items: center; cursor: pointer;">
                 <input type="hidden" name="ai_reactions" value="0">

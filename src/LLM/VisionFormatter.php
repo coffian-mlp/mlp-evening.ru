@@ -29,9 +29,25 @@ class VisionFormatter {
         if (!$c->getOption('ai_send_images', 1)) {
             return $messages;
         }
+        // MLP-268: основная модель не понимает картинки → вместо мультимодального
+        // разворота подставляем текстовые описания от вспомогательной vision-модели.
+        if (!$c->getOption('ai_main_is_vision', 1)) {
+            return VisionDescriber::maybeDescribe($messages);
+        }
         $base = (string)$c->getOption('ai_public_base_url', 'https://mlp-evening.ru');
         $webroot = realpath(__DIR__ . '/../..'); // корень сайта (где лежит /upload)
         return self::expand($messages, $base, $webroot ?: null);
+    }
+
+    /**
+     * Подготовить ОДНУ картинку для отправки модели (MLP-268, зовёт VisionDescriber):
+     * data-URI превью для локальных файлов или абсолютный URL, null — не картинка.
+     */
+    public static function resolveForModel(string $url): ?string {
+        $c = ConfigManager::getInstance();
+        $base = (string)$c->getOption('ai_public_base_url', 'https://mlp-evening.ru');
+        $webroot = realpath(__DIR__ . '/../..');
+        return self::resolveImage($url, rtrim($base, '/'), $webroot ?: null);
     }
 
     /**
@@ -146,6 +162,11 @@ class VisionFormatter {
             return null;
         }
         return 'data:image/jpeg;base64,' . base64_encode($jpeg);
+    }
+
+    /** Pure: похоже ли на URL картинки (по расширению). Используется и VisionDescriber (MLP-268). */
+    public static function isImageUrl(string $url): bool {
+        return self::imageMime($url) !== null;
     }
 
     private static function imageMime(string $url): ?string {
