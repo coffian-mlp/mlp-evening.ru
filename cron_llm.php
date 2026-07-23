@@ -17,6 +17,10 @@ if (php_sapi_name() !== 'cli') { http_response_code(404); exit; }
 
 require_once __DIR__ . '/autoload.php'; // MLP-248
 
+// MLP-274: крон глушит stderr — направляем error_log воркера в файл,
+// иначе сбои генерации/LLM теряются бесследно.
+ini_set('error_log', __DIR__ . '/logs/worker.log');
+
 // Демон живёт дольше деплоя (git pull): прогреваем классы эагерно,
 // чтобы лениво догруженный ПОСЛЕ pull класс не смешал старую и новую версии кода.
 foreach (['Core', 'Infra', 'Domain', 'LLM', 'Social', 'Api'] as $preloadDir) {
