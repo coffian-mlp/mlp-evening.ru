@@ -843,6 +843,18 @@ class LLMManager {
         }
         ImageGenerator::bumpToday();
 
+        // MLP-276: живой комментарий — Лира «смотрит» на свой рисунок (vision)
+        // и комментирует основной LLM с личностью и контекстом. Отключаемо;
+        // при любом сбое — фолбэк на фикс-подписи ниже.
+        if ($config->getOption('ai_image_llm_caption', 1)) {
+            $caption = $this->describeOwnDrawing($url, $subject, $username);
+            if ($caption !== null) {
+                $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(),
+                    $caption . "\n![рисунок](" . $url . ")");
+                return true;
+            }
+        }
+
         $captions = [
             "@%s, вот! Рисовала копытом, так что не суди строго. 🎨\n![рисунок](%s)",
             "@%s, та-дам! Кисть держала во рту, но вроде похоже? 🖌️\n![рисунок](%s)",
@@ -852,6 +864,26 @@ class LLMManager {
         $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(),
             sprintf($captions[array_rand($captions)], $username, $url));
         return true;
+    }
+
+    /** MLP-276: vision смотрит на готовый рисунок → основная LLM комментирует в характере. */
+    private function describeOwnDrawing(string $url, string $subject, string $username): ?string {
+        try {
+            $desc = VisionDescriber::describe($url);
+            if ($desc === null) {
+                return null;
+            }
+            $instr = "Ты только что НАРИСОВАЛА картинку по просьбе @$username: «" . mb_substr($subject, 0, 200) . "». "
+                . "Взглянув на результат, ты видишь: «$desc». "
+                . "Ответь @$username в своём стиле, 1–2 предложения: вручи рисунок, прокомментируй что получилось (можно с самоиронией про рисование копытом). "
+                . "НЕ вставляй ссылки и картинки — рисунок приложится сам. Не пересказывай описание дословно.";
+            $raw = $this->generateReply($this->buildContext($this->contextLimit()), $instr);
+            $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
+            return $text !== '' ? $text : null;
+        } catch (\Throwable $e) {
+            error_log('describeOwnDrawing: ' . get_class($e) . ': ' . $e->getMessage());
+            return null;
+        }
     }
 
     private function getBotUsername() {

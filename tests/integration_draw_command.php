@@ -16,7 +16,7 @@ $optBackup = [];
 
 try {
     $cfg = \Infra\ConfigManager::getInstance();
-    foreach (['ai_enabled' => '1', 'ai_bot_user_id' => '1', 'ai_routerai_key' => 'it-dummy', 'ai_image_daily_limit' => '20'] as $k => $v) {
+    foreach (['ai_enabled' => '1', 'ai_bot_user_id' => '1', 'ai_routerai_key' => 'it-dummy', 'ai_image_daily_limit' => '20', 'ai_image_llm_caption' => '0'] as $k => $v) {
         $optBackup[$k] = $cfg->getOption($k, null);
         $cfg->setOption($k, $v);
     }

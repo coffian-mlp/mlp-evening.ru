@@ -209,6 +209,15 @@ $config = $arResult['config']; // Helper
             </div>
         </div>
 
+        <div class="form-group" style="margin-top: 10px;">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="hidden" name="ai_image_llm_caption" value="0">
+                <input type="checkbox" name="ai_image_llm_caption" value="1" <?= $config->getOption('ai_image_llm_caption', 1) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                Живой комментарий к рисунку (Лира смотрит на результат)
+            </label>
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Vision описывает готовый рисунок, основная LLM комментирует в характере (с контекстом чата). Выключено или сбой — фиксированные подписи.</p>
+        </div>
+
         <div class="form-group">
             <label class="form-label">Стиль-промпт художницы (пусто = встроенный «детский рисунок»)</label>
             <textarea name="ai_image_style_prompt" class="form-input" rows="2" placeholder="A naive child's crayon drawing… Subject:"><?= htmlspecialchars($config->getOption('ai_image_style_prompt', '')) ?></textarea>

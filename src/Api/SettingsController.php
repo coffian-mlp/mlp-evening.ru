@@ -175,6 +175,9 @@ class SettingsController {
         if (isset($_POST['ai_image_style_prompt'])) {
             $config->setOption('ai_image_style_prompt', trim($_POST['ai_image_style_prompt']));
         }
+        if (isset($_POST['ai_image_llm_caption'])) {
+            $config->setOption('ai_image_llm_caption', (int)$_POST['ai_image_llm_caption']);
+        }
         if (isset($_POST['ai_reactions'])) {
             $config->setOption('ai_reactions', (int)$_POST['ai_reactions']);
         }
