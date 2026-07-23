@@ -18,11 +18,14 @@ async function loginInContext(page) {
   });
   const json = await res.json();
   expect(json.success, `login: ${JSON.stringify(json)}`).toBeTruthy();
+  // Залогиненные POST-запросы проходят CSRF-гейт — берём токен сразу.
+  const html = await (await page.request.get(BASE + '/')).text();
+  return html.match(/name="csrf-token"\s+content="([^"]+)"/)?.[1];
 }
 
 test('embedded: чат на главной живёт на ядре — рендер, отправка, удаление (MLP-267)', async ({ page }) => {
   test.skip(!BASE, 'MLP_BASE_URL must be set');
-  await loginInContext(page);
+  const csrf = await loginInContext(page);
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
 
   // Ядро подключено, дублей старых шаблонных скриптов нет.
@@ -41,20 +44,30 @@ test('embedded: чат на главной живёт на ядре — ренд
   const marker = `pw267-ядро-${Date.now()}`;
   await page.fill('#chat-input', marker);
   await page.locator('#chat-form button[type="submit"]').click();
-  await expect(page.locator('.chat-messages').getByText(marker)).toBeVisible({ timeout: 10000 });
-
-  // Уборка: удаляем своё сообщение через API (id из DOM).
-  const msgEl = page.locator('.chat-message', { hasText: marker }).last();
-  const msgId = await msgEl.getAttribute('data-id');
-  if (msgId) {
-    const html = await (await page.request.get(BASE + '/')).text();
-    const csrf = html.match(/name="csrf-token"\s+content="([^"]+)"/)?.[1];
-    const del = await (await page.request.post(BASE + '/api.php', {
-      form: { action: 'delete_message', message_id: msgId, csrf_token: csrf },
+  // Realtime-пуш (Centrifugo) в песочнице флакиен — подтверждаем отправку через
+  // API, затем перезагрузкой проверяем рендер из истории (тот же код ядра).
+  await expect.poll(async () => {
+    const res = await (await page.request.post(BASE + '/api.php', {
+      form: { action: 'get_messages', limit: '10', csrf_token: csrf },
       headers: { 'X-CSRF-Token': csrf },
     })).json();
-    expect(del.success, 'уборка тестового сообщения').toBeTruthy();
-  }
+    return (res.data.messages || []).some(m => (m.message || '').includes(marker));
+  }, { timeout: 10000 }).toBeTruthy();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.chat-messages').getByText(marker)).toBeVisible({ timeout: 10000 });
+
+  // Уборка: id берём из API (надёжнее DOM-атрибутов), удаляем своё сообщение.
+  const hist = await (await page.request.post(BASE + '/api.php', {
+    form: { action: 'get_messages', limit: '10', csrf_token: csrf },
+    headers: { 'X-CSRF-Token': csrf },
+  })).json();
+  const mine = hist.data.messages.find(m => (m.message || '').includes(marker));
+  expect(mine, 'тестовое сообщение найдено для уборки').toBeTruthy();
+  const del = await (await page.request.post(BASE + '/api.php', {
+    form: { action: 'delete_message', message_id: mine.id, csrf_token: csrf },
+    headers: { 'X-CSRF-Token': csrf },
+  })).json();
+  expect(del.success, 'уборка тестового сообщения').toBeTruthy();
 });
 
 test('popup: /chat_popup.php на ядре — десктопный ввод, ghost-инпут, история (MLP-267)', async ({ page }) => {
