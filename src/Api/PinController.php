@@ -15,28 +15,28 @@ class PinController {
 
     public static function pin(): void {
         if (!Auth::isModerator()) {
-            sendResponse(false, "Access Denied", 'error');
+            Response::json(false, "Access Denied", 'error');
         }
         $id = (int)($_POST['message_id'] ?? 0);
         if (!$id) {
-            sendResponse(false, "ID сообщения не указан", 'error');
+            Response::json(false, "ID сообщения не указан", 'error');
         }
         $chat = new ChatManager();
         if (!$chat->pinMessage($id)) {
-            sendResponse(false, "Сообщение не найдено", 'error');
+            Response::json(false, "Сообщение не найдено", 'error');
         }
-        sendResponse(true, "Сообщение закреплено", 'success', ['pinned' => $chat->getPinnedMessage()]);
+        Response::json(true, "Сообщение закреплено", 'success', ['pinned' => $chat->getPinnedMessage()]);
     }
 
     public static function unpin(): void {
         if (!Auth::isModerator()) {
-            sendResponse(false, "Access Denied", 'error');
+            Response::json(false, "Access Denied", 'error');
         }
         (new ChatManager())->unpinMessage();
-        sendResponse(true, "Закрепление снято", 'success');
+        Response::json(true, "Закрепление снято", 'success');
     }
 
     public static function get(): void {
-        sendResponse(true, "OK", 'success', ['pinned' => (new ChatManager())->getPinnedMessage()]);
+        Response::json(true, "OK", 'success', ['pinned' => (new ChatManager())->getPinnedMessage()]);
     }
 }

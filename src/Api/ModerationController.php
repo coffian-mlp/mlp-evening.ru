@@ -2,12 +2,13 @@
 
 namespace Api;
 
+use Domain\Auth;
 use Domain\ChatManager;
 use Domain\UserManager;
 
 /**
  * Обработчики API-действий модерации (MLP-255) — перенос из legacy-switch
- * api.php в тонкий роутер. Ответы — глобальной sendResponse() (api.php).
+ * api.php в тонкий роутер. Ответы — Api\Response (MLP-262);
  * Роль (moderator) проверяет роутер ДО вызова; иерархия ролей — здесь,
  * в checkHierarchy() (переехала из api.php вместе с ветками).
  */
@@ -19,7 +20,7 @@ class ModerationController {
      */
     private static function checkHierarchy(int $targetUserId): bool|string {
         // Self-check
-        if ($targetUserId == $_SESSION['user_id']) {
+        if ($targetUserId == Auth::userId()) {
             return "Нельзя применять санкции к самому себе!";
         }
 
@@ -27,7 +28,7 @@ class ModerationController {
         $target = $um->getUserById($targetUserId);
         if (!$target) return "Пользователь не найден.";
 
-        $actorRole = $_SESSION['role'] ?? 'user';
+        $actorRole = Auth::role();
         $targetRole = $target['role'];
 
         if ($actorRole === 'admin') {
@@ -49,32 +50,32 @@ class ModerationController {
         $targetId = (int)($_POST['user_id'] ?? 0);
         $reason = trim($_POST['reason'] ?? 'Нарушение правил');
 
-        if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
+        if (!$targetId) Response::json(false, "Не указан ID пользователя", 'error');
 
         $check = self::checkHierarchy($targetId);
-        if ($check !== true) sendResponse(false, $check, 'error');
+        if ($check !== true) Response::json(false, $check, 'error');
 
         $userManager = new UserManager();
-        if ($userManager->banUser($targetId, $reason, $_SESSION['user_id'])) {
-            sendResponse(true, "Пользователь забанен! 🔨");
+        if ($userManager->banUser($targetId, $reason, Auth::userId())) {
+            Response::json(true, "Пользователь забанен! 🔨");
         } else {
-            sendResponse(false, "Ошибка при бане пользователя.", 'error');
+            Response::json(false, "Ошибка при бане пользователя.", 'error');
         }
     }
 
     /** Разбанить пользователя (moderator+). */
     public static function unban(): void {
         $targetId = (int)($_POST['user_id'] ?? 0);
-        if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
+        if (!$targetId) Response::json(false, "Не указан ID пользователя", 'error');
 
         $check = self::checkHierarchy($targetId);
-        if ($check !== true) sendResponse(false, $check, 'error');
+        if ($check !== true) Response::json(false, $check, 'error');
 
         $userManager = new UserManager();
-        if ($userManager->unbanUser($targetId, $_SESSION['user_id'])) {
-            sendResponse(true, "Пользователь разбанен! 🕊️");
+        if ($userManager->unbanUser($targetId, Auth::userId())) {
+            Response::json(true, "Пользователь разбанен! 🕊️");
         } else {
-            sendResponse(false, "Ошибка при разбане.", 'error');
+            Response::json(false, "Ошибка при разбане.", 'error');
         }
     }
 
@@ -84,34 +85,34 @@ class ModerationController {
         $minutes = (int)($_POST['minutes'] ?? 15);
         $reason = trim($_POST['reason'] ?? 'Нарушение правил');
 
-        if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
+        if (!$targetId) Response::json(false, "Не указан ID пользователя", 'error');
 
         $check = self::checkHierarchy($targetId);
-        if ($check !== true) sendResponse(false, $check, 'error');
+        if ($check !== true) Response::json(false, $check, 'error');
 
         if ($minutes < 1) $minutes = 15;
 
         $userManager = new UserManager();
-        if ($userManager->muteUser($targetId, $minutes, $_SESSION['user_id'], $reason)) {
-            sendResponse(true, "Пользователь заглушен на $minutes мин. 🤐");
+        if ($userManager->muteUser($targetId, $minutes, Auth::userId(), $reason)) {
+            Response::json(true, "Пользователь заглушен на $minutes мин. 🤐");
         } else {
-            sendResponse(false, "Ошибка при муте.", 'error');
+            Response::json(false, "Ошибка при муте.", 'error');
         }
     }
 
     /** Вернуть голос (moderator+). */
     public static function unmute(): void {
         $targetId = (int)($_POST['user_id'] ?? 0);
-        if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
+        if (!$targetId) Response::json(false, "Не указан ID пользователя", 'error');
 
         $check = self::checkHierarchy($targetId);
-        if ($check !== true) sendResponse(false, $check, 'error');
+        if ($check !== true) Response::json(false, $check, 'error');
 
         $userManager = new UserManager();
-        if ($userManager->unmuteUser($targetId, $_SESSION['user_id'])) {
-            sendResponse(true, "Голос возвращен! 🗣️");
+        if ($userManager->unmuteUser($targetId, Auth::userId())) {
+            Response::json(true, "Голос возвращен! 🗣️");
         } else {
-            sendResponse(false, "Ошибка при снятии мута.", 'error');
+            Response::json(false, "Ошибка при снятии мута.", 'error');
         }
     }
 
@@ -119,10 +120,10 @@ class ModerationController {
     public static function purge(): void {
         $targetId = (int)($_POST['user_id'] ?? 0);
         $count = (int)($_POST['count'] ?? 50);
-        if (!$targetId) sendResponse(false, "Не указан ID пользователя", 'error');
+        if (!$targetId) Response::json(false, "Не указан ID пользователя", 'error');
 
         $check = self::checkHierarchy($targetId);
-        if ($check !== true) sendResponse(false, $check, 'error');
+        if ($check !== true) Response::json(false, $check, 'error');
 
         if ($count > 100) $count = 100;
         if ($count < 1) $count = 1;
@@ -131,8 +132,8 @@ class ModerationController {
         $deletedCount = $chat->purgeMessages($targetId, $count);
 
         $userManager = new UserManager();
-        $userManager->logAction($_SESSION['user_id'], 'purge', $targetId, "Deleted $deletedCount messages");
+        $userManager->logAction(Auth::userId(), 'purge', $targetId, "Deleted $deletedCount messages");
 
-        sendResponse(true, "Удалено $deletedCount сообщений! 🧹");
+        Response::json(true, "Удалено $deletedCount сообщений! 🧹");
     }
 }

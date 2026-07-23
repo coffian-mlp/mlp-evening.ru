@@ -209,10 +209,10 @@
 - [ ] 💬 **UX-пак чата (мелочь одной задачей):** подсветка сообщений-ответов тебе (слабее @-упоминания), обращение кликом по нику из онлайн-тултипа, иконка-треугольник вместо кнопки «Сохранить» при редактировании.
 
 Архитектура (все findings AR6 из ревью 23.07 + переносы; детали в `docs/tasklist/arch-2026-07-23.tasklist.md`):
-- [ ] 🛡️ **AR6-1 (HIGH, security, первым):** утечка `$e->getMessage()` в JSON — новые контроллеры (Sticker×4, UserAdmin×2) + api.php×5; разделить валидационные/системные исключения.
+- [x] 🛡️ **MLP-261 / AR6-1 (HIGH, security):** утечка `$e->getMessage()` в JSON ликвидирована — `Core\UserError` (пользовательские тексты) + `respondCaught()` (системное → error_log); 14 catch-точек, включая найденную на ревью SocialAuthService. *(23.07.2026, прод 23e77de)*
 - [ ] 🗄️ **AR6-2 (HIGH):** `Core\FileCache` — промоция трёх файловых кешей (Episode/User/MenuManager).
 - [ ] 🧬 **AR6-3 (HIGH):** общее ядро чата popup/embedded (~4800 строк JS, 24% дрейф) — **строго ДО UX-пака чата и аплоад-полировки**, чтобы не дублировать правки в два шаблона.
-- [ ] 🔧 **AR6-4 (наследник AR5-2):** `Api\Response::ok()/fail()` вместо глобальной `sendResponse` (134 вызова) + AR6-9 (`$_SESSION` → `Auth::`-аксессоры).
+- [x] 🔧 **MLP-262 / AR6-4 + AR6-9:** `Api\Response` (pure-ядро payload/classify + json/ok/fail/caught) — 133 вызова в 13 контроллерах мигрированы, глобальные функции остались делегатами для легаси api.php; `Auth::userId()/username()/role()` вместо 14 прямых чтений `$_SESSION`. *(23.07.2026)*
 - [ ] 🔪 **AR5-6 + AR6-5 + AR6-8:** срезы api.php — auth/profile/socials и чат (13 кейсов switch); общий хелпер «файл/URL → UploadManager» (3 копии); bind_social через менеджера.
 - [ ] 🧹 **Мелкий арх-пак:** AR6-6 (StickerManager::setThumb для бэкфилла), AR6-7 (партиал nav.php в SiteMenu), AR6-10 (dashApi()-хелпер в dashboard.js), AR6-11 (контракты llm-bot/core + Env/Thumbnailer), AR6-12 (версионирование ассетов через хелпер, apple-touch-icon 180), выпил Env legacy-fallback.
 - [ ] ☀️ Светлая тема «Селестия» — решить: сюда или дальше.

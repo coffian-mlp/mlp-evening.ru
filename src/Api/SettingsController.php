@@ -6,7 +6,7 @@ use Infra\ConfigManager;
 
 /**
  * Обработчики API-действий для глобальных настроек (MLP-255) — перенос из
- * legacy-switch api.php в тонкий роутер. Ответы шлёт глобальной sendResponse()
+ * legacy-switch api.php в тонкий роутер. Ответы — Api\Response (MLP-262);
  * (определена в api.php); роль (admin) проверяет роутер ДО вызова.
  *
  * Контракт сохранён: частичное обновление — каждый ключ пишется только при
@@ -30,7 +30,7 @@ class SettingsController {
                 $config->setOption('stream_url', $url);
                 // Не возвращаем сразу, вдруг еще настройки есть
             } else {
-                sendResponse(false, "❌ Некорректный формат ссылки.", 'error');
+                Response::json(false, "❌ Некорректный формат ссылки.", 'error');
             }
         }
 
@@ -172,6 +172,6 @@ class SettingsController {
             $config->setOption('smtp_from_name', trim($_POST['smtp_from_name']));
         }
 
-        sendResponse(true, "✅ Настройки обновлены!");
+        Response::json(true, "✅ Настройки обновлены!");
     }
 }

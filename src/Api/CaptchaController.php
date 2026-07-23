@@ -6,7 +6,7 @@ use Domain\CaptchaManager;
 
 /**
  * API-обработчики «Испытания Гармонии» (MLP-245) — срез из легаси-цепочки api.php
- * в тонкий роутер. Ответы — глобальной sendResponse() (api.php), роль — роутер.
+ * в тонкий роутер. Ответы — Api\Response (MLP-262);
  */
 class CaptchaController {
 
@@ -14,7 +14,7 @@ class CaptchaController {
     public static function start(): void {
         $captcha = new CaptchaManager();
         $data = $captcha->start();
-        sendResponse(true, "Капча начата", 'success', $data);
+        Response::json(true, "Капча начата", 'success', $data);
     }
 
     /** Проверить ответ шага. */
@@ -24,9 +24,9 @@ class CaptchaController {
         $result = $captcha->checkAnswer($answer);
 
         if ($result['success']) {
-            sendResponse(true, "Верно!", 'success', $result);
+            Response::json(true, "Верно!", 'success', $result);
         } else {
-            sendResponse(false, $result['message'], 'error');
+            Response::json(false, $result['message'], 'error');
         }
     }
 }

@@ -2,18 +2,19 @@
 
 namespace Api;
 
+use Domain\Auth;
 use Domain\OnlineManager;
 
 /**
  * API-обработчики онлайн-присутствия (MLP-245) — срез из легаси-цепочки api.php
- * в тонкий роутер. Ответы — глобальной sendResponse() (api.php), роль — роутер.
+ * в тонкий роутер. Ответы — Api\Response (MLP-262);
  */
 class OnlineController {
 
     /** Heartbeat: отметиться в online_sessions и вернуть статистику. */
     public static function beat(): void {
         $sessionId = session_id();
-        $userId = $_SESSION['user_id'] ?? null;
+        $userId = Auth::userId();
         $ip = $_SERVER['REMOTE_ADDR'] ?? '';
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
 
@@ -28,7 +29,7 @@ class OnlineController {
             $online->cleanup(60);
         }
 
-        sendResponse(true, "Beat", 'success', ['online_stats' => $stats]);
+        Response::json(true, "Beat", 'success', ['online_stats' => $stats]);
     }
 
     /** Выход со страницы (beacon): убрать сессию из online. */

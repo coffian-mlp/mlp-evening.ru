@@ -78,29 +78,14 @@ try {
 
     $action = $_POST['action'] ?? '';
 
+    // MLP-262 (AR6-4): формат и политика ошибок живут в Api\Response.
+    // Глобальные обёртки — для легаси-вызовов switch (уходят со срезами AR5-6).
     function sendResponse($success, $message, $type = 'success', $data = []) {
-        echo json_encode([
-            'success' => $success,
-            'message' => $message,
-            'type' => $type,
-            'data' => $data
-        ]);
-        exit();
+        \Api\Response::json($success, $message, $type, $data);
     }
 
-    /**
-     * Единый ответ на пойманное исключение (MLP-261, AR6-1).
-     * Core\UserError — текст писался для пользователя, отдаём как есть;
-     * всё остальное (включая mysqli_sql_exception) — детали в error_log, наружу общий текст.
-     * Уедет в Api\Response вместе с sendResponse (AR6-4).
-     */
     function respondCaught(Throwable $e, string $prefix = '') {
-        if ($e instanceof \Core\UserError) {
-            sendResponse(false, $prefix . $e->getMessage(), 'error');
-        }
-        $action = $_POST['action'] ?? '?';
-        error_log("api.php [{$action}] " . get_class($e) . ': ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
-        sendResponse(false, $prefix . 'Что-то пошло не так. Попробуй ещё раз позже.', 'error');
+        \Api\Response::caught($e, $prefix);
     }
 
     // checkHierarchy переехала в Api\ModerationController (MLP-255).

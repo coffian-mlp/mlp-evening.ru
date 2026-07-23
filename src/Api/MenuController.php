@@ -5,25 +5,24 @@ namespace Api;
 use Domain\MenuManager;
 
 /**
- * Обработчики API-действий меню сайта (MLP-259). Ответы — глобальной
- * sendResponse() (api.php); роль (admin) и CSRF проверяет роутер ДО вызова.
+ * Обработчики API-действий меню сайта (MLP-259). Ответы — Api\Response (MLP-262); роль (admin) и CSRF проверяет роутер ДО вызова.
  */
 class MenuController {
 
     /** Полное дерево (включая выключенные) для редактора (admin). */
     public static function getItems(): void {
-        sendResponse(true, "Меню получено", 'success', ['items' => (new MenuManager())->getAllTree()]);
+        Response::json(true, "Меню получено", 'success', ['items' => (new MenuManager())->getAllTree()]);
     }
 
     /** Создать (id пуст) или обновить пункт (admin). */
     public static function save(): void {
         $title = trim($_POST['title'] ?? '');
-        if ($title === '') sendResponse(false, "Заголовок обязателен", 'error');
+        if ($title === '') Response::json(false, "Заголовок обязателен", 'error');
 
         // url обязателен для внешних; для внутренних пустой = раскрывашка
         $url = MenuManager::sanitizeUrl($_POST['url'] ?? null);
         if (!empty($_POST['url']) && $url === null) {
-            sendResponse(false, "Некорректный адрес: только локальные пути (/...) или http(s)://", 'error');
+            Response::json(false, "Некорректный адрес: только локальные пути (/...) или http(s)://", 'error');
         }
 
         $ok = (new MenuManager())->save([
@@ -39,31 +38,31 @@ class MenuController {
         ]);
 
         if ($ok) {
-            sendResponse(true, "Пункт сохранён");
+            Response::json(true, "Пункт сохранён");
         }
-        sendResponse(false, "Не сохранилось: проверь родителя (двух уровней достаточно) и заголовок", 'error');
+        Response::json(false, "Не сохранилось: проверь родителя (двух уровней достаточно) и заголовок", 'error');
     }
 
     /** Удалить пункт; его дети поднимаются на корень (admin). */
     public static function delete(): void {
         $id = (int)($_POST['id'] ?? 0);
-        if (!$id) sendResponse(false, "ID не указан", 'error');
+        if (!$id) Response::json(false, "ID не указан", 'error');
 
         if ((new MenuManager())->delete($id)) {
-            sendResponse(true, "Пункт удалён");
+            Response::json(true, "Пункт удалён");
         }
-        sendResponse(false, "Ошибка удаления", 'error');
+        Response::json(false, "Ошибка удаления", 'error');
     }
 
     /** Сдвинуть пункт вверх/вниз в пределах уровня (admin). */
     public static function move(): void {
         $id = (int)($_POST['id'] ?? 0);
         $dir = $_POST['dir'] ?? '';
-        if (!$id || !in_array($dir, ['up', 'down'], true)) sendResponse(false, "Данные неполные", 'error');
+        if (!$id || !in_array($dir, ['up', 'down'], true)) Response::json(false, "Данные неполные", 'error');
 
         if ((new MenuManager())->move($id, $dir)) {
-            sendResponse(true, "Порядок обновлён");
+            Response::json(true, "Порядок обновлён");
         }
-        sendResponse(false, "Ошибка перемещения", 'error');
+        Response::json(false, "Ошибка перемещения", 'error');
     }
 }

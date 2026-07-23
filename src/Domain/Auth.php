@@ -40,6 +40,23 @@ class Auth {
         return isset($_SESSION['user_id']);
     }
 
+    // MLP-262 (AR6-9): аксессоры идентичности — контроллеры не читают $_SESSION напрямую.
+
+    public static function userId(): ?int {
+        self::ensureSession();
+        return isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+    }
+
+    public static function username(): ?string {
+        self::ensureSession();
+        return isset($_SESSION['username']) ? (string)$_SESSION['username'] : null;
+    }
+
+    public static function role(): string {
+        self::ensureSession();
+        return (string)($_SESSION['role'] ?? 'user');
+    }
+
     public static function requireLogin() {
         if (!self::check()) {
             // MLP-256: неавторизованных ведём на страницу входа с возвратом обратно.

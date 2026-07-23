@@ -12,7 +12,7 @@ use Domain\PollManager;
  * API-действия опросов (MLP-238) — второй срез тонкого роутера api.php.
  * Роль (logged-in) проверяет роутер; тонкую проверку «кто может создавать»
  * (конфиг polls_create_role) и «кто может закрыть» — здесь.
- * Ответы через глобальную sendResponse().
+ * Ответы — Api\Response (MLP-262);
  */
 class PollController {
 
@@ -26,7 +26,7 @@ class PollController {
 
     public static function create(): void {
         if (!self::canCreate()) {
-            sendResponse(false, "Недостаточно прав для создания опроса", 'error');
+            Response::json(false, "Недостаточно прав для создания опроса", 'error');
         }
         $question = trim($_POST['question'] ?? '');
         // Варианты: options[] (текст) + опциональный параллельный option_images[] (URL превью).
@@ -41,25 +41,25 @@ class PollController {
         $isMulti     = !empty($_POST['is_multi']);
         $isAnonymous = !empty($_POST['is_anonymous']);
 
-        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $userId = (int)(Auth::userId() ?? 0);
         $pm = new PollManager();
         $pollId = $pm->create($userId, $question, $options, $isMulti, $isAnonymous);
         if (!$pollId) {
-            sendResponse(false, "Нужен вопрос и хотя бы 2 варианта", 'error');
+            Response::json(false, "Нужен вопрос и хотя бы 2 варианта", 'error');
         }
 
         // Опрос появляется в ленте как сообщение-карточка (маркер рендерит фронт, MLP-239).
         // addMessage сам делает realtime-broadcast — отдельная рассылка не нужна.
         try {
             $chat = new ChatManager();
-            $username = $_SESSION['username'] ?? 'user';
+            $username = Auth::username() ?? 'user';
             $messageId = $chat->addMessage($userId, $username, '[[poll:' . $pollId . ']]');
             if ($messageId) $pm->attachMessage($pollId, (int)$messageId);
         } catch (\Throwable $e) {
             error_log('PollController::create addMessage ' . $e->getMessage());
         }
 
-        sendResponse(true, "Опрос создан!", 'success', [
+        Response::json(true, "Опрос создан!", 'success', [
             'poll'    => $pm->getPoll($pollId),
             'results' => $pm->getResults($pollId),
         ]);
@@ -71,18 +71,18 @@ class PollController {
         if (!is_array($optionIds)) {
             $optionIds = ($optionIds === '' || $optionIds === null) ? [] : [$optionIds];
         }
-        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $userId = (int)(Auth::userId() ?? 0);
 
         $pm = new PollManager();
         if (!$pm->vote($pollId, $userId, $optionIds)) {
-            sendResponse(false, "Не удалось проголосовать (опрос закрыт или неверный вариант)", 'error');
+            Response::json(false, "Не удалось проголосовать (опрос закрыт или неверный вариант)", 'error');
         }
         // Realtime-broadcast делает PollManager::vote() — единый путь для API и бота.
         $poll    = $pm->getPoll($pollId);
         $results = $pm->getResults($pollId);
         $voters  = empty($poll['is_anonymous']) ? $pm->getVotersByOption($pollId) : null;
 
-        sendResponse(true, "Голос учтён", 'success', [
+        Response::json(true, "Голос учтён", 'success', [
             'results'  => $results,
             'my_votes' => $pm->getUserVotes($pollId, $userId),
             'voters'   => $voters,
@@ -94,14 +94,14 @@ class PollController {
         $pm = new PollManager();
         $poll = $pm->getPoll($pollId);
         if (!$poll) {
-            sendResponse(false, "Опрос не найден", 'error');
+            Response::json(false, "Опрос не найден", 'error');
         }
         // Закрыть может автор или модератор/админ.
-        if ((int)$poll['created_by'] !== (int)($_SESSION['user_id'] ?? 0) && !Auth::isModerator()) {
-            sendResponse(false, "Access Denied", 'error');
+        if ((int)$poll['created_by'] !== (int)(Auth::userId() ?? 0) && !Auth::isModerator()) {
+            Response::json(false, "Access Denied", 'error');
         }
         $pm->close($pollId); // realtime poll_closed шлёт PollManager::close()
-        sendResponse(true, "Опрос закрыт", 'success', ['results' => $pm->getResults($pollId)]);
+        Response::json(true, "Опрос закрыт", 'success', ['results' => $pm->getResults($pollId)]);
     }
 
     public static function get(): void {
@@ -109,15 +109,15 @@ class PollController {
         $pm = new PollManager();
         $poll = $pm->getPoll($pollId);
         if (!$poll) {
-            sendResponse(false, "Опрос не найден", 'error');
+            Response::json(false, "Опрос не найден", 'error');
         }
         $data = ['poll' => $poll, 'results' => $pm->getResults($pollId)];
         if (empty($poll['is_anonymous'])) {
             $data['voters'] = $pm->getVotersByOption($pollId);
         }
         if (Auth::check()) {
-            $data['my_votes'] = $pm->getUserVotes($pollId, (int)$_SESSION['user_id']);
+            $data['my_votes'] = $pm->getUserVotes($pollId, (int)Auth::userId());
         }
-        sendResponse(true, "OK", 'success', $data);
+        Response::json(true, "OK", 'success', $data);
     }
 }

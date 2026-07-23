@@ -9,7 +9,7 @@ use Domain\EpisodeManager;
 /**
  * Обработчики API-действий для событий (MLP-229) — первый срез, вынесенный из
  * гигантского switch в api.php через тонкий роутер (action → роль → менеджер).
- * Ответы шлёт глобальной sendResponse() (определена в api.php), как и остальной API.
+ * Ответы — Api\Response (MLP-262);
  * Проверку роли делает роутер ДО вызова этих методов.
  */
 class EventController {
@@ -18,7 +18,7 @@ class EventController {
     public static function getPublic(): void {
         $events   = (new EventManager())->getPublic();
         $playlist = (new EpisodeManager())->getSavedPlaylist();
-        sendResponse(true, "События загружены", 'success', ['events' => $events, 'playlist' => $playlist]);
+        Response::json(true, "События загружены", 'success', ['events' => $events, 'playlist' => $playlist]);
     }
 
     /** Создать/обновить событие (admin). */
@@ -28,7 +28,7 @@ class EventController {
         $start = trim($_POST['start_time_utc'] ?? '');
 
         if ($title === '' || $start === '') {
-            sendResponse(false, "Заголовок и время начала обязательны", 'error');
+            Response::json(false, "Заголовок и время начала обязательны", 'error');
         }
 
         $duration = (int)($_POST['duration_minutes'] ?? 60);
@@ -51,25 +51,25 @@ class EventController {
         // Только одно регулярное событие может работать с плейлистом.
         if ($data['is_recurring'] && ($data['use_playlist'] || $data['generate_new_playlist'])) {
             if ($events->hasOtherPlaylistRecurring($id)) {
-                sendResponse(false, "Уже есть другое регулярное событие, работающее с плейлистами!", 'error');
+                Response::json(false, "Уже есть другое регулярное событие, работающее с плейлистами!", 'error');
             }
         }
 
         if ($id > 0) {
             $ok = $events->update($id, $data);
-            sendResponse($ok, $ok ? "Событие обновлено!" : "Ошибка обновления события", $ok ? 'success' : 'error');
+            Response::json($ok, $ok ? "Событие обновлено!" : "Ошибка обновления события", $ok ? 'success' : 'error');
         } else {
             $ok = $events->create($data);
-            sendResponse($ok, $ok ? "Событие добавлено!" : "Ошибка создания события", $ok ? 'success' : 'error');
+            Response::json($ok, $ok ? "Событие добавлено!" : "Ошибка создания события", $ok ? 'success' : 'error');
         }
     }
 
     /** Удалить событие (admin). */
     public static function delete(): void {
         $id = (int)($_POST['id'] ?? 0);
-        if (!$id) sendResponse(false, "ID не указан", 'error');
+        if (!$id) Response::json(false, "ID не указан", 'error');
 
         $ok = (new EventManager())->delete($id);
-        sendResponse($ok, $ok ? "Событие удалено!" : "Ошибка удаления события", $ok ? 'success' : 'error');
+        Response::json($ok, $ok ? "Событие удалено!" : "Ошибка удаления события", $ok ? 'success' : 'error');
     }
 }

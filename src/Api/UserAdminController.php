@@ -8,8 +8,7 @@ use Infra\UploadManager;
 
 /**
  * Обработчики API-действий администрирования пользователей (MLP-255) —
- * перенос из legacy-switch api.php в тонкий роутер. Ответы — глобальной
- * sendResponse() (api.php); роль (admin) проверяет роутер ДО вызова.
+ * перенос из legacy-switch api.php в тонкий роутер. Ответы — Api\Response (MLP-262); роль (admin) проверяет роутер ДО вызова.
  */
 class UserAdminController {
 
@@ -17,18 +16,18 @@ class UserAdminController {
     public static function getUsers(): void {
         $userManager = new UserManager();
         $users = $userManager->getAllUsers(); // с chat_color и avatar_url из user_options
-        sendResponse(true, "Список получен", 'success', ['users' => $users]);
+        Response::json(true, "Список получен", 'success', ['users' => $users]);
     }
 
     /** Опции произвольного пользователя (admin). */
     public static function getUserOptions(): void {
         $targetUserId = (int)($_POST['user_id'] ?? 0);
-        if (!$targetUserId) sendResponse(false, "ID не указан", 'error');
+        if (!$targetUserId) Response::json(false, "ID не указан", 'error');
 
         $userManager = new UserManager();
         $options = $userManager->getUserOptions($targetUserId);
 
-        sendResponse(true, "Опции получены", 'success', ['options' => $options]);
+        Response::json(true, "Опции получены", 'success', ['options' => $options]);
     }
 
     /** Журнал действий модераторов (admin). */
@@ -43,7 +42,7 @@ class UserAdminController {
             }
         }
 
-        sendResponse(true, "Логи получены", 'success', ['logs' => $logs]);
+        Response::json(true, "Логи получены", 'success', ['logs' => $logs]);
     }
 
     /** Создать/обновить пользователя из карточки дашборда (admin). */
@@ -57,7 +56,7 @@ class UserAdminController {
         // MLP-258: email из карточки ('' = снять email; уникальность проверяет updateUser)
         $email = isset($_POST['email']) ? trim($_POST['email']) : null;
         if ($email !== null && $email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            sendResponse(false, "Некорректный формат Email", 'error');
+            Response::json(false, "Некорректный формат Email", 'error');
         }
 
         // New fields & Uploads
@@ -78,10 +77,10 @@ class UserAdminController {
                 $avatar_url = $uploadManager->uploadFromUrl($raw_avatar_url);
             }
         } catch (\Throwable $e) {
-            respondCaught($e, "Аватар: ");
+            Response::caught($e, "Аватар: ");
         }
 
-        if (empty($login)) sendResponse(false, "Логин обязателен", 'error');
+        if (empty($login)) Response::json(false, "Логин обязателен", 'error');
         if (empty($nickname)) $nickname = $login;
 
         try {
@@ -101,17 +100,17 @@ class UserAdminController {
             if (!empty($id)) {
                 // Update
                 if (!empty($password)) {
-                    if ($pwErr = Auth::validatePasswordPolicy($password)) sendResponse(false, $pwErr, 'error');
+                    if ($pwErr = Auth::validatePasswordPolicy($password)) Response::json(false, $pwErr, 'error');
                     $data['password'] = $password;
                 }
 
                 // UserManager::updateUser сам раскладывает поля users/user_options
                 $userManager->updateUser($id, $data);
-                sendResponse(true, "Пользователь обновлен");
+                Response::json(true, "Пользователь обновлен");
             } else {
                 // Create
-                if (empty($password)) sendResponse(false, "Для нового пользователя нужен пароль", 'error');
-                if ($pwErr = Auth::validatePasswordPolicy($password)) sendResponse(false, $pwErr, 'error');
+                if (empty($password)) Response::json(false, "Для нового пользователя нужен пароль", 'error');
+                if ($pwErr = Auth::validatePasswordPolicy($password)) Response::json(false, $pwErr, 'error');
 
                 // MLP-258 (ревью): email из карточки участвует и в создании
                 $newId = $userManager->createUser($login, $password, $role, $nickname, $email ?? '');
@@ -124,50 +123,50 @@ class UserAdminController {
                     'font_scale' => $font_scale
                 ]);
 
-                sendResponse(true, "Пользователь создан");
+                Response::json(true, "Пользователь создан");
             }
         } catch (\Throwable $e) {
-            respondCaught($e);
+            Response::caught($e);
         }
     }
 
     /** Соц-привязки произвольного пользователя (admin, MLP-258). */
     public static function getUserSocials(): void {
         $targetUserId = (int)($_POST['user_id'] ?? 0);
-        if (!$targetUserId) sendResponse(false, "ID не указан", 'error');
+        if (!$targetUserId) Response::json(false, "ID не указан", 'error');
 
         $socials = (new UserManager())->getUserSocials($targetUserId);
-        sendResponse(true, "Соцсети получены", 'success', ['socials' => $socials]);
+        Response::json(true, "Соцсети получены", 'success', ['socials' => $socials]);
     }
 
     /** Отвязать соцсеть у произвольного пользователя (admin, MLP-258). */
     public static function unlinkSocial(): void {
         $targetUserId = (int)($_POST['user_id'] ?? 0);
         $provider = trim($_POST['provider'] ?? '');
-        if (!$targetUserId || $provider === '') sendResponse(false, "Данные неполные", 'error');
+        if (!$targetUserId || $provider === '') Response::json(false, "Данные неполные", 'error');
 
         if ((new UserManager())->unlinkSocial($targetUserId, $provider)) {
-            sendResponse(true, "Аккаунт отвязан");
+            Response::json(true, "Аккаунт отвязан");
         } else {
-            sendResponse(false, "Привязка не найдена", 'error');
+            Response::json(false, "Привязка не найдена", 'error');
         }
     }
 
     /** Удалить пользователя (admin). Самоудаление запрещено. */
     public static function delete(): void {
         $id = $_POST['user_id'] ?? '';
-        if (empty($id)) sendResponse(false, "ID не указан", 'error');
+        if (empty($id)) Response::json(false, "ID не указан", 'error');
 
         // Не даем удалить самого себя
-        if ($id == $_SESSION['user_id']) {
-            sendResponse(false, "Нельзя удалить самого себя!", 'error');
+        if ($id == Auth::userId()) {
+            Response::json(false, "Нельзя удалить самого себя!", 'error');
         }
 
         $userManager = new UserManager();
         if ($userManager->deleteUser($id)) {
-            sendResponse(true, "Пользователь удален");
+            Response::json(true, "Пользователь удален");
         } else {
-            sendResponse(false, "Ошибка удаления", 'error');
+            Response::json(false, "Ошибка удаления", 'error');
         }
     }
 }
