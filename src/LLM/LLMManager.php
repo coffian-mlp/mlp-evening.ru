@@ -346,6 +346,14 @@ class LLMManager {
     private function createPollFromCommand($command, $contextData): bool {
         $message = (string)($contextData['message'] ?? '');
 
+        // MLP-271 (AR5-4): «закрой(ся) через N минут/часов» — срок жизни опроса.
+        // Извлекаем из сырого сообщения ДО разбора вопроса/вариантов.
+        $closeSpec = self::parseCloseSpec($message);
+        $message = $closeSpec['text'];
+        $closesAt = $closeSpec['minutes'] !== null
+            ? gmdate('Y-m-d H:i:s', time() + min($closeSpec['minutes'], 10080) * 60)
+            : null;
+
         // ОСНОВНОЙ режим: пользователь задал опрос явно —
         // «/опрос Кто лучшая пони? Варианты: я, Лира, Твайлайт, ...».
         $spec = self::parseUserPollSpec($message);
@@ -364,7 +372,7 @@ class LLMManager {
         }
 
         $pm = new PollManager();
-        $pollId = $pm->create($this->botUserId, $question, $options, false, false);
+        $pollId = $pm->create($this->botUserId, $question, $options, false, false, $closesAt);
         if (!$pollId) return false;
 
         $msgId = $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(), '[[poll:' . $pollId . ']]');
@@ -377,6 +385,27 @@ class LLMManager {
      * Формат: «[/опрос] Вопрос? Варианты: a, b, c» (разделитель «варианты[:/-]»,
      * варианты — через запятую/перенос строки/;). Возвращает null, если явной заявки нет.
      */
+    /**
+     * Pure (MLP-271, AR5-4): вытащить из текста «закрой(ся)/закрыть через N минут|часов|дней»
+     * → минуты + текст без этой фразы. Тест: tests/test_poll_close_spec.php.
+     */
+    public static function parseCloseSpec(string $message): array {
+        $minutes = null;
+        $re = '/[,;.]?\s*закр(?:ой(?:ся)?|ыть)\s+через\s+(\d{1,5})\s*(мин(?:ут[уы]?)?|м\b|час(?:а|ов)?|ч\b|дн(?:я|ей)?|день|д\b)\.?/iu';
+        $text = preg_replace_callback($re, function ($m) use (&$minutes) {
+            $n = (int)$m[1];
+            $unit = mb_strtolower($m[2]);
+            if (str_starts_with($unit, 'ч')) {
+                $n *= 60;
+            } elseif (str_starts_with($unit, 'д')) {
+                $n *= 1440;
+            }
+            $minutes = max(1, $n);
+            return '';
+        }, $message, 1);
+        return ['minutes' => $minutes, 'text' => trim($text ?? $message)];
+    }
+
     public static function parseUserPollSpec(string $message): ?array {
         // Срезаем ведущую команду (/опрос, /poll — со слэшем или без).
         $s = preg_replace('/^\s*\/?(?:опрос|poll)\b\s*/iu', '', trim($message));

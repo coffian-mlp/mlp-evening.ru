@@ -204,6 +204,10 @@
                     '<button type="button" class="pc-add-option">+ добавить вариант</button>' +
                     '<label class="pc-flag"><input type="checkbox" class="pc-multi"> Несколько вариантов</label>' +
                     '<label class="pc-flag"><input type="checkbox" class="pc-anon"> Анонимный</label>' +
+                    '<label class="pc-flag">Автозакрытие: <select class="pc-closes">' +
+                    '<option value="0">выкл</option><option value="10">10 мин</option><option value="30">30 мин</option>' +
+                    '<option value="60">1 час</option><option value="180">3 часа</option><option value="1440">сутки</option>' +
+                    '</select></label>' +
                     '<div class="pc-actions">' +
                         '<button type="button" class="pc-submit">Создать опрос</button>' +
                     '</div>' +
@@ -280,7 +284,8 @@
                 'options': options,
                 'option_images': images,
                 is_multi: $modal.find('.pc-multi').is(':checked') ? 1 : 0,
-                is_anonymous: $modal.find('.pc-anon').is(':checked') ? 1 : 0
+                is_anonymous: $modal.find('.pc-anon').is(':checked') ? 1 : 0,
+                closes_minutes: parseInt($modal.find('.pc-closes').val(), 10) || 0
             }).done(function (res) {
                 if (res && res.success) { close(); } // опрос прилетит в чат сообщением-карточкой (realtime)
                 else { alert((res && res.message) || 'Ошибка создания'); $btn.prop('disabled', false).text('Создать опрос'); }

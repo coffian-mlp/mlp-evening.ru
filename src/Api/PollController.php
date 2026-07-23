@@ -41,9 +41,16 @@ class PollController {
         $isMulti     = !empty($_POST['is_multi']);
         $isAnonymous = !empty($_POST['is_anonymous']);
 
+        // MLP-271 (AR5-4): автозакрытие — минуты от «сейчас» (0/пусто = бессрочно, потолок неделя).
+        $closesAt = null;
+        $closesMin = (int)($_POST['closes_minutes'] ?? 0);
+        if ($closesMin > 0) {
+            $closesAt = gmdate('Y-m-d H:i:s', time() + min($closesMin, 10080) * 60);
+        }
+
         $userId = (int)(Auth::userId() ?? 0);
         $pm = new PollManager();
-        $pollId = $pm->create($userId, $question, $options, $isMulti, $isAnonymous);
+        $pollId = $pm->create($userId, $question, $options, $isMulti, $isAnonymous, $closesAt);
         if (!$pollId) {
             Response::json(false, "Нужен вопрос и хотя бы 2 варианта", 'error');
         }
