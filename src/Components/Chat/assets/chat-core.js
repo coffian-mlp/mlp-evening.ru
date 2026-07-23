@@ -2346,6 +2346,17 @@ $(document).ready(function() {
             data: formData,
             processData: false,
             contentType: false,
+            // MLP-272: живой прогресс загрузки (важно на мобильной сети с большими файлами)
+            xhr: function() {
+                const xhr = new window.XMLHttpRequest();
+                xhr.upload.addEventListener('progress', function(evt) {
+                    if (!evt.lengthComputable) return;
+                    const pct = Math.round(evt.loaded / evt.total * 100);
+                    if (activeInput) activeInput.placeholder = 'Загрузка ' + pct + '%…';
+                    if (uploadBtn) uploadBtn.textContent = pct < 100 ? pct + '%' : '⏳';
+                });
+                return xhr;
+            },
             success: function(res) {
                 if (res.success) {
                     const name = res.data.name;
