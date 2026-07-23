@@ -73,6 +73,7 @@ class ImageGenerator {
         }
         $bytes = base64_decode($b64);
         if ($bytes === false || $bytes === '') {
+            error_log("ImageGenerator [$model]: b64_json не декодировался");
             return null;
         }
         return self::saveJpeg($bytes);
@@ -102,6 +103,8 @@ class ImageGenerator {
         }
         $name = ($nameHint ?: uniqid('lyra_')) . '_' . bin2hex(random_bytes(4)) . '.jpg';
         if (!imagejpeg($dst, $dir . $name, self::JPEG_QUALITY)) {
+            // Классика: каталог создан root-ом по ssh, воркер (bitrix) писать не может.
+            error_log('ImageGenerator: не записать ' . $dir . $name . ' (права? владелец каталога?)');
             return null;
         }
         return self::UPLOAD_DIR . $name;
