@@ -667,12 +667,31 @@ class LLMManager {
         // Схлопываем подряд идущие маркеры удаления и строим итоговый контекст.
         $context = [];
         $run = [];
-        $flushRun = function () use (&$run, &$context) {
+        $plural = static fn(int $n) => ($n % 10 === 1 && $n % 100 !== 11) ? 'сообщение'
+            : (($n % 10 >= 2 && $n % 10 <= 4 && ($n % 100 < 12 || $n % 100 > 14)) ? 'сообщения' : 'сообщений');
+        $flushRun = function () use (&$run, &$context, $plural) {
             if (!$run) return;
             $n = count($run);
-            $content = ($n === 1)
-                ? "[{$run[0]['time']}] (сообщение {$run[0]['username']} удалено)"
-                : "[{$run[0]['time']}–{$run[$n - 1]['time']}] (удалено $n сообщений)";
+            if ($n === 1) {
+                $content = "[{$run[0]['time']}] (сообщение {$run[0]['username']} удалено)";
+            } else {
+                // Разбивка по авторам (по убыванию) — масштаб драмы виден поимённо.
+                $byUser = [];
+                foreach ($run as $r) {
+                    $byUser[$r['username']] = ($byUser[$r['username']] ?? 0) + 1;
+                }
+                arsort($byUser);
+                if (count($byUser) === 1) {
+                    $who = ' ' . array_key_first($byUser);
+                } else {
+                    $parts = [];
+                    foreach ($byUser as $u => $cnt) {
+                        $parts[] = "$cnt — $u";
+                    }
+                    $who = ': ' . implode(', ', $parts);
+                }
+                $content = "[{$run[0]['time']}–{$run[$n - 1]['time']}] (удалено $n {$plural($n)}$who)";
+            }
             $context[] = ['role' => 'user', 'content' => $content];
             $run = [];
         };

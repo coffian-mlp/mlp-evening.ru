@@ -19,7 +19,7 @@ $ids = [];
 $ids[] = (int)$cm->addMessage(1, 'ИтПони', "живое-1 $marker");
 $ids[] = $d1 = (int)$cm->addMessage(1, 'ИтПони', "секрет-1 $marker");
 $ids[] = $d2 = (int)$cm->addMessage(1, 'ИтПони', "секрет-2 $marker");
-$ids[] = $d3 = (int)$cm->addMessage(1, 'ИтПони', "секрет-3 $marker");
+$ids[] = $d3 = (int)$cm->addMessage(999888, 'ЧужаяПони', "секрет-3 $marker");
 $ids[] = (int)$cm->addMessage(1, 'ИтПони', "живое-2 $marker");
 $ids[] = $d4 = (int)$cm->addMessage(1, 'ИтПони', "секрет-4 $marker");
 foreach ([$d1, $d2, $d3, $d4] as $id) {
@@ -34,7 +34,7 @@ try {
     $all = implode("\n", array_map(fn($c) => is_string($c['content']) ? $c['content'] : '', $ctx));
     check(str_contains($all, "живое-1 $marker") && str_contains($all, "живое-2 $marker"), 'живые сообщения в контексте');
     check(!str_contains($all, 'секрет-'), 'содержимое удалённых НЕ раскрывается');
-    check(str_contains($all, '(удалено 3 сообщений)'), 'серия из 3 удалённых схлопнута в один маркер');
+    check((bool)preg_match('/\(удалено 3 сообщения: 2 — [^,]+, 1 — ЧужаяПони\)/u', $all), 'серия схлопнута с разбивкой по авторам (по убыванию): ' . $all);
     check((bool)preg_match('/\(сообщение [^)]+ удалено\)/u', $all), 'одиночное удаление — именной маркер (имя из users-джойна)');
     check(!str_contains($all, 'Сообщение удалено</em>'), 'HTML-плейсхолдер не просочился');
 
