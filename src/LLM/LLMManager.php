@@ -823,7 +823,11 @@ class LLMManager {
             return true;
         }
 
-        $stylePrefix = trim((string)($command['system_prompt'] ?? ''));
+        // MLP-275: стиль-промпт — из настроек дашборда; фоллбеки: system_prompt команды → дефолт.
+        $stylePrefix = trim((string)$config->getOption('ai_image_style_prompt', ''));
+        if ($stylePrefix === '') {
+            $stylePrefix = trim((string)($command['system_prompt'] ?? ''));
+        }
         if ($stylePrefix === '') {
             $stylePrefix = "A naive child's crayon drawing, wobbly uneven lines, smudges, drawn clumsily as if a pony held the crayon in her mouth, simple flat colors, paper texture, charming and silly. Subject:";
         }

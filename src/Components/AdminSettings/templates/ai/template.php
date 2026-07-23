@@ -200,13 +200,19 @@ $config = $arResult['config']; // Helper
             <div class="form-group" style="flex: 2;">
                 <label class="form-label">Модель генерации картинок (/нарисуй, RouterAI)</label>
                 <input type="text" name="ai_image_model" value="<?= htmlspecialchars($config->getOption('ai_image_model', 'black-forest-labs/flux.2-klein-4b')) ?>" class="form-input" placeholder="black-forest-labs/flux.2-klein-4b">
-                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Стиль-промпт — в system_prompt команды /нарисуй (вкладка «Бот» → Команды).</p>
+                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Стиль — в поле ниже.</p>
             </div>
             <div class="form-group" style="flex: 1;">
                 <label class="form-label">Лимит рисунков в день</label>
                 <input type="number" name="ai_image_daily_limit" value="<?= (int)$config->getOption('ai_image_daily_limit', 20) ?>" class="form-input" min="0">
                 <p style="font-size: 0.8em; color: #666; margin-top: 3px;">0 = без лимита (не советую — тролли).</p>
             </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Стиль-промпт художницы (пусто = встроенный «детский рисунок»)</label>
+            <textarea name="ai_image_style_prompt" class="form-input" rows="2" placeholder="A naive child's crayon drawing… Subject:"><?= htmlspecialchars($config->getOption('ai_image_style_prompt', '')) ?></textarea>
+            <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Приставка к сюжету пользователя. Заканчивай словом «Subject:» — дальше подставится запрос.</p>
         </div>
 
         <!-- MLP-268: вспомогательная vision-модель, когда основная картинки не понимает -->
@@ -235,6 +241,12 @@ $config = $arResult['config']; // Helper
                 <input type="text" name="ai_vision_model" value="<?= htmlspecialchars($config->getOption('ai_vision_model', 'google/gemma-3-27b-it')) ?>" class="form-input" placeholder="google/gemma-3-27b-it">
                 <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Быстрая и дешёвая: gemma-3-27b-it, gemini-2.5-flash-lite, glm-4.6v.</p>
             </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Промпт vision-помощника (пусто = встроенный)</label>
+            <textarea name="ai_vision_prompt" class="form-input" rows="2" placeholder="Опиши изображение подробно и по делу…"><?= htmlspecialchars($config->getOption('ai_vision_prompt', '')) ?></textarea>
+            <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Простой, без характера Лиры — это техническое описание, не реплика.</p>
         </div>
 
         <div class="form-group" style="margin-top: 10px;">

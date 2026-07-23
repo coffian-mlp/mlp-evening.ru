@@ -168,6 +168,13 @@ class SettingsController {
         if (isset($_POST['ai_image_daily_limit'])) {
             $config->setOption('ai_image_daily_limit', max(0, (int)$_POST['ai_image_daily_limit']));
         }
+        // MLP-275: промпты vision-помощника и художницы — из настроек
+        if (isset($_POST['ai_vision_prompt'])) {
+            $config->setOption('ai_vision_prompt', trim($_POST['ai_vision_prompt']));
+        }
+        if (isset($_POST['ai_image_style_prompt'])) {
+            $config->setOption('ai_image_style_prompt', trim($_POST['ai_image_style_prompt']));
+        }
         if (isset($_POST['ai_reactions'])) {
             $config->setOption('ai_reactions', (int)$_POST['ai_reactions']);
         }

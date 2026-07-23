@@ -105,6 +105,8 @@ class VisionDescriber {
         $c = ConfigManager::getInstance();
         $providerKey = (string)$c->getOption('ai_vision_provider', 'routerai');
         $modelName = (string)$c->getOption('ai_vision_model', 'google/gemma-3-27b-it');
+        // MLP-275: промпт помощника настраивается из дашборда (пустой = дефолт).
+        $prompt = trim((string)$c->getOption('ai_vision_prompt', '')) ?: self::PROMPT;
 
         // socks5-прокси поддерживаем; vless — нет (помощник по умолчанию на RouterAI, ему прокси не нужен).
         $proxy = (string)$c->getOption('ai_proxy_url', '');
@@ -132,6 +134,6 @@ class VisionDescriber {
             ],
         ]];
 
-        return $provider->askChat($messages, self::PROMPT);
+        return $provider->askChat($messages, $prompt);
     }
 }
