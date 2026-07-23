@@ -2,9 +2,8 @@
 
 namespace Infra;
 
+use Core\UserError;
 use finfo;
-
-use Exception;
 
 class UploadManager {
     private $uploadDir;
@@ -88,24 +87,24 @@ class UploadManager {
      */
     public function uploadFromPost($file) {
         if (!isset($file['error']) || is_array($file['error'])) {
-            throw new Exception("Некорректные параметры файла.");
+            throw new UserError("Некорректные параметры файла.");
         }
 
         switch ($file['error']) {
             case UPLOAD_ERR_OK:
                 break;
             case UPLOAD_ERR_NO_FILE:
-                throw new Exception("Файл не был отправлен.");
+                throw new UserError("Файл не был отправлен.");
             case UPLOAD_ERR_INI_SIZE:
             case UPLOAD_ERR_FORM_SIZE:
-                throw new Exception("Файл слишком большой.");
+                throw new UserError("Файл слишком большой.");
             default:
-                throw new Exception("Неизвестная ошибка загрузки (Code: {$file['error']}).");
+                throw new UserError("Неизвестная ошибка загрузки (Code: {$file['error']}).");
         }
 
         if ($file['size'] > $this->maxSize) {
             $mb = $this->maxSize / 1024 / 1024;
-            throw new Exception("Файл слишком большой (макс. $mb МБ).");
+            throw new UserError("Файл слишком большой (макс. $mb МБ).");
         }
 
         $finfo = new finfo(FILEINFO_MIME_TYPE);
@@ -119,7 +118,7 @@ class UploadManager {
             // Fallback: check extension if mime is generic octet-stream (sometimes happens with rare files)
             // But better to trust mime.
             // Let's try to map some common issues if needed.
-            throw new Exception("Недопустимый формат файла ($mime).");
+            throw new UserError("Недопустимый формат файла ($mime).");
         }
 
         $ext = $this->allowedTypes[$mime];
@@ -133,7 +132,7 @@ class UploadManager {
         $targetPath = $this->uploadDir . $filename;
 
         if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
-            throw new Exception("Не удалось сохранить файл на сервере.");
+            throw new UserError("Не удалось сохранить файл на сервере.");
         }
 
         // Return relative path
@@ -151,7 +150,7 @@ class UploadManager {
     public function uploadFromUrl($url) {
         // Базовая валидация URL
         if (!filter_var($url, FILTER_VALIDATE_URL)) {
-             throw new Exception("Некорректная ссылка.");
+             throw new UserError("Некорректная ссылка.");
         }
 
         // SSRF-защита (MLP-222, M3): только http/https, запрет внутренних адресов.
@@ -169,19 +168,19 @@ class UploadManager {
         $headers = @get_headers($url, 1, $context);
 
         if (!$headers || strpos($headers[0], '200') === false) {
-             throw new Exception("Не удалось получить доступ к файлу по ссылке.");
+             throw new UserError("Не удалось получить доступ к файлу по ссылке.");
         }
 
         // Скачиваем контент (с ограничением объёма чтения, без редиректов)
         $content = @file_get_contents($url, false, stream_context_create($noRedirect), 0, $this->maxSize + 1);
 
         if ($content === false) {
-            throw new Exception("Ошибка загрузки файла по ссылке.");
+            throw new UserError("Ошибка загрузки файла по ссылке.");
         }
 
         if (strlen($content) > $this->maxSize) {
             $mb = $this->maxSize / 1024 / 1024;
-            throw new Exception("Файл по ссылке слишком большой (макс $mb МБ).");
+            throw new UserError("Файл по ссылке слишком большой (макс $mb МБ).");
         }
 
         // Проверяем реальный MIME тип содержимого
@@ -189,7 +188,7 @@ class UploadManager {
         $mime = $finfo->buffer($content);
 
         if (!isset($this->allowedTypes[$mime])) {
-            throw new Exception("Формат файла по ссылке не поддерживается ($mime).");
+            throw new UserError("Формат файла по ссылке не поддерживается ($mime).");
         }
 
         $ext = $this->allowedTypes[$mime];
@@ -203,7 +202,7 @@ class UploadManager {
         $targetPath = $this->uploadDir . $filename;
 
         if (file_put_contents($targetPath, $content) === false) {
-            throw new Exception("Не удалось сохранить файл на диск.");
+            throw new UserError("Не удалось сохранить файл на диск.");
         }
 
         if ($this->context === 'chat') $relDir = '/upload/chat/';
@@ -222,11 +221,11 @@ class UploadManager {
     private function assertSafeUrl($url) {
         $parts = parse_url($url);
         if (!$parts || empty($parts['scheme']) || empty($parts['host'])) {
-            throw new Exception("Некорректная ссылка.");
+            throw new UserError("Некорректная ссылка.");
         }
         $scheme = strtolower($parts['scheme']);
         if ($scheme !== 'http' && $scheme !== 'https') {
-            throw new Exception("Разрешены только http/https ссылки.");
+            throw new UserError("Разрешены только http/https ссылки.");
         }
         $host = $parts['host'];
 
@@ -244,11 +243,11 @@ class UploadManager {
             }
         }
         if (empty($ips)) {
-            throw new Exception("Не удалось разрешить адрес ссылки.");
+            throw new UserError("Не удалось разрешить адрес ссылки.");
         }
         foreach ($ips as $ip) {
             if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                throw new Exception("Ссылка ведёт на внутренний адрес — запрещено.");
+                throw new UserError("Ссылка ведёт на внутренний адрес — запрещено.");
             }
         }
     }

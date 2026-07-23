@@ -4,7 +4,7 @@ namespace Domain;
 
 use ZipArchive;
 
-use Exception;
+use Core\UserError;
 use Infra\Database;
 
 
@@ -263,7 +263,7 @@ class StickerManager {
             $zip->close();
             return $count;
         } else {
-            throw new Exception("Не удалось открыть ZIP архив");
+            throw new UserError("Не удалось открыть ZIP архив");
         }
     }
 

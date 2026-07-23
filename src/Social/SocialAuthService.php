@@ -2,9 +2,9 @@
 
 namespace Social;
 
+use Core\UserError;
 use Domain\Auth;
 use Infra\Database;
-use Exception;
 use Domain\UserManager;
 
 
@@ -101,8 +101,13 @@ class SocialAuthService {
             
             return ['success' => true, 'message' => 'Добро пожаловать, новый пони!', 'redirect' => '/'];
             
-        } catch (Exception $e) {
-            return ['success' => false, 'message' => 'Ошибка регистрации: ' . $e->getMessage()];
+        } catch (\Throwable $e) {
+            // MLP-261: пользовательский текст — наружу, системный — только в лог.
+            if ($e instanceof UserError) {
+                return ['success' => false, 'message' => 'Ошибка регистрации: ' . $e->getMessage()];
+            }
+            error_log('SocialAuthService registerNewUser: ' . get_class($e) . ': ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+            return ['success' => false, 'message' => 'Ошибка регистрации. Попробуй ещё раз позже.'];
         }
     }
 

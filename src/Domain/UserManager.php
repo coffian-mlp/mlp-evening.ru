@@ -2,6 +2,7 @@
 
 namespace Domain;
 
+use Core\UserError;
 use Exception;
 use Infra\Database;
 
@@ -164,7 +165,7 @@ class UserManager {
                 $stmt->bind_param("si", $data['email'], $id);
                 $stmt->execute();
                 if ($stmt->get_result()->num_rows > 0) {
-                    throw new Exception("Этот Email уже используется другой пони.");
+                    throw new UserError("Этот Email уже используется другой пони.");
                 }
                 $stmt->close();
             }
@@ -186,7 +187,7 @@ class UserManager {
             $stmt->bind_param("si", $data['login'], $id);
             $stmt->execute();
             if ($stmt->get_result()->num_rows > 0) {
-                throw new Exception("Логин уже занят.");
+                throw new UserError("Логин уже занят.");
             }
             $stmt->close();
 
@@ -238,7 +239,7 @@ class UserManager {
         $stmt->bind_param("s", $login);
         $stmt->execute();
         if ($stmt->get_result()->num_rows > 0) {
-            throw new Exception("Пользователь с таким логином уже существует.");
+            throw new UserError("Пользователь с таким логином уже существует.");
         }
         $stmt->close();
 
@@ -247,7 +248,7 @@ class UserManager {
              $stmt->bind_param("s", $email);
              $stmt->execute();
              if ($stmt->get_result()->num_rows > 0) {
-                 throw new Exception("Пользователь с таким Email уже существует.");
+                 throw new UserError("Пользователь с таким Email уже существует.");
              }
              $stmt->close();
         }
@@ -298,7 +299,8 @@ class UserManager {
             $this->clearAllUsersCache(); // Add to list
             return $newUserId;
         } else {
-            throw new Exception("Ошибка при создании пользователя: " . $stmt->error);
+            error_log('UserManager createUser: ' . $stmt->error); // деталь mysqli — только в лог (MLP-261)
+            throw new Exception("Не удалось создать пользователя.");
         }
     }
 

@@ -63,8 +63,8 @@ class StickerController {
             } else {
                 sendResponse(false, "Ошибка (возможно, такой код уже есть)", 'error');
             }
-        } catch (\Exception $e) {
-            sendResponse(false, $e->getMessage(), 'error');
+        } catch (\Throwable $e) {
+            respondCaught($e);
         }
     }
 
@@ -90,8 +90,8 @@ class StickerController {
             } else {
                 sendResponse(false, "Ошибка обновления", 'error');
             }
-        } catch (\Exception $e) {
-            sendResponse(false, $e->getMessage(), 'error');
+        } catch (\Throwable $e) {
+            respondCaught($e);
         }
     }
 
@@ -138,8 +138,8 @@ class StickerController {
             $id = $sm->addSticker($code, $url, $packId, $thumbUrl);
             sendResponse(true, "Стикер :$code: добавлен!", 'success', ['id' => $id, 'url' => $url, 'thumb_url' => $thumbUrl]);
 
-        } catch (\Exception $e) {
-            sendResponse(false, $e->getMessage(), 'error');
+        } catch (\Throwable $e) {
+            respondCaught($e);
         }
     }
 
@@ -151,15 +151,15 @@ class StickerController {
 
         try {
             $file = $_FILES['zip_file'];
-            if ($file['error'] !== UPLOAD_ERR_OK) throw new \Exception("Ошибка загрузки файла");
-            if (pathinfo($file['name'], PATHINFO_EXTENSION) !== 'zip') throw new \Exception("Только ZIP архивы!");
+            if ($file['error'] !== UPLOAD_ERR_OK) throw new \Core\UserError("Ошибка загрузки файла");
+            if (pathinfo($file['name'], PATHINFO_EXTENSION) !== 'zip') throw new \Core\UserError("Только ZIP архивы!");
 
             $sm = new StickerManager();
             $count = $sm->importFromZip($packId, $file['tmp_name']);
 
             sendResponse(true, "Успешно импортировано $count стикеров! 📦✨");
-        } catch (\Exception $e) {
-            sendResponse(false, "ZIP Import Error: " . $e->getMessage(), 'error');
+        } catch (\Throwable $e) {
+            respondCaught($e, "Импорт: ");
         }
     }
 

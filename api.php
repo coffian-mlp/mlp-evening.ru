@@ -88,6 +88,21 @@ try {
         exit();
     }
 
+    /**
+     * Единый ответ на пойманное исключение (MLP-261, AR6-1).
+     * Core\UserError — текст писался для пользователя, отдаём как есть;
+     * всё остальное (включая mysqli_sql_exception) — детали в error_log, наружу общий текст.
+     * Уедет в Api\Response вместе с sendResponse (AR6-4).
+     */
+    function respondCaught(Throwable $e, string $prefix = '') {
+        if ($e instanceof \Core\UserError) {
+            sendResponse(false, $prefix . $e->getMessage(), 'error');
+        }
+        $action = $_POST['action'] ?? '?';
+        error_log("api.php [{$action}] " . get_class($e) . ': ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+        sendResponse(false, $prefix . 'Что-то пошло не так. Попробуй ещё раз позже.', 'error');
+    }
+
     // checkHierarchy переехала в Api\ModerationController (MLP-255).
 
     // Public Actions
@@ -222,8 +237,8 @@ try {
                     sendResponse(false, "Ошибка базы данных.", 'error');
                 }
 
-            } catch (Exception $e) {
-                sendResponse(false, "Ошибка провайдера: " . $e->getMessage(), 'error');
+            } catch (Throwable $e) {
+                respondCaught($e, "Ошибка провайдера: ");
             }
         } else {
             sendResponse(false, "Неизвестный провайдер", 'error');
@@ -356,8 +371,8 @@ try {
             } else {
                 sendResponse(false, "Ошибка БД", 'error');
             }
-        } catch (Exception $e) {
-            sendResponse(false, "Ошибка: " . $e->getMessage(), 'error');
+        } catch (Throwable $e) {
+            respondCaught($e);
         }
     }
 
@@ -387,8 +402,8 @@ try {
             $userManager->clearResetToken($user['id']);
             
             sendResponse(true, "Пароль успешно изменен! Теперь можно войти.", 'success', ['redirect' => '/']);
-        } catch (Exception $e) {
-            sendResponse(false, "Ошибка смены пароля: " . $e->getMessage(), 'error');
+        } catch (Throwable $e) {
+            respondCaught($e, "Смена пароля: ");
         }
     }
 
@@ -457,8 +472,8 @@ try {
                 sendResponse(true, "Ура! Ты с нами! Теперь можно войти.", 'success');
             }
             
-        } catch (Exception $e) {
-            sendResponse(false, $e->getMessage(), 'error');
+        } catch (Throwable $e) {
+            respondCaught($e);
         }
     }
 
@@ -531,8 +546,8 @@ try {
                 }
                 
                 $data['avatar_url'] = $url;
-            } catch (Exception $e) {
-                sendResponse(false, "Аватар: " . $e->getMessage(), 'error');
+            } catch (Throwable $e) {
+                respondCaught($e, "Аватар: ");
             }
         }
         
@@ -546,8 +561,8 @@ try {
             $userManager->updateProfile($userId, $data);
             if (isset($data['nickname'])) $_SESSION['username'] = $data['nickname'];
             sendResponse(true, "Профиль обновлен!", 'success', ['reload' => true]);
-        } catch (Exception $e) {
-            sendResponse(false, $e->getMessage(), 'error');
+        } catch (Throwable $e) {
+            respondCaught($e);
         }
     }
 
@@ -863,8 +878,8 @@ try {
                     'name' => $_FILES['file']['name'], // Original name
                     'is_image' => (bool)$isImage
                 ]);
-            } catch (Exception $e) {
-                sendResponse(false, $e->getMessage(), 'error');
+            } catch (Throwable $e) {
+                respondCaught($e);
             }
             break;
 
@@ -877,8 +892,8 @@ try {
             sendResponse(false, "❌ Неизвестное действие: $action", 'error');
     }
 
-} catch (Exception $e) {
-    // L1: детали — в лог, наружу — общий текст
+} catch (Throwable $e) {
+    // L1: детали — в лог, наружу — общий текст (Throwable: ловим и TypeError/mysqli, MLP-261)
     error_log('api.php exception: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
     sendResponse(false, "💥 Ошибка сервера. Попробуйте позже.", 'error');
 }

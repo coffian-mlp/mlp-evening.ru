@@ -77,8 +77,8 @@ class UserAdminController {
             elseif (!empty($raw_avatar_url) && strpos($raw_avatar_url, '/upload/avatars/') !== 0 && filter_var($raw_avatar_url, FILTER_VALIDATE_URL)) {
                 $avatar_url = $uploadManager->uploadFromUrl($raw_avatar_url);
             }
-        } catch (\Exception $e) {
-            sendResponse(false, "Аватар: " . $e->getMessage(), 'error');
+        } catch (\Throwable $e) {
+            respondCaught($e, "Аватар: ");
         }
 
         if (empty($login)) sendResponse(false, "Логин обязателен", 'error');
@@ -126,8 +126,8 @@ class UserAdminController {
 
                 sendResponse(true, "Пользователь создан");
             }
-        } catch (\Exception $e) {
-            sendResponse(false, $e->getMessage(), 'error');
+        } catch (\Throwable $e) {
+            respondCaught($e);
         }
     }
 
