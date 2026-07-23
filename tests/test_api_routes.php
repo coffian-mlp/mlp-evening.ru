@@ -110,6 +110,9 @@ $expected = [
     'delete_message'      => 'user',
     'restore_message'     => 'user',
     'upload_file'         => 'user',
+    // MLP-270: беклог фидбека (дашборд)
+    'get_feedback'        => 'admin',
+    'set_feedback_status' => 'admin',
 ];
 
 echo "== Карта ролей: каждый action объявлен с гейтом «как было» ==\n";

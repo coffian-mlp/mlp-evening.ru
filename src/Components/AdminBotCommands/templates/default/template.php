@@ -30,6 +30,8 @@ use Domain\Auth;
                     <select name="handler_type" id="handler_type" class="form-input">
                         <option value="text">Текстовый промпт (Обычный)</option>
                         <option value="schedule">Расписание (Спец. логика)</option>
+                        <option value="poll">Опрос (Спец. логика)</option>
+                        <option value="todo">Беклог /todo (без LLM)</option>
                     </select>
                 </div>
 
@@ -134,4 +136,55 @@ function resetCommandForm() {
     document.getElementById('command_is_active').checked = true;
     document.getElementById('cancel-edit-btn').style.display = 'none';
 }
+</script>
+
+<!-- MLP-270: беклог фидбека из чата (команда /todo) -->
+<div class="card" style="margin-top: 20px;">
+    <h3 class="dashboard-title">📝 Беклог от пользователей (/todo)</h3>
+    <div style="margin-bottom: 10px;">
+        <select id="fb-status-filter" class="form-input" style="width: auto; display: inline-block;" onchange="loadFeedback()">
+            <option value="new">Новые</option>
+            <option value="">Все</option>
+            <option value="done">Сделано</option>
+            <option value="dismissed">Отклонено</option>
+        </select>
+        <span id="fb-count" style="margin-left: 10px; color: #888;"></span>
+    </div>
+    <div style="overflow-x: auto;">
+        <table class="admin-table" style="width: 100%;">
+            <thead><tr><th>№</th><th>Когда</th><th>Кто</th><th>Текст</th><th>Статус</th><th></th></tr></thead>
+            <tbody id="fb-rows"><tr><td colspan="6" style="color:#888;">Загрузка…</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function loadFeedback() {
+    const status = document.getElementById('fb-status-filter').value;
+    $.post('/api.php', { action: 'get_feedback', status: status, limit: 100, csrf_token: window.csrfToken }, function (res) {
+        if (!res.success) return;
+        document.getElementById('fb-count').innerText = 'новых: ' + res.data.new_count + ', в выборке: ' + res.data.total;
+        const rows = res.data.items.map(function (it) {
+            const st = { 'new': '🆕', 'done': '✅', 'dismissed': '🚫' }[it.status] || it.status;
+            const btns = it.status === 'new'
+                ? '<button class="btn-small" onclick="setFeedbackStatus(' + it.id + ', \'done\')">✅</button> ' +
+                  '<button class="btn-small" onclick="setFeedbackStatus(' + it.id + ', \'dismissed\')">🚫</button>'
+                : '<button class="btn-small" onclick="setFeedbackStatus(' + it.id + ', \'new\')">↺</button>';
+            const div = document.createElement('div');
+            div.innerText = it.text; // экранирование пользовательского текста
+            return '<tr><td>' + it.id + '</td><td>' + it.created_at + '</td><td>' + $('<i>').text(it.username).html() +
+                   '</td><td style="max-width:480px; word-break:break-word;">' + div.innerHTML + '</td><td>' + st + '</td><td>' + btns + '</td></tr>';
+        });
+        document.getElementById('fb-rows').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="6" style="color:#888;">Пусто. Тишина и покой.</td></tr>';
+    }, 'json');
+}
+
+function setFeedbackStatus(id, status) {
+    $.post('/api.php', { action: 'set_feedback_status', id: id, status: status, csrf_token: window.csrfToken }, function (res) {
+        if (res.success) loadFeedback();
+        else if (window.showFlashMessage) window.showFlashMessage(res.message, 'error');
+    }, 'json');
+}
+
+loadFeedback();
 </script>

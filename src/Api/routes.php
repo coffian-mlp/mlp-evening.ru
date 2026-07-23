@@ -32,6 +32,9 @@ return [
     'delete_message'     => ['role' => 'user',   'handler' => [\Api\ChatController::class, 'delete']],
     'restore_message'    => ['role' => 'user',   'handler' => [\Api\ChatController::class, 'restore']],
     'upload_file'        => ['role' => 'user',   'handler' => [\Api\ChatController::class, 'uploadFile']],
+    // Беклог фидбека /todo (MLP-270)
+    'get_feedback'        => ['role' => 'admin', 'handler' => [\Api\FeedbackController::class, 'list']],
+    'set_feedback_status' => ['role' => 'admin', 'handler' => [\Api\FeedbackController::class, 'setStatus']],
     // Auth и профиль (MLP-264, срез AR5-6)
     'login'                => ['role' => 'public', 'handler' => [\Api\AuthController::class, 'login']],
     'register'             => ['role' => 'public', 'handler' => [\Api\AuthController::class, 'register']],

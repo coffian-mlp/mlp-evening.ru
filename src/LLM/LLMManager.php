@@ -257,6 +257,11 @@ class LLMManager {
                 return $this->createPollFromCommand($command, $contextData);
             }
 
+            // Беклог /todo (MLP-270): запись фидбека БЕЗ LLM — мгновенно и бесплатно.
+            if ($command['handler_type'] === 'todo') {
+                return $this->handleTodoCommand($command, $contextData);
+            }
+
             $context = $this->buildContext($this->contextLimit());
 
             if ($command['handler_type'] === 'schedule') {
@@ -712,6 +717,48 @@ class LLMManager {
         }
 
         return $context;
+    }
+
+    /**
+     * Команда /todo (MLP-270): сохранить фидбек в беклог и подтвердить в чате.
+     * Без LLM: подтверждение — вариативные фикс-фразы в характере Лиры.
+     */
+    private function handleTodoCommand(array $command, array $contextData): bool {
+        $message = (string)($contextData['message'] ?? '');
+        $prefix = ltrim((string)($command['command_prefix'] ?? 'todo'), '/');
+        $text = trim(preg_replace('/^\s*\/?' . preg_quote($prefix, '/') . '\s*/ui', '', $message));
+
+        $username = (string)($contextData['username'] ?? 'Гость');
+
+        if ($text === '') {
+            $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(),
+                "@$username, а что записать-то? Напиши так: /todo <твоя идея или жалоба> — и я занесу в беклог. 📝");
+            return true;
+        }
+
+        $fm = new \Domain\FeedbackManager();
+        $id = $fm->add(
+            isset($contextData['user_id']) ? (int)$contextData['user_id'] : null,
+            $username,
+            isset($contextData['message_id']) ? (int)$contextData['message_id'] : null,
+            $text
+        );
+
+        if ($id === false) {
+            $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(),
+                "@$username, копыто дрогнуло — не смогла записать. Попробуй ещё раз чуть позже!");
+            return true;
+        }
+
+        $confirmations = [
+            "@%s, записала в беклог под №%d! Передам, куда следует. 📝",
+            "@%s, есть! Идея №%d занесена в свиток пожеланий. ✒️",
+            "@%s, зафиксировала (№%d). Бюрократия — моё второе имя после лиры! 📋",
+            "@%s, готово — №%d в беклоге. Если это про баг, то он уже боится. 📝",
+        ];
+        $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(),
+            sprintf($confirmations[array_rand($confirmations)], $username, $id));
+        return true;
     }
 
     private function getBotUsername() {
