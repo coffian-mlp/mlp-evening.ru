@@ -1,3 +1,10 @@
+/**
+ * Ядро чата (MLP-267, AR6-3) — ЕДИНЫЙ script для обоих шаблонов (popup и
+ * embedded). База — бывший embedded/script.js (делегирование событий работает
+ * и на статичном popup-DOM, и при reloadChatMessages, перетирающем innerHTML).
+ * Режимные различия решаются feature-detection по DOM (см. метки MLP-267).
+ * Подключается из ChatComponent::executeComponent(), шаблонных script.js нет.
+ */
 // Local Chat Logic using SSE (Server-Sent Events)
 // Updated by Twilight Sparkle
 
@@ -45,7 +52,6 @@ $(document).ready(function() {
 
         // Position
         const rect = element.getBoundingClientRect();
-        const tooltipWidth = tooltip.outerWidth();
         
         tooltip.css({
             top: (rect.top + window.scrollY - tooltip.outerHeight() - 8) + 'px',
@@ -318,7 +324,9 @@ $(document).ready(function() {
     function updateNotificationUI() {
         const titleBtn = $('#toggle-title-alert');
         
-        titleBtn.text((titleAlertEnabled ? '🔔' : '🔕') + ' Моргание вкладки');
+        // MLP-267: в embedded кнопка — пункт меню (с подписью), в popup — иконка топ-бара.
+        const titleLabel = $('#chat-menu-btn').length ? ' Моргание вкладки' : '';
+        titleBtn.text((titleAlertEnabled ? '🔔' : '🔕') + titleLabel);
         titleBtn.toggleClass('active', titleAlertEnabled);
 
         $('#profile-title-toggle').prop('checked', titleAlertEnabled);
@@ -430,7 +438,7 @@ $(document).ready(function() {
         
         // Check for Quote Mention (Soft Highlight)
         // If NOT directly mentioned, but one of the quotes is mine
-        if (!isMentioned && data.quotes && data.quotes.length > 0 && currentUserId) {
+        if (!isMentioned && data.quotes && data.quotes.length > 0 && window.currentUserId) {
             // Check if any quote author is me (by username comparison, as quotes stores username snapshot usually)
             // But better to check original ID? We don't have original author ID in quote object easily,
             // quotes array in msg usually has: id, username, message, etc.
@@ -1480,7 +1488,6 @@ $(document).ready(function() {
                     // Show "Return to Present" Button
                     if ($('#return-to-present-btn').length === 0) {
                         const returnBtn = $('<button id="return-to-present-btn" class="chat-return-btn">⬇ Вернуться к новым</button>');
-                        $(chatMessages).append(returnBtn);
                         
                         returnBtn.css({
                             position: 'absolute',
@@ -2438,3 +2445,21 @@ $(document).ready(function() {
          }
     });
 });
+
+// MLP-267: на попап-странице (/chat_popup.php) main.js не подключён — если
+// хелперы профиля никто не определил, даём локальный fallback (бывший popup-код).
+if (typeof window.openProfileModal !== 'function') {
+    window.switchProfileTab = function(tabName) {
+        $('.profile-tab-content').hide();
+        $('#tab-' + tabName).fadeIn(200);
+        $('.profile-tab-btn').removeClass('active');
+        $('.profile-tab-btn[onclick*="' + tabName + '"]').addClass('active');
+    };
+    window.openProfileModal = function(e) {
+        if (e) e.preventDefault();
+        $('#profile-modal').css('display', 'flex').hide().fadeIn(200, function() {
+            // loadUserSocials живёт в main.js (только на основном сайте) — на попапе пропускаем.
+            if (typeof window.loadUserSocials === 'function') window.loadUserSocials();
+        });
+    };
+}

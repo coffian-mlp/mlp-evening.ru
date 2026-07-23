@@ -57,8 +57,13 @@ class ChatComponent extends Component {
         // Передаем параметры режима (popup/local)
         $this->result['mode'] = $this->params['mode'] ?? 'local';
 
-        // Виджет опросов монтируется внутри DOM чата — подключаем его ассеты вместе с чатом (MLP-239).
+        // Ядро чата (MLP-267, AR6-3): единые CSS/JS обоих шаблонов — ДО шаблонных
+        // ассетов (includeTemplate ниже), чтобы popup/style.css мог переопределять.
         global $app;
+        $app->addCss('/src/Components/Chat/assets/chat-core.css');
+        $app->addJs('/src/Components/Chat/assets/chat-core.js');
+
+        // Виджет опросов монтируется внутри DOM чата — подключаем его ассеты вместе с чатом (MLP-239).
         $app->addCss('/src/Components/Poll/templates/default/style.css');
         $app->addJs('/src/Components/Poll/templates/default/script.js');
 

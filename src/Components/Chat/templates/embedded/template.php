@@ -19,7 +19,6 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
 // CSS чата подключается автоматически через Component->includeTemplate() -> style.css
 // JS чата подключается автоматически через Component->includeTemplate() -> script.js
 ?>
-<link rel="stylesheet" href="/src/Components/Chat/templates/embedded/tooltip.css">
 
 <!-- Chat Container -->
 <div class="chat-container" id="chat" style="<?= isset($arParams['HEIGHT']) ? 'height:'.$arParams['HEIGHT'] : '' ?>">

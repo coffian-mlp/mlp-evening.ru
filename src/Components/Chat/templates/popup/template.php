@@ -19,7 +19,6 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
 // CSS чата подключается автоматически через Component->includeTemplate() -> style.css
 // JS чата подключается автоматически через Component->includeTemplate() -> script.js
 ?>
-<link rel="stylesheet" href="/src/Components/Chat/templates/popup/tooltip.css">
 
 <!-- Chat Container -->
 <div class="chat-container" id="chat" style="<?= isset($arParams['HEIGHT']) ? 'height:'.$arParams['HEIGHT'] : '' ?>">
@@ -172,8 +171,11 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
 
             <form id="chat-form">
                 <input type="file" id="chat-file-input" hidden>
-                <textarea id="chat-input" placeholder="Напиши что-нибудь..." rows="1"></textarea>
-                <button type="submit">➤</button>
+                <!-- MLP-267: wrapper как в embedded — ghost-кнопка отправки из ядра стилей -->
+                <div class="chat-input-wrapper">
+                    <textarea id="chat-input" placeholder="Напиши что-нибудь..." rows="1"></textarea>
+                    <button type="submit">➤</button>
+                </div>
             </form>
             <?php else: ?>
             <div class="chat-login-prompt">
