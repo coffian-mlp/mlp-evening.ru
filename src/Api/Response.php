@@ -56,6 +56,34 @@ final class Response {
         self::json(false, $message, 'error', $data);
     }
 
+    /**
+     * Отдать готовый JSON клиенту и отпустить соединение, НЕ завершая скрипт —
+     * дальше можно будить бота/делать фоновую работу (MLP-265, промоция
+     * fastcgi-блока: потребители — AuthController::finishThenGreet и
+     * ChatController::send). Закрывает сессию и снимает лимит времени.
+     */
+    public static function finish(string $responseJson): void {
+        if (function_exists('fastcgi_finish_request')) {
+            echo $responseJson;
+            fastcgi_finish_request();
+        } else {
+            @ob_end_clean();
+            header("Connection: close");
+            ignore_user_abort(true);
+            ob_start();
+            echo $responseJson;
+            $size = ob_get_length();
+            header("Content-Length: $size");
+            ob_end_flush();
+            flush();
+        }
+
+        // Не блокировать другие запросы пользователя и не умереть во время LLM.
+        session_write_close();
+        set_time_limit(0);
+        ignore_user_abort(true);
+    }
+
     /** Ответ на пойманное исключение: UserError → текст, прочее → error_log + общий текст. */
     public static function caught(Throwable $e, string $prefix = ''): never {
         $c = self::classify($e, $prefix);

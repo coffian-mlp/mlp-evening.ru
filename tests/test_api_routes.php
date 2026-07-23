@@ -99,6 +99,17 @@ $expected = [
     'save_user_option'      => 'user',
     'get_user_socials'      => 'user',
     'unlink_social'         => 'user',
+    // MLP-265: чат-срез (get_chat_input/get_messages были публичными до гейта/в whitelist)
+    'get_chat_input'      => 'public',
+    'get_messages'        => 'public',
+    'search_messages'     => 'user',
+    'get_message_context' => 'user',
+    'toggle_reaction'     => 'user',
+    'send_message'        => 'user',
+    'edit_message'        => 'user',
+    'delete_message'      => 'user',
+    'restore_message'     => 'user',
+    'upload_file'         => 'user',
 ];
 
 echo "== Карта ролей: каждый action объявлен с гейтом «как было» ==\n";

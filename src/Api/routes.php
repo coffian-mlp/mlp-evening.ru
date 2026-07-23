@@ -21,6 +21,17 @@ return [
     'pin_message'       => ['role' => 'user',   'handler' => [\Api\PinController::class, 'pin']],
     'unpin_message'     => ['role' => 'user',   'handler' => [\Api\PinController::class, 'unpin']],
     // Капча и онлайн-присутствие (MLP-245): публичные, CSRF-гейт выше как раньше.
+    // Чат (MLP-265, финал среза AR5-6)
+    'get_chat_input'     => ['role' => 'public', 'handler' => [\Api\ChatController::class, 'getInput']],
+    'get_messages'       => ['role' => 'public', 'handler' => [\Api\ChatController::class, 'getMessages']],
+    'search_messages'    => ['role' => 'user',   'handler' => [\Api\ChatController::class, 'search']],
+    'get_message_context'=> ['role' => 'user',   'handler' => [\Api\ChatController::class, 'getContext']],
+    'toggle_reaction'    => ['role' => 'user',   'handler' => [\Api\ChatController::class, 'toggleReaction']],
+    'send_message'       => ['role' => 'user',   'handler' => [\Api\ChatController::class, 'send']],
+    'edit_message'       => ['role' => 'user',   'handler' => [\Api\ChatController::class, 'edit']],
+    'delete_message'     => ['role' => 'user',   'handler' => [\Api\ChatController::class, 'delete']],
+    'restore_message'    => ['role' => 'user',   'handler' => [\Api\ChatController::class, 'restore']],
+    'upload_file'        => ['role' => 'user',   'handler' => [\Api\ChatController::class, 'uploadFile']],
     // Auth и профиль (MLP-264, срез AR5-6)
     'login'                => ['role' => 'public', 'handler' => [\Api\AuthController::class, 'login']],
     'register'             => ['role' => 'public', 'handler' => [\Api\AuthController::class, 'register']],

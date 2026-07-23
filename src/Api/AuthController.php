@@ -230,28 +230,7 @@ class AuthController {
      * вербатим, MLP-264). Клиент не ждёт LLM.
      */
     private static function finishThenGreet(string $responseJson, string $greetUsername): never {
-        if (function_exists('fastcgi_finish_request')) {
-            echo $responseJson;
-            fastcgi_finish_request();
-        } else {
-            @ob_end_clean();
-            header("Connection: close");
-            ignore_user_abort(true);
-            ob_start();
-            echo $responseJson;
-            $size = ob_get_length();
-            header("Content-Length: $size");
-            ob_end_flush();
-            flush();
-        }
-
-        // Закрываем сессию, чтобы не блокировать другие запросы пользователя.
-        session_write_close();
-
-        // Скрипт не должен умереть во время задержки/LLM.
-        set_time_limit(0);
-        ignore_user_abort(true);
-
+        Response::finish($responseJson); // MLP-265: общий fastcgi-паттерн в Response
         BotDispatch::dispatch('greeting', ['username' => $greetUsername]);
         exit();
     }
