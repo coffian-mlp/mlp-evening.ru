@@ -634,6 +634,11 @@ class LLMManager {
         $currentTime = time();
 
         foreach ($messages as $msg) {
+            // MLP-269: удалённые не попадают в контекст бота (у них нет raw_message —
+            // получались «пустышки», Лира ворчала на пустые сообщения и просыпался проактив).
+            if (!empty($msg['is_deleted'])) {
+                continue;
+            }
             // Check message age if required
             if ($maxAgeHours !== null) {
                 $msgTime = strtotime($msg['created_at'] . ' UTC');
