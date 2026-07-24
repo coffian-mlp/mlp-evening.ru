@@ -227,6 +227,7 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
         
         window.stickerMap = <?= json_encode($arResult['sticker_map']) ?>;
         window.stickerData = <?= json_encode($arResult['frontend_sticker_data']) ?>;
+        window.botCommands = <?= json_encode($arResult['bot_commands'] ?? []) ?>; // MLP-278: превью команд по «/»
     <?php endif; ?>
 </script>
 

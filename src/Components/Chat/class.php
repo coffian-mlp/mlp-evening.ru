@@ -78,6 +78,27 @@ class ChatComponent extends Component {
         }
         $this->result['can_create_poll'] = $canCreatePoll;
 
+        // MLP-278: превью команд при вводе «/» — список активных команд бота
+        // (префикс+описание). /опрос показываем только тем, кому позволено.
+        $botCommands = [];
+        if (Auth::check()) {
+            $bcm = new \Domain\BotCommandManager();
+            if ($bcm->isAvailable()) {
+                foreach ($bcm->getActive() as $cmd) {
+                    if (($cmd['handler_type'] ?? '') === 'poll' && !$canCreatePoll) {
+                        continue;
+                    }
+                    $prefix = trim((string)($cmd['command_prefix'] ?? ''));
+                    if ($prefix === '') continue;
+                    $botCommands[] = [
+                        'prefix' => '/' . ltrim($prefix, '/'),
+                        'description' => (string)($cmd['description'] ?? ''),
+                    ];
+                }
+            }
+        }
+        $this->result['bot_commands'] = $botCommands;
+
         // Подключаем шаблон
         $this->includeTemplate();
     }

@@ -2474,3 +2474,65 @@ if (typeof window.openProfileModal !== 'function') {
         });
     };
 }
+
+// === MLP-278: превью команд при вводе «/» (как в Telegram/Discord) ===
+(function () {
+    function ensureCmdPreview() {
+        let el = document.getElementById('cmd-preview');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'cmd-preview';
+            el.className = 'cmd-preview';
+            el.style.display = 'none';
+            const wrapper = document.querySelector('.chat-input-wrapper');
+            if (!wrapper) return null;
+            wrapper.appendChild(el);
+        }
+        return el;
+    }
+
+    function hideCmdPreview() {
+        const el = document.getElementById('cmd-preview');
+        if (el) el.style.display = 'none';
+    }
+
+    function renderCmdPreview(filter) {
+        const cmds = (window.botCommands || []).filter(c =>
+            c.prefix.toLowerCase().startsWith(filter.toLowerCase()));
+        const el = ensureCmdPreview();
+        if (!el) return;
+        if (!cmds.length) { hideCmdPreview(); return; }
+        el.innerHTML = cmds.map(c =>
+            '<div class="cmd-preview-item" data-prefix="' + c.prefix.replace(/"/g, '&quot;') + '">' +
+            '<span class="cmd-preview-prefix">' + c.prefix + '</span>' +
+            '<span class="cmd-preview-desc">' + (c.description || '') + '</span></div>').join('');
+        el.style.display = 'block';
+    }
+
+    $(document).on('input', '#chat-input', function () {
+        const v = this.value;
+        // Показываем только пока набирается первое слово, начинающееся с «/»
+        if (v.startsWith('/') && !/\s/.test(v)) {
+            renderCmdPreview(v);
+        } else {
+            hideCmdPreview();
+        }
+    });
+
+    $(document).on('keydown', '#chat-input', function (e) {
+        if (e.key === 'Escape') hideCmdPreview();
+    });
+
+    $(document).on('click', '.cmd-preview-item', function () {
+        const input = document.getElementById('chat-input');
+        if (input) {
+            input.value = $(this).data('prefix') + ' ';
+            input.focus();
+            input.dispatchEvent(new Event('input', { bubbles: true })); // авторесайз; превью скроется (есть пробел)
+        }
+    });
+
+    $(document).on('click', function (e) {
+        if (!e.target.closest('#cmd-preview') && e.target.id !== 'chat-input') hideCmdPreview();
+    });
+})();

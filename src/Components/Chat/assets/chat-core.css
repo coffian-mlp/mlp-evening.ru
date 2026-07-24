@@ -1338,3 +1338,28 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+/* === MLP-278: превью команд при вводе «/» === */
+.cmd-preview {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    margin-bottom: 6px;
+    background: rgba(30, 20, 50, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    overflow: hidden;
+    z-index: 30;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.35);
+}
+.cmd-preview-item {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+.cmd-preview-item:hover { background: rgba(186, 104, 200, 0.2); }
+.cmd-preview-prefix { color: #ce93d8; font-weight: 600; white-space: nowrap; }
+.cmd-preview-desc { color: #aaa; font-size: 0.85em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
