@@ -78,6 +78,7 @@ class SettingsController {
         'ai_image_chat_context' => 'uint', // MLP-295: окно режиссёра /нарисуйчат
         'ai_image_style_prompt' => 'string',
         'ai_image_llm_caption'  => 'int',
+        'ai_debug_log'          => 'int', // debug-журнал обращений к нейронкам (llm_debug_log, TTL 7 дней)
         // --- SMTP ---
         'smtp_enabled'       => 'int',
         'smtp_host'          => 'string',

@@ -18,6 +18,10 @@ class OpenAIProvider implements LLMProviderInterface {
         $this->proxyUrl = $proxyUrl;
     }
 
+    public function getModel(): string {
+        return (string)$this->model;
+    }
+
     public function askChat(array $messagesContext, string $systemPrompt): ?string {
         if (empty($this->apiKey)) {
             throw new Exception("OpenAI API key is missing");

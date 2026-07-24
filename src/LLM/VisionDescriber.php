@@ -137,6 +137,16 @@ class VisionDescriber {
             ],
         ]];
 
-        return $provider->askChat($messages, $prompt);
+        $t0 = microtime(true);
+        try {
+            $out = $provider->askChat($messages, $prompt);
+        } catch (\Throwable $e) {
+            LlmDebugLog::log('vision', $providerKey, $modelName, ['system' => $prompt, 'messages' => $messages],
+                $e->getMessage(), 'error', (int)round((microtime(true) - $t0) * 1000));
+            throw $e; // describe() выше сам решает, что делать со сбоем
+        }
+        LlmDebugLog::log('vision', $providerKey, $modelName, ['system' => $prompt, 'messages' => $messages],
+            (string)$out, 'ok', (int)round((microtime(true) - $t0) * 1000));
+        return $out;
     }
 }

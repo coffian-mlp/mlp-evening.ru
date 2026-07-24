@@ -532,7 +532,7 @@ class LLMManager {
         return ['question' => $question, 'options' => $options];
     }
 
-    private function askWithFallback($context, $prompt) {
+    private function askWithFallback($context, $prompt, string $logKind = 'chat') {
         $userManager = new UserManager();
         $botUser = $userManager->getUserById($this->botUserId);
         $botLogin = $botUser['login'] ?? 'Lyra';
@@ -544,8 +544,12 @@ class LLMManager {
         $prompt .= "\n\n[Системное правило]: Пиши ТОЛЬКО текст своего ответа. НИКОГДА не добавляй своё имя, никнейм, время или служебные пометки в начале сообщения (например, не пиши '[12:00] {$botNickname}:').";
 
         foreach ($this->providers as $provider) {
+            $t0 = microtime(true);
             try {
                 $response = $provider->askChat($context, $prompt);
+                LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
+                    ['system' => $prompt, 'messages' => $context], (string)$response, 'ok',
+                    (int)round((microtime(true) - $t0) * 1000));
 
                 // Единая очистка + выходной guard против прорыва системных инструкций/контекста.
                 $clean = ResponseSanitizer::clean($response, $botNickname, $botLogin);
@@ -558,6 +562,9 @@ class LLMManager {
                 // тишина, чем «системщина». Пробуем следующего провайдера.
             } catch (Exception $e) {
                 error_log("LLM Provider Error (" . get_class($provider) . "): " . $e->getMessage());
+                LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
+                    ['system' => $prompt, 'messages' => $context], $e->getMessage(), 'error',
+                    (int)round((microtime(true) - $t0) * 1000));
                 continue; // Try next provider
             }
         }
@@ -639,7 +646,7 @@ class LLMManager {
      * провайдеров с фолбэком и санитизацией.
      */
     public function generateUtility(array $context, string $systemPrompt): ?string {
-        return $this->askWithFallback($context, $systemPrompt);
+        return $this->askWithFallback($context, $systemPrompt, 'utility');
     }
 
     /**
@@ -653,7 +660,7 @@ class LLMManager {
         }
         if (ConfigManager::getInstance()->getOption('ai_reactions', 1)) {
             $prompt .= "\n\n[Реакции]: можешь поставить реакцию на сообщение — добавь в начале ответа маркер"
-                . " [РЕАКЦИЯ: X], где X одно из: like, heart, laugh, wow, fire, party, cool, think, neutral, cry, dislike."
+                . " [РЕАКЦИЯ: X], где X одно из: like, heart, laugh, wow, fire, party, cool, think, neutral, cry, eyes, dislike."
                 . " Ставь по настроению, не каждый раз. Если хочешь только отреагировать без слов — верни ТОЛЬКО маркер.";
         }
         return $this->askWithFallback($context, $prompt);

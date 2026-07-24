@@ -21,6 +21,10 @@ class RouterAIProvider implements LLMProviderInterface {
         $this->proxyUrl = $proxyUrl;
     }
 
+    public function getModel(): string {
+        return (string)$this->model;
+    }
+
     public function askChat(array $messagesContext, string $systemPrompt): ?string {
         if (empty($this->apiKey)) {
             throw new Exception("RouterAI API key is missing");
