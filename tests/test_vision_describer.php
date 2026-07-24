@@ -69,6 +69,15 @@ try {
     $out2 = VisionDescriber::maybeDescribe($msgs2, $boom, $cache);
     ok($out2[0]['content'] === $msgs2[0]['content'], 'markdown остаётся при сбое помощника');
 
+    echo "== метка [Стикер: …] по alt из expandStickers (MLP-292) ==\n";
+    $stickerModel = function () { return 'мятная пони танцует польку'; };
+    $msgs3 = [['role' => 'user', 'content' => '![стикер :ponypolkadance:](https://example.com/polka.webp)']];
+    $out3 = VisionDescriber::maybeDescribe($msgs3, $stickerModel, $cache);
+    ok(str_contains($out3[0]['content'], '[Стикер: мятная пони танцует польку]'), 'alt «стикер …» -> метка [Стикер: …]');
+    $msgs4 = [['role' => 'user', 'content' => '![просто фото](https://example.com/photo4.png)']];
+    $out4 = VisionDescriber::maybeDescribe($msgs4, $stickerModel, $cache);
+    ok(str_contains($out4[0]['content'], '[Картинка: '), 'обычный alt -> метка [Картинка: …] как раньше');
+
 } finally {
     foreach (glob("$root/*.json") ?: [] as $f) @unlink($f);
     @rmdir($root);

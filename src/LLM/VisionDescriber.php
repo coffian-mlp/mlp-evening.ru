@@ -41,17 +41,20 @@ class VisionDescriber {
                 continue;
             }
             $messages[$i]['content'] = preg_replace_callback(
-                '/!\[[^\]]*\]\(([^)\s]+)\)/u',
+                '/!\[([^\]]*)\]\(([^)\s]+)\)/u',
                 function ($m) use (&$budget, $model, $cache) {
                     if ($budget <= 0) {
                         return $m[0];
                     }
-                    $desc = self::describe(trim($m[1]), $model, $cache);
+                    $desc = self::describe(trim($m[2]), $model, $cache);
                     if ($desc === null) {
                         return $m[0]; // не смогли — оставляем markdown как раньше
                     }
                     $budget--;
-                    return '[Картинка: ' . $desc . ']';
+                    // MLP-292: alt «стикер …» приходит из expandStickers — метим отдельно,
+                    // чтобы Лира отличала стикер от присланной картинки.
+                    $label = (mb_stripos($m[1], 'стикер') === 0) ? 'Стикер' : 'Картинка';
+                    return '[' . $label . ': ' . $desc . ']';
                 },
                 $content
             );

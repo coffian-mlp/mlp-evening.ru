@@ -44,6 +44,18 @@ class StickerManager {
         return $map;
     }
 
+    /**
+     * Карта code → url для «зрения» Лиры (MLP-292): предпочитает превью
+     * (thumb_url, MLP-258) — vision-модели хватает, а весит кратно меньше.
+     */
+    public function getVisionMap(): array {
+        $map = [];
+        foreach ($this->getAllStickers() as $s) {
+            $map[$s['code']] = ($s['thumb_url'] ?? null) ?: $s['image_url'];
+        }
+        return $map;
+    }
+
     public function addSticker($code, $imageUrl, $packId, $thumbUrl = null) {
         $code = trim($code, ':');
         $packId = (int)$packId;

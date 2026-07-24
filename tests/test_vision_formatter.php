@@ -77,5 +77,21 @@ if (extension_loaded('gd')) {
     echo "  (GD недоступен локально — кейс пропущен, проверим на проде)\n";
 }
 
+echo "\n== expandStickers: коды стикеров -> markdown (MLP-292) ==\n";
+$map = ['ponypolkadance' => '/upload/stickers/polka_thumb.webp', 'lyra_sit' => '/upload/stickers/lyra.png'];
+$msgs = [
+    ['role' => 'user', 'content' => 'старое сообщение :ponypolkadance:'],           // вне окна
+    ['role' => 'user', 'content' => 'смотри :ponypolkadance: и ещё :lyra_sit:'],
+    ['role' => 'user', 'content' => 'а это :neizvestnyj: код и просто 10:30 время'],
+    ['role' => 'user', 'content' => ['уже', 'мультимодальное']],
+];
+$out = VisionFormatter::expandStickers($msgs, $map, 3);
+check($out[0]['content'] === 'старое сообщение :ponypolkadance:', 'вне окна — код остаётся текстом');
+check($out[1]['content'] === 'смотри ![стикер :ponypolkadance:](/upload/stickers/polka_thumb.webp) и ещё ![стикер :lyra_sit:](/upload/stickers/lyra.png)',
+    'известные коды -> markdown с alt «стикер», два в одном сообщении');
+check($out[2]['content'] === 'а это :neizvestnyj: код и просто 10:30 время', 'неизвестный код и время не трогаются');
+check(is_array($out[3]['content']), 'мультимодальный content не тронут');
+check(VisionFormatter::expandStickers([['role' => 'user', 'content' => ':a:']], [], 3)[0]['content'] === ':a:', 'пустая карта — вход нетронут');
+
 echo "\n" . ($fail === 0 ? "ALL PASS\n" : "FAILURES: $fail\n");
 exit($fail === 0 ? 0 : 1);

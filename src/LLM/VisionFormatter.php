@@ -29,6 +29,17 @@ class VisionFormatter {
         if (!$c->getOption('ai_send_images', 1)) {
             return $messages;
         }
+        // MLP-292: стикеры хранятся текстовым кодом :code: (картинку рендерит фронт) —
+        // прогоняем через ту же зрительную трубу, что и обычные картинки: код → markdown.
+        // Сбой карты стикеров (нет таблицы и т.п.) зрение не ломает — коды останутся текстом.
+        try {
+            $map = (new \Domain\StickerManager())->getVisionMap();
+            if ($map) {
+                $messages = self::expandStickers($messages, $map);
+            }
+        } catch (\Throwable $e) {
+            error_log('VisionFormatter stickers: ' . $e->getMessage());
+        }
         // MLP-268: основная модель не понимает картинки → вместо мультимодального
         // разворота подставляем текстовые описания от вспомогательной vision-модели.
         if (!$c->getOption('ai_main_is_vision', 1)) {
@@ -37,6 +48,34 @@ class VisionFormatter {
         $base = (string)$c->getOption('ai_public_base_url', 'https://mlp-evening.ru');
         $webroot = realpath(__DIR__ . '/../..'); // корень сайта (где лежит /upload)
         return self::expand($messages, $base, $webroot ?: null);
+    }
+
+    /**
+     * Pure (MLP-292): заменить коды стикеров :code: на markdown-картинки
+     * `![стикер :code:](url)` в последних $window сообщениях — дальше их
+     * подхватывают expand()/maybeDescribe() со своим бюджетом и кешем.
+     * Старые сообщения не трогаем: там код информативнее, чем ссылка.
+     * Неизвестные коды остаются текстом; alt «стикер …» даёт метку
+     * «[Стикер: …]» в пути помощника и подсказку vision-модели.
+     */
+    public static function expandStickers(array $messages, array $map, int $window = self::RECENT_MSGS): array {
+        $n = count($messages);
+        $from = max(0, $n - $window);
+        for ($i = $from; $i < $n; $i++) {
+            $content = $messages[$i]['content'] ?? '';
+            if (!is_string($content) || strpos($content, ':') === false) {
+                continue; // мультимодальные и пустые не трогаем (анти-рекурсия как в maybeDescribe)
+            }
+            $messages[$i]['content'] = preg_replace_callback(
+                '/:([^\s:]{1,64}):/u',
+                function ($m) use ($map) {
+                    $url = $map[$m[1]] ?? null;
+                    return $url !== null ? '![стикер :' . $m[1] . ':](' . $url . ')' : $m[0];
+                },
+                $content
+            );
+        }
+        return $messages;
     }
 
     /**
