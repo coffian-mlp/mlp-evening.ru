@@ -928,6 +928,8 @@ class LLMManager {
                 . "НЕ вставляй ссылки и картинки — рисунок приложится сам. Не пересказывай описание дословно.";
             $raw = $this->generateReply($this->buildContext($this->contextLimit()), $instr);
             $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
+            // Модель иногда копирует формат контекста «[HH:MM] Имя:» — срезаем (прецедент 23050).
+            $text = trim(preg_replace('/^\[\d{1,2}:\d{2}\]\s*[^:\n]{1,40}:\s*/u', '', $text));
             return $text !== '' ? $text : null;
         } catch (\Throwable $e) {
             error_log('describeOwnDrawing: ' . get_class($e) . ': ' . $e->getMessage());
