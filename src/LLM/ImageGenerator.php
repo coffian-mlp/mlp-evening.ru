@@ -107,6 +107,13 @@ class ImageGenerator {
             error_log('ImageGenerator: не записать ' . $dir . $name . ' (права? владелец каталога?)');
             return null;
         }
+        // Sanity (MLP-277: разовый инцидент исчезнувшего файла) — битая ссылка
+        // не должна попасть в чат ни при каких обстоятельствах.
+        clearstatcache(true, $dir . $name);
+        if (!is_file($dir . $name) || filesize($dir . $name) < 1000) {
+            error_log('ImageGenerator: файл не прошёл sanity-проверку после записи: ' . $dir . $name);
+            return null;
+        }
         return self::UPLOAD_DIR . $name;
     }
 }
