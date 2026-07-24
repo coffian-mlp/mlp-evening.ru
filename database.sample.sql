@@ -349,7 +349,7 @@ CREATE TABLE IF NOT EXISTS `bot_commands` (
     `id` int(11) NOT NULL AUTO_INCREMENT,
     `command_prefix` varchar(50) NOT NULL COMMENT 'Например /schedule',
     `description` varchar(255) NOT NULL COMMENT 'Описание для админки',
-    `handler_type` enum('text','schedule','poll','todo','image') NOT NULL DEFAULT 'text',
+    `handler_type` enum('text','schedule','poll','todo','image','image_chat') NOT NULL DEFAULT 'text',
     `system_prompt` text COMMENT 'Шаблон промпта для ИИ',
     `is_active` tinyint(1) NOT NULL DEFAULT '1',
     PRIMARY KEY (`id`),

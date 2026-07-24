@@ -33,6 +33,7 @@ use Domain\Auth;
                         <option value="poll">Опрос (Спец. логика)</option>
                         <option value="todo">Беклог /todo (без LLM)</option>
                         <option value="image">Картинка /нарисуй (генерация)</option>
+                        <option value="image_chat">Сценка чата /нарисуйчат (режиссёр+генерация)</option>
                     </select>
                 </div>
 

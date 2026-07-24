@@ -69,6 +69,28 @@ try {
     check($captured !== null, 'лимит 0 = безлимит');
     $row = $conn->query("SELECT id FROM chat_messages ORDER BY id DESC LIMIT 1")->fetch_assoc();
     $msgIds[] = (int)$row['id'];
+
+    echo "== /нарисуйчат (MLP-277) ==\n";
+    $rc = new ReflectionMethod(LLMManager::class, 'handleDrawChatCommand');
+    $rc->setAccessible(true);
+    $cmdChat = ['handler_type' => 'image_chat', 'command_prefix' => '/нарисуйчат', 'system_prompt' => ''];
+
+    $captured = null;
+    $director = function () { return 'two ponies argue about apples while a third laughs'; };
+    $rc->invoke($llm, $cmdChat, ['username' => 'ИтПони'], $director, $fake);
+    check(str_contains((string)$captured, 'two ponies argue'), 'сцена режиссёра ушла в генератор');
+    check(str_contains((string)$captured, 'ТЕСТ-СТИЛЬ:') || str_contains((string)$captured, 'crayon'), 'стиль-префикс применён к сцене');
+    $row = $conn->query("SELECT id, message FROM chat_messages ORDER BY id DESC LIMIT 1")->fetch_assoc();
+    $msgIds[] = (int)$row['id'];
+    check(str_contains($row['message'], '![рисунок]'), 'сценка чата запощена');
+
+    $captured = null;
+    $emptyDirector = function () { return null; };
+    $rc->invoke($llm, $cmdChat, ['username' => 'ИтПони'], $emptyDirector, $fake);
+    check($captured === null, 'пустая сцена — генератор не вызван');
+    $row = $conn->query("SELECT id, message FROM chat_messages ORDER BY id DESC LIMIT 1")->fetch_assoc();
+    $msgIds[] = (int)$row['id'];
+    check(str_contains($row['message'], 'рисовать-то нечего'), 'вежливый отказ на пустой чат');
 } finally {
     foreach ($optBackup as $k => $v) {
         if ($v === null) $conn->query("DELETE FROM site_options WHERE key_name = '" . $conn->real_escape_string($k) . "'");
