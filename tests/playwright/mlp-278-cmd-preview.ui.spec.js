@@ -28,10 +28,16 @@ test('превью команд: «/» открывает список, филь
   const total = await page.locator('.cmd-preview-item').count();
   expect(total).toBeGreaterThan(1);
 
-  // Фильтрация
-  await page.fill('#chat-input', '/то');
+  // Фильтрация (префиксы латинские и кириллические)
+  await page.fill('#chat-input', '/tod');
   await expect(page.locator('.cmd-preview-item')).toHaveCount(1);
   await expect(page.locator('.cmd-preview-prefix').first()).toHaveText('/todo');
+
+  await page.fill('#chat-input', '/нарисуйч');
+  await expect(page.locator('.cmd-preview-item')).toHaveCount(1);
+  await expect(page.locator('.cmd-preview-prefix').first()).toHaveText('/нарисуйчат');
+
+  await page.fill('#chat-input', '/tod');
 
   // Клик подставляет префикс с пробелом и закрывает превью
   await page.locator('.cmd-preview-item').first().click();

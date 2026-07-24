@@ -2493,7 +2493,7 @@ if (typeof window.openProfileModal !== 'function') {
 
     function hideCmdPreview() {
         const el = document.getElementById('cmd-preview');
-        if (el) el.style.display = 'none';
+        if (el) { el.style.display = 'none'; el.innerHTML = ''; }
     }
 
     function renderCmdPreview(filter) {
