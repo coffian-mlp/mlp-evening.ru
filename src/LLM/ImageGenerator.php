@@ -41,21 +41,49 @@ class ImageGenerator {
      */
     public static function generate(string $prompt, ?string $model = null): ?string {
         $c = ConfigManager::getInstance();
-        $key = (string)$c->getOption('ai_routerai_key', '');
-        if ($key === '') {
-            error_log('ImageGenerator: нет ai_routerai_key');
-            return null;
-        }
         $model = $model ?? (string)$c->getOption('ai_image_model', 'black-forest-labs/flux.2-klein-4b');
+        $payload = ['model' => $model, 'prompt' => $prompt, 'n' => 1, 'size' => '1024x1024'];
+        $proxy = null;
 
-        $ch = curl_init('https://routerai.ru/api/v1/images/generations');
+        // MLP-296: выбор провайдера — как у vision-помощника. Оба ходят в
+        // OpenAI-совместимый /images/generations (ответ b64_json).
+        $provider = (string)$c->getOption('ai_image_provider', 'routerai');
+        if ($provider === 'openai') {
+            $key = (string)$c->getOption('ai_openai_key', '');
+            if ($key === '') {
+                error_log('ImageGenerator: провайдер openai — нет ai_openai_key');
+                return null;
+            }
+            // База настроена на chat/completions — производим images-эндпоинт из неё.
+            $base = (string)$c->getOption('ai_openai_base_url', 'https://api.openai.com/v1/chat/completions');
+            $endpoint = preg_replace('#/chat/completions/?$#', '/images/generations', $base);
+            if ($endpoint === $base) {
+                $endpoint = rtrim($base, '/') . '/images/generations';
+            }
+            $payload['response_format'] = 'b64_json'; // OpenAI по умолчанию отдаёт url
+            // socks5-прокси как у vision-помощника (vless не поддерживаем)
+            $p = (string)$c->getOption('ai_proxy_url', '');
+            $proxy = (strpos($p, 'socks5') === 0) ? str_replace('socks5://', 'socks5h://', $p) : null;
+        } else {
+            $key = (string)$c->getOption('ai_routerai_key', '');
+            if ($key === '') {
+                error_log('ImageGenerator: нет ai_routerai_key');
+                return null;
+            }
+            $endpoint = 'https://routerai.ru/api/v1/images/generations';
+        }
+
+        $ch = curl_init($endpoint);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => true,
             CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $key, 'Content-Type: application/json'],
-            CURLOPT_POSTFIELDS => json_encode(['model' => $model, 'prompt' => $prompt, 'n' => 1, 'size' => '1024x1024']),
+            CURLOPT_POSTFIELDS => json_encode($payload),
             CURLOPT_TIMEOUT => self::TIMEOUT,
         ]);
+        if ($proxy !== null) {
+            curl_setopt($ch, CURLOPT_PROXY, $proxy);
+        }
         $res = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err = curl_error($ch);

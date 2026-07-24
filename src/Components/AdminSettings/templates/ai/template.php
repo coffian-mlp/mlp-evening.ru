@@ -181,55 +181,18 @@ $config = $arResult['config']; // Helper
             </div>
         </div>
 
+        <!-- ============ 👁 Зрение (MLP-268/292; порядок — MLP-296) ============ -->
+        <h4 style="margin: 18px 0 6px; color: #b085c9;">👁 Зрение</h4>
+
         <div class="form-group" style="margin-top: 10px;">
             <label style="display: flex; align-items: center; cursor: pointer;">
                 <input type="hidden" name="ai_send_images" value="0">
                 <input type="checkbox" name="ai_send_images" value="1" <?= $config->getOption('ai_send_images', 1) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
                 Показывать боту картинки из чата (vision)
             </label>
-            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Главный выключатель. Vision-модель получает картинку напрямую (image_url); не-vision — текстовое описание от помощника (настройка ниже).</p>
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Главный выключатель. Vision-модель получает картинку напрямую (image_url); не-vision — текстовое описание от помощника (настройки ниже). Стикеры считаются картинками (MLP-292).</p>
         </div>
 
-        <div class="form-group">
-            <label class="form-label">Публичный базовый URL (для картинок)</label>
-            <input type="text" name="ai_public_base_url" value="<?= htmlspecialchars($config->getOption('ai_public_base_url', 'https://mlp-evening.ru')) ?>" class="form-input" placeholder="https://mlp-evening.ru">
-        </div>
-
-        <!-- MLP-274: Лира-художница -->
-        <div style="display: flex; gap: 15px;">
-            <div class="form-group" style="flex: 2;">
-                <label class="form-label">Модель генерации картинок (/нарисуй, RouterAI)</label>
-                <input type="text" name="ai_image_model" value="<?= htmlspecialchars($config->getOption('ai_image_model', 'black-forest-labs/flux.2-klein-4b')) ?>" class="form-input" placeholder="black-forest-labs/flux.2-klein-4b">
-                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Стиль — в поле ниже.</p>
-            </div>
-            <div class="form-group" style="flex: 1;">
-                <label class="form-label">Лимит рисунков в день</label>
-                <input type="number" name="ai_image_daily_limit" value="<?= (int)$config->getOption('ai_image_daily_limit', 20) ?>" class="form-input" min="0">
-                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">0 = без лимита (не советую — тролли).</p>
-            </div>
-            <div class="form-group" style="flex: 1;">
-                <label class="form-label">Контекст /нарисуйчат, сообщений</label>
-                <input type="number" name="ai_image_chat_context" value="<?= (int)$config->getOption('ai_image_chat_context', 10) ?>" class="form-input" min="2" max="50">
-                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Сколько последних сообщений видит режиссёр сценки (MLP-295).</p>
-            </div>
-        </div>
-
-        <div class="form-group" style="margin-top: 10px;">
-            <label style="display: flex; align-items: center; cursor: pointer;">
-                <input type="hidden" name="ai_image_llm_caption" value="0">
-                <input type="checkbox" name="ai_image_llm_caption" value="1" <?= $config->getOption('ai_image_llm_caption', 1) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
-                Живой комментарий к рисунку (Лира смотрит на результат)
-            </label>
-            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Vision описывает готовый рисунок, основная LLM комментирует в характере (с контекстом чата). Выключено или сбой — фиксированные подписи.</p>
-        </div>
-
-        <div class="form-group">
-            <label class="form-label">Стиль-промпт художницы (пусто = встроенный «детский рисунок»)</label>
-            <textarea name="ai_image_style_prompt" class="form-input" rows="2" placeholder="A naive child's crayon drawing… Subject:"><?= htmlspecialchars($config->getOption('ai_image_style_prompt', '')) ?></textarea>
-            <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Приставка к сюжету пользователя. Заканчивай словом «Subject:» — дальше подставится запрос.</p>
-        </div>
-
-        <!-- MLP-268: вспомогательная vision-модель, когда основная картинки не понимает -->
         <div class="form-group" style="margin-top: 10px;">
             <label style="display: flex; align-items: center; cursor: pointer;">
                 <input type="hidden" name="ai_main_is_vision" value="0">
@@ -261,6 +224,59 @@ $config = $arResult['config']; // Helper
             <label class="form-label">Промпт vision-помощника (пусто = встроенный)</label>
             <textarea name="ai_vision_prompt" class="form-input" rows="2" placeholder="Опиши изображение подробно и по делу…"><?= htmlspecialchars($config->getOption('ai_vision_prompt', '')) ?></textarea>
             <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Простой, без характера Лиры — это техническое описание, не реплика.</p>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Публичный базовый URL (для картинок)</label>
+            <input type="text" name="ai_public_base_url" value="<?= htmlspecialchars($config->getOption('ai_public_base_url', 'https://mlp-evening.ru')) ?>" class="form-input" placeholder="https://mlp-evening.ru">
+        </div>
+
+        <!-- ============ 🎨 Художница (MLP-274/276/277/295) ============ -->
+        <h4 style="margin: 18px 0 6px; color: #b085c9;">🎨 Художница</h4>
+
+        <div style="display: flex; gap: 15px;">
+            <div class="form-group" style="flex: 1;">
+                <label class="form-label">Провайдер генерации картинок</label>
+                <?php $ip = $config->getOption('ai_image_provider', 'routerai'); ?>
+                <select name="ai_image_provider" class="form-input">
+                    <option value="routerai" <?= $ip === 'routerai' ? 'selected' : '' ?>>RouterAI</option>
+                    <option value="openai" <?= $ip === 'openai' ? 'selected' : '' ?>>OpenAI-совместимый</option>
+                </select>
+                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">MLP-296: OpenAI-совместимый ходит в /images/generations по базовому URL и ключу из настроек OpenAI выше.</p>
+            </div>
+            <div class="form-group" style="flex: 2;">
+                <label class="form-label">Модель генерации картинок (/нарисуй)</label>
+                <input type="text" name="ai_image_model" value="<?= htmlspecialchars($config->getOption('ai_image_model', 'black-forest-labs/flux.2-klein-4b')) ?>" class="form-input" placeholder="black-forest-labs/flux.2-klein-4b">
+                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Стиль — в поле ниже.</p>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 15px;">
+            <div class="form-group" style="flex: 1;">
+                <label class="form-label">Лимит рисунков в день</label>
+                <input type="number" name="ai_image_daily_limit" value="<?= (int)$config->getOption('ai_image_daily_limit', 20) ?>" class="form-input" min="0">
+                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">0 = без лимита (не советую — тролли).</p>
+            </div>
+            <div class="form-group" style="flex: 1;">
+                <label class="form-label">Контекст /нарисуйчат, сообщений</label>
+                <input type="number" name="ai_image_chat_context" value="<?= (int)$config->getOption('ai_image_chat_context', 10) ?>" class="form-input" min="2" max="50">
+                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Сколько последних сообщений видит режиссёр сценки (MLP-295).</p>
+            </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 10px;">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="hidden" name="ai_image_llm_caption" value="0">
+                <input type="checkbox" name="ai_image_llm_caption" value="1" <?= $config->getOption('ai_image_llm_caption', 1) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                Живой комментарий к рисунку (Лира смотрит на результат)
+            </label>
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Vision описывает готовый рисунок, основная LLM комментирует в характере (с контекстом чата). Выключено или сбой — фиксированные подписи.</p>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Стиль-промпт художницы (пусто = встроенный «детский рисунок»)</label>
+            <textarea name="ai_image_style_prompt" class="form-input" rows="2" placeholder="A naive child's crayon drawing… Subject:"><?= htmlspecialchars($config->getOption('ai_image_style_prompt', '')) ?></textarea>
+            <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Приставка к сюжету пользователя. Заканчивай словом «Subject:» — дальше подставится запрос.</p>
         </div>
 
         <div class="form-group" style="margin-top: 10px;">

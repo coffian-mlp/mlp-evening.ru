@@ -478,6 +478,7 @@ SELECT * FROM (
     SELECT 'ai_main_is_vision' AS key_name, '0' AS value UNION ALL
     SELECT 'ai_vision_provider', 'routerai' UNION ALL
     SELECT 'ai_vision_model', 'google/gemma-3-27b-it' UNION ALL
+    SELECT 'ai_image_provider', 'routerai' UNION ALL
     SELECT 'ai_image_model', 'google/gemini-2.5-flash-image' UNION ALL
     SELECT 'ai_image_daily_limit', '20' UNION ALL
     SELECT 'ai_image_chat_context', '10' UNION ALL

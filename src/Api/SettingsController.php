@@ -72,6 +72,7 @@ class SettingsController {
         'ai_vision_provider' => ['enum', ['routerai', 'openrouter', 'openai']],
         'ai_vision_model'    => 'string',
         'ai_vision_prompt'   => 'string',
+        'ai_image_provider'  => ['enum', ['routerai', 'openai']], // MLP-296
         'ai_image_model'     => 'string',
         'ai_image_daily_limit' => 'uint',
         'ai_image_chat_context' => 'uint', // MLP-295: окно режиссёра /нарисуйчат
