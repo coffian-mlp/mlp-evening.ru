@@ -207,6 +207,11 @@ $config = $arResult['config']; // Helper
                 <input type="number" name="ai_image_daily_limit" value="<?= (int)$config->getOption('ai_image_daily_limit', 20) ?>" class="form-input" min="0">
                 <p style="font-size: 0.8em; color: #666; margin-top: 3px;">0 = без лимита (не советую — тролли).</p>
             </div>
+            <div class="form-group" style="flex: 1;">
+                <label class="form-label">Контекст /нарисуйчат, сообщений</label>
+                <input type="number" name="ai_image_chat_context" value="<?= (int)$config->getOption('ai_image_chat_context', 10) ?>" class="form-input" min="2" max="50">
+                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Сколько последних сообщений видит режиссёр сценки (MLP-295).</p>
+            </div>
         </div>
 
         <div class="form-group" style="margin-top: 10px;">

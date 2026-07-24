@@ -74,6 +74,7 @@ class SettingsController {
         'ai_vision_prompt'   => 'string',
         'ai_image_model'     => 'string',
         'ai_image_daily_limit' => 'uint',
+        'ai_image_chat_context' => 'uint', // MLP-295: окно режиссёра /нарисуйчат
         'ai_image_style_prompt' => 'string',
         'ai_image_llm_caption'  => 'int',
         // --- SMTP ---

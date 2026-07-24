@@ -54,7 +54,10 @@ class LyraArtist {
         $username = (string)($contextData['username'] ?? 'Гость');
 
         $director = $director ?? function (): ?string {
-            $ctx = $this->llm->buildReplyContext(10, null, null, false);
+            // MLP-295: окно режиссёра — настройка дашборда (кламп 2..50: меньше двух
+            // сцены не выйдет, больше полусотни — трата токенов и размытый сюжет).
+            $window = (int)ConfigManager::getInstance()->getOption('ai_image_chat_context', 10);
+            $ctx = $this->llm->buildReplyContext(max(2, min(50, $window)), null, null, false);
             if (count($ctx) < 2) {
                 return null; // рисовать пустоту — не наш жанр
             }

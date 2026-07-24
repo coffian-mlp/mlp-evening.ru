@@ -480,6 +480,7 @@ SELECT * FROM (
     SELECT 'ai_vision_model', 'google/gemma-3-27b-it' UNION ALL
     SELECT 'ai_image_model', 'google/gemini-2.5-flash-image' UNION ALL
     SELECT 'ai_image_daily_limit', '20' UNION ALL
+    SELECT 'ai_image_chat_context', '10' UNION ALL
     SELECT 'ai_image_llm_caption', '1'
 ) AS seed
 WHERE NOT EXISTS (SELECT 1 FROM `site_options` so WHERE so.`key_name` = seed.key_name);
