@@ -101,6 +101,7 @@ $(document).ready(function() {
         think: '🤔',
         neutral: '😐',
         cry: '😢',
+        eyes: '👀',
         dislike: '👎'
     };
 

@@ -12,7 +12,7 @@ use Domain\ChatManager;
 class ReactionParser {
 
     // Должно совпадать с $allowed в ChatManager::toggleReaction().
-    const ALLOWED = ['like', 'dislike', 'laugh', 'cry', 'neutral', 'heart', 'fire', 'wow', 'think', 'party', 'cool'];
+    const ALLOWED = ['like', 'dislike', 'laugh', 'cry', 'neutral', 'heart', 'fire', 'wow', 'think', 'party', 'cool', 'eyes'];
 
     /**
      * @return array ['reaction' => ?string, 'text' => string] — валидная реакция (или null)

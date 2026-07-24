@@ -38,7 +38,7 @@ check(ReactionParser::extract('[REACT: wow] ого')['reaction'] === 'wow', 'а�
 check(ReactionParser::extract('[REACTION: cool]')['reaction'] === 'cool', 'англ. REACTION');
 
 echo "\n== Новые реакции ==\n";
-foreach (['heart', 'fire', 'wow', 'think', 'party', 'cool'] as $t) {
+foreach (['heart', 'fire', 'wow', 'think', 'party', 'cool', 'eyes'] as $t) {
     check(ReactionParser::extract("[РЕАКЦИЯ: $t] x")['reaction'] === $t, "реакция $t");
 }
 
