@@ -124,6 +124,16 @@ class LyraArtist {
         $url = $generator($prompt);
 
         if ($url === null) {
+            // Живое извинение (той же настройкой, что живой комментарий): Лира
+            // своими словами обыгрывает ответ рисовальной модели; при любом
+            // сбое LLM — прежняя фикс-фраза.
+            if ($config->getOption('ai_image_llm_caption', 1)) {
+                $excuse = $this->excuseFailure($subject, $username, ImageGenerator::lastError());
+                if ($excuse !== null) {
+                    $this->llm->botSay($excuse);
+                    return true;
+                }
+            }
             $this->llm->botSay("@$username, кисть сломалась, мольберт упал... не вышло. Попробуй ещё раз чуть позже! 🎨");
             return true;
         }
@@ -163,6 +173,32 @@ class LyraArtist {
             return null; // пусто или без английского — это не сцена, а болтовня/молчание
         }
         return mb_substr($scene, 0, 400);
+    }
+
+    /**
+     * Pure: инструкция для живого извинения — техническую причину сбоя Лира
+     * пересказывает своими словами, без выдумывания готового рисунка.
+     */
+    public static function excuseInstruction(string $subject, string $username, ?string $reason): string {
+        $instr = "Ты пыталась НАРИСОВАТЬ картинку по просьбе @$username: «" . mb_substr($subject, 0, 200) . "», но рисунок НЕ ПОЛУЧИЛСЯ — техника подвела.";
+        if ($reason !== null && trim($reason) !== '') {
+            $instr .= " Рисовальная машина ответила: «" . mb_substr(trim($reason), 0, 300) . "».";
+        }
+        $instr .= " Ответь @$username в своём стиле, 1–2 предложения: признайся, что не вышло, обыграй причину простыми словами (без технических терминов), предложи попросить ещё раз чуть позже. НЕ вставляй ссылки и картинки. Не делай вид, что рисунок готов.";
+        return $instr;
+    }
+
+    /** Живое извинение за провал генерации: основная LLM с личностью и контекстом. */
+    private function excuseFailure(string $subject, string $username, ?string $reason): ?string {
+        try {
+            $raw = $this->llm->generateReply($this->llm->buildReplyContext($this->llm->contextLimit()), self::excuseInstruction($subject, $username, $reason));
+            $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
+            $text = trim(preg_replace('/^\[\d{1,2}:\d{2}\]\s*[^:\n]{1,40}:\s*/u', '', $text));
+            return $text !== '' ? $text : null;
+        } catch (\Throwable $e) {
+            error_log('LyraArtist::excuseFailure: ' . get_class($e) . ': ' . $e->getMessage());
+            return null;
+        }
     }
 
     /** MLP-276: vision смотрит на готовый рисунок → основная LLM комментирует в характере. */

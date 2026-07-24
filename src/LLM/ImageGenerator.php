@@ -20,6 +20,13 @@ class ImageGenerator {
     const JPEG_QUALITY = 88;
     const TIMEOUT = 90; // генерация 5–30с, берём с запасом
 
+    /** Причина последнего сбоя generate() — сырьё для живого извинения Лиры. */
+    private static ?string $lastError = null;
+
+    public static function lastError(): ?string {
+        return self::$lastError;
+    }
+
     /** Сегодняшний счётчик генераций (для лимита и статистики). */
     public static function todayCount(?FileCache $cache = null, ?string $day = null): int {
         $cache = $cache ?? new FileCache('imagegen');
@@ -40,6 +47,7 @@ class ImageGenerator {
      * (используется дегустацией моделей).
      */
     public static function generate(string $prompt, ?string $model = null): ?string {
+        self::$lastError = null;
         $c = ConfigManager::getInstance();
         $model = $model ?? (string)$c->getOption('ai_image_model', 'black-forest-labs/flux.2-klein-4b');
         $payload = ['model' => $model, 'prompt' => $prompt, 'n' => 1, 'size' => '1024x1024'];
@@ -52,6 +60,7 @@ class ImageGenerator {
             $key = (string)$c->getOption('ai_openai_key', '');
             if ($key === '') {
                 error_log('ImageGenerator: провайдер openai — нет ai_openai_key');
+                self::$lastError = 'провайдер openai не настроен (нет ключа)';
                 return null;
             }
             // База настроена на chat/completions — производим images-эндпоинт из неё.
@@ -68,6 +77,7 @@ class ImageGenerator {
             $key = (string)$c->getOption('ai_routerai_key', '');
             if ($key === '') {
                 error_log('ImageGenerator: нет ai_routerai_key');
+                self::$lastError = 'провайдер routerai не настроен (нет ключа)';
                 return null;
             }
             $endpoint = 'https://routerai.ru/api/v1/images/generations';
@@ -84,27 +94,53 @@ class ImageGenerator {
         if ($proxy !== null) {
             curl_setopt($ch, CURLOPT_PROXY, $proxy);
         }
+        $t0 = microtime(true);
         $res = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err = curl_error($ch);
         curl_close($ch);
+        $ms = (int)round((microtime(true) - $t0) * 1000);
 
         if ($err || $code >= 400 || !$res) {
             error_log("ImageGenerator [$model] HTTP $code: " . ($err ?: mb_substr((string)$res, 0, 200)));
+            LlmDebugLog::log('image', $provider, $model, $payload, $err ?: (string)$res, 'error', $ms);
+            self::$lastError = self::failureReason((string)$res, $err, $code);
             return null;
         }
+        LlmDebugLog::log('image', $provider, $model, $payload, (string)$res, 'ok', $ms);
         $data = json_decode($res, true);
         $b64 = $data['data'][0]['b64_json'] ?? null;
         if (!$b64) {
             error_log("ImageGenerator [$model]: нет b64_json в ответе");
+            self::$lastError = 'провайдер прислал ответ без картинки';
             return null;
         }
         $bytes = base64_decode($b64);
         if ($bytes === false || $bytes === '') {
             error_log("ImageGenerator [$model]: b64_json не декодировался");
+            self::$lastError = 'картинка от провайдера не читается';
             return null;
         }
-        return self::saveJpeg($bytes);
+        $saved = self::saveJpeg($bytes);
+        if ($saved === null) {
+            self::$lastError = 'картинка получена, но не сохранилась на сервере';
+        }
+        return $saved;
+    }
+
+    /**
+     * Pure: короткая причина сбоя для извинения Лиры — error.message из JSON
+     * провайдера (как у OpenAI/RouterAI), иначе curl-ошибка / голый HTTP-код.
+     */
+    public static function failureReason(string $body, string $curlErr, int $httpCode): string {
+        $msg = (string)(json_decode($body, true)['error']['message'] ?? '');
+        if ($msg !== '') {
+            return mb_substr($msg, 0, 300);
+        }
+        if ($curlErr !== '') {
+            return 'сеть подвела: ' . mb_substr($curlErr, 0, 200);
+        }
+        return "провайдер ответил ошибкой HTTP $httpCode";
     }
 
     /** GD-пережатие в JPEG (max 1024) и сохранение в /upload/lyra/. */
