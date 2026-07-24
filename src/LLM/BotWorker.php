@@ -82,6 +82,9 @@ class BotWorker {
                     $this->llm->processTrigger('greeting', $job['data'] ?? []);
                 } elseif ($job['type'] === 'dynamic_command') {
                     $this->llm->processTrigger('dynamic_command', $job['data'] ?? []);
+                } elseif ($job['type'] === 'cron_spontaneous') {
+                    // MLP-279: проактив теперь журналируется через очередь (единый путь)
+                    $this->llm->processTrigger('cron_spontaneous', $job['data'] ?? []);
                 }
             }
             $this->queue->complete([$id]);
@@ -179,8 +182,9 @@ class BotWorker {
 
         $announced = $this->runAnnouncements();
         if (!$announced) {
-            // Спонтанное сообщение (само вклинивается). Триггер сам решает молчать/писать.
-            $this->llm->processTrigger('cron_spontaneous');
+            // MLP-279: спонтанное — через очередь (журнал в llm_jobs; обработает
+            // следующий тик — даже живее). Триггер сам решает молчать/писать.
+            $this->queue->enqueue('cron_spontaneous', [], 0);
         }
     }
 
@@ -235,10 +239,11 @@ class BotWorker {
     }
 
     private function announce(string $message, array $scheduleCmd): void {
-        $this->llm->processTrigger('dynamic_command', [
+        // MLP-279: анонсы — через очередь (единый путь с реактивом, журнал в llm_jobs).
+        $this->queue->enqueue('dynamic_command', [
             'message' => $message,
             'command' => $scheduleCmd,
-        ]);
+        ], 0);
     }
 
     // ---------------- Опросы (бот голосует) ----------------

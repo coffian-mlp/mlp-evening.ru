@@ -428,7 +428,7 @@ CREATE TABLE IF NOT EXISTS `poll_votes` (
 
 CREATE TABLE IF NOT EXISTS `llm_jobs` (
   `id`         BIGINT       NOT NULL AUTO_INCREMENT,
-  `type`       ENUM('mention','greeting','dynamic_command') NOT NULL,
+  `type`       ENUM('mention','greeting','dynamic_command','cron_spontaneous') NOT NULL,
   `payload`    JSON         NOT NULL COMMENT 'message, message_id, user_id, username, quoted_ids, command',
   `run_after`  DATETIME     NOT NULL COMMENT 'когда можно исполнять (lifelike-задержка)',
   `status`     ENUM('pending','processing','done','failed') NOT NULL DEFAULT 'pending',

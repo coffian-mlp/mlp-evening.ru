@@ -43,7 +43,7 @@ class JobQueue {
         $limit = max(1, (int)$limit);
         $res = $this->db->query(
             "SELECT * FROM llm_jobs
-             WHERE status='pending' AND run_after <= NOW() AND type IN ('greeting','dynamic_command')
+             WHERE status='pending' AND run_after <= NOW() AND type IN ('greeting','dynamic_command','cron_spontaneous')
              ORDER BY id ASC LIMIT $limit"
         );
         return $this->collectAndMark($res);
