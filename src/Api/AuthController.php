@@ -231,7 +231,12 @@ class AuthController {
      */
     private static function finishThenGreet(string $responseJson, string $greetUsername): never {
         Response::finish($responseJson); // MLP-265: общий fastcgi-паттерн в Response
-        BotDispatch::dispatch('greeting', ['username' => $greetUsername]);
+        // MLP-294: user_id — для гейта «уже написал сам» (mention поздоровается лучше);
+        // по username гейтить нельзя: greeting несёт логин, mention — ник.
+        BotDispatch::dispatch('greeting', [
+            'username' => $greetUsername,
+            'user_id'  => (int)(Auth::userId() ?? 0),
+        ]);
         exit();
     }
 }

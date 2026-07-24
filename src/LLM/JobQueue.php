@@ -112,6 +112,23 @@ class JobQueue {
     }
 
     /**
+     * Была ли недавняя задача типа $type для пользователя с payload.user_id (MLP-294).
+     * Как hasRecentByUsername, но по id: greeting несёт логин, mention — ник,
+     * сверять их между собой по имени нельзя.
+     */
+    public function hasRecentByUserId(string $type, int $userId, int $seconds): bool {
+        $stmt = $this->db->prepare(
+            "SELECT 1 FROM llm_jobs
+             WHERE type = ? AND created_at > DATE_SUB(NOW(), INTERVAL ? SECOND)
+               AND JSON_EXTRACT(payload, '$.user_id') = ?
+             LIMIT 1"
+        );
+        $stmt->bind_param('sii', $type, $seconds, $userId);
+        $stmt->execute();
+        return $stmt->get_result()->num_rows > 0;
+    }
+
+    /**
      * Журнальная запись задачи, обработанной inline (MLP-254): статус сразу done.
      * Даёт троттлу единое состояние независимо от пути (очередь/inline)
      * и приближает «единый путь через llm_jobs» (TODO: проактив).

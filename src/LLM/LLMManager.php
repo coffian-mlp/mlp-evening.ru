@@ -220,6 +220,14 @@ class LLMManager {
                 return true;
             }
         } elseif ($triggerType === 'greeting') {
+            // MLP-294: «вошёл и сразу написал» — mention уже в очереди и сам поздоровается;
+            // отдельное приветствие даёт двойной ответ. Гейт по user_id (username не годится:
+            // greeting несёт логин, mention — ник). Центральная точка: очередь И inline.
+            $uid = (int)($contextData['user_id'] ?? 0);
+            if ($uid > 0 && (new JobQueue())->hasRecentByUserId('mention', $uid, 300)) {
+                return false;
+            }
+
             $userLogin = $contextData['username'] ?? 'Гость';
             $context = $this->buildContext($this->contextLimit());
             
@@ -622,6 +630,16 @@ class LLMManager {
      */
     public function botSay(string $text, array $quotedIds = []) {
         return $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(), $text, $quotedIds);
+    }
+
+    /**
+     * Служебный LLM-вызов БЕЗ личности Лиры и без инструкции реакций (MLP-293):
+     * для внутренних задач-инструментов (режиссёр сцены и т.п.), где персона
+     * и «можешь ответить только маркером» саботируют задание. Та же цепочка
+     * провайдеров с фолбэком и санитизацией.
+     */
+    public function generateUtility(array $context, string $systemPrompt): ?string {
+        return $this->askWithFallback($context, $systemPrompt);
     }
 
     /**
