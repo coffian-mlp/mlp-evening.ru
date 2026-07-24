@@ -190,3 +190,39 @@ function setFeedbackStatus(id, status) {
 
 loadFeedback();
 </script>
+
+<!-- MLP-280: метрики Лиры -->
+<div class="card" style="margin-top: 20px;">
+    <h3 class="dashboard-title">📊 Метрики Лиры (7 дней)</h3>
+    <div id="lyra-metrics" style="color:#888;">Загрузка…</div>
+</div>
+
+<script>
+(function () {
+    $.post('/api.php', { action: 'get_lyra_metrics', csrf_token: window.csrfToken }, function (res) {
+        if (!res.success) { document.getElementById('lyra-metrics').innerText = res.message; return; }
+        const d = res.data;
+        const typeNames = { mention: 'Ответы (упоминания)', greeting: 'Приветствия', dynamic_command: 'Команды', cron_spontaneous: 'Проактив' };
+        let rows = '';
+        Object.keys(d.jobs.by_type).forEach(function (t) {
+            const st = d.jobs.by_type[t];
+            const total = Object.values(st).reduce((a, b) => a + b, 0);
+            const failed = st.failed || 0;
+            rows += '<tr><td>' + (typeNames[t] || t) + '</td><td>' + total + '</td><td>' + (st.done || 0) + '</td>' +
+                    '<td' + (failed ? ' style="color:#e57373;"' : '') + '>' + failed + '</td></tr>';
+        });
+        const days = Object.keys(d.jobs.by_day).map(k => k.slice(5) + ': <b>' + d.jobs.by_day[k] + '</b>').join(' · ');
+        const hb = d.worker.heartbeat_age === null ? '—' : (d.worker.heartbeat_age < 90 ? '✅ жив (' + d.worker.heartbeat_age + 'с)' : '⚠️ молчит ' + Math.round(d.worker.heartbeat_age / 60) + ' мин');
+        document.getElementById('lyra-metrics').innerHTML =
+            '<div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:12px;">' +
+            '<div>🫀 Воркер: ' + hb + ' <span style="color:#888;">(' + d.worker.mode + ')</span></div>' +
+            '<div>🎨 Рисунки: сегодня <b>' + d.images.today + '</b>/' + d.images.daily_limit + ', всего <b>' + d.images.total_files + '</b></div>' +
+            '<div>📝 Беклог: 🆕 <b>' + d.feedback.new + '</b> · ✅ ' + d.feedback.done + ' · 🚫 ' + d.feedback.dismissed + '</div>' +
+            '</div>' +
+            '<div style="overflow-x:auto;"><table class="admin-table" style="width:100%;">' +
+            '<thead><tr><th>Задачи бота</th><th>Всего</th><th>Done</th><th>Failed</th></tr></thead>' +
+            '<tbody>' + (rows || '<tr><td colspan="4" style="color:#888;">Журнал пуст</td></tr>') + '</tbody></table></div>' +
+            '<p style="font-size:0.85em; color:#888; margin-top:8px;">По дням: ' + (days || '—') + '</p>';
+    }, 'json');
+})();
+</script>

@@ -55,7 +55,7 @@ class BotWorker {
         // MLP-251: страховка авто-закрытия опросов (основной путь — лениво при чтении).
         try { (new PollManager())->closeExpired(); } catch (\Throwable $e) { error_log('BotWorker closeExpired error: ' . $e->getMessage()); }
         try { $this->config->setOption('bot_worker_heartbeat', (string)time()); } catch (\Throwable $e) {}
-        try { $this->queue->purgeOld(24); } catch (\Throwable $e) {}
+        try { $this->queue->purgeOld(168); /* MLP-280: неделя журнала — окно метрик */ } catch (\Throwable $e) {}
         $this->db->query("SELECT RELEASE_LOCK('bot_worker')");
     }
 

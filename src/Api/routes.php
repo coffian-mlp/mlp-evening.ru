@@ -32,6 +32,8 @@ return [
     'delete_message'     => ['role' => 'user',   'handler' => [\Api\ChatController::class, 'delete']],
     'restore_message'    => ['role' => 'user',   'handler' => [\Api\ChatController::class, 'restore']],
     'upload_file'        => ['role' => 'user',   'handler' => [\Api\ChatController::class, 'uploadFile']],
+    // Метрики Лиры (MLP-280)
+    'get_lyra_metrics'    => ['role' => 'admin', 'handler' => [\Api\BotMetricsController::class, 'get']],
     // Беклог фидбека /todo (MLP-270)
     'get_feedback'        => ['role' => 'admin', 'handler' => [\Api\FeedbackController::class, 'list']],
     'set_feedback_status' => ['role' => 'admin', 'handler' => [\Api\FeedbackController::class, 'setStatus']],

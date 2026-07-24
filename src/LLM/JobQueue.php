@@ -147,6 +147,33 @@ class JobQueue {
         $this->db->query("UPDATE llm_jobs SET status='$safe' WHERE id IN ($list)");
     }
 
+    /**
+     * Метрики за период (MLP-280): счётчики по типам/статусам и по дням.
+     * llm_jobs хранится 7 дней (purgeOld в воркере) — окно метрик такое же.
+     */
+    public function stats(int $hours = 168): array {
+        $h = max(1, min(720, $hours));
+        $byType = [];
+        $res = $this->db->query(
+            "SELECT type, status, COUNT(*) c FROM llm_jobs
+             WHERE created_at > DATE_SUB(NOW(), INTERVAL $h HOUR)
+             GROUP BY type, status"
+        );
+        while ($res && $row = $res->fetch_assoc()) {
+            $byType[$row['type']][$row['status']] = (int)$row['c'];
+        }
+        $byDay = [];
+        $res = $this->db->query(
+            "SELECT DATE(created_at) d, COUNT(*) c FROM llm_jobs
+             WHERE created_at > DATE_SUB(NOW(), INTERVAL $h HOUR)
+             GROUP BY DATE(created_at) ORDER BY d"
+        );
+        while ($res && $row = $res->fetch_assoc()) {
+            $byDay[$row['d']] = (int)$row['c'];
+        }
+        return ['by_type' => $byType, 'by_day' => $byDay];
+    }
+
     /** Очистка старых завершённых задач (вызывать периодически из воркера). */
     public function purgeOld(int $olderThanHours = 24): void {
         $h = max(1, (int)$olderThanHours);

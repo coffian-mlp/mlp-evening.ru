@@ -112,6 +112,7 @@ $expected = [
     'upload_file'         => 'user',
     // MLP-270: беклог фидбека (дашборд)
     'get_feedback'        => 'admin',
+    'get_lyra_metrics'    => 'admin',
     'set_feedback_status' => 'admin',
 ];
 
