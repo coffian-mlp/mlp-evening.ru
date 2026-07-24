@@ -64,18 +64,15 @@ try {
 
     $action = $_POST['action'] ?? '';
 
-    // captcha_start/captcha_check, heartbeat/leave — в тонком роутере (MLP-245).
-
-    // Protected Actions
-    // captcha_*/heartbeat/leave: публичные, обрабатывались до этого гейта — после
-    // переезда в роутер (MLP-245) числятся в whitelist явно.
-    if (!$isLoggedIn && !in_array($action, ['get_chat_input', 'login', 'register', 'forgot_password', 'reset_password_submit', 'social_login', 'get_messages', 'get_stickers', 'get_packs', 'get_public_events', 'get_poll', 'get_pinned', 'captcha_start', 'captcha_check', 'heartbeat', 'leave'])) {
-         Auth::requireApiLogin(); 
-    }
-
     // --- Тонкий роутер (MLP-229/255): action → роль → контроллер.
     // Карта — в src/Api/routes.php (отдельный файл, чтобы её видели тесты).
     $apiRoutes = require __DIR__ . '/src/Api/routes.php';
+
+    // Гостевой гейт (MLP-282, AR7-2): доступ без логина ТОЛЬКО к public-маршрутам
+    // карты — единственный источник истины, ручной whitelist-список упразднён.
+    if (!$isLoggedIn && ($apiRoutes[$action]['role'] ?? '') !== 'public') {
+         Auth::requireApiLogin();
+    }
     if (isset($apiRoutes[$action])) {
         $route = $apiRoutes[$action];
         if ($route['role'] === 'admin') {

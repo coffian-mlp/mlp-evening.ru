@@ -41,12 +41,14 @@ class JobQueue {
      */
     public function claimDue(int $limit = 50): array {
         $limit = max(1, (int)$limit);
-        $res = $this->db->query(
+        $stmt = $this->db->prepare(
             "SELECT * FROM llm_jobs
              WHERE status='pending' AND run_after <= NOW() AND type IN ('greeting','dynamic_command','cron_spontaneous')
-             ORDER BY id ASC LIMIT $limit"
+             ORDER BY id ASC LIMIT ?"
         );
-        return $this->collectAndMark($res);
+        $stmt->bind_param('i', $limit);
+        $stmt->execute();
+        return $this->collectAndMark($stmt->get_result());
     }
 
     /**
@@ -152,22 +154,29 @@ class JobQueue {
      * llm_jobs хранится 7 дней (purgeOld в воркере) — окно метрик такое же.
      */
     public function stats(int $hours = 168): array {
+        // MLP-289 (AR7-L5): интервалы — через bind, единый prepared-стиль класса.
         $h = max(1, min(720, $hours));
         $byType = [];
-        $res = $this->db->query(
+        $stmt = $this->db->prepare(
             "SELECT type, status, COUNT(*) c FROM llm_jobs
-             WHERE created_at > DATE_SUB(NOW(), INTERVAL $h HOUR)
+             WHERE created_at > DATE_SUB(NOW(), INTERVAL ? HOUR)
              GROUP BY type, status"
         );
+        $stmt->bind_param('i', $h);
+        $stmt->execute();
+        $res = $stmt->get_result();
         while ($res && $row = $res->fetch_assoc()) {
             $byType[$row['type']][$row['status']] = (int)$row['c'];
         }
         $byDay = [];
-        $res = $this->db->query(
+        $stmt = $this->db->prepare(
             "SELECT DATE(created_at) d, COUNT(*) c FROM llm_jobs
-             WHERE created_at > DATE_SUB(NOW(), INTERVAL $h HOUR)
+             WHERE created_at > DATE_SUB(NOW(), INTERVAL ? HOUR)
              GROUP BY DATE(created_at) ORDER BY d"
         );
+        $stmt->bind_param('i', $h);
+        $stmt->execute();
+        $res = $stmt->get_result();
         while ($res && $row = $res->fetch_assoc()) {
             $byDay[$row['d']] = (int)$row['c'];
         }
@@ -177,8 +186,10 @@ class JobQueue {
     /** Очистка старых завершённых задач (вызывать периодически из воркера). */
     public function purgeOld(int $olderThanHours = 24): void {
         $h = max(1, (int)$olderThanHours);
-        $this->db->query(
-            "DELETE FROM llm_jobs WHERE status IN ('done','failed') AND created_at < DATE_SUB(NOW(), INTERVAL $h HOUR)"
+        $stmt = $this->db->prepare(
+            "DELETE FROM llm_jobs WHERE status IN ('done','failed') AND created_at < DATE_SUB(NOW(), INTERVAL ? HOUR)"
         );
+        $stmt->bind_param('i', $h);
+        $stmt->execute();
     }
 }

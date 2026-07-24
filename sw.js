@@ -1,6 +1,6 @@
 // Версия кеша = версия релиза (R11). Бампать при каждом релизе (см. release-чеклист):
 // смена имени заставляет activate-обработчик выбросить старый кеш ассетов на проде.
-const CACHE_VERSION = 'v4.10.1';
+const CACHE_VERSION = 'v4.10.2';
 const CACHE_NAME = 'mlp-evening-' + CACHE_VERSION;
 const ASSETS_TO_CACHE = [
     '/assets/css/main.css',
@@ -9,6 +9,7 @@ const ASSETS_TO_CACHE = [
     '/assets/js/main.js',
     '/src/Components/Chat/assets/chat-core.css',
     '/src/Components/Chat/assets/chat-core.js',
+    '/src/Components/Chat/templates/popup/style.css', // MLP-289: офлайн-попап без него терял оверрайды
     '/assets/js/dashboard.js',
     '/assets/js/jquery.min.js',
     '/assets/img/logo.png',

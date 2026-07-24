@@ -925,6 +925,11 @@ body.dashboard-layout {
     .site-nav { display: none; }
     .site-header-burger { display: block; }
 }
+/* MLP-290: пункты «только шапка» в панели бургера живут лишь на мобиле —
+   на десктопе их показывает горизонталь, в сенобургере главной они дубли. */
+@media (min-width: 769px) {
+    .menu-only-mobile { display: none !important; }
+}
 
 /* === Шапка страниц: базовые правила (MLP-260) ===
    Раньше жили только в dashboard.css — страницы без него (например /login)

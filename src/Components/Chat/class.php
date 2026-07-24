@@ -68,14 +68,7 @@ class ChatComponent extends Component {
         $app->addJs('/src/Components/Poll/templates/default/script.js');
 
         // Право текущего пользователя создавать опросы (для кнопки в тулбаре).
-        $config = ConfigManager::getInstance();
-        $pollsRole = $config->getOption('polls_create_role', 'moderator');
-        $canCreatePoll = false;
-        if (Auth::check()) {
-            if ($pollsRole === 'all')       $canCreatePoll = true;
-            elseif ($pollsRole === 'admin') $canCreatePoll = Auth::isAdmin();
-            else                            $canCreatePoll = Auth::isModerator();
-        }
+        $canCreatePoll = \Domain\PollManager::canCreate();
         $this->result['can_create_poll'] = $canCreatePoll;
 
         // MLP-278: превью команд при вводе «/» — список активных команд бота

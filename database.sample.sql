@@ -459,3 +459,27 @@ CREATE TABLE IF NOT EXISTS `feedback_backlog` (
 INSERT INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`)
 SELECT '/todo', 'Записать фидбек/идею в беклог (Лира сохранит и подтвердит)', 'todo', '', 1
 WHERE NOT EXISTS (SELECT 1 FROM `bot_commands` WHERE `handler_type` = 'todo');
+
+-- Художница (MLP-274/277, seed-синхронизация MLP-286): без этих строк свежая
+-- установка получала схему художницы, но не команды.
+INSERT INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`)
+SELECT '/нарисуй', 'Лира рисует картинку в наивном стиле (генерация, лимит в день)', 'image',
+       'A naive child''s crayon drawing, wobbly uneven lines, smudges, drawn clumsily as if a pony held the crayon in her mouth, simple flat colors, paper texture, charming and silly. Subject:', 1
+WHERE NOT EXISTS (SELECT 1 FROM `bot_commands` WHERE `handler_type` = 'image');
+
+INSERT INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`)
+SELECT '/нарисуйчат', 'Лира рисует сценку того, что происходит в чате (LLM-режиссёр + генерация)', 'image_chat', '', 1
+WHERE NOT EXISTS (SELECT 1 FROM `bot_commands` WHERE `handler_type` = 'image_chat');
+
+-- Опции vision-помощника и художницы (MLP-268/274/275, MLP-286): рантайм-дефолты
+-- в коде работу бота закрывают, но дашборд на чистой БД показывал пустые поля.
+INSERT INTO `site_options` (`key_name`, `value`)
+SELECT * FROM (
+    SELECT 'ai_main_is_vision' AS key_name, '0' AS value UNION ALL
+    SELECT 'ai_vision_provider', 'routerai' UNION ALL
+    SELECT 'ai_vision_model', 'google/gemma-3-27b-it' UNION ALL
+    SELECT 'ai_image_model', 'google/gemini-2.5-flash-image' UNION ALL
+    SELECT 'ai_image_daily_limit', '20' UNION ALL
+    SELECT 'ai_image_llm_caption', '1'
+) AS seed
+WHERE NOT EXISTS (SELECT 1 FROM `site_options` so WHERE so.`key_name` = seed.key_name);

@@ -150,8 +150,21 @@ ok($badHandlers === [], 'все хендлеры вызываемы' . ($badHand
 ok(class_exists('Components\\DbAdmin\\DbAdminComponent'),
    'DbAdminComponent автозагружаем (зависимость DbAdminController)');
 
-echo "\n== Legacy-switch: перенесённых веток больше нет ==\n";
+echo "\n== Guest-гейт выводится из карты, не из ручного списка (MLP-282) ==\n";
 $apiSrc = file_get_contents(__DIR__ . '/../api.php');
+ok(!preg_match("/in_array\\(\\\$action,\\s*\\['get_chat_input'/", $apiSrc),
+   'ручной guest-whitelist удалён из api.php');
+ok(strpos($apiSrc, "!== 'public'") !== false,
+   'гостевой гейт сверяется с role=public из карты');
+// Смысловая сверка: набор public-маршрутов карты = ожидаемый (страхует от
+// случайного открытия user-действия гостям при правке routes.php).
+$publicNow = array_keys(array_filter($routes, static fn($r) => ($r['role'] ?? '') === 'public'));
+$publicExpected = array_keys(array_filter($expected, static fn($role) => $role === 'public'));
+sort($publicNow); sort($publicExpected);
+ok($publicNow === $publicExpected,
+   'public-набор карты совпадает со сверочной таблицей (' . count($publicNow) . ' шт.)');
+
+echo "\n== Legacy-switch: перенесённых веток больше нет ==\n";
 $migrated = [
     'update_settings', 'regenerate_playlist', 'mark_watched', 'clear_votes',
     'reset_times_watched', 'clear_watching_log', 'get_users', 'get_user_options',

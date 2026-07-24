@@ -70,6 +70,19 @@ class BotCommandManager {
         return null;
     }
 
+    /**
+     * Pure (MLP-284, AR7-5): срезать префикс команды из сообщения — «полезная
+     * нагрузка» после '/todo', '/нарисуй' и т.п. Единая точка для всех хендлеров.
+     * $defaultPrefix — фоллбек, если у команды не задан command_prefix.
+     */
+    public static function stripPrefix(array $command, string $message, string $defaultPrefix): string {
+        $prefix = ltrim((string)($command['command_prefix'] ?? $defaultPrefix), '/');
+        if ($prefix === '') {
+            return trim($message);
+        }
+        return trim((string)preg_replace('/^\s*\/?' . preg_quote($prefix, '/') . '\s*/ui', '', $message));
+    }
+
     public function create(string $prefix, string $description, string $handlerType, string $systemPrompt, int $isActive): bool {
         $stmt = $this->db->prepare("INSERT INTO bot_commands (command_prefix, description, handler_type, system_prompt, is_active) VALUES (?, ?, ?, ?, ?)");
         $stmt->bind_param("ssssi", $prefix, $description, $handlerType, $systemPrompt, $isActive);

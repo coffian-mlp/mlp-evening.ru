@@ -52,6 +52,16 @@ class Auth {
         return isset($_SESSION['username']) ? (string)$_SESSION['username'] : null;
     }
 
+    /**
+     * Обновить отображаемое имя в сессии (MLP-287, AR7-8): смена ника в профиле.
+     * Единственная точка записи username в сессию вне login-механики —
+     * контроллеры в $_SESSION напрямую не пишут.
+     */
+    public static function setUsername(string $username): void {
+        self::ensureSession();
+        $_SESSION['username'] = $username;
+    }
+
     public static function role(): string {
         self::ensureSession();
         return (string)($_SESSION['role'] ?? 'user');

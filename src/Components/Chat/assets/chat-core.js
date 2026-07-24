@@ -2502,10 +2502,23 @@ if (typeof window.openProfileModal !== 'function') {
         const el = ensureCmdPreview();
         if (!el) return;
         if (!cmds.length) { hideCmdPreview(); return; }
-        el.innerHTML = cmds.map(c =>
-            '<div class="cmd-preview-item" data-prefix="' + c.prefix.replace(/"/g, '&quot;') + '">' +
-            '<span class="cmd-preview-prefix">' + c.prefix + '</span>' +
-            '<span class="cmd-preview-desc">' + (c.description || '') + '</span></div>').join('');
+        // MLP-289 (AR7-L1): узлы вместо innerHTML-конкатенации — префикс и
+        // описание команды экранированы, как пользовательский текст в беклоге.
+        el.innerHTML = '';
+        cmds.forEach(function (c) {
+            const item = document.createElement('div');
+            item.className = 'cmd-preview-item';
+            item.dataset.prefix = c.prefix;
+            const prefix = document.createElement('span');
+            prefix.className = 'cmd-preview-prefix';
+            prefix.textContent = c.prefix;
+            const desc = document.createElement('span');
+            desc.className = 'cmd-preview-desc';
+            desc.textContent = c.description || '';
+            item.appendChild(prefix);
+            item.appendChild(desc);
+            el.appendChild(item);
+        });
         el.style.display = 'block';
     }
 

@@ -19,7 +19,6 @@ class BotMetricsController {
         $fm = new FeedbackManager();
         $c = ConfigManager::getInstance();
 
-        $lyraDir = dirname(__DIR__, 2) . '/upload/lyra';
         $hb = (int)$c->getOption('bot_worker_heartbeat', 0);
 
         Response::json(true, "Метрики получены", 'success', [
@@ -27,7 +26,7 @@ class BotMetricsController {
             'images' => [
                 'today' => ImageGenerator::todayCount(),
                 'daily_limit' => (int)$c->getOption('ai_image_daily_limit', 20),
-                'total_files' => is_dir($lyraDir) ? count(glob($lyraDir . '/*.jpg') ?: []) : 0,
+                'total_files' => self::totalDrawings(),
             ],
             'feedback' => [
                 'new' => $fm->countNew(),
@@ -39,5 +38,22 @@ class BotMetricsController {
                 'mode' => (string)$c->getOption('ai_worker_mode', 'auto'),
             ],
         ]);
+    }
+
+    /**
+     * Всего рисунков в /upload/lyra (MLP-289, AR7-L7): glob по каталогу дорог
+     * при разрастании — кешируем на 5 минут через Core\FileCache('imagegen'),
+     * тот же подкаталог, что у дневного счётчика художницы.
+     */
+    private static function totalDrawings(): int {
+        $cache = new \Core\FileCache('imagegen');
+        $cached = $cache->get('total_files', 300);
+        if ($cached !== null && isset($cached['n'])) {
+            return (int)$cached['n'];
+        }
+        $lyraDir = dirname(__DIR__, 2) . '/upload/lyra';
+        $n = is_dir($lyraDir) ? count(glob($lyraDir . '/*.jpg') ?: []) : 0;
+        $cache->set('total_files', ['n' => $n]);
+        return $n;
     }
 }

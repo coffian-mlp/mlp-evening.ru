@@ -1,10 +1,12 @@
 <?php
 use LLM\LLMManager;
+use LLM\LyraArtist;
 use LLM\ImageGenerator;
 use Core\FileCache;
 /**
- * Интеграционный тест /нарисуй (MLP-274): путь handleDrawCommand с
+ * Интеграционный тест /нарисуй (MLP-274): путь LyraArtist::handleDraw с
  * инжектированным генератором (без сети/оплаты) + дневной лимит.
+ * MLP-284: художница вынесена в LLM\LyraArtist — методы публичные, без рефлексии.
  *
  * Запуск: docker compose exec php php tests/integration_draw_command.php
  */
@@ -22,15 +24,14 @@ try {
     }
 
     $llm = new LLMManager();
-    $r = new ReflectionMethod(LLMManager::class, 'handleDrawCommand');
-    $r->setAccessible(true);
+    $artist = new LyraArtist($llm);
     $cmd = ['handler_type' => 'image', 'command_prefix' => '/нарисуй', 'system_prompt' => 'ТЕСТ-СТИЛЬ:'];
 
     $captured = null;
     $fake = function ($prompt) use (&$captured) { $captured = $prompt; return '/upload/lyra/it_fake.jpg'; };
 
     echo "== успешная генерация ==\n";
-    $r->invoke($llm, $cmd, ['message' => '/нарисуй пони на облаке', 'username' => 'ИтПони'], $fake);
+    $artist->handleDraw($cmd, ['message' => '/нарисуй пони на облаке', 'username' => 'ИтПони'], $fake);
     check(str_starts_with((string)$captured, 'ТЕСТ-СТИЛЬ:'), 'стиль-префикс из system_prompt команды');
     check(str_contains($captured, 'пони на облаке'), 'сюжет пользователя в промпте');
     $row = $conn->query("SELECT id, message FROM chat_messages ORDER BY id DESC LIMIT 1")->fetch_assoc();
@@ -40,7 +41,7 @@ try {
 
     echo "== пустой запрос ==\n";
     $captured = null;
-    $r->invoke($llm, $cmd, ['message' => '/нарисуй', 'username' => 'ИтПони'], $fake);
+    $artist->handleDraw($cmd, ['message' => '/нарисуй', 'username' => 'ИтПони'], $fake);
     check($captured === null, 'генератор не вызван');
     $row = $conn->query("SELECT id, message FROM chat_messages ORDER BY id DESC LIMIT 1")->fetch_assoc();
     $msgIds[] = (int)$row['id'];
@@ -48,7 +49,7 @@ try {
 
     echo "== сбой генератора ==\n";
     $boom = function () { return null; };
-    $r->invoke($llm, $cmd, ['message' => '/нарисуй грозу', 'username' => 'ИтПони'], $boom);
+    $artist->handleDraw($cmd, ['message' => '/нарисуй грозу', 'username' => 'ИтПони'], $boom);
     $row = $conn->query("SELECT id, message FROM chat_messages ORDER BY id DESC LIMIT 1")->fetch_assoc();
     $msgIds[] = (int)$row['id'];
     check(str_contains($row['message'], 'не вышло'), 'вежливый отказ при сбое');
@@ -65,19 +66,17 @@ try {
 
     $cfg->setOption('ai_image_daily_limit', '0'); // 0 = без лимита — генерация идёт
     $captured = null;
-    $r->invoke($llm, $cmd, ['message' => '/нарисуй солнце', 'username' => 'ИтПони'], $fake);
+    $artist->handleDraw($cmd, ['message' => '/нарисуй солнце', 'username' => 'ИтПони'], $fake);
     check($captured !== null, 'лимит 0 = безлимит');
     $row = $conn->query("SELECT id FROM chat_messages ORDER BY id DESC LIMIT 1")->fetch_assoc();
     $msgIds[] = (int)$row['id'];
 
     echo "== /нарисуйчат (MLP-277) ==\n";
-    $rc = new ReflectionMethod(LLMManager::class, 'handleDrawChatCommand');
-    $rc->setAccessible(true);
     $cmdChat = ['handler_type' => 'image_chat', 'command_prefix' => '/нарисуйчат', 'system_prompt' => ''];
 
     $captured = null;
     $director = function () { return 'two ponies argue about apples while a third laughs'; };
-    $rc->invoke($llm, $cmdChat, ['username' => 'ИтПони'], $director, $fake);
+    $artist->handleDrawChat($cmdChat, ['username' => 'ИтПони'], $director, $fake);
     check(str_contains((string)$captured, 'two ponies argue'), 'сцена режиссёра ушла в генератор');
     check(str_contains((string)$captured, 'ТЕСТ-СТИЛЬ:') || str_contains((string)$captured, 'crayon'), 'стиль-префикс применён к сцене');
     $row = $conn->query("SELECT id, message FROM chat_messages ORDER BY id DESC LIMIT 1")->fetch_assoc();
@@ -86,7 +85,7 @@ try {
 
     $captured = null;
     $emptyDirector = function () { return null; };
-    $rc->invoke($llm, $cmdChat, ['username' => 'ИтПони'], $emptyDirector, $fake);
+    $artist->handleDrawChat($cmdChat, ['username' => 'ИтПони'], $emptyDirector, $fake);
     check($captured === null, 'пустая сцена — генератор не вызван');
     $row = $conn->query("SELECT id, message FROM chat_messages ORDER BY id DESC LIMIT 1")->fetch_assoc();
     $msgIds[] = (int)$row['id'];

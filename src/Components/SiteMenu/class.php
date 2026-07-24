@@ -18,11 +18,15 @@ class SiteMenuComponent extends Component {
         // Подачи: 'header' — шапка страниц (горизонталь + мобильный бургер),
         // 'burger' — только сенобургер, 'stream' — полоска главной (сенобургер
         // всегда + горизонталь header-набора справа от лого; мобилка — CSS).
+        // MLP-290: панели бургеров строятся из ОБЪЕДИНЕНИЯ header+burger ('mobile'),
+        // чтобы пункт «только шапка» не исчезал на мобиле, где горизонталь спрятана.
+        // На главной сенобургер виден и на десктопе — header-only пункты там
+        // помечаются классом menu-only-mobile (см. panel.php) и прячутся >768px.
         if ($this->templateName === 'header') {
             $this->result['items'] = $menu->getTreeForViewer('header');
-            $this->result['burger_items'] = $menu->getTreeForViewer('burger');
+            $this->result['burger_items'] = $menu->getTreeForViewer('mobile');
         } elseif ($this->templateName === 'stream') {
-            $this->result['items'] = $menu->getTreeForViewer('burger');      // панель сенобургера
+            $this->result['items'] = $menu->getTreeForViewer('mobile');      // панель сенобургера
             $this->result['nav_items'] = $menu->getTreeForViewer('header');  // горизонталь
         } else {
             $this->result['items'] = $menu->getTreeForViewer('burger');

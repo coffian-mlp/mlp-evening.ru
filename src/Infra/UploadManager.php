@@ -105,6 +105,14 @@ class UploadManager {
     }
 
     /**
+     * Резолвер аватара (MLP-287, AR7-9): фиксирует «магическую тройку»
+     * (ключ файла + каталог) — раньше дублировалась в Profile/UserAdmin.
+     */
+    public function resolveAvatar(): string {
+        return $this->resolveFromRequest('avatar_file', trim($_POST['avatar_url'] ?? ''), '/upload/avatars/');
+    }
+
+    /**
      * Загрузка файла из $_FILES
      */
     public function uploadFromPost($file) {

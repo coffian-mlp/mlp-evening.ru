@@ -64,10 +64,8 @@ class UserAdminController {
         $font_preference = trim($_POST['font_preference'] ?? 'open_sans');
         $font_scale = (int)($_POST['font_scale'] ?? 100);
         try {
-            // AR6-5 (MLP-264): общий резолвер «файл приоритетнее URL».
-            $avatar_url = (new UploadManager())->resolveFromRequest(
-                'avatar_file', trim($_POST['avatar_url'] ?? ''), '/upload/avatars/'
-            );
+            // AR6-5 (MLP-264): общий резолвер «файл приоритетнее URL». MLP-287: resolveAvatar().
+            $avatar_url = (new UploadManager())->resolveAvatar();
         } catch (\Throwable $e) {
             Response::caught($e, "Аватар: ");
         }

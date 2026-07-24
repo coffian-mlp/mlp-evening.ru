@@ -61,10 +61,8 @@ class ProfileController {
         if (isset($_POST['avatar_url']) || isset($_FILES['avatar_file'])) {
             try {
                 // AR6-5: общий резолвер «файл приоритетнее URL»; невалидная внешняя
-                // ссылка теперь отбивается UserError (раньше тихо сохранялась — MLP-261 находка).
-                $data['avatar_url'] = (new UploadManager())->resolveFromRequest(
-                    'avatar_file', trim($_POST['avatar_url'] ?? ''), '/upload/avatars/'
-                );
+                // ссылка отбивается UserError. MLP-287: тройка аргументов — в resolveAvatar().
+                $data['avatar_url'] = (new UploadManager())->resolveAvatar();
             } catch (\Throwable $e) {
                 Response::caught($e, "Аватар: ");
             }
@@ -77,7 +75,7 @@ class ProfileController {
 
         try {
             (new UserManager())->updateProfile($userId, $data);
-            if (isset($data['nickname'])) $_SESSION['username'] = $data['nickname']; // запись сессии — auth-механика, как было
+            if (isset($data['nickname'])) Auth::setUsername($data['nickname']); // MLP-287: сессия — только через Auth
             Response::json(true, "Профиль обновлен!", 'success', ['reload' => true]);
         } catch (\Throwable $e) {
             Response::caught($e);

@@ -64,6 +64,24 @@ $burger = array_column(MenuManager::filterForViewer($tree, 'all', 'burger'), 'ti
 ok($header === ['Оба', 'Только шапка'], 'header-набор по флагу');
 ok($burger === ['Оба', 'Только бургер'], 'burger-набор по флагу');
 
+echo "\n== filterForViewer: подача mobile — объединение (MLP-290) ==\n";
+$mobile = array_column(MenuManager::filterForViewer($tree, 'all', 'mobile'), 'title');
+ok($mobile === ['Оба', 'Только шапка', 'Только бургер'], 'mobile = header ∪ burger, порядок sort_order');
+// Прецедент бага: админ-пункт «только шапка» обязан попасть в мобильный бургер.
+$tree2 = MenuManager::buildTree([
+    item(1, null, 'Админка', '/dashboard/', 'admins', ['show_in_burger' => 0]),
+]);
+ok(MenuManager::filterForViewer($tree2, 'admins', 'mobile') !== [], 'header-only админ-пункт виден в mobile-наборе');
+ok(MenuManager::filterForViewer($tree2, 'admins', 'burger') === [], 'в чистом burger-наборе его по-прежнему нет');
+// Дети тоже объединяются
+$tree3 = MenuManager::buildTree([
+    item(1, null, 'Комнаты', null),
+    item(2, 1, 'Только шапка', '/p/a', 'all', ['show_in_burger' => 0]),
+    item(3, 1, 'Только бургер', '/p/b', 'all', ['show_in_header' => 0]),
+]);
+$m3 = MenuManager::filterForViewer($tree3, 'all', 'mobile');
+ok(count($m3) === 1 && count($m3[0]['children']) === 2, 'mobile объединяет и детей раскрывашки');
+
 echo "\n== filterForViewer: пустые раскрывашки ==\n";
 $tree = MenuManager::buildTree([
     item(1, null, 'Комнаты', null),

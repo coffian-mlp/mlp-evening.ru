@@ -4,7 +4,6 @@ namespace Api;
 
 use Domain\Auth;
 use Domain\ChatManager;
-use Infra\ConfigManager;
 use Domain\PollManager;
 
 
@@ -16,16 +15,8 @@ use Domain\PollManager;
  */
 class PollController {
 
-    /** Право создавать опрос по настройке дашборда (admin / moderator / all). */
-    private static function canCreate(): bool {
-        $role = ConfigManager::getInstance()->getOption('polls_create_role', 'moderator');
-        if ($role === 'all')   return Auth::check();
-        if ($role === 'admin') return Auth::isAdmin();
-        return Auth::isModerator(); // 'moderator' (дефолт) = модер + админ
-    }
-
     public static function create(): void {
-        if (!self::canCreate()) {
+        if (!PollManager::canCreate()) {
             Response::json(false, "Недостаточно прав для создания опроса", 'error');
         }
         $question = trim($_POST['question'] ?? '');

@@ -40,5 +40,15 @@ ok(BotCommandManager::matchCommand($cmds, 'привет, лира!') === null, '
 ok(BotCommandManager::matchCommand($cmds, 'а что там по schedule') === null, 'префикс не в начале');
 ok(BotCommandManager::matchCommand([], '/schedule') === null, 'пустой список команд');
 
+echo "\n== stripPrefix (MLP-284, AR7-5) ==\n";
+$todo = ['command_prefix' => '/todo'];
+ok(BotCommandManager::stripPrefix($todo, '/todo идея про пони', 'todo') === 'идея про пони', 'срез префикса со слешем');
+ok(BotCommandManager::stripPrefix($todo, 'todo идея', 'todo') === 'идея', 'срез без слеша');
+ok(BotCommandManager::stripPrefix($todo, '/todo', 'todo') === '', 'пустая нагрузка');
+ok(BotCommandManager::stripPrefix($todo, '  /TODO  ИДЕЯ  ', 'todo') === 'ИДЕЯ', 'регистронезависимо, трим');
+ok(BotCommandManager::stripPrefix(['command_prefix' => '/нарисуй'], '/нарисуй мятного кролика', 'нарисуй') === 'мятного кролика', 'кириллический префикс');
+ok(BotCommandManager::stripPrefix([], '/todo идея', 'todo') === 'идея', 'фоллбек-префикс при пустой команде');
+ok(BotCommandManager::stripPrefix(['command_prefix' => ''], 'просто текст', '') === 'просто текст', 'пустой префикс — только трим');
+
 echo "\n" . ($fail === 0 ? "ALL PASS\n" : "FAILURES: $fail\n");
 exit($fail === 0 ? 0 : 1);

@@ -20,6 +20,20 @@ class PollManager {
         $this->db = Database::getInstance()->getConnection();
     }
 
+    /**
+     * Право текущего пользователя создавать опросы — доменное правило по настройке
+     * дашборда polls_create_role (all / admin / moderator; дефолт moderator = модер+админ).
+     * Единая точка (AR7-1): API, кнопка тулбара, превью команд и команда-опрос бота
+     * зовут ТОЛЬКО сюда — копии правила запрещены.
+     */
+    public static function canCreate(): bool {
+        if (!Auth::check()) return false;
+        $role = \Infra\ConfigManager::getInstance()->getOption('polls_create_role', 'moderator');
+        if ($role === 'all')   return true;
+        if ($role === 'admin') return Auth::isAdmin();
+        return Auth::isModerator();
+    }
+
     // ---------------- Создание ----------------
 
     /**

@@ -743,6 +743,18 @@ class ChatManager {
         return $row ? (int)$row['user_id'] : null;
     }
 
+    /**
+     * Время (created_at, UTC) последнего сообщения пользователя (MLP-283, AR7-3):
+     * rate-лимиты бота по собственной активности. null — сообщений нет.
+     */
+    public function getLastMessageTimeByUser(int $userId): ?string {
+        $stmt = $this->db->prepare("SELECT created_at FROM chat_messages WHERE user_id = ? ORDER BY id DESC LIMIT 1");
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        return $row ? (string)$row['created_at'] : null;
+    }
+
     public function getMessages($limit = 50, $beforeId = null) {
         $limit = (int)$limit;
         

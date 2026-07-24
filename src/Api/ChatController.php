@@ -20,11 +20,7 @@ class ChatController {
     /** HTML поля ввода + данные пользователя для мягкой авторизации (public). */
     public static function getInput(): void {
         // Право на кнопку «Создать опрос» при мягком входе (MLP-239).
-        $arResult = ['can_create_poll' => false];
-        if (Auth::check()) {
-            $pr = ConfigManager::getInstance()->getOption('polls_create_role', 'moderator');
-            $arResult['can_create_poll'] = ($pr === 'all') ? true : (($pr === 'admin') ? Auth::isAdmin() : Auth::isModerator());
-        }
+        $arResult = ['can_create_poll' => \Domain\PollManager::canCreate()];
         ob_start();
         include dirname(__DIR__, 2) . '/src/Components/Chat/templates/embedded/input_area.php';
         $html = ob_get_clean();
@@ -155,10 +151,9 @@ class ChatController {
 
         // AR4-1: команда-опрос уважает polls_create_role — как и прямое создание.
         // Нет прав → сбрасываем в обычное упоминание (Лира поболтает, опрос не создаст).
-        if ($matchedCommand && ($matchedCommand['handler_type'] ?? '') === 'poll') {
-            $pr = ConfigManager::getInstance()->getOption('polls_create_role', 'moderator');
-            $canPoll = ($pr === 'all') ? Auth::check() : (($pr === 'admin') ? Auth::isAdmin() : Auth::isModerator());
-            if (!$canPoll) $matchedCommand = null;
+        if ($matchedCommand && ($matchedCommand['handler_type'] ?? '') === 'poll'
+            && !\Domain\PollManager::canCreate()) {
+            $matchedCommand = null;
         }
 
         // Диспетчеризация: очередь (воркер ответит) или inline-фоллбек (с lifelike-задержкой).

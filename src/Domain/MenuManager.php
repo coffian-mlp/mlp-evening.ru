@@ -86,11 +86,17 @@ class MenuManager {
 
     /**
      * Фильтр видимости: роль зрителя ('all' — гость, 'users', 'admins' — админ
-     * видит всё) × подача ('header'|'burger'). Раскрывашка без url и без
+     * видит всё) × подача ('header'|'burger'|'mobile'). Раскрывашка без url и без
      * видимых детей скрывается.
+     *
+     * 'mobile' (MLP-290): объединение header+burger — на мобиле горизонталь шапки
+     * спрятана CSS-ом, и пункт «только шапка» без объединения исчезал бы совсем.
      */
     public static function filterForViewer(array $tree, string $role, string $mode): array {
-        $showFlag = $mode === 'header' ? 'show_in_header' : 'show_in_burger';
+        $shown = function (array $item) use ($mode): bool {
+            if ($mode === 'mobile') return !empty($item['show_in_header']) || !empty($item['show_in_burger']);
+            return !empty($item[$mode === 'header' ? 'show_in_header' : 'show_in_burger']);
+        };
         $roleAllows = function (string $vis) use ($role): bool {
             if ($vis === 'all') return true;
             if ($vis === 'users') return $role === 'users' || $role === 'admins';
@@ -99,11 +105,11 @@ class MenuManager {
 
         $out = [];
         foreach ($tree as $item) {
-            if (!$roleAllows($item['visibility']) || !(int)$item[$showFlag]) continue;
+            if (!$roleAllows($item['visibility']) || !$shown($item)) continue;
 
             $item['children'] = array_values(array_filter(
                 $item['children'] ?? [],
-                fn($c) => $roleAllows($c['visibility']) && (int)$c[$showFlag]
+                fn($c) => $roleAllows($c['visibility']) && $shown($c)
             ));
 
             // Раскрывашка (url NULL) без видимых детей — пустышка, скрываем

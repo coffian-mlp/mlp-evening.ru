@@ -157,15 +157,9 @@ class BotWorker {
     }
 
     private function lastBotReplyTs(): ?int {
-        $botId = $this->llm->getBotUserId();
-        $stmt = $this->db->prepare("SELECT created_at FROM chat_messages WHERE user_id = ? ORDER BY id DESC LIMIT 1");
-        $stmt->bind_param('i', $botId);
-        $stmt->execute();
-        $res = $stmt->get_result();
-        if ($row = $res->fetch_assoc()) {
-            return strtotime($row['created_at'] . ' UTC') ?: null;
-        }
-        return null;
+        // MLP-283 (AR7-3): chat_messages — только через владельца ChatManager.
+        $at = $this->llm->getChatManager()->getLastMessageTimeByUser((int)$this->llm->getBotUserId());
+        return $at !== null ? (strtotime($at . ' UTC') ?: null) : null;
     }
 
     // ---------------- Проактив (спонтанные + анонсы) ----------------
