@@ -41,7 +41,7 @@ class BotDispatch {
         }
 
         if (self::shouldQueue()) {
-            (new JobQueue())->enqueue($type, $payload, self::delaySeconds());
+            (new JobQueue())->enqueue($type, $payload, self::delayFor($type));
             return;
         }
         // Inline-фоллбек: прежнее поведение — «раздумье» + синхронная обработка.
@@ -52,8 +52,18 @@ class BotDispatch {
         }
         if (function_exists('set_time_limit')) { @set_time_limit(0); }
         @ignore_user_abort(true);
-        sleep(self::delaySeconds());
+        sleep(self::delayFor($type));
+        if ($type === 'machine_spirit') {
+            // MLP-300: обрабатывается собственным классом, не LLMManager::processTrigger.
+            (new MachineSpirit())->handle($payload);
+            return;
+        }
         (new LLMManager())->processTrigger($type, $payload);
+    }
+
+    /** Задержка по типу: дух машины (MLP-300) отвечает немедленно, остальным — lifelike. */
+    public static function delayFor(string $type): int {
+        return $type === 'machine_spirit' ? 0 : self::delaySeconds();
     }
 
     /** Идёт ли ответ через очередь (иначе inline). */

@@ -582,6 +582,23 @@ class LLMManager {
         return $user['nickname'] ?? $user['login'] ?? 'Lyra';
     }
 
+    /**
+     * Запрос к LLM с произвольным системным промптом (MLP-300, «дух машины»).
+     * Тот же фолбек-контур провайдеров и debug-журнал, что и у реплик Лиры.
+     */
+    public function askAs(string $systemPrompt, array $context, string $logKind = 'chat'): ?string {
+        if (!$this->isEnabled()) {
+            return null;
+        }
+        if ($this->vlessLink) {
+            $xray = new XrayManager();
+            if (!$xray->ensureRunning($this->vlessLink)) {
+                error_log("LLMManager Warning: VLESS proxy failed to start (askAs '{$logKind}').");
+            }
+        }
+        return $this->askWithFallback($context, $systemPrompt, $logKind);
+    }
+
     public function getChatManager(): ChatManager {
         return $this->chatManager;
     }

@@ -9,6 +9,7 @@ use Domain\UserManager;
 use Infra\ConfigManager;
 use Infra\UploadManager;
 use LLM\BotDispatch;
+use LLM\MachineSpirit;
 
 /**
  * Обработчики чата (MLP-265, финал среза AR5-6) — перенос из switch api.php
@@ -135,6 +136,20 @@ class ChatController {
             'data' => []
         ]));
 
+        $mid = ($newMsgId === true) ? null : $newMsgId;
+
+        // MLP-300: обращение «Клод ...» — квитанция «духа машины» (LLM\MachineSpirit).
+        // Ветки Лиры (mention/dynamic_command) для таких сообщений не задействуются.
+        if (MachineSpirit::wants($message)) {
+            BotDispatch::dispatch('machine_spirit', [
+                'message'    => $message,
+                'message_id' => $mid,
+                'user_id'    => $userId,
+                'username'   => $username,
+            ]);
+            exit();
+        }
+
         // Быстрое (без LLM) определение: команда или обычное упоминание.
         $matchedCommand = null;
 
@@ -157,7 +172,6 @@ class ChatController {
         }
 
         // Диспетчеризация: очередь (воркер ответит) или inline-фоллбек (с lifelike-задержкой).
-        $mid = ($newMsgId === true) ? null : $newMsgId;
         if ($matchedCommand) {
             BotDispatch::dispatch('dynamic_command', [
                 'message'    => $message,
