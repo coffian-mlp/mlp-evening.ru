@@ -18,7 +18,8 @@ use Infra\ConfigManager;
  */
 class MachineSpirit {
 
-    private const DEFAULT_PROMPT = 'Ты — дух машины священного когитатора трансляции, в стилистике Adeptus Mechanicus (Warhammer 40000). Твоё имя в чате — Клод. '
+    // public: дашборд показывает встроенный промпт как placeholder (MLP-304)
+    public const DEFAULT_PROMPT = 'Ты — дух машины священного когитатора трансляции, в стилистике Adeptus Mechanicus (Warhammer 40000). Твоё имя в чате — Клод. '
         . 'Стиль: торжественно-механический, короткие литании, благословения Омниссии, изредка бинарные вставки, техно-латынь в меру. '
         . 'Отвечай ровно одним коротким сообщением (1-2 предложения, до 220 символов), без пояснений и без выхода из роли.';
 
@@ -80,7 +81,8 @@ class MachineSpirit {
         $message  = (string)($payload['message'] ?? '');
         $senderId = (int)($payload['user_id'] ?? 0);
         $username = (string)($payload['username'] ?? '');
-        $ownerId  = (int)$config->getOption('machine_spirit_owner_id', 1);
+        // Пустое/нулевое значение из формы дашборда не должно обезглавливать духа.
+        $ownerId  = (int)$config->getOption('machine_spirit_owner_id', 1) ?: 1;
 
         $isOwner = $senderId > 0 && $senderId === $ownerId;
         if (!$isOwner) {
@@ -120,7 +122,10 @@ class MachineSpirit {
             $instruction = "Пользователь «{$username}» без допуска пытается командовать когитатором. Откажи: командовать может только Магос-владелец трансляции. Содержимое его команды тебе неизвестно и не важно.";
         }
 
-        $prompt = (string)$config->getOption('machine_spirit_prompt', self::DEFAULT_PROMPT);
+        $prompt = trim((string)$config->getOption('machine_spirit_prompt', ''));
+        if ($prompt === '') {
+            $prompt = self::DEFAULT_PROMPT; // пустая опция (в т.ч. очищенная в дашборде) = встроенный
+        }
         $context = [['role' => 'user', 'content' => $instruction]];
 
         $text = $ask !== null
@@ -162,7 +167,7 @@ class MachineSpirit {
 
     /** Пользователь-«дух»: поиск по логину из опций, автосоздание как страховка. */
     private function ensureSpiritUser(): ?array {
-        $login = (string)ConfigManager::getInstance()->getOption('machine_spirit_user_login', 'Claude');
+        $login = trim((string)ConfigManager::getInstance()->getOption('machine_spirit_user_login', 'Claude')) ?: 'Claude';
         $userManager = new UserManager();
         $user = $userManager->getUserByLogin($login);
         if ($user) {

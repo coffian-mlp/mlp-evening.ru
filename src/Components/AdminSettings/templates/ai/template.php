@@ -288,6 +288,41 @@ $config = $arResult['config']; // Helper
             <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Лира сможет реагировать (❤️ 😂 🔥 и др.) на сообщение, которому отвечает — вместо или вместе с текстом.</p>
         </div>
 
+        <!-- ============ ⚙️ Дух машины (MLP-300..304) ============ -->
+        <h4 style="margin: 18px 0 6px; color: #b085c9;">⚙️ Дух машины (Клод)</h4>
+        <p style="font-size: 0.85em; color: #666; margin-bottom: 10px;">Квитанции на команды стрима «Клод, …»: владельцу — подтверждение/справка, остальным — отказ. Сами команды исполняет внешний демон владельца.</p>
+
+        <div class="form-group">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="hidden" name="machine_spirit_enabled" value="0">
+                <input type="checkbox" name="machine_spirit_enabled" value="1" <?= $config->getOption('machine_spirit_enabled', 0) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                <strong>Включить духа машины</strong>
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Системный промпт духа (пусто = встроенный «Adeptus Mechanicus»)</label>
+            <textarea name="machine_spirit_prompt" class="form-input" rows="3" placeholder="<?= htmlspecialchars(\LLM\MachineSpirit::DEFAULT_PROMPT) ?>"><?= htmlspecialchars($config->getOption('machine_spirit_prompt', '')) ?></textarea>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Логин пользователя-духа</label>
+            <input type="text" name="machine_spirit_user_login" value="<?= htmlspecialchars($config->getOption('machine_spirit_user_login', 'Claude')) ?>" class="form-input" placeholder="Claude">
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">От имени этого пользователя дух пишет в чат (создастся автоматически, если нет).</p>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">ID владельца (Магоса)</label>
+            <input type="number" name="machine_spirit_owner_id" value="<?= htmlspecialchars($config->getOption('machine_spirit_owner_id', 1)) ?>" class="form-input">
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Только его обращения считаются командами; ему дух отвечает безусловно.</p>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Кулдаун отказов чужим (сек, 0 = не отвечать чужим)</label>
+            <input type="number" name="machine_spirit_cooldown" value="<?= htmlspecialchars($config->getOption('machine_spirit_cooldown', 120)) ?>" class="form-input">
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Дополнительно действуют общие лимиты бота («Мин. пауза между ответами» выше) — по сообщениям самого духа.</p>
+        </div>
+
         <button type="submit" class="btn-primary">Сохранить ИИ настройки</button>
     </form>
 </div>
