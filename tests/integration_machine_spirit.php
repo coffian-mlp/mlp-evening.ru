@@ -136,6 +136,22 @@ try {
     check(is_array($help) && strpos($help['message'], 'перечень команд') !== false, 'справка опубликована');
     if ($help) $cleanupMsgIds[] = (int)$help['id'];
 
+    // --- Нераспознанное обращение владельца (MLP-302) ---
+    $unknownInstruction = null;
+    (new MachineSpirit())->handle(
+        ['message' => 'Клод, как дела?', 'user_id' => $ownerId, 'username' => $ownerLogin],
+        function ($prompt, $ctx) use (&$unknownInstruction) {
+            $unknownInstruction = $ctx[0]['content'] ?? '';
+            return 'Недоумение когитатора. (ит-тест 5)';
+        }
+    );
+    check(is_string($unknownInstruction) && strpos($unknownInstruction, 'не распознал') !== false,
+        'нераспознанное обращение владельца -> инструкция «команда не распознана»');
+    $res = $conn->query("SELECT id, message FROM chat_messages WHERE user_id = $spiritId ORDER BY id DESC LIMIT 1");
+    $unk = $res ? $res->fetch_assoc() : null;
+    check(is_array($unk) && strpos($unk['message'], 'Недоумение') !== false, 'ответ о нераспознанной команде опубликован');
+    if ($unk) $cleanupMsgIds[] = (int)$unk['id'];
+
     // --- Очередь: dispatch кладёт machine_spirit без задержки (FR-1, FR-7) ---
     $config->setOption('ai_use_queue', '1');
     $config->setOption('ai_worker_mode', 'daemon');

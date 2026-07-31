@@ -40,5 +40,13 @@ ok(MachineSpirit::isHelpRequest('Клод ???'), 'несколько знако�
 ok(!MachineSpirit::isHelpRequest('Клод включи перерыв'), 'обычная команда — не справка');
 ok(!MachineSpirit::isHelpRequest('Клод, включишь кино?'), 'команда-вопрос — не справка');
 
+echo "\n== Известные команды (MLP-302) ==\n";
+ok(MachineSpirit::isKnownCommand('Клод, включи перерыв'), 'перерыв');
+ok(MachineSpirit::isKnownCommand('Клод следующая серия'), 'следующая');
+ok(MachineSpirit::isKnownCommand('Клод, врубай киношку'), 'кино (словоформа)');
+ok(MachineSpirit::isKnownCommand('Клод, включи конец'), 'конец');
+ok(!MachineSpirit::isKnownCommand('Клод, как дела?'), 'болтовня — не команда');
+ok(!MachineSpirit::isKnownCommand('Клод, спой песню'), 'произвольная просьба — не команда');
+
 echo $fail ? "\nFAIL ($fail)\n" : "\nALL PASS\n";
 exit($fail ? 1 : 0);
