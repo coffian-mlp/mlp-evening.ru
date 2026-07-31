@@ -29,3 +29,4 @@ CLAUDE.md
 dev_knowledge/
 PROJECT_PROFILE.md
 USER_PROJECT_PROFILE.md
+__pycache__/
