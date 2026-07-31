@@ -120,6 +120,22 @@ try {
     $res = $conn->query("SELECT id FROM chat_messages WHERE user_id = $spiritId ORDER BY id DESC LIMIT 1");
     if ($row = $res->fetch_assoc()) $cleanupMsgIds[] = (int)$row['id'];
 
+    // --- Справка забывчивому Магосу (MLP-301) ---
+    $helpInstruction = null;
+    (new MachineSpirit())->handle(
+        ['message' => 'Клод, команды', 'user_id' => $ownerId, 'username' => $ownerLogin],
+        function ($prompt, $ctx) use (&$helpInstruction) {
+            $helpInstruction = $ctx[0]['content'] ?? '';
+            return 'Литания-перечень команд. (ит-тест 4)';
+        }
+    );
+    check(is_string($helpInstruction) && strpos($helpInstruction, 'перечень') !== false
+        && strpos($helpInstruction, 'включи перерыв') !== false, 'help-инструкция содержит перечень команд');
+    $res = $conn->query("SELECT id, message FROM chat_messages WHERE user_id = $spiritId ORDER BY id DESC LIMIT 1");
+    $help = $res ? $res->fetch_assoc() : null;
+    check(is_array($help) && strpos($help['message'], 'перечень команд') !== false, 'справка опубликована');
+    if ($help) $cleanupMsgIds[] = (int)$help['id'];
+
     // --- Очередь: dispatch кладёт machine_spirit без задержки (FR-1, FR-7) ---
     $config->setOption('ai_use_queue', '1');
     $config->setOption('ai_worker_mode', 'daemon');
