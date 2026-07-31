@@ -84,6 +84,8 @@ class MachineSpirit {
 
         $isOwner = $senderId > 0 && $senderId === $ownerId;
         if (!$isOwner) {
+            // MLP-303: владельцу — безусловно; на отказах чужим дух наследует
+            // ограничения Лиры, но замеряет их по СВОИМ сообщениям.
             $cooldown = (int)$config->getOption('machine_spirit_cooldown', 120);
             if ($cooldown <= 0) {
                 return; // отказы чужим отключены
@@ -91,6 +93,10 @@ class MachineSpirit {
             $last = (int)$config->getOption('machine_spirit_last_refusal', 0);
             if (time() - $last < $cooldown) {
                 return; // в окне кулдауна чужие обращения игнорируются молча
+            }
+            $spiritProbe = $this->ensureSpiritUser();
+            if ($spiritProbe && !$this->passesLyraStyleGates((int)$spiritProbe['id'])) {
+                return;
             }
             // Отметка ДО генерации: при сбое LLM цена ошибки — один пропущенный
             // отказ, зато сбойный провайдер не выключает кулдаун (нет спама ретраями).
@@ -132,6 +138,26 @@ class MachineSpirit {
         $quoted = !empty($payload['message_id']) ? [(int)$payload['message_id']] : [];
         $name = ($spirit['nickname'] ?? '') !== '' ? $spirit['nickname'] : $spirit['login'];
         (new ChatManager())->addMessage((int)$spirit['id'], $name, $text, $quoted);
+    }
+
+    /**
+     * Антиспам-гейты в духе Лиры (MLP-303), относительно СОБСТВЕННЫХ сообщений духа:
+     * не отвечать, если последнее сообщение чата — своё же; выдерживать
+     * ai_reply_min_gap (опция Лиры) от собственного последнего сообщения.
+     */
+    private function passesLyraStyleGates(int $spiritId): bool {
+        $chat = new ChatManager();
+        if ($chat->getLastMessageAuthorId() === $spiritId) {
+            return false; // дух только что писал — не сдваивать
+        }
+        $minGap = (int)ConfigManager::getInstance()->getOption('ai_reply_min_gap', 20);
+        if ($minGap > 0) {
+            $lastAt = $chat->getLastMessageTimeByUser($spiritId);
+            if ($lastAt !== null && (time() - (strtotime($lastAt . ' UTC') ?: 0)) < $minGap) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Пользователь-«дух»: поиск по логину из опций, автосоздание как страховка. */

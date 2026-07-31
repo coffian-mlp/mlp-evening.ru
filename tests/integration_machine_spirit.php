@@ -27,7 +27,7 @@ $cm = new ChatManager();
 $saved = [];
 foreach (['machine_spirit_enabled', 'machine_spirit_user_login', 'machine_spirit_owner_id',
           'machine_spirit_cooldown', 'machine_spirit_last_refusal',
-          'ai_use_queue', 'ai_worker_mode', 'bot_worker_heartbeat'] as $k) {
+          'ai_use_queue', 'ai_worker_mode', 'bot_worker_heartbeat', 'ai_reply_min_gap'] as $k) {
     $saved[$k] = $config->getOption($k, null);
 }
 
@@ -44,6 +44,7 @@ $config->setOption('machine_spirit_user_login', $spiritLogin);
 $config->setOption('machine_spirit_owner_id', (string)$ownerId);
 $config->setOption('machine_spirit_cooldown', '120');
 $config->setOption('machine_spirit_last_refusal', '0');
+$config->setOption('ai_reply_min_gap', '0'); // гейты MLP-303 проверяются отдельным сценарием
 
 $cleanupMsgIds = [];
 $spiritId = null;
@@ -93,6 +94,9 @@ try {
     check(in_array($cmdMsgId, array_map('intval', $quoted), true), 'квитанция цитирует сообщение-команду');
 
     // --- Отказ чужому + кулдаун (AC-2) ---
+    // Гость пишет в чат, чтобы последним автором был не дух (иначе гейт MLP-303).
+    $guestMsgId = $cm->addMessage($guestId, 'Ит. Гость', 'Клод включи кино (ит-тест, гость)');
+    if (is_int($guestMsgId)) $cleanupMsgIds[] = $guestMsgId;
     (new MachineSpirit())->handle(
         ['message' => 'Клод включи кино', 'user_id' => $guestId, 'username' => $guestLogin],
         fn() => 'Отказ: недостаточный уровень допуска. (ит-тест 2)'
@@ -151,6 +155,43 @@ try {
     $unk = $res ? $res->fetch_assoc() : null;
     check(is_array($unk) && strpos($unk['message'], 'Недоумение') !== false, 'ответ о нераспознанной команде опубликован');
     if ($unk) $cleanupMsgIds[] = (int)$unk['id'];
+
+    // --- Гейты Лиры для отказов чужим (MLP-303), относительно сообщений духа ---
+    // Последнее сообщение чата сейчас — сам дух (ит-тест 5) -> отказ молчит.
+    $config->setOption('machine_spirit_last_refusal', '0');
+    $config->flushCache();
+    $countGate = (int)$conn->query("SELECT COUNT(*) c FROM chat_messages WHERE user_id = $spiritId")->fetch_assoc()['c'];
+    (new MachineSpirit())->handle(
+        ['message' => 'Клод включи кино', 'user_id' => $guestId, 'username' => $guestLogin],
+        fn() => 'Гейт-тест 1: не должно попасть в чат'
+    );
+    $c1 = (int)$conn->query("SELECT COUNT(*) c FROM chat_messages WHERE user_id = $spiritId")->fetch_assoc()['c'];
+    check($c1 === $countGate, 'отказ молчит, если последнее сообщение чата — сам дух');
+
+    // Гость разбавил чат, но дух писал недавно и ai_reply_min_gap велик -> молчит.
+    $g2 = $cm->addMessage($guestId, 'Ит. Гость', 'разбавляю чат (ит-тест)');
+    if (is_int($g2)) $cleanupMsgIds[] = $g2;
+    $config->setOption('ai_reply_min_gap', '3600');
+    $config->setOption('machine_spirit_last_refusal', '0');
+    $config->flushCache();
+    (new MachineSpirit())->handle(
+        ['message' => 'Клод включи кино', 'user_id' => $guestId, 'username' => $guestLogin],
+        fn() => 'Гейт-тест 2: не должно попасть в чат'
+    );
+    $c2 = (int)$conn->query("SELECT COUNT(*) c FROM chat_messages WHERE user_id = $spiritId")->fetch_assoc()['c'];
+    check($c2 === $countGate, 'отказ молчит в пределах ai_reply_min_gap от своего сообщения');
+
+    // Владелец — безусловно, гейты не применяются даже при min_gap=3600.
+    (new MachineSpirit())->handle(
+        ['message' => 'Клод, произвольное воззвание', 'user_id' => $ownerId, 'username' => $ownerLogin],
+        fn() => 'Безусловный ответ Магосу. (ит-тест 6)'
+    );
+    $c3 = (int)$conn->query("SELECT COUNT(*) c FROM chat_messages WHERE user_id = $spiritId")->fetch_assoc()['c'];
+    check($c3 === $countGate + 1, 'владельцу дух отвечает безусловно (гейты не применяются)');
+    $res = $conn->query("SELECT id FROM chat_messages WHERE user_id = $spiritId ORDER BY id DESC LIMIT 1");
+    if ($row = $res->fetch_assoc()) $cleanupMsgIds[] = (int)$row['id'];
+    $config->setOption('ai_reply_min_gap', '0');
+    $config->flushCache();
 
     // --- Очередь: dispatch кладёт machine_spirit без задержки (FR-1, FR-7) ---
     $config->setOption('ai_use_queue', '1');
