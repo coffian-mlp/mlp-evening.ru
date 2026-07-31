@@ -132,6 +132,12 @@ try {
     $job = $res ? $res->fetch_assoc() : null;
     check(is_array($job), 'dispatch поставил задачу machine_spirit в llm_jobs');
     check($job && (int)$job['due'] === 1, 'задача без lifelike-задержки (run_after <= now)');
+
+    // Воркер обязан ВЫБИРАТЬ этот тип (регрессия первого деплоя MLP-300:
+    // фильтр типов в claimDue не включал machine_spirit — задачи висели pending).
+    $claimed = (new \LLM\JobQueue())->claimDue(50);
+    $claimedIds = array_map(static fn($j) => (int)$j['id'], $claimed);
+    check($job && in_array((int)$job['id'], $claimedIds, true), 'claimDue() забирает задачи machine_spirit');
     if ($job) $conn->query("DELETE FROM llm_jobs WHERE id = " . (int)$job['id']);
 } finally {
     // --- Очистка: сообщения, пользователи, опции ---
