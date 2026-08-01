@@ -23,6 +23,7 @@ import glob
 import html
 import json
 import logging
+import random
 import re
 import sys
 import threading
@@ -53,6 +54,8 @@ SCENE_YOUTUBE = "youtube"
 
 MOVIE_SOURCE = "Кино"  # Media Source в сцене SCENE_MOVIE
 EPISODES_DIR = "/Volumes/KINGSTON/downloads/Stargate SG-1 S07 DVDrip-AVC (AXN Sci-Fi)"
+BREAK_SOURCE = "Перерыв видео"  # VLC Source в сцене SCENE_BREAK
+BREAK_DIR = "/Volumes/KINGSTON/downloads/All Songs Warhammer 40k"
 STATE_FILE = Path.home() / ".local/stream-commander/state.json"
 DEFAULT_EPISODE_IDX = 5  # S07E06 — реперная точка
 
@@ -158,6 +161,22 @@ def movie_shift(delta):
     log.info("OBS: серия %s (%d из %d) с начала", episode_name(eps[idx]), idx + 1, len(eps))
 
 
+def reshuffle_break_playlist():
+    """Свежая тасовка плейлиста перерывов. VLC-shuffle в OBS перемешивает список
+    один раз при загрузке настроек, и stop_restart гоняет один и тот же порядок —
+    поэтому тасуем сами, а встроенный shuffle держим выключенным."""
+    files = sorted(glob.glob(BREAK_DIR + "/*.mp4"))
+    if not files:
+        log.warning("Перерывы: в %s нет mp4 — тасовать нечего", BREAK_DIR)
+        return
+    random.shuffle(files)
+    playlist = [{"value": f, "hidden": False, "selected": False} for f in files]
+    obs_client().set_input_settings(
+        BREAK_SOURCE, {"playlist": playlist, "shuffle": False, "loop": True}, True)
+    log.info("Перерывы: плейлист перетасован (%d роликов, первый: %s)",
+             len(files), files[0].rsplit("/", 1)[-1][:40])
+
+
 def break_scene():
     """Перерыв: поставить кино на паузу и уйти на сцену перерыва."""
     cl = obs_client()
@@ -248,6 +267,12 @@ def on_current_program_scene_changed(data):
             log.info("Автопауза кино: сцена %s -> %s", prev, new_scene)
         except Exception as e:
             log.warning("Автопауза кино не удалась: %s", e)
+    if prev == SCENE_BREAK and new_scene != SCENE_BREAK:
+        # Ушли с перерыва — тасуем колоду к следующему (сцену никто не видит, глюков нет)
+        try:
+            reshuffle_break_playlist()
+        except Exception as e:
+            log.warning("Тасовка перерывов не удалась: %s", e)
 
 
 def on_media_input_playback_ended(data):
@@ -398,5 +423,10 @@ if __name__ == "__main__":
     if not STATE_FILE.exists():
         save_state(st)
     log.info("Счётчик серий: %d (серия %d)", st["episode_idx"], st["episode_idx"] + 1)
+    try:
+        if obs_client().get_scene_list().current_program_scene_name != SCENE_BREAK:
+            reshuffle_break_playlist()  # свежая колода на старте (если перерыв не в эфире)
+    except Exception as e:
+        log.warning("Стартовая тасовка перерывов не удалась: %s", e)
     threading.Thread(target=obs_events_loop, daemon=True).start()
     listen()
