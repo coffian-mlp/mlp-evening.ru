@@ -120,6 +120,8 @@ def movie_play():
     target = eps[idx]
     current = cl.get_input_settings(MOVIE_SOURCE).input_settings.get("local_file")
     if current != target:
+        global _last_media_load
+        _last_media_load = time.time()
         cl.set_input_settings(MOVIE_SOURCE, {"local_file": target}, True)
         log.info("Кино: заряжена %s", episode_name(target))
     else:
@@ -130,6 +132,8 @@ def movie_play():
             action = "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART"   # доиграла/стоит — с начала
         else:
             action = None
+        if action == "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART":
+            _last_media_load = time.time()  # RESTART тоже может породить ложный ended
         if action:
             cl.trigger_media_input_action(MOVIE_SOURCE, action)
     cl.set_current_program_scene(SCENE_MOVIE)
@@ -144,6 +148,8 @@ def movie_shift(delta):
     state["episode_idx"] = idx
     save_state(state)
     cl = obs_client()
+    global _last_media_load
+    _last_media_load = time.time()
     cl.set_input_settings(MOVIE_SOURCE, {"local_file": eps[idx]}, True)
     # Явный RESTART: смена файла запускает с нуля сама, но при упоре в границу
     # списка (та же серия) настройки не меняются — без рестарта продолжилось бы с места.
@@ -226,6 +232,7 @@ def process_payload(msg, state):
 # --- Автопилот: конец серии -> перерыв, счётчик+1; уход со сцены кино -> пауза ---
 
 _last_scene = None
+_last_media_load = 0.0  # время последней зарядки файла: гасит ложный playback_ended
 
 
 def on_current_program_scene_changed(data):
@@ -246,6 +253,13 @@ def on_current_program_scene_changed(data):
 def on_media_input_playback_ended(data):
     """Callback obs-websocket: имя функции = имя события."""
     if getattr(data, "input_name", None) != MOVIE_SOURCE:
+        return
+    # Замена файла (следующая/предыдущая серия) закрывает старый медиафайл и
+    # порождает ЛОЖНЫЙ playback_ended — без этого гейта автопилот сдвигал
+    # счётчик и уводил на перерыв поверх только что включённой серии (гонка
+    # выловлена в бою 2026-08-01 18:59).
+    if time.time() - _last_media_load < 3:
+        log.info("Игнорирую playback_ended сразу после зарядки файла (ложный)")
         return
     state = load_state()
     state["episode_idx"] = state.get("episode_idx", DEFAULT_EPISODE_IDX) + 1
