@@ -69,12 +69,24 @@ python3 -m venv ~/.local/obs-claude-venv
 
 ## Запуск
 
+Штатно (macOS) — LaunchAgent: автостарт при загрузке + автоперезапуск при падении:
+
+```bash
+cp tools/stream-commander/ru.mlp-evening.stream-commander.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ru.mlp-evening.stream-commander.plist
+```
+
+Остановка/перезапуск: `launchctl kickstart -k gui/$(id -u)/ru.mlp-evening.stream-commander`
+(перезапуск) или `launchctl bootout gui/$(id -u)/ru.mlp-evening.stream-commander` (снять).
+Пути в plist абсолютные — при другом расположении venv/скрипта поправить.
+
+Разово без launchd:
+
 ```bash
 nohup ~/.local/obs-claude-venv/bin/python3 tools/stream-commander/commander.py >/dev/null 2>&1 &
 ```
 
-Остановка: `pkill -f stream-commander/commander.py`. Автостарт (LaunchAgent /
-Планировщик задач Windows) — в бэклоге.
+На Windows аналог — Планировщик задач (при переносе).
 
 ## Перенос на другую машину (в т.ч. Windows)
 
