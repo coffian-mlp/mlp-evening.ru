@@ -42,9 +42,12 @@ class JobQueue {
     public function claimDue(int $limit = 50): array {
         $limit = max(1, (int)$limit);
         $stmt = $this->db->prepare(
+            // MLP-311: команды и события стрима — вперёд очереди. Их ответ привязан
+            // к тому, что зрители видят прямо сейчас, и устаревает за секунды,
+            // в отличие от приветствий и спонтанных реплик.
             "SELECT * FROM llm_jobs
              WHERE status='pending' AND run_after <= NOW() AND type IN ('greeting','dynamic_command','cron_spontaneous','stream_command')
-             ORDER BY id ASC LIMIT ?"
+             ORDER BY (type = 'stream_command') DESC, id ASC LIMIT ?"
         );
         $stmt->bind_param('i', $limit);
         $stmt->execute();

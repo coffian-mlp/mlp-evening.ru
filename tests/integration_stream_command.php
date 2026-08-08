@@ -167,6 +167,14 @@ try {
     check(is_array($auto) && (json_decode($auto['quoted_msg_ids'] ?? '[]', true) ?: []) === [], 'у автокомментария нет цитаты');
     if ($auto) $cleanupMsgIds[] = (int)$auto['id'];
 
+    // Молчание LLM не оставляет зрителей без объявления (MLP-311)
+    (new StreamCommand())->handle(['event' => 'episode_ended'], fn() => '');
+    $res = $conn->query("SELECT id, message FROM chat_messages WHERE user_id = $botId ORDER BY id DESC LIMIT 1");
+    $fb = $res ? $res->fetch_assoc() : null;
+    check(is_array($fb) && stripos($fb['message'], 'перерыв') !== false,
+        'пустой ответ LLM -> опубликовано запасное объявление перерыва');
+    if ($fb) $cleanupMsgIds[] = (int)$fb['id'];
+
     // Неизвестное событие игнорируется
     $calledUnknown = false;
     (new StreamCommand())->handle(
