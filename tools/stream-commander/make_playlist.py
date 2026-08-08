@@ -16,10 +16,20 @@
 """
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
 VIDEO_EXT = {".mkv", ".mp4", ".avi", ".m4v"}
+
+
+def is_complete(path: str) -> bool:
+    """Читается ли конец файла. Торрент-клиент заранее создаёт файлы полного
+    размера, поэтому «файл есть и весит сколько надо» ещё не значит «докачан»:
+    недокачанный доиграет до места обрыва и встанет чёрным экраном."""
+    r = subprocess.run(["ffmpeg", "-v", "error", "-sseof", "-3", "-i", path, "-f", "null", "-"],
+                       capture_output=True)
+    return r.returncode == 0
 
 
 def episodes(folder: str) -> list[str]:
@@ -49,9 +59,20 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Собрать playlist.txt с чередованием сериалов")
     ap.add_argument("folders", nargs="+", help="папки с сериями, в порядке чередования")
     ap.add_argument("--chunk", type=int, default=1, help="сколько серий подряд из каждого (по умолчанию 1)")
+    ap.add_argument("--verify", action="store_true",
+                    help="проверить, что файлы докачаны (ffmpeg читает конец), недокачанные выбросить")
     args = ap.parse_args()
 
     lists = [episodes(f) for f in args.folders]
+    if args.verify:
+        for i, files in enumerate(lists):
+            good = []
+            for f in files:
+                if is_complete(f):
+                    good.append(f)
+                else:
+                    print(f"# НЕДОКАЧАН, пропущен: {Path(f).name}", file=sys.stderr)
+            lists[i] = good
     for folder, files in zip(args.folders, lists):
         print(f"# {Path(folder).name}: {len(files)} серий", file=sys.stderr)
 
