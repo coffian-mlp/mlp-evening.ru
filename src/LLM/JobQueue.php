@@ -43,7 +43,7 @@ class JobQueue {
         $limit = max(1, (int)$limit);
         $stmt = $this->db->prepare(
             "SELECT * FROM llm_jobs
-             WHERE status='pending' AND run_after <= NOW() AND type IN ('greeting','dynamic_command','cron_spontaneous','machine_spirit')
+             WHERE status='pending' AND run_after <= NOW() AND type IN ('greeting','dynamic_command','cron_spontaneous','stream_command')
              ORDER BY id ASC LIMIT ?"
         );
         $stmt->bind_param('i', $limit);

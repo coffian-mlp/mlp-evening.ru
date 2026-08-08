@@ -82,9 +82,9 @@ class BotWorker {
                     $this->llm->processTrigger('greeting', $job['data'] ?? []);
                 } elseif ($job['type'] === 'dynamic_command') {
                     $this->llm->processTrigger('dynamic_command', $job['data'] ?? []);
-                } elseif ($job['type'] === 'machine_spirit') {
-                    // MLP-300: квитанция «духа машины» на команды стрима
-                    (new MachineSpirit())->handle($job['data'] ?? []);
+                } elseif ($job['type'] === 'stream_command') {
+                    // MLP-307: ответ Лиры на команду управления стримом
+                    (new StreamCommand())->handle($job['data'] ?? []);
                 } elseif ($job['type'] === 'cron_spontaneous') {
                     // MLP-279: проактив теперь журналируется через очередь (единый путь)
                     $this->llm->processTrigger('cron_spontaneous', $job['data'] ?? []);

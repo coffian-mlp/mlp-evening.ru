@@ -9,7 +9,7 @@ use Domain\UserManager;
 use Infra\ConfigManager;
 use Infra\UploadManager;
 use LLM\BotDispatch;
-use LLM\MachineSpirit;
+use LLM\StreamCommand;
 
 /**
  * Обработчики чата (MLP-265, финал среза AR5-6) — перенос из switch api.php
@@ -138,18 +138,6 @@ class ChatController {
 
         $mid = ($newMsgId === true) ? null : $newMsgId;
 
-        // MLP-300: обращение «Клод ...» — квитанция «духа машины» (LLM\MachineSpirit).
-        // Ветки Лиры (mention/dynamic_command) для таких сообщений не задействуются.
-        if (MachineSpirit::wants($message)) {
-            BotDispatch::dispatch('machine_spirit', [
-                'message'    => $message,
-                'message_id' => $mid,
-                'user_id'    => $userId,
-                'username'   => $username,
-            ]);
-            exit();
-        }
-
         // Быстрое (без LLM) определение: команда или обычное упоминание.
         $matchedCommand = null;
 
@@ -169,6 +157,21 @@ class ChatController {
         if ($matchedCommand && ($matchedCommand['handler_type'] ?? '') === 'poll'
             && !\Domain\PollManager::canCreate()) {
             $matchedCommand = null;
+        }
+
+        // MLP-307: обращение к боту с командой стрима («Лира, включи перерыв») —
+        // отвечает сама Лира отдельной веткой (контекст чата + приоритетная инструкция).
+        // Проверяется ПОСЛЕ команд бота: явная команда (/нарисуй кинотеатр) приоритетнее,
+        // иначе её ключевое слово увело бы запрос в ветку стрима. Обращение БЕЗ известной
+        // команды сюда не попадает — это обычный mention.
+        if (!$matchedCommand && StreamCommand::wants($message)) {
+            BotDispatch::dispatch('stream_command', [
+                'message'    => $message,
+                'message_id' => $mid,
+                'user_id'    => $userId,
+                'username'   => $username,
+            ]);
+            exit();
         }
 
         // Диспетчеризация: очередь (воркер ответит) или inline-фоллбек (с lifelike-задержкой).

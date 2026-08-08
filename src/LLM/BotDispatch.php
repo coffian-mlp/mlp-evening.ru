@@ -53,17 +53,17 @@ class BotDispatch {
         if (function_exists('set_time_limit')) { @set_time_limit(0); }
         @ignore_user_abort(true);
         sleep(self::delayFor($type));
-        if ($type === 'machine_spirit') {
-            // MLP-300: обрабатывается собственным классом, не LLMManager::processTrigger.
-            (new MachineSpirit())->handle($payload);
+        if ($type === 'stream_command') {
+            // MLP-307: обрабатывается собственным классом, не LLMManager::processTrigger.
+            (new StreamCommand())->handle($payload);
             return;
         }
         (new LLMManager())->processTrigger($type, $payload);
     }
 
-    /** Задержка по типу: дух машины (MLP-300) отвечает немедленно, остальным — lifelike. */
+    /** Задержка по типу: команды стрима (MLP-307) отвечаются немедленно, остальным — lifelike. */
     public static function delayFor(string $type): int {
-        return $type === 'machine_spirit' ? 0 : self::delaySeconds();
+        return $type === 'stream_command' ? 0 : self::delaySeconds();
     }
 
     /** Идёт ли ответ через очередь (иначе inline). */
