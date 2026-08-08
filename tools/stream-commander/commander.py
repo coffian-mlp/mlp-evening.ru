@@ -54,6 +54,10 @@ SCENE_END = "end"
 SCENE_YOUTUBE = "youtube"
 
 MOVIE_SOURCE = "Кино"  # Media Source в сцене SCENE_MOVIE
+# Порядок показа: если есть playlist.txt — берётся он (одна строка = один файл,
+# «#» — комментарий); иначе всё содержимое EPISODES_DIR по алфавиту. Плейлист нужен,
+# когда порядок не совпадает с сортировкой папки — например, чередование двух сериалов.
+PLAYLIST_FILE = Path.home() / ".local/stream-commander/playlist.txt"
 EPISODES_DIR = "/Volumes/KINGSTON/downloads/Stargate SG-1 S07 DVDrip-AVC (AXN Sci-Fi)"
 BREAK_SOURCE = "Перерыв видео"  # VLC Source в сцене SCENE_BREAK
 BREAK_DIR = "/Volumes/KINGSTON/downloads/All Songs Warhammer 40k"
@@ -103,6 +107,20 @@ def save_state(state):
 
 
 def episode_list():
+    """Порядок показа: playlist.txt (если есть и непуст) либо папка EPISODES_DIR."""
+    if PLAYLIST_FILE.exists():
+        files = []
+        for line in PLAYLIST_FILE.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if Path(line).exists():
+                files.append(line)
+            else:
+                log.warning("Плейлист: файла нет, строка пропущена — %s", line)
+        if files:
+            return files
+        log.warning("Плейлист пуст или все файлы отсутствуют — откат на папку %s", EPISODES_DIR)
     files = sorted(glob.glob(EPISODES_DIR + "/*.mkv"))
     if not files:
         raise RuntimeError(f"в {EPISODES_DIR} не найдено серий")
