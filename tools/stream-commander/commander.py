@@ -87,10 +87,15 @@ def obs_client():
 # --- Состояние (счётчик серий) ---
 
 def load_state():
+    """Состояние: episode_idx — серия на очереди; pending — её ещё не начинали смотреть
+    (счётчик сдвинут автопилотом после конца предыдущей). Дефолт pending=False —
+    безопасный: «следующая» ведёт себя как раньше, если состояние правили руками."""
     try:
-        return json.loads(STATE_FILE.read_text())
+        st = json.loads(STATE_FILE.read_text())
     except Exception:
-        return {"episode_idx": DEFAULT_EPISODE_IDX}
+        st = {"episode_idx": DEFAULT_EPISODE_IDX}
+    st.setdefault("pending", False)
+    return st
 
 
 def save_state(state):
@@ -143,15 +148,29 @@ def movie_play():
         if action:
             cl.trigger_media_input_action(MOVIE_SOURCE, action)
     cl.set_current_program_scene(SCENE_MOVIE)
+    if state.get("pending"):
+        state["pending"] = False  # серию начали смотреть (MLP-310)
+        save_state(state)
     log.info("OBS: кино -> %s (серия %d из %d)", episode_name(target), idx + 1, len(eps))
 
 
 def movie_shift(delta):
-    """Сдвинуть счётчик и включить серию строго с начала."""
+    """Сдвинуть счётчик и включить серию строго с начала.
+
+    MLP-310: если серия на очереди ещё не начиналась (автопилот сдвинул счётчик
+    после конца предыдущей), «следующая» НЕ двигает счётчик повторно, а просто
+    запускает то, что на очереди — иначе серия перескакивается (случилось в бою
+    2026-08-08). «Предыдущая» двигает всегда."""
     eps = episode_list()
     state = load_state()
+    if delta > 0 and state.get("pending"):
+        log.info("Серия %d ещё не начиналась — «следующая» запускает её, а не перескакивает",
+                 state["episode_idx"] + 1)
+        movie_play()
+        return
     idx = max(0, min(state["episode_idx"] + delta, len(eps) - 1))
     state["episode_idx"] = idx
+    state["pending"] = False  # серию начали смотреть
     save_state(state)
     cl = obs_client()
     global _last_media_load
@@ -329,6 +348,7 @@ def on_media_input_playback_ended(data):
         return
     state = load_state()
     state["episode_idx"] = state.get("episode_idx", DEFAULT_EPISODE_IDX) + 1
+    state["pending"] = True  # следующая серия на очереди, но ещё не начата (MLP-310)
     save_state(state)
     log.info("Серия доиграла: счётчик -> серия %d, уходим на перерыв", state["episode_idx"] + 1)
     try:
