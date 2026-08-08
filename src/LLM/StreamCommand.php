@@ -29,16 +29,39 @@ class StreamCommand {
         . '«Лира, включи конец» — финальная заставка; '
         . '«Лира, команды» (или просто «Лира, ?») — этот перечень.';
 
+    /** Командный глагол — надёжный признак приказа, а не разговора о кино. */
+    private const IMPERATIVE = '/\b(включ|врубай|врубить|врубл|поставь|переключ|запусти|давай'
+        . '|сделай|верни|останов|прекрат|стоп|дальше|next)/iu';
+
     /** Обращение к боту в начале сообщения: алиасы из ai_aliases + legacy «Клод». */
     public static function addressesBot(string $message): bool {
-        $aliases = self::aliases();
-        foreach ($aliases as $alias) {
+        return self::body($message) !== null;
+    }
+
+    /** Текст после обращения к боту; null — если обращения нет. */
+    private static function body(string $message): ?string {
+        foreach (self::aliases() as $alias) {
             $quoted = preg_quote($alias, '/');
-            if (preg_match('/^\s*@?' . $quoted . '([^\p{L}]|$)/iu', $message)) {
-                return true;
+            if (preg_match('/^\s*@?' . $quoted . '([^\p{L}]|$)/iu', $message, $m)) {
+                return ltrim(mb_substr($message, mb_strlen($m[0])), " \t,:.!—-");
             }
         }
-        return false;
+        return null;
+    }
+
+    /**
+     * Отличает приказ от болтовни: «Лира, кино» — да, «Лира, что думаешь про 18 серию?» — нет.
+     * Признак приказа: командный глагол ЛИБО короткая телеграфная фраза без вопроса.
+     * (Ложное срабатывание поймано в бою 2026-08-08: обсуждение серии сошло за команду.)
+     */
+    public static function looksLikeCommand(string $body): bool {
+        if (preg_match(self::IMPERATIVE, $body)) {
+            return true;
+        }
+        if (mb_strpos($body, '?') !== false) {
+            return false;
+        }
+        return count(preg_split('/\s+/u', trim($body), -1, PREG_SPLIT_NO_EMPTY) ?: []) <= 3;
     }
 
     /** Pure: сообщение содержит известную команду управления стримом.
@@ -66,10 +89,15 @@ class StreamCommand {
         if (!(int)ConfigManager::getInstance()->getOption('stream_command_enabled', 0)) {
             return false;
         }
-        if (!self::addressesBot($message)) {
+        $body = self::body($message);
+        if ($body === null) {
             return false;
         }
-        return self::isKnownCommand($message) || self::isHelpRequest($message);
+        if (self::isHelpRequest($message)) {
+            return true;
+        }
+        // Ключевое слово само по себе не приказ: разговор о серии командой не считается.
+        return self::isKnownCommand($message) && self::looksLikeCommand($body);
     }
 
     /**

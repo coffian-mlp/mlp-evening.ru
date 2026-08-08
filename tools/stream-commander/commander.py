@@ -204,6 +204,22 @@ COMMANDS = [
 # Обращение к боту: основное имя + алиасы; «клод» — legacy с эпохи «духа машины» (MLP-307)
 TRIGGER = re.compile(r"^\s*@?(лирочка|лира|lyra|клод)[\s,:!.]*", re.IGNORECASE)
 
+# Командный глагол — надёжный признак приказа, а не разговора о кино
+IMPERATIVE = re.compile(
+    r"\b(включ|врубай|врубить|врубл|поставь|переключ|запусти|давай|сделай|верни|"
+    r"останов|прекрат|стоп|дальше|next)", re.IGNORECASE)
+
+
+def looks_like_command(body):
+    """Отличает приказ от болтовни: «Лира, кино» — да, «Лира, что думаешь про 18 серию?» — нет.
+    Признак приказа: командный глагол ЛИБО короткая телеграфная фраза без вопроса.
+    (Ложное срабатывание поймано в бою 2026-08-08: обсуждение серии переключило сцену.)"""
+    if IMPERATIVE.search(body):
+        return True
+    if "?" in body:
+        return False
+    return len(body.split()) <= 3
+
 STARTED_AT = datetime.now(timezone.utc)
 
 
@@ -227,6 +243,9 @@ def handle_message(msg):
     if not m:
         return
     body = text[m.end():].lower()
+    if not looks_like_command(body):
+        log.info("Обращение без приказа (#%s): %r — не команда", msg.get("id"), text[:70])
+        return
     for pattern, action, label in COMMANDS:
         if re.search(pattern, body):
             log.info("Команда от %s (#%s): %r -> %s",

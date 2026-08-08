@@ -51,5 +51,15 @@ ok(!StreamCommand::isHelpRequest('Лира, включишь кино?'), 'ко�
 ok(!StreamCommand::isHelpRequest('Лира, помоги с задачей'), '«помоги» — обычная просьба, не перечень');
 ok(!StreamCommand::isHelpRequest('Лира, включи перерыв'), 'обычная команда — не перечень');
 
+echo "\n== Приказ против болтовни (боевая находка 2026-08-08) ==\n";
+ok(StreamCommand::looksLikeCommand('включи перерыв'), 'глагол «включи»');
+ok(StreamCommand::looksLikeCommand('кино'), 'одно слово — телеграфный приказ');
+ok(StreamCommand::looksLikeCommand('следующая серия'), 'два слова');
+ok(StreamCommand::looksLikeCommand('а давай перерыв'), 'глагол «давай»');
+ok(!StreamCommand::looksLikeCommand('а ты что думаешь? мы про 18 серию 7 сезона SG-1'),
+    'обсуждение серии — НЕ приказ');
+ok(!StreamCommand::looksLikeCommand('что думаешь про эту серию'), 'вопрос без глагола — не приказ');
+ok(!StreamCommand::looksLikeCommand('классное кино мы сегодня смотрим правда'), 'длинная реплика — не приказ');
+
 echo $fail ? "\nFAIL ($fail)\n" : "\nALL PASS\n";
 exit($fail ? 1 : 0);
