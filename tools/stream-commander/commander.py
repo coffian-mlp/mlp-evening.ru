@@ -61,6 +61,8 @@ STATE_FILE = Path.home() / ".local/stream-commander/state.json"
 DEFAULT_EPISODE_IDX = 5  # S07E06 — реперная точка
 
 LOG_FILE = Path.home() / ".local/stream-commander/commander.log"
+# Секрет для отправки событий на сайт (MLP-308). Файл вне git: {"stream_token": "..."}
+CONFIG_FILE = Path.home() / ".local/stream-commander/config.json"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -176,6 +178,24 @@ def reshuffle_break_playlist():
         BREAK_SOURCE, {"playlist": playlist, "shuffle": False, "loop": True}, True)
     log.info("Перерывы: плейлист перетасован (%d роликов, первый: %s)",
              len(files), files[0].rsplit("/", 1)[-1][:40])
+
+
+def notify_site(event, episode=""):
+    """Сообщить сайту об автопереключении (MLP-308) — бот прокомментирует в чате.
+    Сбой отправки некритичен: показ уже переключён, теряется только реплика."""
+    try:
+        token = json.loads(CONFIG_FILE.read_text()).get("stream_token", "")
+    except Exception:
+        return  # конфига нет — событие просто не отправляем
+    if not token:
+        return
+    try:
+        r = requests.post(SITE_URL + "/api.php",
+                          data={"action": "stream_event", "event": event, "episode": episode},
+                          headers={"X-Stream-Token": token}, timeout=8)
+        log.info("Событие '%s' отправлено на сайт: HTTP %s", event, r.status_code)
+    except Exception as e:
+        log.warning("Не удалось отправить событие '%s': %s", event, e)
 
 
 def break_scene():
@@ -315,6 +335,8 @@ def on_media_input_playback_ended(data):
         set_scene(SCENE_BREAK)
     except Exception as e:
         log.error("Не удалось включить перерыв: %s", e)
+    # Реплику в чат сочинит бот на сайте — показ от этого не зависит (MLP-308)
+    notify_site("episode_ended", str(state["episode_idx"]))
 
 
 def obs_events_loop():

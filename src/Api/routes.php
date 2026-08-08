@@ -34,6 +34,9 @@ return [
     'upload_file'        => ['role' => 'user',   'handler' => [\Api\ChatController::class, 'uploadFile']],
     // Метрики Лиры (MLP-280)
     'get_lyra_metrics'    => ['role' => 'admin', 'handler' => [\Api\BotMetricsController::class, 'get']],
+    // События демона стрима (MLP-308): public по маршруту, доступ гейтит общий
+    // секрет stream_command_token внутри контроллера (демон не авторизован).
+    'stream_event'        => ['role' => 'public', 'handler' => [\Api\StreamEventController::class, 'receive']],
     // Беклог фидбека /todo (MLP-270)
     'get_feedback'        => ['role' => 'admin', 'handler' => [\Api\FeedbackController::class, 'list']],
     'set_feedback_status' => ['role' => 'admin', 'handler' => [\Api\FeedbackController::class, 'setStatus']],

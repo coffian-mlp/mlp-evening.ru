@@ -114,6 +114,12 @@ class StreamCommand {
             return;
         }
 
+        // MLP-308: автопереключение от демона (серия доиграла) — комментируем без адресата.
+        if (!empty($payload['event'])) {
+            $this->handleAutoEvent((string)$payload['event'], $llm, $ask);
+            return;
+        }
+
         $message  = (string)($payload['message'] ?? '');
         $senderId = (int)($payload['user_id'] ?? 0);
         $username = (string)($payload['username'] ?? '');
@@ -171,6 +177,27 @@ class StreamCommand {
             return;
         }
         $llm->botSay($text, $msgId ? [$msgId] : []);
+    }
+
+    /**
+     * Комментарий к автопереключению (MLP-308): серия доиграла сама, техника ушла
+     * на перерыв — бот сообщает об этом зрителям своими словами. Адресата нет,
+     * цитировать нечего; гейты частоты не применяются (событие редкое и значимое).
+     */
+    private function handleAutoEvent(string $event, LLMManager $llm, ?callable $ask): void {
+        if ($event !== 'episode_ended') {
+            return;
+        }
+        $instruction = "[Команды стрима]: серия только что закончилась, и показ автоматически ушёл на перерыв. "
+            . "Сообщи об этом зрителям одним коротким сообщением своими словами и в своём характере — "
+            . "с учётом того, о чём сейчас идёт беседа в чате. Можешь позвать вернуться, когда перерыв кончится.";
+
+        $context = $ask === null ? $llm->buildReplyContext($llm->contextLimit()) : [];
+        $raw = $ask !== null ? $ask($context, $instruction) : $llm->generateReply($context, $instruction);
+        $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
+        if ($text !== '') {
+            $llm->botSay($text);
+        }
     }
 
     /** Алиасы обращения к боту: ai_aliases + legacy-триггер «клод» (переходный период). */

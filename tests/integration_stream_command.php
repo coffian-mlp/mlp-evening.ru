@@ -150,6 +150,31 @@ try {
     $res = $conn->query("SELECT id FROM chat_messages WHERE user_id = $botId ORDER BY id DESC LIMIT 1");
     if ($row = $res->fetch_assoc()) $cleanupMsgIds[] = (int)$row['id'];
 
+    // --- Автопереключение от демона: серия доиграла (MLP-308) ---
+    $autoInstruction = null;
+    (new StreamCommand())->handle(
+        ['event' => 'episode_ended', 'episode' => '17'],
+        function ($ctx, $instruction) use (&$autoInstruction) {
+            $autoInstruction = $instruction;
+            return 'Серия кончилась, я поставила музыку! (ит-тест 5)';
+        }
+    );
+    check(is_string($autoInstruction) && strpos($autoInstruction, 'ушёл на перерыв') !== false,
+        'инструкция автособытия: серия кончилась, ушли на перерыв');
+    $res = $conn->query("SELECT id, message, quoted_msg_ids FROM chat_messages WHERE user_id = $botId ORDER BY id DESC LIMIT 1");
+    $auto = $res ? $res->fetch_assoc() : null;
+    check(is_array($auto) && strpos($auto['message'], 'поставила музыку') !== false, 'комментарий к автопереходу опубликован');
+    check(is_array($auto) && (json_decode($auto['quoted_msg_ids'] ?? '[]', true) ?: []) === [], 'у автокомментария нет цитаты');
+    if ($auto) $cleanupMsgIds[] = (int)$auto['id'];
+
+    // Неизвестное событие игнорируется
+    $calledUnknown = false;
+    (new StreamCommand())->handle(
+        ['event' => 'что-то-чужое'],
+        function () use (&$calledUnknown) { $calledUnknown = true; return 'не должно попасть в чат'; }
+    );
+    check($calledUnknown === false, 'неизвестное событие не вызывает LLM');
+
     // --- Очередь: тип stream_command без задержки + выборка воркером ---
     $config->setOption('ai_use_queue', '1');
     $config->setOption('ai_worker_mode', 'daemon');

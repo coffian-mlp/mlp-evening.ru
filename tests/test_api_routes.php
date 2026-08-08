@@ -113,6 +113,9 @@ $expected = [
     // MLP-270: беклог фидбека (дашборд)
     'get_feedback'        => 'admin',
     'get_lyra_metrics'    => 'admin',
+    // MLP-308: public по маршруту (демон стрима не авторизован), доступ гейтит
+    // секрет stream_command_token внутри StreamEventController.
+    'stream_event'        => 'public',
     'set_feedback_status' => 'admin',
 ];
 
