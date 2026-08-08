@@ -276,7 +276,13 @@ $config = $arResult['config']; // Helper
         <div class="form-group">
             <label class="form-label">Стиль-промпт художницы (пусто = встроенный «детский рисунок»)</label>
             <textarea name="ai_image_style_prompt" class="form-input" rows="2" placeholder="A naive child's crayon drawing… Subject:"><?= htmlspecialchars($config->getOption('ai_image_style_prompt', '')) ?></textarea>
-            <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Приставка к сюжету пользователя. Заканчивай словом «Subject:» — дальше подставится запрос.</p>
+            <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Приставка к сюжету пользователя. Заканчивай словом «Subject:» — дальше подставится запрос. Плейсхолдер <code>{technique}</code> заменяется на случайную технику из списка ниже.</p>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Техники рисования (через «|», пусто = встроенный набор)</label>
+            <textarea name="ai_image_techniques" class="form-input" rows="3" placeholder="<?= htmlspecialchars(\LLM\LyraArtist::DEFAULT_TECHNIQUES) ?>"><?= htmlspecialchars($config->getOption('ai_image_techniques', '')) ?></textarea>
+            <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Работает, только если в стиль-промпте есть <code>{technique}</code>. Каждая запись — материал вместе с его характерными огрехами (у акварели подтёки, у карандаша штриховка).</p>
         </div>
 
         <div class="form-group" style="margin-top: 10px;">
