@@ -24,6 +24,7 @@ import glob
 import html
 import json
 import logging
+import os
 import random
 import re
 import sys
@@ -43,9 +44,32 @@ CENTRIFUGO_CHANNEL = "public:chat"
 OWNER_ID = 1  # users.id владельца (coffian)
 
 OBS_HOST = "localhost"
-OBS_WS_CONFIG = Path.home() / (
-    "Library/Application Support/obs-studio/plugin_config/obs-websocket/config.json"
-)
+
+
+def _base_dir() -> Path:
+    """Рабочая папка демона: state.json, playlist.txt, config.json, лог.
+    Переопределяется переменной STREAM_COMMANDER_HOME (удобно при переносе)."""
+    env = os.environ.get("STREAM_COMMANDER_HOME")
+    if env:
+        return Path(env)
+    if sys.platform == "win32":
+        return Path(os.environ.get("APPDATA", Path.home())) / "stream-commander"
+    return Path.home() / ".local/stream-commander"
+
+
+def _obs_ws_config() -> Path:
+    """Конфиг obs-websocket — у каждой ОС свой каталог настроек OBS."""
+    if sys.platform == "win32":
+        root = Path(os.environ.get("APPDATA", Path.home())) / "obs-studio"
+    elif sys.platform == "darwin":
+        root = Path.home() / "Library/Application Support/obs-studio"
+    else:
+        root = Path.home() / ".config/obs-studio"
+    return root / "plugin_config/obs-websocket/config.json"
+
+
+BASE_DIR = _base_dir()
+OBS_WS_CONFIG = _obs_ws_config()
 
 SCENE_START = "Начало"
 SCENE_BREAK = "Перерыв"
@@ -57,16 +81,22 @@ MOVIE_SOURCE = "Кино"  # Media Source в сцене SCENE_MOVIE
 # Порядок показа: если есть playlist.txt — берётся он (одна строка = один файл,
 # «#» — комментарий); иначе всё содержимое EPISODES_DIR по алфавиту. Плейлист нужен,
 # когда порядок не совпадает с сортировкой папки — например, чередование двух сериалов.
-PLAYLIST_FILE = Path.home() / ".local/stream-commander/playlist.txt"
-EPISODES_DIR = "/Volumes/KINGSTON/downloads/Stargate SG-1 S07 DVDrip-AVC (AXN Sci-Fi)"
+PLAYLIST_FILE = BASE_DIR / "playlist.txt"
+STATE_FILE = BASE_DIR / "state.json"
+LOG_FILE = BASE_DIR / "commander.log"
+CONFIG_FILE = BASE_DIR / "config.json"
 BREAK_SOURCE = "Перерыв видео"  # VLC Source в сцене SCENE_BREAK
-BREAK_DIR = "/Volumes/KINGSTON/downloads/All Songs Warhammer 40k"
-STATE_FILE = Path.home() / ".local/stream-commander/state.json"
-DEFAULT_EPISODE_IDX = 5  # S07E06 — реперная точка
+DEFAULT_EPISODE_IDX = 5
 
-LOG_FILE = Path.home() / ".local/stream-commander/commander.log"
-# Секрет для отправки событий на сайт (MLP-308). Файл вне git: {"stream_token": "..."}
-CONFIG_FILE = Path.home() / ".local/stream-commander/config.json"
+try:
+    _CFG = json.loads(CONFIG_FILE.read_text()) if CONFIG_FILE.exists() else {}
+except Exception:
+    _CFG = {}
+
+# Пути к медиа — из config.json: при переезде на другую машину меняется только он
+# (буквы дисков Windows, другой внешний диск), сам код трогать не нужно.
+EPISODES_DIR = _CFG.get("episodes_dir", "/Volumes/KINGSTON/downloads/Stargate SG-1 S07 DVDrip-AVC (AXN Sci-Fi)")
+BREAK_DIR = _CFG.get("breaks_dir", "/Volumes/KINGSTON/downloads/All Songs Warhammer 40k")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -219,20 +249,34 @@ def reshuffle_break_playlist():
 
 def notify_site(event, episode=""):
     """Сообщить сайту об автопереключении (MLP-308) — бот прокомментирует в чате.
-    Сбой отправки некритичен: показ уже переключён, теряется только реплика."""
+
+    Отправка идёт в фоне и с повторами: домашний/отельный интернет иногда роняет
+    DNS на десятки секунд (поймано в бою 2026-08-09), и без этого объявление
+    перерыва терялось, а сам обработчик события ждал таймаута полминуты.
+    Показ от отправки не зависит — теряется в худшем случае только реплика."""
     try:
         token = json.loads(CONFIG_FILE.read_text()).get("stream_token", "")
     except Exception:
         return  # конфига нет — событие просто не отправляем
     if not token:
         return
-    try:
-        r = requests.post(SITE_URL + "/api.php",
-                          data={"action": "stream_event", "event": event, "episode": episode},
-                          headers={"X-Stream-Token": token}, timeout=8)
-        log.info("Событие '%s' отправлено на сайт: HTTP %s", event, r.status_code)
-    except Exception as e:
-        log.warning("Не удалось отправить событие '%s': %s", event, e)
+
+    def worker():
+        for attempt, pause in enumerate((0, 5, 15, 30), start=1):
+            if pause:
+                time.sleep(pause)
+            try:
+                r = requests.post(SITE_URL + "/api.php",
+                                  data={"action": "stream_event", "event": event, "episode": episode},
+                                  headers={"X-Stream-Token": token}, timeout=10)
+                log.info("Событие '%s' отправлено на сайт: HTTP %s (попытка %d)",
+                         event, r.status_code, attempt)
+                return
+            except Exception as e:
+                log.warning("Событие '%s': попытка %d не удалась (%s)", event, attempt, e)
+        log.error("Событие '%s' так и не доставлено — реплика бота потеряна", event)
+
+    threading.Thread(target=worker, daemon=True).start()
 
 
 def break_scene():

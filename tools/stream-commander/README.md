@@ -109,17 +109,63 @@ nohup ~/.local/obs-claude-venv/bin/python3 tools/stream-commander/commander.py >
 
 На Windows аналог — Планировщик задач (при переносе).
 
-## Перенос на другую машину (в т.ч. Windows)
+## Перенос на другую машину
 
-Код кроссплатформенный. При переносе поправить:
+Пути определяются автоматически, менять код не нужно. Рабочая папка демона
+(`state.json`, `playlist.txt`, `config.json`, лог):
 
-1. `OBS_WS_CONFIG` — путь к конфигу obs-websocket
-   (macOS: `~/Library/Application Support/obs-studio/...`,
-   Windows: `%APPDATA%\obs-studio\...`);
-2. `EPISODES_DIR` и папку перерывов в OBS — под новые пути/буквы дисков;
-3. пересоздать venv, скопировать `state.json`.
+| ОС | Папка |
+|----|-------|
+| macOS / Linux | `~/.local/stream-commander` |
+| Windows | `%APPDATA%\stream-commander` |
 
-Сцены OBS переносятся экспортом коллекции сцен (пути внутри — поправить).
+Переопределяется переменной `STREAM_COMMANDER_HOME`. Конфиг obs-websocket
+демон ищет в каталоге настроек OBS для текущей ОС сам.
+
+Пути к медиа — в `config.json`, там же токен:
+
+```json
+{
+  "stream_token": "...",
+  "episodes_dir": "E:\\downloads\\Stargate SG-1 S08",
+  "breaks_dir": "E:\\downloads\\Breaks"
+}
+```
+
+### Windows: пошагово
+
+1. Установить Python 3 (с сайта python.org, галочка «Add to PATH») и создать окружение:
+
+   ```bat
+   python -m venv %USERPROFILE%\obs-venv
+   %USERPROFILE%\obs-venv\Scripts\pip install requests obsws-python websocket-client
+   ```
+
+2. Скопировать `commander.py` куда удобно, а `config.json`, `state.json` и
+   `playlist.txt` — в `%APPDATA%\stream-commander`. В `config.json` прописать
+   пути с буквами дисков, в `playlist.txt` — заменить пути на windows-овские
+   (проще пересобрать: `make_playlist.py --verify`).
+
+3. В OBS: Сервис → Настройки сервера WebSocket → включить. Коллекцию сцен
+   перенести экспортом (Сцены → Экспорт), после импорта поправить пути у
+   источников «Кино» и «Перерыв видео» — они остаются от старой машины.
+
+4. Автозапуск — задача Планировщика (аналог LaunchAgent), от текущего
+   пользователя, при входе в систему:
+
+   ```bat
+   schtasks /create /tn "StreamCommander" /sc onlogon /rl highest ^
+     /tr "%USERPROFILE%\obs-venv\Scripts\pythonw.exe C:\путь\commander.py"
+   ```
+
+   `pythonw.exe` (не `python.exe`) — чтобы не висело окно консоли.
+   Проверка: `schtasks /run /tn "StreamCommander"`, затем хвост
+   `%APPDATA%\stream-commander\commander.log`.
+   Остановить: `schtasks /end /tn "StreamCommander"`, снять: `/delete`.
+
+   Планировщик не перезапускает упавшую задачу сам (в отличие от `KeepAlive`
+   у launchd) — при желании добавить перезапуск в свойствах задачи, вкладка
+   «Параметры».
 
 ## Отладка
 
