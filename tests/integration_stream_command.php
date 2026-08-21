@@ -167,13 +167,17 @@ try {
     check(is_array($auto) && (json_decode($auto['quoted_msg_ids'] ?? '[]', true) ?: []) === [], 'у автокомментария нет цитаты');
     if ($auto) $cleanupMsgIds[] = (int)$auto['id'];
 
-    // Молчание LLM не оставляет зрителей без объявления (MLP-311)
+    // Молчание LLM не оставляет зрителей без объявления (MLP-311).
+    // Ищем строго по id, появившимся после вызова: «последнее сообщение бота»
+    // зависит от порядка шагов и делает проверку хрупкой.
+    $beforeId = (int)$conn->query("SELECT COALESCE(MAX(id), 0) m FROM chat_messages")->fetch_assoc()['m'];
     (new StreamCommand())->handle(['event' => 'episode_ended'], fn() => '');
-    $res = $conn->query("SELECT id, message FROM chat_messages WHERE user_id = $botId ORDER BY id DESC LIMIT 1");
-    $fb = $res ? $res->fetch_assoc() : null;
-    check(is_array($fb) && stripos($fb['message'], 'перерыв') !== false,
-        'пустой ответ LLM -> опубликовано запасное объявление перерыва');
-    if ($fb) $cleanupMsgIds[] = (int)$fb['id'];
+    $res = $conn->query("SELECT id, message FROM chat_messages WHERE user_id = $botId AND id > $beforeId ORDER BY id");
+    $fbRows = [];
+    while ($row = $res->fetch_assoc()) { $fbRows[] = $row; $cleanupMsgIds[] = (int)$row['id']; }
+    check(count($fbRows) === 1, 'пустой ответ LLM -> ровно одно новое сообщение бота');
+    check($fbRows && stripos($fbRows[0]['message'], 'перерыв') !== false,
+        'это запасное объявление перерыва');
 
     // Неизвестное событие игнорируется
     $calledUnknown = false;
