@@ -34,6 +34,22 @@ class JobQueue {
     }
 
     /**
+     * Типы, которые claimDue забирает поштучно (MLP-314: единый источник истины).
+     * mention сюда НЕ входит — он клеймится дебаунс-пачкой claimMentionBurst().
+     * Новый клеймящийся тип добавляется сюда и автоматически учитывается
+     * гейтом hasReactiveDue() (см. REACTIVE_TYPES).
+     */
+    public const CLAIM_TYPES = ['greeting', 'dynamic_command', 'cron_spontaneous', 'stream_command'];
+
+    /**
+     * «Реактивный бэклог» для гейта фоновой автописи (MLP-314): CLAIM_TYPES + mention.
+     * Позитивный список намеренно: негативный (type <> 'memory_scribe') блокировался бы
+     * навсегда осиротевшим pending неклеймящегося типа (прецедент — machine_spirit
+     * после MLP-307; purgeOld чистит только done/failed).
+     */
+    public const REACTIVE_TYPES = ['mention', 'greeting', 'dynamic_command', 'cron_spontaneous', 'stream_command'];
+
+    /**
      * Забрать созревшие ИНДИВИДУАЛЬНЫЕ задачи (greeting, dynamic_command) и пометить processing.
      * Упоминания обрабатываются пачкой отдельно — см. claimMentionBurst().
      * Вызывать под воркер-локом.
@@ -41,12 +57,13 @@ class JobQueue {
      */
     public function claimDue(int $limit = 50): array {
         $limit = max(1, (int)$limit);
+        $typesIn = "'" . implode("','", self::CLAIM_TYPES) . "'";
         $stmt = $this->db->prepare(
             // MLP-311: команды и события стрима — вперёд очереди. Их ответ привязан
             // к тому, что зрители видят прямо сейчас, и устаревает за секунды,
             // в отличие от приветствий и спонтанных реплик.
             "SELECT * FROM llm_jobs
-             WHERE status='pending' AND run_after <= NOW() AND type IN ('greeting','dynamic_command','cron_spontaneous','stream_command')
+             WHERE status='pending' AND run_after <= NOW() AND type IN ($typesIn)
              ORDER BY (type = 'stream_command') DESC, id ASC LIMIT ?"
         );
         $stmt->bind_param('i', $limit);
@@ -211,5 +228,61 @@ class JobQueue {
         );
         $stmt->bind_param('i', $h);
         $stmt->execute();
+    }
+
+    /**
+     * Забрать pending-задачи автописи (MLP-314). Отдельно от claimDue намеренно:
+     * scribe низкоприоритетен и не должен конкурировать с ответами бота
+     * (сортировка claimDue по id ставила бы его впереди свежих реплик).
+     * Вызывать под воркер-локом, после reactive-шагов.
+     */
+    public function claimScribe(int $limit = 1): array {
+        $limit = max(1, (int)$limit);
+        $stmt = $this->db->prepare(
+            "SELECT * FROM llm_jobs WHERE status='pending' AND type='memory_scribe' ORDER BY id ASC LIMIT ?"
+        );
+        $stmt->bind_param('i', $limit);
+        $stmt->execute();
+        return $this->collectAndMark($stmt->get_result());
+    }
+
+    /**
+     * Есть ли невыполненная задача типа (pending ИЛИ processing) — гейт планировщика
+     * автописи от дублей. Processing учитывается: job, чей процесс умер, не должен
+     * порождать параллельные дубли до реапера failStale().
+     */
+    public function hasPending(string $type): bool {
+        $stmt = $this->db->prepare(
+            "SELECT 1 FROM llm_jobs WHERE status IN ('pending','processing') AND type = ? LIMIT 1"
+        );
+        $stmt->bind_param('s', $type);
+        $stmt->execute();
+        return $stmt->get_result()->num_rows > 0;
+    }
+
+    /**
+     * Реапер зависших processing (процесс умер во время выполнения): старше порога —
+     * failed с attempts+1. Возвращает число реанимированных.
+     */
+    public function failStale(string $type, int $olderSec = 1800): int {
+        $sec = max(60, (int)$olderSec);
+        $stmt = $this->db->prepare(
+            "UPDATE llm_jobs SET status='failed', attempts = attempts + 1
+             WHERE status='processing' AND type = ? AND claimed_at < DATE_SUB(NOW(), INTERVAL ? SECOND)"
+        );
+        $stmt->bind_param('si', $type, $sec);
+        $stmt->execute();
+        return $stmt->affected_rows;
+    }
+
+    /**
+     * Ждёт ли реактивная работа (гейт запуска scribe, MLP-314). Намеренно БЕЗ
+     * run_after <= NOW(): mention с lifelike-задержкой 4–42с — тоже «ждущий»
+     * (прецедент трактовки — claimMentionBurst забирает несозревшие).
+     */
+    public function hasReactiveDue(): bool {
+        $typesIn = "'" . implode("','", self::REACTIVE_TYPES) . "'";
+        $res = $this->db->query("SELECT 1 FROM llm_jobs WHERE status='pending' AND type IN ($typesIn) LIMIT 1");
+        return $res && $res->num_rows > 0;
     }
 }

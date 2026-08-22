@@ -84,6 +84,15 @@ class SettingsController {
         'stream_command_owner_id' => 'uint',
         'stream_command_cooldown' => 'uint',
         'ai_debug_log'          => 'int', // debug-журнал обращений к нейронкам (llm_debug_log, TTL 7 дней)
+        // --- ИИ: память Лиры (MLP-314) ---
+        'ai_memory_enabled'     => 'int',  // выключатель подсистемы (0 = поведение до фичи, AC-8)
+        'ai_memory_auto'        => 'int',  // фаза 2: автопись (включает владелец после ревизии)
+        'ai_memory_interval'    => 'uint', // период автописи, сек (кламп ≥300 у потребителя)
+        'ai_memory_view_role'   => ['enum', ['all', 'moderator', 'admin']],
+        'ai_memory_teach_role'  => ['enum', ['moderator', 'admin']],
+        'ai_memory_block_limit' => 'uint', // общий кап блока в промпте, симв. (0 = блока нет)
+        'ai_memory_user_limit'  => 'uint', // бюджет досье пользователя, симв.
+        'ai_memory_meme_limit'  => 'uint', // бюджет мемов в блоке, симв.
         // --- SMTP ---
         'smtp_enabled'       => 'int',
         'smtp_host'          => 'string',

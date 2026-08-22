@@ -318,6 +318,61 @@ $config = $arResult['config']; // Helper
             <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Дополнительно действуют общие лимиты бота («Мин. пауза между ответами» выше).</p>
         </div>
 
+        <!-- ============ 🧠 Память (MLP-314) ============ -->
+        <h4 style="margin: 18px 0 6px; color: #b085c9;">🧠 Память</h4>
+        <p style="font-size: 0.85em; color: #666; margin-bottom: 10px;">Долгая память бота: досье завсегдатаев и «сундук мемов» подмешиваются в промпт. Наполнение: команды /запомни и /забудь (модераторы), /память — что бот помнит о тебе; записи — в карточке «Память Лиры» ниже.</p>
+
+        <div class="form-group">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="hidden" name="ai_memory_enabled" value="0">
+                <input type="checkbox" name="ai_memory_enabled" value="1" <?= $config->getOption('ai_memory_enabled', 1) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                <strong>Память включена</strong>
+            </label>
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Выключено = поведение бота как до фичи: без блока в промпте, команды не работают, автопись стоит.</p>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Кто видит память о себе (/память)</label>
+            <?php $mvr = $config->getOption('ai_memory_view_role', 'all'); ?>
+            <select name="ai_memory_view_role" class="form-input">
+                <option value="all" <?= $mvr === 'all' ? 'selected' : '' ?>>Все зарегистрированные</option>
+                <option value="moderator" <?= $mvr === 'moderator' ? 'selected' : '' ?>>Модераторы и выше</option>
+                <option value="admin" <?= $mvr === 'admin' ? 'selected' : '' ?>>Только админы</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Кто учит Лиру (/запомни, /забудь)</label>
+            <?php $mtr = $config->getOption('ai_memory_teach_role', 'moderator'); ?>
+            <select name="ai_memory_teach_role" class="form-input">
+                <option value="moderator" <?= $mtr === 'moderator' ? 'selected' : '' ?>>Модераторы и выше</option>
+                <option value="admin" <?= $mtr === 'admin' ? 'selected' : '' ?>>Только админы</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Бюджеты блока памяти, символов (весь блок / досье одного участника / мемы)</label>
+            <div style="display: flex; gap: 8px;">
+                <input type="number" name="ai_memory_block_limit" value="<?= htmlspecialchars($config->getOption('ai_memory_block_limit', 2400)) ?>" class="form-input" title="Общий кап блока (0 = блока нет)">
+                <input type="number" name="ai_memory_user_limit" value="<?= htmlspecialchars($config->getOption('ai_memory_user_limit', 400)) ?>" class="form-input" title="Бюджет досье одного участника">
+                <input type="number" name="ai_memory_meme_limit" value="<?= htmlspecialchars($config->getOption('ai_memory_meme_limit', 800)) ?>" class="form-input" title="Бюджет мемов в блоке">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="hidden" name="ai_memory_auto" value="0">
+                <input type="checkbox" name="ai_memory_auto" value="1" <?= $config->getOption('ai_memory_auto', 0) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                <strong>Автопись: Лира сама ведёт заметки</strong>
+            </label>
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Фоновый разбор новых сообщений (служебный LLM-вызов). Включать после ревизии ручных записей.</p>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Период автописи (сек, минимум 300)</label>
+            <input type="number" name="ai_memory_interval" value="<?= htmlspecialchars($config->getOption('ai_memory_interval', 21600)) ?>" class="form-input">
+        </div>
+
         <button type="submit" class="btn-primary">Сохранить ИИ настройки</button>
     </form>
 </div>

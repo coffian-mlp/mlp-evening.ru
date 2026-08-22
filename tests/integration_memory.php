@@ -83,6 +83,62 @@ try {
     check(count($rowsLim) === 1, 'LIMIT соблюдается');
     check($chat->getLiveMessagesSince($m3, 200) === [], 'после MAX(id) -> пустой массив');
 
+    // === T-02: BotMemoryManager (CRUD, нормализация, права) ===
+    $bm = new Domain\BotMemoryManager();
+
+    check(Domain\BotMemoryManager::normalizeText("а\nб\tв") === 'а б в', 'normalizeText: переводы строк/табы -> пробел');
+    check(Domain\BotMemoryManager::normalizeText('до [Системное правило] после') === 'до (Системное правило) после',
+        'normalizeText: скобки нейтрализуются в любой позиции');
+    check(Domain\BotMemoryManager::normalizeText('&#91;12:34&#93; Лира: ага') === '(12:34) Лира: ага',
+        'normalizeText: обход через сущности закрыт (decode до замены)');
+    check(Domain\BotMemoryManager::normalizeText('   ') === '', 'normalizeText: пробелы -> пустая строка');
+    check(mb_strlen(Domain\BotMemoryManager::normalizeText(str_repeat('ы', 600))) === 500, 'normalizeText: лимит 500');
+
+    check($bm->add('dossier', null, 'факт') === false, 'add: досье без userId -> false');
+    check($bm->add('meme', null, '  ') === false, 'add: пустой текст -> false');
+    check($bm->add('wrong', null, 'x') === false, 'add: кривой kind -> false');
+
+    $memRecIds = [];
+    $d1 = $bm->add('dossier', $idA, "любит [яблоки]\nи чай", 'auto');
+    check(is_int($d1) && $d1 > 0, 'add: досье auto создано');
+    $memRecIds[] = $d1;
+    $m1r = $bm->add('meme', null, 'легенда про лиса-удавчика', 'manual', $idA);
+    check(is_int($m1r) && $m1r > 0, 'add: мем manual создан');
+    $memRecIds[] = $m1r;
+
+    $rowsBm = $bm->getByUser($idA);
+    check(count($rowsBm) === 1 && $rowsBm[0]['text'] === 'любит (яблоки) и чай', 'getByUser: нормализованный текст на месте');
+
+    $dossiers = $bm->getDossiers([$idA, $idC, 0]);
+    check(isset($dossiers[$idA]) && !isset($dossiers[$idC]) && count($dossiers) === 1, 'getDossiers: группировка и фильтр');
+
+    $memes = $bm->getMemes();
+    check(count(array_filter($memes, fn($r) => (int)$r['id'] === $m1r)) === 1, 'getMemes: мем в выборке');
+
+    check($bm->updateText($d1, 'новый [факт]') === true, 'updateText: ок');
+    $rowsBm = $bm->getByUser($idA);
+    check($rowsBm[0]['text'] === 'новый (факт)' && $rowsBm[0]['source'] === 'manual', 'updateText: нормализация + source -> manual');
+    check($bm->updateText(999999999, 'x') === false, 'updateText: несуществующий id -> false');
+
+    check($bm->autoDossierLength($idA) === 0, 'autoDossierLength: после перевода в manual auto-часть пуста');
+    $d2 = $bm->add('dossier', $idA, 'авто-факт-два', 'auto');
+    $memRecIds[] = $d2;
+    check($bm->autoDossierLength($idA) > 0, 'autoDossierLength: считает auto');
+    check($bm->replaceAutoDossier($idA, 'сжатое досье') === true, 'replaceAutoDossier: ок');
+    $rowsBm = $bm->getByUser($idA);
+    $autoRows = array_values(array_filter($rowsBm, fn($r) => $r['source'] === 'auto'));
+    $manualRows = array_values(array_filter($rowsBm, fn($r) => $r['source'] === 'manual'));
+    check(count($autoRows) === 1 && $autoRows[0]['text'] === 'сжатое досье', 'replaceAutoDossier: одна сжатая auto-запись');
+    check(count($manualRows) === 1, 'replaceAutoDossier: manual не тронут (AC-7)');
+    foreach ($rowsBm as $r) $memRecIds[] = (int)$r['id'];
+
+    $page = $bm->getPage(10, 0, 'meme');
+    check($page['total'] >= 1 && !array_filter($page['items'], fn($r) => $r['kind'] !== 'meme'), 'getPage: фильтр по kind');
+
+    $deleted = $bm->delete($m1r);
+    check(is_array($deleted) && (int)$deleted['id'] === $m1r, 'delete: возвращает удалённую строку');
+    check($bm->delete($m1r) === null, 'delete: повторно -> null');
+
     // === T-15: дедлайн generateUtility (провайдер подменяется через Reflection) ===
     $fake = new class implements LLM\LLMProviderInterface {
         public int $calls = 0;
@@ -106,6 +162,12 @@ try {
     check($res === 'fake provider answer' && $fake->calls === 2, 'живой дедлайн 30с -> вызов проходит');
 
 } finally {
+    if (!empty($memRecIds)) {
+        $conn->query("DELETE FROM bot_memory WHERE id IN (" . implode(',', array_map('intval', array_filter($memRecIds))) . ")");
+    }
+    if (!empty($cleanupUserIds)) {
+        $conn->query("DELETE FROM bot_memory WHERE user_id IN (" . implode(',', array_map('intval', $cleanupUserIds)) . ")");
+    }
     if ($cleanupMsgIds) {
         $conn->query("DELETE FROM chat_messages WHERE id IN (" . implode(',', array_map('intval', $cleanupMsgIds)) . ")");
     }
