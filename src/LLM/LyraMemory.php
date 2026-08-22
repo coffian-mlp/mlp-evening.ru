@@ -110,7 +110,10 @@ class LyraMemory {
         if (!(int)$config->getOption('ai_memory_enabled', 1)) {
             return null;
         }
-        $blockLimit = min(4000, max(0, (int)$config->getOption('ai_memory_block_limit', 2400)));
+        // Кламп-потолок 8000 (~4 страницы): страховка от случайного «999999» в поле,
+        // не рекомендация. Цена блока — токены в КАЖДОМ ответе бота (решение владельца
+        // 22.08: рабочее значение 6000, «4000 маловато»).
+        $blockLimit = min(8000, max(0, (int)$config->getOption('ai_memory_block_limit', 2400)));
         if ($blockLimit === 0) {
             return null;
         }
