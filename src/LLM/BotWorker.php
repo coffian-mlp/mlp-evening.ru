@@ -56,6 +56,12 @@ class BotWorker {
         try { (new PollManager())->closeExpired(); } catch (\Throwable $e) { error_log('BotWorker closeExpired error: ' . $e->getMessage()); }
         try { $this->config->setOption('bot_worker_heartbeat', (string)time()); } catch (\Throwable $e) {}
         try { $this->queue->purgeOld(168); /* MLP-280: неделя журнала — окно метрик */ } catch (\Throwable $e) {}
+        // MLP-314: автопись памяти — ПОСЛЕ heartbeat: бюджет scribe (75с) отсчитывается
+        // от свежей отметки живости, к концу шага возраст ≤ 75с+ε < 90с (workerStale) —
+        // иначе reactive-часть тика съедала бы запас и диспетчер уходил в inline.
+        try { $this->memoryScribeSchedule(); } catch (\Throwable $e) { error_log('BotWorker scribe schedule error: ' . $e->getMessage()); }
+        try { $this->memoryScribeProcess(); } catch (\Throwable $e) { error_log('BotWorker scribe process error: ' . $e->getMessage()); }
+        try { $this->config->setOption('bot_worker_heartbeat', (string)time()); } catch (\Throwable $e) {}
         $this->db->query("SELECT RELEASE_LOCK('bot_worker')");
     }
 
@@ -263,5 +269,94 @@ class BotWorker {
     private function scheduleCommandRow(): array {
         return $this->commands->getScheduleCommand()
             ?? ['handler_type' => 'schedule', 'system_prompt' => ''];
+    }
+
+    // ---------------- Автопись памяти (MLP-314, фаза 2) ----------------
+
+    /**
+     * Планировщик memory_scribe (образец proactive, MLP-279): гейты, маркер, интервал.
+     * Маркер last_run пишется ДО enqueue — защита от дублей между тиками.
+     */
+    private function memoryScribeSchedule(): void {
+        $this->queue->failStale('memory_scribe', 1800); // реапер «вечного processing»
+
+        if (!(int)$this->config->getOption('ai_enabled', 0)
+            || !(int)$this->config->getOption('ai_memory_enabled', 1)
+            || !(int)$this->config->getOption('ai_memory_auto', 0)) {
+            return;
+        }
+        if ($this->queue->hasPending('memory_scribe')) {
+            return; // job уже в работе/ожидании — дубли не плодим
+        }
+
+        // Маркера нет (миграция не сидировала?) — фиксируем текущий конец чата БЕЗ LLM:
+        // бэкфилл истории исключён (Non-goal), первый содержательный прогон — следующий.
+        $markerRaw = $this->config->getOption('bot_memory_last_id', null);
+        if ($markerRaw === null) {
+            $res = $this->db->query("SELECT COALESCE(MAX(id), 0) m FROM chat_messages");
+            $this->config->setOption('bot_memory_last_id', (string)(int)($res->fetch_assoc()['m'] ?? 0));
+            return;
+        }
+
+        $rows = $this->llm->getChatManager()->getLiveMessagesSince((int)$markerRaw, MemoryScribe::BATCH_MSGS);
+        if (!$rows) {
+            return; // новых сообщений нет — ни job, ни LLM (AC-6, «тихая неделя»)
+        }
+        // Только сообщения бота (спонтанные/анонсы двигают MAX(id) чата) — сдвигаем
+        // маркер без job: холостых LLM-вызовов нет, маркер не застревает.
+        $botId = $this->llm->getBotUserId();
+        $humans = array_filter($rows, static fn($r) => (int)($r['user_id'] ?? 0) !== $botId || $botId <= 0);
+        if (!$humans) {
+            $maxId = max(array_map(static fn($r) => (int)$r['id'], $rows));
+            $this->config->setOption('bot_memory_last_id', (string)$maxId);
+            return;
+        }
+
+        // Интервал: обычный — ai_memory_interval (кламп ≥300); режим догона (прошлый
+        // батч был полным, флаг ставит сам job) — ускоренный, но не чаще раза в 600с.
+        $interval = max(300, (int)$this->config->getOption('ai_memory_interval', 21600));
+        if ((int)$this->config->getOption('bot_memory_backlog', 0) === 1) {
+            $interval = min($interval, 600);
+        }
+        $lastRun = (int)$this->config->getOption('bot_memory_last_run', 0);
+        if (time() - $lastRun < $interval) {
+            return;
+        }
+
+        $this->config->setOption('bot_memory_last_run', (string)time()); // ДО enqueue (анти-дубль)
+        $this->queue->enqueue('memory_scribe', [], 0);
+    }
+
+    /**
+     * Обработка memory_scribe: отдельный claim ПОСЛЕ реактивных шагов и только при
+     * пустом реактивном бэклоге (pending без run_after — mention с lifelike-задержкой
+     * тоже «ждущий»). Выключатели гасят и уже поставленные job'ы (rollback-рычаг, AC-8).
+     */
+    private function memoryScribeProcess(): void {
+        $enabled = (int)$this->config->getOption('ai_enabled', 0)
+            && (int)$this->config->getOption('ai_memory_enabled', 1)
+            && (int)$this->config->getOption('ai_memory_auto', 0);
+
+        if (!$enabled) {
+            // Консьюм без работы (образец reactive при ai_enabled=0): pending-job
+            // после выключения не должен ни звать LLM, ни висеть вечно.
+            foreach ($this->queue->claimScribe(1) as $job) {
+                $this->queue->complete([(int)$job['id']]);
+            }
+            return;
+        }
+        if ($this->queue->hasReactiveDue()) {
+            return; // живые ответы важнее — scribe подождёт следующего тика
+        }
+        foreach ($this->queue->claimScribe(1) as $job) {
+            $id = (int)$job['id'];
+            try {
+                (new MemoryScribe($this->llm))->runScribe($job['data'] ?? []);
+                $this->queue->complete([$id]);
+            } catch (\Throwable $e) {
+                error_log('MemoryScribe failed: ' . $e->getMessage());
+                $this->queue->fail([$id]); // маркер не сдвинут — батч повторится
+            }
+        }
     }
 }

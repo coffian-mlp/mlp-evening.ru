@@ -12,6 +12,9 @@
 
 require_once __DIR__ . '/integration_helpers.php';
 
+// Сессия — до первого вывода (Auth::check в CLI стартует сессию; после echo — warning).
+if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
+
 $conn = it_require_db();
 $marker = 'itm_' . getmypid();
 
@@ -161,7 +164,168 @@ try {
     $res = $llm->generateUtility([['role' => 'user', 'content' => 'ping']], 'test system', 30);
     check($res === 'fake provider answer' && $fake->calls === 2, 'живой дедлайн 30с -> вызов проходит');
 
+    // === T-11: команды памяти (полный путь) и инъекция блока (фаза 1) ===
+    $cfg = Infra\ConfigManager::getInstance();
+    $optKeys = ['ai_enabled', 'ai_bot_user_id', 'ai_routerai_key', 'ai_memory_enabled',
+                'ai_memory_teach_role', 'ai_memory_view_role', 'ai_memory_block_limit'];
+    $optBackup = [];
+    foreach ($optKeys as $k) { $optBackup[$k] = $cfg->getOption($k, null); }
+
+    $botId = $mk("{$marker}_bot", "{$marker}_Лира");
+    $cfg->setOption('ai_enabled', '1');
+    $cfg->setOption('ai_bot_user_id', (string)$botId);
+    $cfg->setOption('ai_routerai_key', 'it-fake-key'); // providers непустые -> isEnabled=true; LLM не зовётся (память без LLM)
+    $cfg->setOption('ai_memory_enabled', '1');
+
+    $llm2 = new LLM\LLMManager();
+    $cmdAdd    = ['handler_type' => 'memory_add',    'command_prefix' => '/запомни'];
+    $cmdShow   = ['handler_type' => 'memory_show',   'command_prefix' => '/память'];
+    $cmdForget = ['handler_type' => 'memory_forget', 'command_prefix' => '/забудь'];
+    $lastBotMsg = function () use ($conn, $botId, &$cleanupMsgIds): string {
+        $res = $conn->query("SELECT id, message FROM chat_messages WHERE user_id = $botId ORDER BY id DESC LIMIT 1");
+        $row = $res ? $res->fetch_assoc() : null;
+        if ($row) $cleanupMsgIds[] = (int)$row['id'];
+        return (string)($row['message'] ?? '');
+    };
+
+    // /запомни: мем (без @)
+    $llm2->processTrigger('dynamic_command', ['command' => $cmdAdd, 'message' => "/запомни легенда про тест-удавчика {$marker}",
+        'user_id' => $idA, 'username' => "{$marker}_nickA"]);
+    $reply = $lastBotMsg();
+    check(preg_match('/№\d+/u', $reply) === 1, '/запомни мем: подтверждение с №');
+    $res = $conn->query("SELECT id, kind, source, created_by FROM bot_memory WHERE text LIKE '%тест-удавчика {$marker}%'");
+    $memeRow = $res->fetch_assoc();
+    check($memeRow && $memeRow['kind'] === 'meme' && $memeRow['source'] === 'manual' && (int)$memeRow['created_by'] === $idA,
+        '/запомни мем: запись meme/manual с автором');
+    $memRecIds[] = (int)$memeRow['id'];
+
+    // /запомни @ник: досье (первый токен)
+    $llm2->processTrigger('dynamic_command', ['command' => $cmdAdd, 'message' => "/запомни @{$marker}_nickA любит интеграционные тесты",
+        'user_id' => $idA, 'username' => "{$marker}_nickA"]);
+    $reply = $lastBotMsg();
+    check(str_contains($reply, "{$marker}_nickA ({$marker}_loginA)"), '/запомни досье: подтверждение «ник (логин)»');
+    $res = $conn->query("SELECT id, kind, user_id FROM bot_memory WHERE text LIKE '%интеграционные тесты%'");
+    $dosRow = $res->fetch_assoc();
+    check($dosRow && $dosRow['kind'] === 'dossier' && (int)$dosRow['user_id'] === $idA, '/запомни досье: запись dossier на верного пользователя');
+    $memRecIds[] = (int)$dosRow['id'];
+
+    // @ник в СЕРЕДИНЕ текста -> мем, не досье
+    $llm2->processTrigger('dynamic_command', ['command' => $cmdAdd, 'message' => "/запомни когда @{$marker}_nickA смеётся — дрожит чат {$marker}",
+        'user_id' => $idA, 'username' => "{$marker}_nickA"]);
+    $lastBotMsg();
+    $res = $conn->query("SELECT kind FROM bot_memory WHERE text LIKE '%дрожит чат {$marker}%'");
+    $row = $res->fetch_assoc();
+    check($row && $row['kind'] === 'meme', '@ник в середине текста -> мем (адресат только первым токеном)');
+    $conn->query("DELETE FROM bot_memory WHERE text LIKE '%дрожит чат {$marker}%'");
+
+    // Неоднозначный ник -> отказ без записи
+    $before = (int)$conn->query("SELECT COUNT(*) c FROM bot_memory")->fetch_assoc()['c'];
+    $llm2->processTrigger('dynamic_command', ['command' => $cmdAdd, 'message' => "/запомни @{$marker}_dupnick что-то",
+        'user_id' => $idA, 'username' => "{$marker}_nickA"]);
+    $reply = $lastBotMsg();
+    check(str_contains($reply, 'не могу однозначно'), 'неоднозначный ник: вежливый отказ');
+    check((int)$conn->query("SELECT COUNT(*) c FROM bot_memory")->fetch_assoc()['c'] === $before, 'неоднозначный ник: записи нет');
+
+    // Пустой /запомни -> подсказка без записи
+    $llm2->processTrigger('dynamic_command', ['command' => $cmdAdd, 'message' => '/запомни', 'user_id' => $idA, 'username' => "{$marker}_nickA"]);
+    check(str_contains($lastBotMsg(), 'что запомнить'), 'пустой /запомни: подсказка');
+
+    // /память: о себе (allowed), с №
+    $llm2->processTrigger('dynamic_command', ['command' => $cmdShow, 'message' => '/память', 'user_id' => $idA,
+        'username' => "{$marker}_nickA", 'allowed' => true]);
+    $reply = $lastBotMsg();
+    check(str_contains($reply, 'интеграционные тесты') && preg_match('/№\d+/u', $reply) === 1, '/память: свои записи с номерами');
+
+    // /память без allowed -> отказ (fail-closed)
+    $llm2->processTrigger('dynamic_command', ['command' => $cmdShow, 'message' => '/память', 'user_id' => $idA, 'username' => "{$marker}_nickA"]);
+    check(str_contains($lastBotMsg(), 'не для твоей роли'), '/память без allowed: fail-closed отказ');
+
+    // /память @чужой -> отказ (AC-4)
+    $llm2->processTrigger('dynamic_command', ['command' => $cmdShow, 'message' => "/память @{$marker}_loginB", 'user_id' => $idA,
+        'username' => "{$marker}_nickA", 'allowed' => true]);
+    check(str_contains($lastBotMsg(), 'чужие досье не выдаю'), '/память о другом: отказ (AC-4)');
+
+    // /память гостем -> отказ
+    $llm2->processTrigger('dynamic_command', ['command' => $cmdShow, 'message' => '/память', 'user_id' => 0, 'username' => 'Гость', 'allowed' => true]);
+    check(str_contains($lastBotMsg(), 'Гостям'), '/память гостем: отказ');
+
+    // /память у пустого пользователя -> дружелюбная фраза
+    $llm2->processTrigger('dynamic_command', ['command' => $cmdShow, 'message' => '/память', 'user_id' => $idC,
+        'username' => "{$marker}_dupnick", 'allowed' => true]);
+    check(str_contains($lastBotMsg(), 'ничего не записано'), '/память пусто: дружелюбный ответ (edge AC-4)');
+
+    // /забудь: подтверждение БЕЗ текста записи + аудит
+    $memeId = (int)$memeRow['id'];
+    $llm2->processTrigger('dynamic_command', ['command' => $cmdForget, 'message' => "/забудь №{$memeId}", 'user_id' => $idA, 'username' => "{$marker}_nickA"]);
+    $reply = $lastBotMsg();
+    check(str_contains($reply, "№{$memeId}") && !str_contains($reply, 'тест-удавчика'), '/забудь: подтверждение без текста записи');
+    check((int)$conn->query("SELECT COUNT(*) c FROM bot_memory WHERE id = {$memeId}")->fetch_assoc()['c'] === 0, '/забудь: запись удалена');
+    $res = $conn->query("SELECT id, user_id, target_id, details FROM audit_logs WHERE action = 'memory_forget' ORDER BY id DESC LIMIT 1");
+    $audit = $res->fetch_assoc();
+    check($audit && (int)$audit['user_id'] === $idA && $audit['target_id'] === null
+        && str_contains((string)$audit['details'], 'тест-удавчика'), '/забудь: аудит в audit_logs (мем: target_id NULL, текст в details)');
+    if ($audit) $conn->query("DELETE FROM audit_logs WHERE id = " . (int)$audit['id']);
+
+    // /забудь несуществующую
+    $llm2->processTrigger('dynamic_command', ['command' => $cmdForget, 'message' => "/забудь №{$memeId}", 'user_id' => $idA, 'username' => "{$marker}_nickA"]);
+    check(str_contains($lastBotMsg(), 'не нашла'), '/забудь несуществующую: отказ');
+
+    // --- Инъекция блока (AC-1, AC-8, регрессы MLP-260/311) ---
+    // Подтверждения бота вытеснили старые реплики из окна — добавляем свежую реплику
+    // участника idA, чтобы он гарантированно был в окне контекста.
+    $ins($idA, "{$marker} свежая реплика для окна");
+    $strayId = $bm->add('dossier', $idC, 'посторонний факт вне окна', 'manual');
+    $memRecIds[] = $strayId;
+
+    $ctx = $llm2->buildReplyContext(10);
+    $joined = implode("\n---\n", array_column($ctx, 'content'));
+    check(str_contains($joined, LLM\LyraMemory::BLOCK_MARKER), 'AC-1: блок памяти в контексте');
+    check(str_contains($joined, 'интеграционные тесты'), 'AC-1: досье участника окна в блоке');
+    check(!str_contains($joined, 'посторонний факт'), 'AC-1: досье постороннего (не в окне) НЕ в блоке');
+
+    $ctx = $llm2->buildReplyContext(10, null, null, false);
+    check(!str_contains(implode('', array_column($ctx, 'content')), LLM\LyraMemory::BLOCK_MARKER),
+        'регресс MLP-260: includePinned=false -> блока нет (наследование)');
+
+    $ctx = $llm2->buildReplyContext(10, null, null, true, false);
+    check(!str_contains(implode('', array_column($ctx, 'content')), LLM\LyraMemory::BLOCK_MARKER),
+        'регресс MLP-311/опросы: явный includeMemory=false -> блока нет');
+
+    // AC-5: правка видна следующей сборке
+    $bm->updateText((int)$dosRow['id'], 'правленый факт про тесты');
+    $ctx = $llm2->buildReplyContext(10);
+    check(str_contains(implode('', array_column($ctx, 'content')), 'правленый факт'), 'AC-5: правка видна следующей сборке');
+
+    // AC-8: выключатель гасит блок и права команд
+    $cfg->setOption('ai_memory_enabled', '0');
+    $ctx = $llm2->buildReplyContext(10);
+    check(!str_contains(implode('', array_column($ctx, 'content')), LLM\LyraMemory::BLOCK_MARKER), 'AC-8: enabled=0 -> блока нет');
+    $_SESSION['user_id'] = $idA; $_SESSION['role'] = 'moderator';
+    check(Domain\BotMemoryManager::canTeach() === false && Domain\BotMemoryManager::canViewOwn() === false,
+        'AC-8: enabled=0 -> canTeach/canViewOwn = false даже для модератора');
+    $cfg->setOption('ai_memory_enabled', '1');
+    check(Domain\BotMemoryManager::canTeach() === true && Domain\BotMemoryManager::canViewOwn() === true,
+        'enabled=1: модератору можно учить и смотреть (дефолтные роли)');
+    $_SESSION['role'] = 'user';
+    check(Domain\BotMemoryManager::canTeach() === false, 'роль user: canTeach = false (teach_role=moderator)');
+    check(Domain\BotMemoryManager::canViewOwn() === true, 'роль user: canViewOwn = true (view_role=all)');
+    $cfg->setOption('ai_memory_teach_role', 'мусор');
+    check(Domain\BotMemoryManager::canTeach() === false, 'мусорная teach_role -> fail-closed (moderator)');
+    $cfg->setOption('ai_memory_view_role', 'мусор');
+    check(Domain\BotMemoryManager::canViewOwn() === false, 'мусорная view_role -> fail-closed (admin)');
+    unset($_SESSION['user_id'], $_SESSION['role']);
+
 } finally {
+    if (isset($optBackup)) {
+        $cfgFin = Infra\ConfigManager::getInstance();
+        foreach ($optBackup as $k => $v) {
+            if ($v === null) {
+                $conn->query("DELETE FROM site_options WHERE key_name = '" . $conn->real_escape_string($k) . "'");
+            } else {
+                $cfgFin->setOption($k, (string)$v);
+            }
+        }
+    }
     if (!empty($memRecIds)) {
         $conn->query("DELETE FROM bot_memory WHERE id IN (" . implode(',', array_map('intval', array_filter($memRecIds))) . ")");
     }
