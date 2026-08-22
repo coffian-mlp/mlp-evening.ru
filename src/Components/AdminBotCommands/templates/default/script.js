@@ -82,8 +82,54 @@ function loadLyraMetrics() {
     }, 'json');
 }
 
+// MLP-314: карточка «Память Лиры» — список/правка/удаление записей bot_memory.
+function loadMemory() {
+    const kind = document.getElementById('mem-kind-filter').value;
+    $.post('/api.php', { action: 'get_memory', kind: kind, limit: 200, csrf_token: window.csrfToken }, function (res) {
+        if (!res.success) return;
+        document.getElementById('mem-count').innerText = 'в выборке: ' + res.data.total;
+        const rows = res.data.items.map(function (it) {
+            const kindIcon = it.kind === 'dossier' ? '👤' : '🎭';
+            // Владелец досье: null при user_id>0 = пользователь удалён (досье-сирота).
+            const owner = it.kind === 'dossier'
+                ? (it.owner_nick !== null ? $('<i>').text('@' + it.owner_nick).html() : '<span style="color:#e57373;">пользователь удалён</span>')
+                : '—';
+            const div = document.createElement('div');
+            div.innerText = it.text; // экранирование пользовательского текста
+            const src = it.source === 'auto' ? '🤖 auto' : '✍️ manual';
+            const btns = '<button class="btn-small" onclick="editMemoryRow(' + it.id + ')">✏️</button> ' +
+                         '<button class="btn-small" onclick="deleteMemoryRow(' + it.id + ')">🗑️</button>';
+            return '<tr data-mem-id="' + it.id + '"><td>' + it.id + '</td><td>' + kindIcon + '</td><td>' + owner +
+                   '</td><td class="mem-text" style="max-width:480px; word-break:break-word;">' + div.innerHTML +
+                   '</td><td>' + src + '</td><td>' + (it.created_at || '') + '</td><td>' + btns + '</td></tr>';
+        });
+        document.getElementById('mem-rows').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="7" style="color:#888;">Память пуста — всё ещё впереди.</td></tr>';
+    }, 'json');
+}
+
+function editMemoryRow(id) {
+    const row = document.querySelector('tr[data-mem-id="' + id + '"] .mem-text');
+    if (!row) return;
+    const current = row.innerText;
+    const next = prompt('Текст записи №' + id + ' (правка переводит запись в manual):', current);
+    if (next === null || next.trim() === '' || next === current) return;
+    $.post('/api.php', { action: 'save_memory', id: id, text: next, csrf_token: window.csrfToken }, function (res) {
+        if (res.success) loadMemory();
+        else if (window.showFlashMessage) window.showFlashMessage(res.message, 'error');
+    }, 'json');
+}
+
+function deleteMemoryRow(id) {
+    if (!confirm('Забыть запись №' + id + '? Действие попадёт в журнал модерации.')) return;
+    $.post('/api.php', { action: 'delete_memory', id: id, csrf_token: window.csrfToken }, function (res) {
+        if (res.success) loadMemory();
+        else if (window.showFlashMessage) window.showFlashMessage(res.message, 'error');
+    }, 'json');
+}
+
 // script.js подключается в head (Application::addJs) — элементы вкладки ещё не в DOM.
 document.addEventListener('DOMContentLoaded', function () {
     if (document.getElementById('fb-rows')) loadFeedback();
+    if (document.getElementById('mem-rows')) loadMemory();
     if (document.getElementById('lyra-metrics')) loadLyraMetrics();
 });

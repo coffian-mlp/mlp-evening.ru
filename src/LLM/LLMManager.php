@@ -260,6 +260,12 @@ class LLMManager {
                     return (new LyraArtist($this))->handleDraw($command, $contextData);
                 case 'image_chat': // /нарисуйчат: LLM-режиссёр → художница (MLP-277)
                     return (new LyraArtist($this))->handleDrawChat($command, $contextData);
+                case 'memory_add':    // /запомни — долгая память, БЕЗ LLM (MLP-314)
+                    return (new LyraMemory($this))->handleRemember($command, $contextData);
+                case 'memory_show':   // /память — только о себе (MLP-314)
+                    return (new LyraMemory($this))->handleShowOwn($command, $contextData);
+                case 'memory_forget': // /забудь №N (MLP-314)
+                    return (new LyraMemory($this))->handleForget($command, $contextData);
             }
 
             $context = $this->buildContext($this->contextLimit());
@@ -428,7 +434,8 @@ class LLMManager {
     /** Фолбэк: Лира сама генерирует опрос (когда варианты не заданы). */
     private function generatePoll($command, string $topic): ?array {
         $topic = trim($topic);
-        $context = $this->buildContext(16);
+        // MLP-314: без блока памяти — досье не должны утекать в тексты публичных опросов.
+        $context = $this->buildContext(16, null, null, true, false);
         $instruction = "\n\n" . ($command['system_prompt'] ?: "Придумай уместный опрос для чата.")
             . "\n\nТЫ СОЗДАЁШЬ ОПРОС."
             . ($topic !== '' ? "\nЗапрос пользователя: " . $topic : "\nТема не задана — придумай уместную по последним сообщениям чата.")
@@ -459,7 +466,7 @@ class LLMManager {
         }
         $anon = !empty($poll['is_anonymous']);
 
-        $context = $this->buildContext(12);
+        $context = $this->buildContext(12, null, null, true, false); // MLP-314: голосование без блока памяти
         $context[] = ['role' => 'user', 'content' =>
             "[Система] В чате идёт опрос — проголосуй и отреагируй в своём стиле.\n"
             . "Вопрос: " . $poll['question'] . "\n"
@@ -635,8 +642,8 @@ class LLMManager {
      * Контекст беседы для воркера. $beforeId ограничивает контекст сообщениями с id < $beforeId
      * (для single-ответа — контекст ДО триггера включительно: передавать message_id + 1).
      */
-    public function buildReplyContext(int $limit = 24, $maxAgeHours = null, ?int $beforeId = null, bool $includePinned = true): array {
-        return $this->buildContext($limit, $maxAgeHours, $beforeId, $includePinned);
+    public function buildReplyContext(int $limit = 24, $maxAgeHours = null, ?int $beforeId = null, bool $includePinned = true, ?bool $includeMemory = null): array {
+        return $this->buildContext($limit, $maxAgeHours, $beforeId, $includePinned, $includeMemory);
     }
 
     /**
@@ -700,7 +707,13 @@ class LLMManager {
         return $context;
     }
 
-    private function buildContext($limit = 24, $maxAgeHours = null, $beforeId = null, $includePinned = true) {
+    /**
+     * $includeMemory (MLP-314): блок долгой памяти (досье участников окна + мемы);
+     * null = наследует $includePinned — пути с отключённым закрепом (проактив до гейтов,
+     * режиссёр) память не получают, регресс MLP-260 исключён.
+     */
+    private function buildContext($limit = 24, $maxAgeHours = null, $beforeId = null, $includePinned = true, ?bool $includeMemory = null) {
+        $includeMemory = $includeMemory ?? $includePinned;
         // MLP-269 (v2): бот ВИДИТ факт удаления (драма с массовой чисткой — повод
         // отреагировать), но удалённые: (а) не занимают лимит живых сообщений,
         // (б) не раскрывают содержимое (приватность — только автор и время),
@@ -730,12 +743,19 @@ class LLMManager {
             }
 
             $alive++;
+            // MLP-314: участники окна для блока памяти — в порядке свежести реплик
+            // (цикл идёт от новых к старым; гости/бот отфильтруются в LyraMemory).
+            $uid = (int)($msg['user_id'] ?? 0);
+            if ($uid > 0 && !in_array($uid, $memoryUserIds ?? [], true)) {
+                $memoryUserIds[] = $uid;
+            }
             $entries[] = [
                 'role' => ($msg['user_id'] == $this->botUserId) ? 'assistant' : 'user',
                 // Имя и время в тексте — чтобы модель знала, кто говорит.
                 'content' => "[$time] {$msg['username']}: " . $msg['raw_message'],
             ];
         }
+        $memoryUserIds = $memoryUserIds ?? [];
         $entries = array_reverse($entries); // обратно в хронологию
 
         // Схлопываем подряд идущие маркеры удаления и строим итоговый контекст.
@@ -778,6 +798,20 @@ class LLMManager {
             $context[] = $e;
         }
         $flushRun();
+
+        // Блок долгой памяти (MLP-314) — фоновый блок перед сообщениями; prepend
+        // ДО закрепа, чтобы итоговый порядок был «закреп → память → сообщения».
+        // Сбой памяти не ломает ответ: блок просто отбрасывается (Fail Fast → деградация).
+        if ($includeMemory) {
+            try {
+                $memBlock = (new LyraMemory($this))->buildPromptBlock($memoryUserIds);
+                if ($memBlock !== null) {
+                    array_unshift($context, ['role' => 'user', 'content' => $memBlock]);
+                }
+            } catch (\Throwable $e) {
+                error_log("LyraMemory block failed (degraded, reply continues): " . $e->getMessage());
+            }
+        }
 
         // Закреплённое сообщение — фоновый контекст (MLP-242); в проактиве
         // подмешивается ПОСЛЕ гейтов (MLP-260), поэтому отключаемо.

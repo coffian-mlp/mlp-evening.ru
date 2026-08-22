@@ -34,6 +34,9 @@ use Domain\Auth;
                         <option value="todo">Беклог /todo (без LLM)</option>
                         <option value="image">Картинка /нарисуй (генерация)</option>
                         <option value="image_chat">Сценка чата /нарисуйчат (режиссёр+генерация)</option>
+                        <option value="memory_add">Память /запомни (без LLM)</option>
+                        <option value="memory_show">Память /память (без LLM)</option>
+                        <option value="memory_forget">Память /забудь (без LLM)</option>
                     </select>
                 </div>
 
@@ -95,6 +98,9 @@ use Domain\Auth;
                                         'todo'       => ['Todo',     '#fd7e14'],
                                         'image'      => ['Art',      '#d63384'],
                                         'image_chat' => ['ArtChat',  '#a83279'],
+                                        'memory_add'    => ['Mem+',   '#8e44ad'],
+                                        'memory_show'   => ['Mem?',   '#7d6ba0'],
+                                        'memory_forget' => ['Mem-',   '#5d4a7a'],
                                         'text'       => ['Text',     '#28a745'],
                                     ];
                                     [$badgeLabel, $badgeColor] = $badges[$cmd['handler_type']] ?? ['Text', '#28a745'];
@@ -145,6 +151,27 @@ use Domain\Auth;
         <table class="admin-table" style="width: 100%;">
             <thead><tr><th>№</th><th>Когда</th><th>Кто</th><th>Текст</th><th>Статус</th><th></th></tr></thead>
             <tbody id="fb-rows"><tr><td colspan="6" style="color:#888;">Загрузка…</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- MLP-314: память Лиры (досье + сундук мемов) -->
+<div class="card" style="margin-top: 20px;">
+    <h3 class="dashboard-title">🧠 Память Лиры</h3>
+    <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+        <div style="width: 220px;">
+            <select id="mem-kind-filter" class="form-input" onchange="loadMemory()">
+                <option value="">Все записи</option>
+                <option value="dossier">Досье</option>
+                <option value="meme">Мемы</option>
+            </select>
+        </div>
+        <span id="mem-count" style="color: #888;"></span>
+    </div>
+    <div style="overflow-x: auto;">
+        <table class="admin-table" style="width: 100%;">
+            <thead><tr><th>№</th><th>Вид</th><th>О ком</th><th>Текст</th><th>Источник</th><th>Когда</th><th></th></tr></thead>
+            <tbody id="mem-rows"><tr><td colspan="7" style="color:#888;">Загрузка…</td></tr></tbody>
         </table>
     </div>
 </div>

@@ -159,6 +159,29 @@ class ChatController {
             $matchedCommand = null;
         }
 
+        // MLP-314: гейты команд памяти — здесь, а не в воркере (там роль недоступна).
+        $memoryAllowed = false;
+        $memoryTypes = ['memory_add', 'memory_show', 'memory_forget'];
+        if ($matchedCommand && in_array($matchedCommand['handler_type'] ?? '', $memoryTypes, true)) {
+            $mType = $matchedCommand['handler_type'];
+            if (!(int)\Infra\ConfigManager::getInstance()->getOption('ai_memory_enabled', 1)) {
+                // AC-8: подсистема выключена → все три команды не существуют (тишина,
+                // до фичи таких сообщений не было — произносимый отказ недопустим).
+                $matchedCommand = null;
+            } elseif (mb_substr(trim($message), 0, 1) !== '/') {
+                // Слэш обязателен (та же trim-строка, что видит matchCommand):
+                // «Запомни, я потом отвечу» — обычная речь, не запись в память.
+                $matchedCommand = null;
+            } elseif ($mType === 'memory_show') {
+                // Право «о себе» — fail-closed флагом в payload: отсутствие = отказ
+                // (обработчик ответит вежливой репликой без LLM — AC-4).
+                $memoryAllowed = \Domain\BotMemoryManager::canViewOwn();
+            } elseif (!\Domain\BotMemoryManager::canTeach()) {
+                // /запомни, /забудь без права → обычный mention-путь (образец poll).
+                $matchedCommand = null;
+            }
+        }
+
         // MLP-307: обращение к боту с командой стрима («Лира, включи перерыв») —
         // отвечает сама Лира отдельной веткой (контекст чата + приоритетная инструкция).
         // Проверяется ПОСЛЕ команд бота: явная команда (/нарисуй кинотеатр) приоритетнее,
@@ -176,13 +199,17 @@ class ChatController {
 
         // Диспетчеризация: очередь (воркер ответит) или inline-фоллбек (с lifelike-задержкой).
         if ($matchedCommand) {
-            BotDispatch::dispatch('dynamic_command', [
+            $payload = [
                 'message'    => $message,
                 'message_id' => $mid,
                 'command'    => $matchedCommand,
                 'user_id'    => $userId,
                 'username'   => $username,
-            ]);
+            ];
+            if (($matchedCommand['handler_type'] ?? '') === 'memory_show' && $memoryAllowed) {
+                $payload['allowed'] = true; // fail-closed: ставится ТОЛЬКО здесь (MLP-314)
+            }
+            BotDispatch::dispatch('dynamic_command', $payload);
         } else {
             BotDispatch::dispatch('mention', [
                 'message'        => $message,

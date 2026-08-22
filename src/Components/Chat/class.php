@@ -77,8 +77,19 @@ class ChatComponent extends Component {
         if (Auth::check()) {
             $bcm = new \Domain\BotCommandManager();
             if ($bcm->isAvailable()) {
+                $canTeachMemory = \Domain\BotMemoryManager::canTeach();
+                $canViewOwnMemory = \Domain\BotMemoryManager::canViewOwn();
                 foreach ($bcm->getActive() as $cmd) {
-                    if (($cmd['handler_type'] ?? '') === 'poll' && !$canCreatePoll) {
+                    $ht = (string)($cmd['handler_type'] ?? '');
+                    if ($ht === 'poll' && !$canCreatePoll) {
+                        continue;
+                    }
+                    // MLP-314: команды памяти показываем только тем, кому они доступны
+                    // (canTeach/canViewOwn включают выключатель подсистемы).
+                    if (in_array($ht, ['memory_add', 'memory_forget'], true) && !$canTeachMemory) {
+                        continue;
+                    }
+                    if ($ht === 'memory_show' && !$canViewOwnMemory) {
                         continue;
                     }
                     $prefix = trim((string)($cmd['command_prefix'] ?? ''));

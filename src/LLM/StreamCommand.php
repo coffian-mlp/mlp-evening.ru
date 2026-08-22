@@ -206,7 +206,8 @@ class StreamCommand {
         // Контекст короче обычного (MLP-311): объявление перерыва должно успеть
         // к моменту переключения, а генерация растёт вместе с числом сообщений.
         $limit = min(10, $llm->contextLimit());
-        $context = $ask === null ? $llm->buildReplyContext($limit) : [];
+        // MLP-314: без блока памяти — latency-критичный путь (контекст урезан не зря).
+        $context = $ask === null ? $llm->buildReplyContext($limit, null, null, true, false) : [];
         $context[] = ['role' => 'user', 'content' => $instruction];
         $raw = $ask !== null ? $ask($context, $instruction) : $llm->generateReply($context);
         $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));

@@ -224,7 +224,7 @@ class LyraArtist {
     /** Живое извинение за провал генерации: основная LLM с личностью и контекстом. */
     private function excuseFailure(string $subject, string $username, ?string $reason): ?string {
         try {
-            $raw = $this->llm->generateReply($this->llm->buildReplyContext($this->llm->contextLimit()), self::excuseInstruction($subject, $username, $reason));
+            $raw = $this->llm->generateReply($this->llm->buildReplyContext($this->llm->contextLimit(), null, null, true, false), self::excuseInstruction($subject, $username, $reason));
             $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
             $text = trim(preg_replace('/^\[\d{1,2}:\d{2}\]\s*[^:\n]{1,40}:\s*/u', '', $text));
             return $text !== '' ? $text : null;
@@ -245,7 +245,7 @@ class LyraArtist {
                 . "Взглянув на результат, ты видишь: «$desc». "
                 . "Ответь @$username в своём стиле, 1–2 предложения: вручи рисунок, прокомментируй что получилось (можно с самоиронией про рисование копытом). "
                 . "НЕ вставляй ссылки и картинки — рисунок приложится сам. Не пересказывай описание дословно.";
-            $raw = $this->llm->generateReply($this->llm->buildReplyContext($this->llm->contextLimit()), $instr);
+            $raw = $this->llm->generateReply($this->llm->buildReplyContext($this->llm->contextLimit(), null, null, true, false), $instr);
             $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
             // Модель иногда копирует формат контекста «[HH:MM] Имя:» — срезаем (прецедент 23050).
             $text = trim(preg_replace('/^\[\d{1,2}:\d{2}\]\s*[^:\n]{1,40}:\s*/u', '', $text));
