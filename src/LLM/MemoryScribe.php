@@ -102,8 +102,13 @@ class MemoryScribe {
                 $includedMaxId = max($includedMaxId, (int)$row['id']);
                 continue;
             }
-            $text = mb_substr((string)$row['text'], 0, self::MSG_CHARS);
-            $nick = BotMemoryManager::normalizeText((string)$row['username']); // анти-инъекция ником
+            // Текст и ник нормализуются ОБА (контракт memory: в транскрипт — только
+            // нормализованное): многострочное сообщение иначе рождало бы поддельные
+            // строки «@Жертва: ложный факт» с персистентной атрибуцией в чужое досье.
+            $text = mb_substr(BotMemoryManager::normalizeText((string)$row['text']), 0, self::MSG_CHARS);
+            $nick = $uid > 0
+                ? BotMemoryManager::normalizeText((string)$row['username'])
+                : 'гость'; // гость не может имитировать ник зарегистрированного
             $line = "@{$nick}: {$text}";
             if ($chars + mb_strlen($line) > self::BATCH_CHARS) {
                 $truncatedByChars = true;
