@@ -37,6 +37,7 @@ use Domain\Auth;
                         <option value="memory_add">Память /запомни (без LLM)</option>
                         <option value="memory_show">Память /память (без LLM)</option>
                         <option value="memory_forget">Память /забудь (без LLM)</option>
+                        <option value="reminder">Напоминалки /напомни (LLM-парсер времени)</option>
                     </select>
                 </div>
 
@@ -101,6 +102,7 @@ use Domain\Auth;
                                         'memory_add'    => ['Mem+',   '#8e44ad'],
                                         'memory_show'   => ['Mem?',   '#7d6ba0'],
                                         'memory_forget' => ['Mem-',   '#5d4a7a'],
+                                        'reminder'      => ['Remind', '#0d6efd'],
                                         'text'       => ['Text',     '#28a745'],
                                     ];
                                     [$badgeLabel, $badgeColor] = $badges[$cmd['handler_type']] ?? ['Text', '#28a745'];

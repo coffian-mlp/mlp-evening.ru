@@ -349,7 +349,7 @@ CREATE TABLE IF NOT EXISTS `bot_commands` (
     `id` int(11) NOT NULL AUTO_INCREMENT,
     `command_prefix` varchar(50) NOT NULL COMMENT 'Например /schedule',
     `description` varchar(255) NOT NULL COMMENT 'Описание для админки',
-    `handler_type` enum('text','schedule','poll','todo','image','image_chat','memory_add','memory_show','memory_forget') NOT NULL DEFAULT 'text',
+    `handler_type` enum('text','schedule','poll','todo','image','image_chat','memory_add','memory_show','memory_forget','reminder') NOT NULL DEFAULT 'text',
     `system_prompt` text COMMENT 'Шаблон промпта для ИИ',
     `is_active` tinyint(1) NOT NULL DEFAULT '1',
     PRIMARY KEY (`id`),
@@ -553,3 +553,25 @@ INSERT IGNORE INTO `site_options` (`key_name`, `value`) VALUES
 ('ai_memory_block_limit', '2400'),
 ('ai_memory_user_limit', '400'),
 ('ai_memory_meme_limit', '800');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `reminders` — напоминалки (MLP-318)
+--
+
+CREATE TABLE IF NOT EXISTS `reminders` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `user_id` INT NOT NULL,
+    `username` VARCHAR(50) NOT NULL COMMENT 'Снапшот ника для адресации при доставке',
+    `text` VARCHAR(300) NOT NULL,
+    `remind_at` DATETIME NOT NULL COMMENT 'UTC',
+    `status` ENUM('pending','done','cancelled') NOT NULL DEFAULT 'pending',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_due` (`status`, `remind_at`),
+    INDEX `idx_user` (`user_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+INSERT INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`)
+SELECT '/напомни', 'Напоминание ко времени: «/напомни через час достать колу», «покажи напоминалки», «отмени №N»', 'reminder', '', 1
+WHERE NOT EXISTS (SELECT 1 FROM `bot_commands` WHERE `handler_type` = 'reminder');

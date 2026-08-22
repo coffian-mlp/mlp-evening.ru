@@ -53,6 +53,7 @@ class BotWorker {
         try { $this->proactive(); } catch (\Throwable $e) { error_log('BotWorker proactive error: ' . $e->getMessage()); }
         try { $this->pollParticipation(); } catch (\Throwable $e) { error_log('BotWorker poll error: ' . $e->getMessage()); }
         try { $this->autoDrawSchedule(); } catch (\Throwable $e) { error_log('BotWorker autodraw error: ' . $e->getMessage()); }
+        try { $this->deliverReminders(); } catch (\Throwable $e) { error_log('BotWorker reminders error: ' . $e->getMessage()); }
         // MLP-251: страховка авто-закрытия опросов (основной путь — лениво при чтении).
         try { (new PollManager())->closeExpired(); } catch (\Throwable $e) { error_log('BotWorker closeExpired error: ' . $e->getMessage()); }
         try { $this->config->setOption('bot_worker_heartbeat', (string)time()); } catch (\Throwable $e) {}
@@ -315,6 +316,29 @@ class BotWorker {
             // username в auto-режиме не используется (подписи и отказы безадресные)
             'auto'     => true,
         ], 0);
+    }
+
+    /**
+     * Доставка созревших напоминаний (MLP-318): точность ±poll-интервал тика.
+     * Живая фраза с fallback'ом — напоминание обязано дойти даже при лежащем LLM
+     * (botSay работает без провайдеров); гейт только на ai_bot_user_id (кому постить).
+     */
+    private function deliverReminders(): void {
+        if ((int)$this->config->getOption('ai_bot_user_id', 0) <= 0) {
+            return;
+        }
+        foreach ((new \Domain\ReminderManager())->claimDue(5) as $r) {
+            $fallback = "@{$r['username']}, напоминаю: {$r['text']} ⏰";
+            if ($this->llm->isEnabled()) {
+                $this->llm->botSayLive(
+                    "Ты обещала @{$r['username']} напомнить, и время пришло — напомни СЕЙЧАС о: «{$r['text']}». "
+                    . "Одна-две фразы в своём стиле, ОБЯЗАТЕЛЬНО обратись @{$r['username']} и передай суть напоминания. Не задавай вопросов.",
+                    $fallback, [], '@' . $r['username']
+                );
+            } else {
+                $this->llm->botSay($fallback);
+            }
+        }
     }
 
     // ---------------- Автопись памяти (MLP-314, фаза 2) ----------------
