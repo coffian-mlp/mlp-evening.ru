@@ -668,7 +668,12 @@ class LLMManager {
         }
         $text = null;
         try {
-            $raw = $this->generateReply($this->buildReplyContext($this->contextLimit()), $instruction);
+            // Инструкция — ПОСЛЕДНЕЙ РЕПЛИКОЙ контекста, не в system (уроки MLP-293/308
+            // и боевой глюк подписи рисунка 22.08: беседа перевешивает system-задание).
+            // Контекст урезан: подтверждению команды длинная история — конкурент.
+            $context = $this->buildContext(min(10, $this->contextLimit()));
+            $context[] = ['role' => 'user', 'content' => $instruction];
+            $raw = $this->generateReply($context);
             $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
         } catch (\Throwable $e) {
             error_log('botSayLive degraded to fallback: ' . $e->getMessage());

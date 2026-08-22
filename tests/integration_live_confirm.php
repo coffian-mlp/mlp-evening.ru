@@ -115,7 +115,13 @@ try {
         'message' => "/забудь №{$recId}", 'user_id' => $userId, 'username' => "{$marker}_Пони",
     ]);
     $lastBotMsg();
-    check(!str_contains($captured->lastSystem, 'секретный мем'), '/забудь: содержимое записи НЕ утекает в живую инструкцию');
+    check(!str_contains($captured->lastSystem, 'секретный мем'), '/забудь: содержимое записи НЕ утекает в system');
+    $lastCtx = end($captured->lastContext);
+    check(is_array($lastCtx) && str_contains((string)$lastCtx['content'], 'стёр запись'), 'инструкция — последней репликой контекста (не в system, анти-MLP-293)');
+    check(!str_contains($captured->lastSystem, 'стёр запись'), 'system без инструкции подтверждения');
+    $ctxJoined = implode(' ', array_map(fn($m) => (string)($m['content'] ?? ''), $captured->lastContext));
+    check(!str_contains($ctxJoined, 'секретный мем') || substr_count($ctxJoined, 'секретный мем') === 0,
+        '/забудь: содержимое записи не утекает и в контекст инструкции');
     check((int)$conn->query("SELECT COUNT(*) c FROM bot_memory WHERE id = " . (int)$recId)->fetch_assoc()['c'] === 0,
         '/забудь: запись удалена независимо от судьбы живого ответа');
 
