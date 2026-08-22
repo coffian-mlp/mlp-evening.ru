@@ -219,7 +219,10 @@ class BotWorker {
                 $announced[$runId]['60m'] = true; $sent = true;
             }
             if ($minsToStart > 0 && $minsToStart <= 15 && empty($announced[$runId]['15m'])) {
-                $this->announce("Напиши срочный анонс, что событие '{$evt['title']}' начнётся уже через 15 минут!", $scheduleCmd);
+                // Анти-копипаста (полевое наблюдение 22.08: GLM продублировала 60м-анонс
+                // почти дословно): второй анонс обязан звучать иначе — первый есть в окне контекста.
+                $this->announce("Напиши срочный анонс, что событие '{$evt['title']}' начнётся уже через 15 минут! "
+                    . "Часовой анонс уже прозвучал и виден в чате — НЕ повторяй его формулировки: скажи заметно иначе, короче и с другим настроением.", $scheduleCmd);
                 $announced[$runId]['15m'] = true; $sent = true;
             }
             if ($minsSinceEnd >= 0 && $minsSinceEnd <= 10 && empty($announced[$runId]['finished'])) {
