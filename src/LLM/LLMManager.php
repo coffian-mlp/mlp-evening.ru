@@ -656,6 +656,30 @@ class LLMManager {
     }
 
     /**
+     * Живое подтверждение команды (MLP-317, прод-беклог №10): действие уже выполнено,
+     * Лира озвучивает результат своим характером и с контекстом беседы. Страховки:
+     * опция ai_live_confirm=0, сбой/молчание LLM или потеря обязательной подстроки
+     * $mustContain (обычно «№N» — адрес записи для /забудь) → фикс-фраза $fallback.
+     * LLM ничего не решает — только формулирует; данные в инструкции минимальны.
+     */
+    public function botSayLive(string $instruction, string $fallback, array $quotedIds = [], ?string $mustContain = null) {
+        if (!(int)ConfigManager::getInstance()->getOption('ai_live_confirm', 1)) {
+            return $this->botSay($fallback, $quotedIds);
+        }
+        $text = null;
+        try {
+            $raw = $this->generateReply($this->buildReplyContext($this->contextLimit()), $instruction);
+            $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
+        } catch (\Throwable $e) {
+            error_log('botSayLive degraded to fallback: ' . $e->getMessage());
+        }
+        if ($text === null || $text === '' || ($mustContain !== null && mb_stripos($text, $mustContain) === false)) {
+            return $this->botSay($fallback, $quotedIds);
+        }
+        return $this->botSay($text, $quotedIds);
+    }
+
+    /**
      * Служебный LLM-вызов БЕЗ личности Лиры и без инструкции реакций (MLP-293):
      * для внутренних задач-инструментов (режиссёр сцены и т.п.), где персона
      * и «можешь ответить только маркером» саботируют задание. Та же цепочка
@@ -854,7 +878,14 @@ class LLMManager {
             "@%s, зафиксировала (№%d). Бюрократия — моё второе имя после лиры! 📋",
             "@%s, готово — №%d в беклоге. Если это про баг, то он уже боится. 📝",
         ];
-        $this->botSay(sprintf($confirmations[array_rand($confirmations)], $username, $id));
+        $fallback = sprintf($confirmations[array_rand($confirmations)], $username, $id);
+        // MLP-317: живое подтверждение (сама идея — из этого же беклога, №10!)
+        $this->botSayLive(
+            "Пользователь @$username командой /todo записал в беклог идею №$id: «" . mb_substr($text, 0, 200) . "». "
+            . "Запись уже сохранена. Подтверди это @$username одной-двумя фразами в своём стиле — можно отреагировать на суть идеи. "
+            . "ОБЯЗАТЕЛЬНО укажи номер записи в формате №$id. Не задавай вопросов.",
+            $fallback, [], "№$id"
+        );
         return true;
     }
 

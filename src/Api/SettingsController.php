@@ -67,6 +67,7 @@ class SettingsController {
         'ai_send_images'     => 'int',
         'ai_public_base_url' => 'string',
         'ai_reactions'       => 'int',
+        'ai_live_confirm'    => 'int', // MLP-317: живые подтверждения команд (todo/запомни/забудь), fallback — фикс-фразы
         // --- ИИ: vision-помощник (MLP-268) и художница (MLP-274/275/276) ---
         'ai_main_is_vision'  => 'int',
         'ai_vision_provider' => ['enum', ['routerai', 'openrouter', 'openai']],

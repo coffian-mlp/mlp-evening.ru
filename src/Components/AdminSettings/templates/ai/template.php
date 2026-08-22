@@ -300,6 +300,15 @@ $config = $arResult['config']; // Helper
             <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Лира сможет реагировать (❤️ 😂 🔥 и др.) на сообщение, которому отвечает — вместо или вместе с текстом.</p>
         </div>
 
+        <div class="form-group">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="hidden" name="ai_live_confirm" value="0">
+                <input type="checkbox" name="ai_live_confirm" value="1" <?= $config->getOption('ai_live_confirm', 1) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                <strong>Живые подтверждения команд (/todo, /запомни, /забудь)</strong>
+            </label>
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Лира отвечает на команды своими словами с учётом беседы (+1 LLM-вызов на команду). При сбое или потере номера записи — откат на фикс-фразы (MLP-317).</p>
+        </div>
+
         <!-- ============ 🎬 Команды стрима (MLP-307) ============ -->
         <h4 style="margin: 18px 0 6px; color: #b085c9;">🎬 Команды стрима</h4>
         <p style="font-size: 0.85em; color: #666; margin-bottom: 10px;">Просьбы вида «Лира, включи перерыв» бот подтверждает отдельной репликой (свой характер + контекст чата). Сами команды исполняет внешний демон владельца; обращения без команды — обычная беседа.</p>
