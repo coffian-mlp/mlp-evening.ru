@@ -891,7 +891,35 @@ class ChatManager {
                 $finalMessages[] = $row;
             }
         }
-        
+
         return $this->processMessages($finalMessages);
+    }
+
+    /**
+     * Живые сообщения после id (MLP-314, гейт и батч автописи памяти).
+     * Отличается от getMessagesAfter(): только живые (без правок/удалённых как события),
+     * с LIMIT, сырые поля без processMessages. Поле text = chat_messages.message как хранится
+     * (htmlspecialchars-экранированный текст; декодирование — на потребителе).
+     */
+    public function getLiveMessagesSince(int $afterId, int $limit = 200): array {
+        $limit = max(1, min(500, $limit));
+        $stmt = $this->db->prepare(
+            "SELECT cm.id, cm.user_id,
+                    COALESCE(NULLIF(u.nickname, ''), u.login, cm.username) AS username,
+                    cm.message AS text, cm.created_at
+             FROM chat_messages cm
+             LEFT JOIN users u ON cm.user_id = u.id
+             WHERE cm.id > ? AND cm.is_deleted = 0
+             ORDER BY cm.id ASC
+             LIMIT ?"
+        );
+        $stmt->bind_param('ii', $afterId, $limit);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $rows = [];
+        while ($row = $res->fetch_assoc()) {
+            $rows[] = $row;
+        }
+        return $rows;
     }
 }

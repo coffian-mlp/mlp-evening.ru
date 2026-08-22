@@ -601,4 +601,55 @@ class UserManager {
         }
         return $users;
     }
+
+    /**
+     * Поиск пользователя по логину или нику (MLP-314, резолв адресата команд памяти).
+     * Порядок намеренный: сначала login (уникален по схеме), затем nickname.
+     * Nickname не уникален — при 2+ совпадениях возвращается null (неоднозначность,
+     * вызывающий отвечает отказом): иначе смена ника позволяла бы перехват чужого досье.
+     */
+    public function findByLoginOrNickname(string $name): ?array {
+        $name = trim($name);
+        if ($name === '') {
+            return null;
+        }
+        $byLogin = $this->getUserByLogin($name);
+        if ($byLogin) {
+            return $byLogin;
+        }
+        $stmt = $this->db->prepare("SELECT id, login, nickname, role FROM users WHERE nickname = ? LIMIT 2");
+        $stmt->bind_param("s", $name);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $rows = [];
+        while ($row = $res->fetch_assoc()) {
+            $rows[] = $row;
+        }
+        return count($rows) === 1 ? $rows[0] : null;
+    }
+
+    /**
+     * Батч-выборка отображаемых имён по id (MLP-314, блок памяти).
+     * Возвращает map id => ['nick' => COALESCE(nickname, login), 'login' => login].
+     * Несуществующие id молча пропускаются (досье-сирота не подмешивается).
+     */
+    public function getUsersByIds(array $ids): array {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn($v) => $v > 0)));
+        if (!$ids) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $this->db->prepare("SELECT id, login, nickname FROM users WHERE id IN ($placeholders)");
+        $stmt->bind_param(str_repeat('i', count($ids)), ...$ids);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $map = [];
+        while ($row = $res->fetch_assoc()) {
+            $map[(int)$row['id']] = [
+                'nick' => ($row['nickname'] !== null && $row['nickname'] !== '') ? $row['nickname'] : $row['login'],
+                'login' => $row['login'],
+            ];
+        }
+        return $map;
+    }
 }

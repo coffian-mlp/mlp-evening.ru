@@ -21,6 +21,9 @@ class GigaChatProvider implements LLMProviderInterface {
 
         $ch = curl_init('https://ngw.devices.sberbank.ru:9443/api/v2/oauth');
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        // MLP-314: таймауты внешних вызовов — зависший провайдер не держит воркер/веб-запрос.
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, 'scope=GIGACHAT_API_PERS');
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
@@ -72,6 +75,9 @@ class GigaChatProvider implements LLMProviderInterface {
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        // MLP-314: таймауты внешних вызовов — зависший провайдер не держит воркер/веб-запрос.
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         curl_setopt($ch, CURLOPT_HTTPHEADER, [

@@ -532,11 +532,15 @@ class LLMManager {
         return ['question' => $question, 'options' => $options];
     }
 
-    private function askWithFallback($context, $prompt, string $logKind = 'chat') {
+    private function askWithFallback($context, $prompt, string $logKind = 'chat', ?int $deadlineSec = null) {
         $userManager = new UserManager();
         $botUser = $userManager->getUserById($this->botUserId);
         $botLogin = $botUser['login'] ?? 'Lyra';
         $botNickname = $botUser['nickname'] ?? 'Лира Хартстрингс';
+
+        // Дедлайн перебора (MLP-314): проверяется ПЕРЕД каждым провайдером — уже начатый
+        // HTTP-вызов ограничен собственными CURLOPT-таймаутами провайдера.
+        $deadlineAt = ($deadlineSec !== null) ? microtime(true) + $deadlineSec : null;
 
         // Жёсткое указание — ТОЛЬКО в системную роль, а НЕ в реплику диалога.
         // Раньше оно дописывалось к последнему сообщению контекста, из-за чего модель
@@ -544,6 +548,10 @@ class LLMManager {
         $prompt .= "\n\n[Системное правило]: Пиши ТОЛЬКО текст своего ответа. НИКОГДА не добавляй своё имя, никнейм, время или служебные пометки в начале сообщения (например, не пиши '[12:00] {$botNickname}:').";
 
         foreach ($this->providers as $provider) {
+            if ($deadlineAt !== null && microtime(true) >= $deadlineAt) {
+                error_log("askWithFallback: deadline {$deadlineSec}s exhausted, aborting provider loop");
+                break;
+            }
             $t0 = microtime(true);
             try {
                 $response = $provider->askChat($context, $prompt);
@@ -645,9 +653,12 @@ class LLMManager {
      * для внутренних задач-инструментов (режиссёр сцены и т.п.), где персона
      * и «можешь ответить только маркером» саботируют задание. Та же цепочка
      * провайдеров с фолбэком и санитизацией.
+     * $deadlineSec (MLP-314) — бюджет времени на весь перебор провайдеров: по истечении
+     * перебор прекращается (null). Нужен фоновым задачам (автопись), чей вызов не должен
+     * удерживать тик воркера дольше порога живости heartbeat (90с).
      */
-    public function generateUtility(array $context, string $systemPrompt): ?string {
-        return $this->askWithFallback($context, $systemPrompt, 'utility');
+    public function generateUtility(array $context, string $systemPrompt, ?int $deadlineSec = null): ?string {
+        return $this->askWithFallback($context, $systemPrompt, 'utility', $deadlineSec);
     }
 
     /**

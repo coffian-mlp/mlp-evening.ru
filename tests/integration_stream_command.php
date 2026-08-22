@@ -176,7 +176,9 @@ try {
     $fbRows = [];
     while ($row = $res->fetch_assoc()) { $fbRows[] = $row; $cleanupMsgIds[] = (int)$row['id']; }
     check(count($fbRows) === 1, 'пустой ответ LLM -> ровно одно новое сообщение бота');
-    check($fbRows && stripos($fbRows[0]['message'], 'перерыв') !== false,
+    // mb_stripos: stripos не понимает кириллический регистр — фраза «Перерыв! …»
+    // (заглавная, без строчного вхождения) роняла проверку с вероятностью 1/3.
+    check($fbRows && mb_stripos($fbRows[0]['message'], 'перерыв') !== false,
         'это запасное объявление перерыва');
 
     // Неизвестное событие игнорируется
