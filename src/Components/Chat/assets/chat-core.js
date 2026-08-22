@@ -1439,6 +1439,13 @@ $(document).ready(function() {
         // --- Standard Full Quote (Attachment) ---
         // Get text for preview
         let text = msgDiv.find('.chat-text').clone().children().remove().end().text().trim();
+
+        // MLP-315: у сообщения-опроса текст живёт в детях-виджете и после children().remove()
+        // предпросмотр оставался пустым — подставляем компактную заглушку с вопросом.
+        if (!text && msgDiv.find('.poll-widget').length) {
+            const q = msgDiv.find('.poll-question').first().text().trim();
+            text = '📊 Опрос' + (q ? ': ' + q : '');
+        }
         
         // Avoid duplicate quotes
         if (!pendingQuotes.find(q => q.id == msgId)) {

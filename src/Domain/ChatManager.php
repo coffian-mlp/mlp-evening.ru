@@ -673,6 +673,12 @@ class ChatManager {
                         if ($qRow['is_deleted']) {
                              $qRow['message'] = '<em style="color:#999;">Сообщение удалено</em>';
                              $qRow['deleted'] = true;
+                        } elseif (preg_match('/^\s*\[\[poll:(\d+)\]\]\s*$/', $qRow['message'], $pm)) {
+                            // MLP-315: цитата опроса. Виджет в мини-карточку не монтируется —
+                            // показываем компактную заглушку с вопросом (клик по карточке и так
+                            // ведёт к оригиналу с живым виджетом). Вопрос — через владельца polls.
+                            $poll = (new PollManager())->getPoll((int)$pm[1]);
+                            $qRow['message'] = '📊 Опрос' . ($poll ? ': ' . htmlspecialchars($poll['question']) : '');
                         } else {
                             // Parse markdown in quote too!
                             $qRow['message'] = $this->parseMarkdown($qRow['message']);

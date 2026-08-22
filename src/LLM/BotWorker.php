@@ -52,6 +52,7 @@ class BotWorker {
         try { $this->reactive(); }  catch (\Throwable $e) { error_log('BotWorker reactive error: ' . $e->getMessage()); }
         try { $this->proactive(); } catch (\Throwable $e) { error_log('BotWorker proactive error: ' . $e->getMessage()); }
         try { $this->pollParticipation(); } catch (\Throwable $e) { error_log('BotWorker poll error: ' . $e->getMessage()); }
+        try { $this->autoDrawSchedule(); } catch (\Throwable $e) { error_log('BotWorker autodraw error: ' . $e->getMessage()); }
         // MLP-251: страховка авто-закрытия опросов (основной путь — лениво при чтении).
         try { (new PollManager())->closeExpired(); } catch (\Throwable $e) { error_log('BotWorker closeExpired error: ' . $e->getMessage()); }
         try { $this->config->setOption('bot_worker_heartbeat', (string)time()); } catch (\Throwable $e) {}
@@ -269,6 +270,48 @@ class BotWorker {
     private function scheduleCommandRow(): array {
         return $this->commands->getScheduleCommand()
             ?? ['handler_type' => 'schedule', 'system_prompt' => ''];
+    }
+
+    /**
+     * Авто-/нарисуйчат (MLP-316): раз в ai_image_auto_interval секунд (0 = выкл)
+     * Лира сама рисует сценку по мотивам беседы. Гейты: чат живой (последнее
+     * сообщение не её), команда image_chat активна; дневной лимит художницы
+     * действует внутри обработчика (в авто-режиме отказы тихие). Маркер времени —
+     * ДО enqueue (образец proactive, анти-дубль между тиками).
+     */
+    private function autoDrawSchedule(): void {
+        if (!(int)$this->config->getOption('ai_enabled', 0)) {
+            return;
+        }
+        $interval = (int)$this->config->getOption('ai_image_auto_interval', 0);
+        if ($interval <= 0) {
+            return; // выключено (дефолт)
+        }
+        $interval = max(900, $interval); // рисование дорогое: не чаще раза в 15 минут
+        $last = (int)$this->config->getOption('bot_last_autodraw', 0);
+        if (time() - $last < $interval) {
+            return;
+        }
+        // Чат живой? Пустой чат или последняя реплика — её собственная → не рисуем
+        // (прецедент гейта проактива MLP-260: не разговаривать с пустотой).
+        $lastAuthor = $this->llm->getChatManager()->getLastMessageAuthorId();
+        if ($lastAuthor === null || $lastAuthor === $this->llm->getBotUserId()) {
+            return;
+        }
+        $cmd = null;
+        foreach ($this->commands->getActive() as $c) {
+            if (($c['handler_type'] ?? '') === 'image_chat') { $cmd = $c; break; }
+        }
+        if ($cmd === null) {
+            return; // команда выключена в дашборде — авто-режим уважает это
+        }
+        $this->config->setOption('bot_last_autodraw', (string)time()); // ДО enqueue
+        $this->queue->enqueue('dynamic_command', [
+            'message'  => '/нарисуйчат',
+            'command'  => $cmd,
+            // username в auto-режиме не используется (подписи и отказы безадресные)
+            'auto'     => true,
+        ], 0);
     }
 
     // ---------------- Автопись памяти (MLP-314, фаза 2) ----------------

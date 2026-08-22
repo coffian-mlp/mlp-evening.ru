@@ -64,6 +64,9 @@ class LyraArtist {
      */
     public function handleDrawChat(array $command, array $contextData, ?callable $director = null, ?callable $generator = null): bool {
         $username = (string)($contextData['username'] ?? 'Гость');
+        // MLP-316: авто-запуск по расписанию (BotWorker::autoDrawSchedule) — без адресата,
+        // отказы и сбои не постятся в чат (авто-режим не должен спамить извинениями).
+        $isAuto = !empty($contextData['auto']);
 
         $director = $director ?? function (): ?string {
             // MLP-295: окно режиссёра — настройка дашборда (кламп 2..50: меньше двух
@@ -106,11 +109,13 @@ class LyraArtist {
         }
 
         if ($scene === null) {
-            $this->llm->botSay("@$username, я вгляделась в чат... а рисовать-то нечего, тишина! Разговоритесь — и я мигом за кисть. 🎨");
+            if (!$isAuto) {
+                $this->llm->botSay("@$username, я вгляделась в чат... а рисовать-то нечего, тишина! Разговоритесь — и я мигом за кисть. 🎨");
+            }
             return true;
         }
 
-        return $this->generateAndPostDrawing($scene, $username, $command, $generator);
+        return $this->generateAndPostDrawing($scene, $username, $command, $generator, $isAuto);
     }
 
     /**
@@ -134,10 +139,14 @@ class LyraArtist {
     }
 
     /** Общее ядро художницы (MLP-277): лимит → стиль → генерация → живой комментарий/фолбэк. */
-    private function generateAndPostDrawing(string $subject, string $username, array $command, ?callable $generator = null): bool {
+    private function generateAndPostDrawing(string $subject, string $username, array $command, ?callable $generator = null, bool $auto = false): bool {
         $config = ConfigManager::getInstance();
         $limit = (int)$config->getOption('ai_image_daily_limit', 20);
         if ($limit > 0 && ImageGenerator::todayCount() >= $limit) {
+            if ($auto) {
+                error_log('LyraArtist auto-draw skipped: daily limit reached');
+                return true;
+            }
             $this->llm->botSay("@$username, у меня краски на сегодня закончились ($limit рисунков в день — потом копыта отваливаются). Приходи завтра! 🎨");
             return true;
         }
@@ -161,11 +170,19 @@ class LyraArtist {
             // своими словами обыгрывает ответ рисовальной модели; при любом
             // сбое LLM — прежняя фикс-фраза.
             if ($config->getOption('ai_image_llm_caption', 1)) {
+                if ($auto) {
+                    error_log('LyraArtist auto-draw failed: ' . (string)ImageGenerator::lastError());
+                    return true;
+                }
                 $excuse = $this->excuseFailure($subject, $username, ImageGenerator::lastError());
                 if ($excuse !== null) {
                     $this->llm->botSay($excuse);
                     return true;
                 }
+            }
+            if ($auto) {
+                error_log('LyraArtist auto-draw failed silently (no excuse path)');
+                return true;
             }
             $this->llm->botSay("@$username, кисть сломалась, мольберт упал... не вышло. Попробуй ещё раз чуть позже! 🎨");
             return true;
@@ -176,7 +193,7 @@ class LyraArtist {
         // и комментирует основной LLM с личностью и контекстом. Отключаемо;
         // при любом сбое — фолбэк на фикс-подписи ниже.
         if ($config->getOption('ai_image_llm_caption', 1)) {
-            $caption = $this->describeOwnDrawing($url, $subject, $username);
+            $caption = $this->describeOwnDrawing($url, $subject, $auto ? null : $username);
             if ($caption !== null) {
                 $this->llm->botSay($caption . "\n![рисунок](" . $url . ")");
                 return true;
@@ -189,6 +206,16 @@ class LyraArtist {
             "@%s, готово! Бон-Бон говорит — «узнаваемо». Это комплимент? 🎨\n![рисунок](%s)",
             "@%s, держи! Немного намазюкала за краями, но душу вложила. ✨\n![рисунок](%s)",
         ];
+        if ($auto) {
+            // Безадресные авто-подписи: Лира рисует по собственному почину.
+            $autoCaptions = [
+                "Подглядела за вашей беседой — и не удержалась, нарисовала! 🎨\n![рисунок](%s)",
+                "Настроение чата в одной картинке (рисовала копытом, простите). 🖌️\n![рисунок](%s)",
+                "Художницу видно по мольберту! Вот вам сценка. ✨\n![рисунок](%s)",
+            ];
+            $this->llm->botSay(sprintf($autoCaptions[array_rand($autoCaptions)], $url));
+            return true;
+        }
         $this->llm->botSay(sprintf($captions[array_rand($captions)], $username, $url));
         return true;
     }
@@ -235,16 +262,24 @@ class LyraArtist {
     }
 
     /** MLP-276: vision смотрит на готовый рисунок → основная LLM комментирует в характере. */
-    private function describeOwnDrawing(string $url, string $subject, string $username): ?string {
+    private function describeOwnDrawing(string $url, string $subject, ?string $username): ?string {
         try {
             $desc = VisionDescriber::describe($url);
             if ($desc === null) {
                 return null;
             }
-            $instr = "Ты только что НАРИСОВАЛА картинку по просьбе @$username: «" . mb_substr($subject, 0, 200) . "». "
-                . "Взглянув на результат, ты видишь: «$desc». "
-                . "Ответь @$username в своём стиле, 1–2 предложения: вручи рисунок, прокомментируй что получилось (можно с самоиронией про рисование копытом). "
-                . "НЕ вставляй ссылки и картинки — рисунок приложится сам. Не пересказывай описание дословно.";
+            if ($username === null) {
+                // MLP-316: авто-рисунок — без адресата (Лира рисует по собственному почину).
+                $instr = "Ты сама решила нарисовать сценку по мотивам беседы в чате: «" . mb_substr($subject, 0, 200) . "». "
+                    . "Взглянув на результат, ты видишь: «$desc». "
+                    . "Скажи чату 1–2 предложения в своём стиле: вручи рисунок, прокомментируй что получилось (можно с самоиронией про рисование копытом). "
+                    . "Без адресата и без вопросов. НЕ вставляй ссылки и картинки — рисунок приложится сам. Не пересказывай описание дословно.";
+            } else {
+                $instr = "Ты только что НАРИСОВАЛА картинку по просьбе @$username: «" . mb_substr($subject, 0, 200) . "». "
+                    . "Взглянув на результат, ты видишь: «$desc». "
+                    . "Ответь @$username в своём стиле, 1–2 предложения: вручи рисунок, прокомментируй что получилось (можно с самоиронией про рисование копытом). "
+                    . "НЕ вставляй ссылки и картинки — рисунок приложится сам. Не пересказывай описание дословно.";
+            }
             $raw = $this->llm->generateReply($this->llm->buildReplyContext($this->llm->contextLimit(), null, null, true, false), $instr);
             $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
             // Модель иногда копирует формат контекста «[HH:MM] Имя:» — срезаем (прецедент 23050).

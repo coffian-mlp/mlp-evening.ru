@@ -78,6 +78,7 @@ class SettingsController {
         'ai_image_chat_context' => 'uint', // MLP-295: окно режиссёра /нарисуйчат
         'ai_image_style_prompt' => 'string',
         'ai_image_techniques'   => 'string', // MLP-309: список техник через «|»
+        'ai_image_auto_interval' => 'uint',  // MLP-316: авто-/нарисуйчат, сек (0 = выкл; кламп ≥900 у воркера)
         'ai_image_llm_caption'  => 'int',
         // --- ИИ: команды стрима (MLP-307) ---
         'stream_command_enabled'  => 'int',

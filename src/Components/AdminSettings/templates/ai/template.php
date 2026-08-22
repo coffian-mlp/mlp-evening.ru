@@ -285,6 +285,12 @@ $config = $arResult['config']; // Helper
             <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Работает, только если в стиль-промпте есть <code>{technique}</code>. Каждая запись — материал вместе с его характерными огрехами (у акварели подтёки, у карандаша штриховка).</p>
         </div>
 
+        <div class="form-group">
+            <label class="form-label">Авто-/нарисуйчат: период, сек (0 = выключено, минимум 900)</label>
+            <input type="number" name="ai_image_auto_interval" value="<?= htmlspecialchars($config->getOption('ai_image_auto_interval', 0)) ?>" class="form-input">
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Лира сама рисует сценку беседы раз в период — только если чат живой; дневной лимит художницы действует, отказы в авто-режиме тихие (MLP-316).</p>
+        </div>
+
         <div class="form-group" style="margin-top: 10px;">
             <label style="display: flex; align-items: center; cursor: pointer;">
                 <input type="hidden" name="ai_reactions" value="0">
