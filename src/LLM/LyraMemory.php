@@ -53,7 +53,10 @@ class LyraMemory {
             if (!isset($nickById[$userId])) {
                 continue; // пользователь удалён — досье-сирота не подмешивается
             }
-            $nick = $nickById[$userId]['nick'];
+            // Ник — тоже недоверенный ввод (валидируется лишь trim): нормализация
+            // держит инвариант «одна строка = одна запись» (перевод строки/скобки в нике
+            // иначе рождали бы строку-инструкцию в блоке).
+            $nick = BotMemoryManager::normalizeText($nickById[$userId]['nick']);
             $userSpent = 0;
             foreach ($rows as $row) {
                 $text = (string)$row['text'];
@@ -131,7 +134,7 @@ class LyraMemory {
                 $dossiers[$id] = $grouped[$id];
             }
         }
-        $memes = $this->memory->getMemes();
+        $memes = $this->memory->getMemes(100); // горячий путь: блок всё равно ограничен meme_limit
         if (!$dossiers && !$memes) {
             return null;
         }
@@ -204,6 +207,9 @@ class LyraMemory {
 
     /** /память (memory_show): только о самом отправителе; fail-closed флаг allowed из диспатча. */
     public function handleShowOwn(array $command, array $contextData): bool {
+        if (!(int)ConfigManager::getInstance()->getOption('ai_memory_enabled', 1)) {
+            return true; // defense in depth (AC-8): rollback-рычаг гасит и уже поставленный job
+        }
         $username = $contextData['username'] ?? 'Гость';
         if (empty($contextData['allowed'])) {
             $this->llm->botSay("@{$username}, эта команда сейчас не для твоей роли — так настроили Принцессы.");

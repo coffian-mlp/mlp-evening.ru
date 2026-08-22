@@ -95,6 +95,7 @@ class MemoryScribe {
         $includedMaxId = $marker;
         $truncatedByChars = false;
         $userIdByNick = [];
+        $ambiguousNicks = [];
         foreach ($rows as $row) {
             $uid = (int)($row['user_id'] ?? 0);
             if ($uid === $botId && $botId > 0) {
@@ -102,7 +103,8 @@ class MemoryScribe {
                 continue;
             }
             $text = mb_substr((string)$row['text'], 0, self::MSG_CHARS);
-            $line = "@{$row['username']}: {$text}";
+            $nick = BotMemoryManager::normalizeText((string)$row['username']); // анти-инъекция ником
+            $line = "@{$nick}: {$text}";
             if ($chars + mb_strlen($line) > self::BATCH_CHARS) {
                 $truncatedByChars = true;
                 break;
@@ -111,7 +113,19 @@ class MemoryScribe {
             $chars += mb_strlen($line) + 1;
             $includedMaxId = max($includedMaxId, (int)$row['id']);
             if ($uid > 0) {
-                $userIdByNick[mb_strtolower((string)$row['username'])] = $uid;
+                // Коллизия ников (nickname не UNIQUE): один ник у разных user_id в батче —
+                // ник помечается неоднозначным и исключается из карты, строки экстрактора
+                // с ним бракуются. Иначе смена ника позволяла бы перехват чужого досье
+                // в обход canTeach (ручной путь закрывает это в findByLoginOrNickname).
+                $nickKey = mb_strtolower($nick);
+                if (isset($ambiguousNicks[$nickKey])) {
+                    // уже помечен неоднозначным — не возвращаем в карту
+                } elseif (isset($userIdByNick[$nickKey]) && $userIdByNick[$nickKey] !== $uid) {
+                    $ambiguousNicks[$nickKey] = true;
+                    unset($userIdByNick[$nickKey]); // ничей: строки с этим ником бракуются
+                } else {
+                    $userIdByNick[$nickKey] = $uid;
+                }
             }
         }
 
@@ -196,7 +210,18 @@ class MemoryScribe {
             $context = [['role' => 'user', 'content' => "Мемы чата (сожми список: важные легенды оставь по одной строке, суммарно до {$memeLimit} символов):\n- " . implode("\n- ", $autoMemes)]];
             $compact = $this->llm->generateUtility($context, self::COMPRESS_PROMPT, $remaining);
             if ($compact !== null && trim($compact) !== '') {
-                $lines = array_slice(array_filter(array_map('trim', preg_split('/\R+|^- /mu', $compact))), 0, 20);
+                // Результат усечён КОДОМ по бюджету: иначе многословная модель оставляла бы
+                // порог 2×meme_limit превышенным и сжатие звалось бы на каждом прогоне вечно.
+                $lines = [];
+                $total = 0;
+                foreach (array_filter(array_map('trim', preg_split('/\R+|^- /mu', $compact))) as $l) {
+                    $l = mb_substr($l, 0, $memeLimit);
+                    if ($total + mb_strlen($l) > $memeLimit) {
+                        break;
+                    }
+                    $lines[] = $l;
+                    $total += mb_strlen($l);
+                }
                 if ($lines) {
                     $this->memory->replaceAutoMemes($lines);
                 }

@@ -107,7 +107,6 @@ try {
 
     // 7) hasReactiveDue: pending mention с БУДУЩИМ run_after виден гейту; machine_spirit — нет
     $q = new JobQueue();
-    check($q->hasReactiveDue() === false || true, 'база: hasReactiveDue вызываем');
     $conn->query("INSERT INTO llm_jobs (type, payload, run_after, status, created_at) VALUES ('mention', '{}', DATE_ADD(NOW(), INTERVAL 30 SECOND), 'pending', NOW())");
     $mentionJobId = (int)$conn->insert_id;
     check($q->hasReactiveDue() === true, 'pending mention с будущим run_after — «ждущий» для гейта');
@@ -127,7 +126,6 @@ try {
     $st = $conn->query("SELECT status FROM llm_jobs WHERE type='memory_scribe' AND id > $baseJobId")->fetch_assoc()['status'];
     check($st === 'done', 'enabled=0: pending job законсьюмлен без работы');
     $cfg->setOption('ai_memory_enabled', '1');
-    $schedule->invoke($w); // при выключателе last_run уже прошёл? interval… backlog=0 после? создадим свежий job ниже руками через runScribe
 
     // 9) runScribe с фейковым провайдером: записи auto, маркер, backlog-флаг
     $llm = new LLM\LLMManager();
@@ -177,13 +175,9 @@ try {
     for ($i = 0; $i < 3; $i++) {
         $bm->add('dossier', $humanId, str_repeat("факт{$i} ", 40), 'auto'); // ~240 симв. каждая
     }
-    $ins($humanId, "{$marker} триггер сжатия");
-    $fake->reply = "NONE"; // экстракция пустая, но сжатие сработает по превышению
-    // fake для второго вызова (COMPRESS) вернёт тот же reply: зададим осмысленный
+    // Сжатие проверяем НАПРЯМУЮ (не через runScribe: его мем-ветка при случайном
+    // превышении порога сделала бы глобальный DELETE auto-мемов в общей докер-БД).
     $fake->reply = "сжатое авто-досье {$marker}";
-    $scribe->runScribe([]);
-    // экстракция вернула «сжатое авто-досье» — строка вне формата, бракуется; записей нет,
-    // но touchedDossierUsers пуст -> сжатие досье не запустится. Проверим сжатие напрямую:
     $compress = new ReflectionMethod(MemoryScribe::class, 'compressIfNeeded');
     $compress->setAccessible(true);
     $compress->invoke($scribe, [$humanId], time());
@@ -192,6 +186,18 @@ try {
     $autoLeft = array_values(array_filter($rows, fn($r) => $r['source'] === 'auto'));
     check(count($manualLeft) === 1 && $manualLeft[0]['text'] === 'ручная запись — неприкосновенна', 'AC-7: manual не тронут сжатием');
     check(count($autoLeft) === 1 && str_contains($autoLeft[0]['text'], 'сжатое авто-досье'), 'AC-7: auto-часть заменена одной сжатой записью');
+
+    // 12б) Коллизия ников: тёзка в батче -> ник исключается из карты, досье не пишется
+    $twinId = $mk("{$marker}_twin", "{$marker}_Пони"); // тот же nickname, другой user_id
+    $collMarkerBefore = (int)$cfg->getOption('bot_memory_last_id', 0);
+    $ins($humanId, "{$marker} говорит первый");
+    $ins($twinId, "{$marker} говорит тёзка");
+    $cntBefore = (int)$conn->query("SELECT COUNT(*) c FROM bot_memory WHERE kind='dossier'")->fetch_assoc()['c'];
+    $fake->reply = "ДОСЬЕ @{$marker}_Пони: факт от неоднозначного ника";
+    $scribe->runScribe([]);
+    $cntAfter = (int)$conn->query("SELECT COUNT(*) c FROM bot_memory WHERE kind='dossier'")->fetch_assoc()['c'];
+    check($cntAfter === $cntBefore, 'коллизия ников в батче: досье НЕ создано (ник исключён из карты)');
+    check((int)$cfg->getOption('bot_memory_last_id', 0) > $collMarkerBefore, 'коллизия: маркер сдвинут (батч обработан, строка бракована)');
 
     // 13) failStale реанимирует зависший processing
     $conn->query("INSERT INTO llm_jobs (type, payload, run_after, status, attempts, created_at, claimed_at) VALUES ('memory_scribe', '{}', NOW(), 'processing', 0, NOW(), DATE_SUB(NOW(), INTERVAL 2000 SECOND))");

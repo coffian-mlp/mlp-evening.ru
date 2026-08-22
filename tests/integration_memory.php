@@ -316,6 +316,8 @@ try {
     unset($_SESSION['user_id'], $_SESSION['role']);
 
 } finally {
+    // Marker-sweep: записи, созданные командным путём, могли не успеть попасть в memRecIds.
+    $conn->query("DELETE FROM bot_memory WHERE text LIKE '%{$marker}%'");
     if (isset($optBackup)) {
         $cfgFin = Infra\ConfigManager::getInstance();
         foreach ($optBackup as $k => $v) {

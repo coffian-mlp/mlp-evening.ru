@@ -298,6 +298,18 @@ class BotWorker {
             return;
         }
 
+        // Интервал — ДО выборки (дешёвый гейт впереди дорогого: иначе LEFT JOIN на 200
+        // строк гонялся бы каждый тик ~3с). Обычный — ai_memory_interval (кламп ≥300);
+        // режим догона (прошлый батч был полным, флаг ставит сам job) — не чаще 600с.
+        $interval = max(300, (int)$this->config->getOption('ai_memory_interval', 21600));
+        if ((int)$this->config->getOption('bot_memory_backlog', 0) === 1) {
+            $interval = min($interval, 600);
+        }
+        $lastRun = (int)$this->config->getOption('bot_memory_last_run', 0);
+        if (time() - $lastRun < $interval) {
+            return;
+        }
+
         $rows = $this->llm->getChatManager()->getLiveMessagesSince((int)$markerRaw, MemoryScribe::BATCH_MSGS);
         if (!$rows) {
             return; // новых сообщений нет — ни job, ни LLM (AC-6, «тихая неделя»)
@@ -309,17 +321,6 @@ class BotWorker {
         if (!$humans) {
             $maxId = max(array_map(static fn($r) => (int)$r['id'], $rows));
             $this->config->setOption('bot_memory_last_id', (string)$maxId);
-            return;
-        }
-
-        // Интервал: обычный — ai_memory_interval (кламп ≥300); режим догона (прошлый
-        // батч был полным, флаг ставит сам job) — ускоренный, но не чаще раза в 600с.
-        $interval = max(300, (int)$this->config->getOption('ai_memory_interval', 21600));
-        if ((int)$this->config->getOption('bot_memory_backlog', 0) === 1) {
-            $interval = min($interval, 600);
-        }
-        $lastRun = (int)$this->config->getOption('bot_memory_last_run', 0);
-        if (time() - $lastRun < $interval) {
             return;
         }
 

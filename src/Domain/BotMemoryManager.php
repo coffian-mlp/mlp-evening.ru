@@ -128,9 +128,17 @@ class BotMemoryManager {
         return $map;
     }
 
-    /** Мемы для блока памяти: manual — приоритетно, затем auto по свежести. */
-    public function getMemes(): array {
-        $res = $this->db->query("SELECT * FROM bot_memory WHERE kind = 'meme' ORDER BY (source = 'manual') DESC, id DESC");
+    /**
+     * Мемы: manual — приоритетно, затем auto по свежести. $limit — для горячего пути
+     * (блок памяти съедает <= meme_limit символов, вся таблица не нужна); сжатие
+     * (compressIfNeeded) зовёт БЕЗ лимита — обязано видеть все auto-записи.
+     */
+    public function getMemes(?int $limit = null): array {
+        $sql = "SELECT * FROM bot_memory WHERE kind = 'meme' ORDER BY (source = 'manual') DESC, id DESC";
+        if ($limit !== null) {
+            $sql .= " LIMIT " . max(1, (int)$limit);
+        }
+        $res = $this->db->query($sql);
         $rows = [];
         if ($res) {
             while ($row = $res->fetch_assoc()) {
