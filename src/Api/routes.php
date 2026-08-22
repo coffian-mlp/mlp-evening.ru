@@ -40,6 +40,10 @@ return [
     // Беклог фидбека /todo (MLP-270)
     'get_feedback'        => ['role' => 'admin', 'handler' => [\Api\FeedbackController::class, 'list']],
     'set_feedback_status' => ['role' => 'admin', 'handler' => [\Api\FeedbackController::class, 'setStatus']],
+    // Память Лиры (MLP-314): карточка в дашборде
+    'get_memory'          => ['role' => 'admin', 'handler' => [\Api\MemoryController::class, 'list']],
+    'save_memory'         => ['role' => 'admin', 'handler' => [\Api\MemoryController::class, 'save']],
+    'delete_memory'       => ['role' => 'admin', 'handler' => [\Api\MemoryController::class, 'remove']],
     // Auth и профиль (MLP-264, срез AR5-6)
     'login'                => ['role' => 'public', 'handler' => [\Api\AuthController::class, 'login']],
     'register'             => ['role' => 'public', 'handler' => [\Api\AuthController::class, 'register']],

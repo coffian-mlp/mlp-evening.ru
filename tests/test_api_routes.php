@@ -117,6 +117,10 @@ $expected = [
     // секрет stream_command_token внутри StreamEventController.
     'stream_event'        => 'public',
     'set_feedback_status' => 'admin',
+    // MLP-314: память Лиры (дашборд)
+    'get_memory'          => 'admin',
+    'save_memory'         => 'admin',
+    'delete_memory'       => 'admin',
 ];
 
 echo "== Карта ролей: каждый action объявлен с гейтом «как было» ==\n";
