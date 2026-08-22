@@ -94,8 +94,12 @@ class BotWorker {
                     // MLP-307: ответ Лиры на команду управления стримом
                     (new StreamCommand())->handle($job['data'] ?? []);
                 } elseif ($job['type'] === 'cron_spontaneous') {
-                    // MLP-279: проактив теперь журналируется через очередь (единый путь)
-                    $this->llm->processTrigger('cron_spontaneous', $job['data'] ?? []);
+                    // MLP-279: проактив теперь журналируется через очередь (единый путь).
+                    // MLP-321: если ждёт mention (в т.ч. несозревший lifelike) — молчим:
+                    // спонтанка между вопросом и ответом выглядит двойным ответом (26843/26844).
+                    if (!$this->queue->hasPending('mention')) {
+                        $this->llm->processTrigger('cron_spontaneous', $job['data'] ?? []);
+                    }
                 }
             }
             $this->queue->complete([$id]);
@@ -212,7 +216,11 @@ class BotWorker {
         if (!$announced) {
             // MLP-279: спонтанное — через очередь (журнал в llm_jobs; обработает
             // следующий тик — даже живее). Триггер сам решает молчать/писать.
-            $this->queue->enqueue('cron_spontaneous', [], 0);
+            // MLP-321: не влезаем в идущий разговор — при ждущем mention спонтанку
+            // даже не ставим (второй рубеж — при обработке job, mention мог прилететь позже).
+            if (!$this->queue->hasPending('mention')) {
+                $this->queue->enqueue('cron_spontaneous', [], 0);
+            }
         }
     }
 

@@ -105,6 +105,26 @@ try {
     check(str_contains($all, "свежий ответ бота {$marker}"),
         'reply: контекст свежий — собственный недавний ответ бота виден (нет обрезки beforeId)');
 
+    // === MLP-321: спонтанка молчит, пока ждёт mention (иначе двойной ответ) ===
+    $pendingMention = $queue->enqueue('mention', $payload, 30); // несозревший lifelike
+    $cleanupJobIds[] = $pendingMention;
+    $spont = $queue->enqueue('cron_spontaneous', [], 0);
+    $cleanupJobIds[] = $spont;
+    $fake->captured = null;
+    $lastBotBefore = (int)$conn->query("SELECT MAX(id) m FROM chat_messages WHERE user_id = $botId")->fetch_assoc()['m'];
+
+    $reactive = new ReflectionMethod(BotWorker::class, 'reactive');
+    $reactive->setAccessible(true);
+    $reactive->invoke($worker);
+
+    $st = $conn->query("SELECT status FROM llm_jobs WHERE id = $spont")->fetch_assoc()['status'];
+    check($st === 'done', 'спонтанка при ждущем mention: job закрыт');
+    check($fake->captured === null, 'спонтанка при ждущем mention: LLM не вызывался');
+    $lastBotAfter = (int)$conn->query("SELECT MAX(id) m FROM chat_messages WHERE user_id = $botId")->fetch_assoc()['m'];
+    check($lastBotAfter === $lastBotBefore, 'спонтанка при ждущем mention: бот ничего не постил');
+    $st = $conn->query("SELECT status FROM llm_jobs WHERE id = $pendingMention")->fetch_assoc()['status'];
+    check($st === 'pending', 'несозревший mention остался ждать своей очереди');
+
 } finally {
     if ($cleanupUserIds) {
         $ids = implode(',', array_map('intval', $cleanupUserIds));
