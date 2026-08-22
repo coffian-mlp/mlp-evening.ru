@@ -24,6 +24,7 @@ check($d['action'] === 'skip' && $d['reason'] === 'no_jobs', 'пусто -> skip
 
 $d = ReplyPolicy::decide([$m(1, 1, 'A')], ['spam_threshold'=>4,'reply_min_gap'=>20,'now'=>1000,'last_bot_reply_ts'=>990]);
 check($d['action'] === 'skip' && $d['reason'] === 'rate_limited', 'ответил 10с назад (gap 20) -> skip/rate_limited');
+check(($d['retry_in'] ?? null) === 10, 'rate_limited отдаёт retry_in = остаток паузы (10с)');
 
 $d = ReplyPolicy::decide([$m(1, 1, 'A')], ['spam_threshold'=>4,'reply_min_gap'=>20,'now'=>1000,'last_bot_reply_ts'=>970]);
 check($d['action'] === 'reply', 'ответил 30с назад -> отвечаем');
@@ -33,6 +34,8 @@ $d = ReplyPolicy::decide([$m(42, 1, 'CoFFian')], $base);
 check($d['action'] === 'reply' && $d['mode'] === 'single', 'single -> reply/single');
 check($d['quote_message_id'] === 42, 'ставит цитату на message_id=42');
 check($d['askers'] === ['CoFFian'], 'адресат — автор');
+check(($d['quote_username'] ?? '') === 'CoFFian' && ($d['quote_text'] ?? '') === 'hi',
+    'single несёт автора и текст триггера (для прицела)');
 
 echo "\n== Тихо (<= порога): адресуем всех, без цитаты ==\n";
 $d = ReplyPolicy::decide([$m(1,1,'A'), $m(2,2,'B'), $m(3,3,'C')], $base);
@@ -59,7 +62,16 @@ $d = ReplyPolicy::decide($pending, $base);
 check($d['mode'] === 'address_all', '4 упоминания (== порог) -> ещё address_all');
 
 echo "\n== instruction() под режим ==\n";
-check(ReplyPolicy::instruction(['mode'=>'single','askers'=>['A']]) === '', 'single -> пустая инструкция');
+check(ReplyPolicy::instruction(['mode'=>'single','askers'=>['A']]) === '', 'single без данных триггера -> пустая инструкция');
+$insS = ReplyPolicy::instruction(['mode'=>'single','askers'=>['A'],
+    'quote_username'=>'CoFFian','quote_text'=>'как заработать денег в ГТА?']);
+check(mb_strpos($insS, 'именно на это сообщение') !== false && mb_strpos($insS, '@CoFFian') !== false
+    && mb_strpos($insS, 'как заработать денег в ГТА?') !== false,
+    'single с данными -> прицел на автора и текст');
+check(mb_strpos($insS, 'не повторяй свой ответ') !== false, 'single -> анти-дубль в инструкции');
+$longText = str_repeat('а', 400);
+$insL = ReplyPolicy::instruction(['mode'=>'single','quote_username'=>'X','quote_text'=>$longText]);
+check(mb_strpos($insL, str_repeat('а', 301)) === false, 'текст триггера в прицеле усечён до 300');
 $ins = ReplyPolicy::instruction(['mode'=>'address_all','askers'=>['A','B']]);
 check(mb_strpos($ins, '@A, @B') !== false, 'address_all -> перечисляет @A, @B');
 $insC = ReplyPolicy::instruction(['mode'=>'coalesce','askers'=>['A','B','C']]);

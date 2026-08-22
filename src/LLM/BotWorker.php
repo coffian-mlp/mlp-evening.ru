@@ -111,9 +111,15 @@ class BotWorker {
             $this->queue->complete($ids);
             return;
         }
-        $mentions = array_map(static fn($j) => ['id' => (int)$j['id']] + ($j['data'] ?? []), $burst);
+        $mentions = array_map(static fn($j) => [
+            'id'       => (int)$j['id'],
+            'attempts' => (int)($j['attempts'] ?? 0), // кап переносов при rate-limit (MLP-320)
+        ] + ($j['data'] ?? []), $burst);
         $this->handleMentions($mentions);
     }
+
+    /** Максимум переносов mention при rate-limit — защита от вечного откладывания. */
+    private const MENTION_DEFER_MAX = 3;
 
     private function handleMentions(array $mentions): void {
         $ids = array_map(static fn($m) => (int)$m['id'], $mentions);
@@ -126,20 +132,37 @@ class BotWorker {
         ]);
 
         if ($decision['action'] !== 'reply') {
-            $this->queue->complete($ids); // consumed без ответа (rate-limit и т.п.)
+            // MLP-320: пауза rate-limit откладывает вопрос, а не съедает (боевой кейс
+            // 22.08: прямой вопрос попал в паузу и остался без ответа навсегда).
+            $retryIn = (int)($decision['retry_in'] ?? 0);
+            if ($decision['reason'] === 'rate_limited' && $retryIn > 0) {
+                $defer = $done = [];
+                foreach ($mentions as $m) {
+                    if ((int)($m['attempts'] ?? 0) < self::MENTION_DEFER_MAX) {
+                        $defer[] = (int)$m['id'];
+                    } else {
+                        $done[] = (int)$m['id'];
+                    }
+                }
+                if ($defer) $this->queue->release($defer, $retryIn + 1);
+                if ($done)  $this->queue->complete($done);
+                return;
+            }
+            $this->queue->complete($ids); // consumed без ответа
             return;
         }
 
-        // Для адресного 1:1 строим контекст ДО триггер-сообщения, чтобы ответ совпал с цитатой
-        // (иначе — актуальная лента для сводного/многоадресного ответа).
-        $beforeId = null;
-        if ($decision['mode'] === 'single' && !empty($decision['quote_message_id'])) {
-            $beforeId = (int)$decision['quote_message_id'] + 1;
-        }
-        // MLP-260: длина контекста — из настроек (ai_context_messages, default 24)
+        // MLP-260: длина контекста — из настроек (ai_context_messages, default 24).
+        // Контекст всегда свежий: обрезка beforeId прятала собственные ответы бота
+        // и порождала дубли (кейс ГТА 22.08); прицел на цитируемое сообщение теперь
+        // даёт инструкция ПОСЛЕДНЕЙ РЕПЛИКОЙ, не system (уроки MLP-293/308).
         $ctxLimit = max(4, min(100, (int)$this->config->getOption('ai_context_messages', 24)));
-        $context = $this->llm->buildReplyContext($ctxLimit, null, $beforeId);
-        $raw = $this->llm->generateReply($context, ReplyPolicy::instruction($decision));
+        $context = $this->llm->buildReplyContext($ctxLimit);
+        $instr = ReplyPolicy::instruction($decision);
+        if ($instr !== '') {
+            $context[] = ['role' => 'user', 'content' => $instr];
+        }
+        $raw = $this->llm->generateReply($context);
 
         // Бот может поставить реакцию вместо/вместе с текстом.
         $parsed = ReactionParser::extract($raw);

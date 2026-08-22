@@ -285,4 +285,20 @@ class JobQueue {
         $res = $this->db->query("SELECT 1 FROM llm_jobs WHERE status='pending' AND type IN ($typesIn) LIMIT 1");
         return $res && $res->num_rows > 0;
     }
+
+    /**
+     * Вернуть заклеймленные задачи в очередь с отсрочкой (MLP-320): пауза
+     * rate-limit не съедает вопрос, а откладывает ответ. attempts++ — кап
+     * числа переносов считает вызывающий.
+     */
+    public function release(array $ids, int $delaySeconds): void {
+        if (!$ids) return;
+        $list = implode(',', array_map('intval', $ids));
+        $d = max(1, (int)$delaySeconds);
+        $this->db->query(
+            "UPDATE llm_jobs SET status='pending', run_after = DATE_ADD(NOW(), INTERVAL $d SECOND),
+                    attempts = attempts + 1
+             WHERE id IN ($list)"
+        );
+    }
 }

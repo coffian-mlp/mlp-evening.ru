@@ -17,7 +17,9 @@ class ReplyPolicy {
      * @param array $cfg      ['spam_threshold'=>int, 'reply_min_gap'=>int, 'now'=>int, 'last_bot_reply_ts'=>?int]
      * @return array решение:
      *        ['action'=>'reply'|'skip', 'reason'=>string, 'mode'=>?'single'|'address_all'|'coalesce',
-     *         'quote_message_id'=>?int, 'askers'=>string[]]
+     *         'quote_message_id'=>?int, 'askers'=>string[],
+     *         'retry_in'=>int (только rate_limited: секунд до конца паузы),
+     *         'quote_username'=>string, 'quote_text'=>string (только single)]
      */
     public static function decide(array $pending, array $cfg): array {
         $spamThreshold = (int)($cfg['spam_threshold']   ?? 4);
@@ -29,9 +31,12 @@ class ReplyPolicy {
             return self::skip('no_jobs');
         }
 
-        // Анти-спам: если бот только что отвечал — держим паузу (при нагрузке отвечаем не всем).
+        // Анти-спам: если бот только что отвечал — держим паузу. retry_in позволяет
+        // вызывающему отложить задачу вместо съедания (боевой кейс 22.08: прямой
+        // вопрос, попавший в паузу, оставался без ответа навсегда).
         if ($lastBotReply !== null && ($now - (int)$lastBotReply) < $replyMinGap) {
-            return self::skip('rate_limited');
+            return self::skip('rate_limited')
+                + ['retry_in' => $replyMinGap - ($now - (int)$lastBotReply)];
         }
 
         // Уникальные адресаты (по username, в порядке появления).
@@ -52,6 +57,8 @@ class ReplyPolicy {
                 'reason'           => 'single',
                 'mode'             => 'single',
                 'quote_message_id' => $pending[0]['message_id'] ?? null,
+                'quote_username'   => trim((string)($pending[0]['username'] ?? '')),
+                'quote_text'       => trim((string)($pending[0]['message'] ?? '')),
                 'askers'           => $askers,
             ];
         }
@@ -82,13 +89,28 @@ class ReplyPolicy {
     }
 
     /**
-     * Доп. инструкция для модели под режим ответа (адресация/сводность).
-     * Пустая строка для single — отвечаем на последнее сообщение как обычно.
+     * Доп. инструкция для модели под режим ответа (адресация/сводность/прицел).
+     * Кладётся ПОСЛЕДНЕЙ РЕПЛИКОЙ контекста, не в system (уроки MLP-293/308).
+     * Для single — явный прицел на цитируемое сообщение: контекст теперь свежий
+     * (без обрезки beforeId), и без прицела модель отвечала на самый громкий
+     * незакрытый вопрос ленты вместо триггера (дубль про ГТА, 22.08).
      * Чистая функция — покрыта тестами.
      */
     public static function instruction(array $decision): string {
         $mode   = $decision['mode'] ?? null;
         $askers = $decision['askers'] ?? [];
+
+        if ($mode === 'single') {
+            $u = trim((string)($decision['quote_username'] ?? ''));
+            $t = trim((string)($decision['quote_text'] ?? ''));
+            if ($u === '' || $t === '') {
+                return '';
+            }
+            $t = mb_substr($t, 0, 300);
+            return "Сейчас ты отвечаешь именно на это сообщение от @{$u}: «{$t}». "
+                 . "Ответь на него, даже если беседа ушла дальше. Если на этот вопрос "
+                 . "ты уже отвечала выше — не повторяй свой ответ, а сошлись на него или дополни.";
+        }
 
         if ($mode === 'address_all' && !empty($askers)) {
             $list = implode(', ', array_map(static fn($u) => '@' . $u, $askers));
