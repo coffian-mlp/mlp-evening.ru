@@ -102,6 +102,8 @@ class SettingsController {
         'smtp_user'          => 'string',
         'smtp_pass'          => 'string',
         'smtp_from_name'     => 'string',
+        // --- ИИ: кто в чате (MLP-323) ---
+        'ai_online_in_context' => 'int', // строка присутствия + досье молчунов в контексте бота
     ];
 
     /** Сохранить глобальные настройки (admin). Бывший action update_settings. */

@@ -388,6 +388,16 @@ $config = $arResult['config']; // Helper
             <input type="number" name="ai_memory_interval" value="<?= htmlspecialchars($config->getOption('ai_memory_interval', 21600)) ?>" class="form-input">
         </div>
 
+        <!-- ============ 👀 Кто в чате (MLP-323) ============ -->
+        <div class="form-group">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="hidden" name="ai_online_in_context" value="0">
+                <input type="checkbox" name="ai_online_in_context" value="1" <?= $config->getOption('ai_online_in_context', 1) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                <strong>Лира видит, кто сейчас в чате</strong>
+            </label>
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">В контекст ответа добавляется список онлайн (как в сайдбаре, окно 3 минуты) и число гостей, а досье молчащих участников подмешиваются в блок памяти после говоривших. Выключено = бот знает только тех, кто писал в окне контекста.</p>
+        </div>
+
         <button type="submit" class="btn-primary">Сохранить ИИ настройки</button>
     </form>
 </div>

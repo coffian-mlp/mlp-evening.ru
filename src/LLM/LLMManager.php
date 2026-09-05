@@ -11,6 +11,7 @@ use Infra\Database;
 use Domain\EventManager;
 use Exception;
 use Domain\UserManager;
+use Domain\OnlineManager;
 
 
 class LLMManager {
@@ -820,8 +821,24 @@ class LLMManager {
         }
         $flushRun();
 
+        // MLP-323: кто сейчас в чате — фоновая строка перед сообщениями + досье молчунов
+        // (онлайн, но без реплик в окне) в хвост списка для блока памяти. Без этого молчун
+        // выпадал из окна вместе с досье, и бот считал, что его нет в чате. Сбой — деградация.
+        if ($includeMemory && (int)ConfigManager::getInstance()->getOption('ai_online_in_context', 1)) {
+            try {
+                $online = (new OnlineManager())->getOnlineStats(OnlineContext::WINDOW_MIN);
+                $presence = OnlineContext::line($online['users'] ?? [], (int)($online['guests_count'] ?? 0), $this->botUserId);
+                if ($presence !== null) {
+                    array_unshift($context, ['role' => 'user', 'content' => $presence]);
+                }
+                $memoryUserIds = OnlineContext::appendSilent($memoryUserIds, array_column($online['users'] ?? [], 'id'), $this->botUserId);
+            } catch (\Throwable $e) {
+                error_log("OnlineContext failed (degraded, reply continues): " . $e->getMessage());
+            }
+        }
+
         // Блок долгой памяти (MLP-314) — фоновый блок перед сообщениями; prepend
-        // ДО закрепа, чтобы итоговый порядок был «закреп → память → сообщения».
+        // ДО закрепа, чтобы итоговый порядок был «закреп → память → (кто в чате) → сообщения».
         // Сбой памяти не ломает ответ: блок просто отбрасывается (Fail Fast → деградация).
         if ($includeMemory) {
             try {
