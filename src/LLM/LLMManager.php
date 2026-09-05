@@ -278,51 +278,37 @@ class LLMManager {
                 $em = new EventManager();
                 $expandedEvents = EventManager::expandOccurrences($em->getAllRaw(), 7, $now);
 
-                $event = null;
-                foreach ($expandedEvents as $evt) {
-                    $endTime = $evt['real_start_time'] + ($evt['duration_minutes'] * 60);
-                    if ($endTime > $now) {
-                        $event = $evt;
-                        break;
-                    }
-                }
-                
+                // MLP-322: модель получает «сейчас», идущее и следующее событие (для анонсов
+                // воркера — ещё и целевое, по event_run_id) с уже посчитанными интервалами.
+                // Раньше бралось «первое незакончившееся» + просьба назвать «сколько до начала»:
+                // для идущего события выходило «до начала 3,5 часа», а анонс Феникса Райта
+                // уезжал с данными StarGate (05.09).
+                $snap = ScheduleData::snapshot($expandedEvents, $now, $contextData['event_run_id'] ?? null);
+                $event = $snap['target'] ?? $snap['current'] ?? $snap['next'];
+
                 // MLP-273: анонс — пересказ, не ксерокс (фидбек id 9506: «криво дублирует описание»).
                 $additionalPrompt = "\n\n" . ($command['system_prompt'] ?: "Системное сообщение (расписание): расскажи про ближайшее событие.")
-                    . "\nВАЖНО: не цитируй описание события дословно и не перечисляй данные списком — перескажи живо, своими словами, в 1–2 предложениях, обязательно назови время и сколько осталось до начала.";
-                
-                if ($event) {
-                    $dt = new \DateTime();
-                    $dt->setTimestamp($event['real_start_time']);
-                    $dt->setTimezone(new \DateTimeZone('Europe/Moscow'));
-                    $mskTime = $dt->format('Y-m-d H:i');
-                    
-                    $additionalPrompt .= "\n\nДАННЫЕ ДЛЯ ОТВЕТА (ты ДОЛЖНА обязательно упомянуть это событие, игнорируй свои прошлые ответы, если они противоречат этим данным):\n";
-                    $additionalPrompt .= "- Ближайшее событие: '{$event['title']}'\n";
-                    $additionalPrompt .= "- Время: {$mskTime} (по московскому времени)\n";
-                    $additionalPrompt .= "- Описание: {$event['description']}\n";
-                    
-                    if ($event['use_playlist'] || $event['generate_new_playlist']) {
-                        $epManager = new EpisodeManager();
-                        $playlist = $epManager->getSavedPlaylist();
-                        if (!empty($playlist)) {
-                            $additionalPrompt .= "- Плейлист серий: ";
-                            foreach ($playlist as $key => $story) {
-                                if ($key === '_meta') continue;
-                                if (is_array($story) && isset($story['titles'])) {
-                                    foreach ($story['titles'] as $title) {
-                                        $additionalPrompt .= "{$title}, ";
-                                    }
+                    . "\nВАЖНО: не цитируй описание события дословно и не перечисляй данные списком — перескажи живо, своими словами, в 1–2 предложениях, обязательно назови время (МСК) и интервалы из данных.";
+
+                $additionalPrompt .= "\n\n" . ScheduleData::dataBlock($snap) . "\n";
+
+                if ($event && ($event['use_playlist'] || $event['generate_new_playlist'])) {
+                    $epManager = new EpisodeManager();
+                    $playlist = $epManager->getSavedPlaylist();
+                    if (!empty($playlist)) {
+                        $additionalPrompt .= "- Плейлист серий: ";
+                        foreach ($playlist as $key => $story) {
+                            if ($key === '_meta') continue;
+                            if (is_array($story) && isset($story['titles'])) {
+                                foreach ($story['titles'] as $title) {
+                                    $additionalPrompt .= "{$title}, ";
                                 }
                             }
-                            $additionalPrompt .= "\n";
                         }
+                        $additionalPrompt .= "\n";
                     }
-                    $additionalPrompt .= "\nТВОЯ ЗАДАЧА: Напиши красивый ответ на основе этих данных (и системного промпта). Обязательно упомяни событие, время (в МСК) и кратко перескажи описание.";
-                } else {
-                    $additionalPrompt .= "\n\nДАННЫЕ ДЛЯ ОТВЕТА: В данный момент расписание абсолютно пусто. Запланированных событий нет.\n"
-                        . "ТВОЯ ЗАДАЧА: Напиши ответ об отсутствии ближайших событий.";
                 }
+                $additionalPrompt .= "\n" . ScheduleData::taskLine($snap);
             } else {
                 // Обычный текстовый обработчик
                 $additionalPrompt = "\n\n" . ($command['system_prompt'] ?: "Тебя вызвали с помощью специальной команды. Ответь коротко и в тему.");
@@ -555,6 +541,9 @@ class LLMManager {
         // Раньше оно дописывалось к последнему сообщению контекста, из-за чего модель
         // периодически выдавала саму инструкцию эхом прямо в чат («прорыв системщины»).
         $prompt .= "\n\n[Системное правило]: Пиши ТОЛЬКО текст своего ответа. НИКОГДА не добавляй своё имя, никнейм, время или служебные пометки в начале сообщения (например, не пиши '[12:00] {$botNickname}:').";
+        // MLP-322: модель не знала «сейчас» и выводила его из таймкодов чата (в TZ сервера):
+        // «сейчас 15:51» при 22:51 МСК, «завтра» про событие, идущее в эту минуту.
+        $prompt .= "\n[Время]: сейчас " . MskClock::nowLine(time()) . ". Таймкоды [ЧЧ:ММ] перед сообщениями чата — тоже МСК.";
 
         foreach ($this->providers as $provider) {
             if ($deadlineAt !== null && microtime(true) >= $deadlineAt) {
@@ -767,7 +756,8 @@ class LLMManager {
                 }
             }
 
-            $time = date('H:i', strtotime($msg['created_at']));
+            // MLP-322: таймкод — в МСК, как у участников; date() давал TZ сервера (America/New_York).
+            $time = MskClock::format(strtotime($msg['created_at']) ?: $currentTime, 'H:i');
             if (!empty($msg['is_deleted'])) {
                 $entries[] = ['deleted' => true, 'time' => $time, 'username' => $msg['username']];
                 continue; // маркер — вне лимита живых

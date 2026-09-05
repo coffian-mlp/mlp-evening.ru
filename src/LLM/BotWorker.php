@@ -247,25 +247,30 @@ class BotWorker {
             $minsSinceEnd = ($now - $end) / 60;
 
             if ($minsToStart > 0 && $minsToStart <= 60 && empty($announced[$runId]['60m'])) {
-                $this->announce("Напиши анонс, что через час начнётся событие '{$evt['title']}'.", $scheduleCmd);
+                $this->announce("Напиши анонс, что через час начнётся событие '{$evt['title']}'.", $scheduleCmd, $runId);
                 $announced[$runId]['60m'] = true; $sent = true;
             }
             if ($minsToStart > 0 && $minsToStart <= 15 && empty($announced[$runId]['15m'])) {
                 // Анти-копипаста (полевое наблюдение 22.08: GLM продублировала 60м-анонс
                 // почти дословно): второй анонс обязан звучать иначе — первый есть в окне контекста.
                 $this->announce("Напиши срочный анонс, что событие '{$evt['title']}' начнётся уже через 15 минут! "
-                    . "Часовой анонс уже прозвучал и виден в чате — НЕ повторяй его формулировки: скажи заметно иначе, короче и с другим настроением.", $scheduleCmd);
+                    . "Часовой анонс уже прозвучал и виден в чате — НЕ повторяй его формулировки: скажи заметно иначе, короче и с другим настроением.", $scheduleCmd, $runId);
                 $announced[$runId]['15m'] = true; $sent = true;
             }
             if ($minsSinceEnd >= 0 && $minsSinceEnd <= 10 && empty($announced[$runId]['finished'])) {
-                $msg = "Спасибо всем за просмотр! Вечерок подошёл к концу.";
+                // MLP-322: если следом (в пределах часа) идёт другое событие — это не конец
+                // вечера, а стык частей (05.09: StarGate 19:00–23:00 → Феникс Райт в 00:00).
+                $follow = ScheduleData::following($expanded, $runId, $now);
+                $msg = $follow
+                    ? "Событие '{$evt['title']}' подошло к концу, но вечер продолжается: дальше по расписанию — '{$follow['title']}' (данные ниже). Поблагодари за первую часть и позови на следующую."
+                    : "Спасибо всем за просмотр! Вечерок подошёл к концу.";
                 if (!empty($evt['generate_new_playlist'])) {
                     (new EpisodeManager())->regeneratePlaylist();
                     $msg .= " А вот и расписание на следующий раз! Напиши об этом в чат в своём стиле.";
                 } else {
                     $msg .= " Напиши об этом в чат тепло и дружелюбно.";
                 }
-                $this->announce($msg, $scheduleCmd);
+                $this->announce($msg, $scheduleCmd, $runId);
                 $announced[$runId]['finished'] = true; $sent = true;
             }
         }
@@ -277,11 +282,14 @@ class BotWorker {
         return $sent;
     }
 
-    private function announce(string $message, array $scheduleCmd): void {
+    private function announce(string $message, array $scheduleCmd, ?string $runId = null): void {
         // MLP-279: анонсы — через очередь (единый путь с реактивом, журнал в llm_jobs).
+        // MLP-322: run_id анонсируемого события — хендлер schedule строит данные под него,
+        // а не под «первое незакончившееся» (иначе анонс Феникса уезжал с данными StarGate).
         $this->queue->enqueue('dynamic_command', [
-            'message' => $message,
-            'command' => $scheduleCmd,
+            'message'      => $message,
+            'command'      => $scheduleCmd,
+            'event_run_id' => $runId,
         ], 0);
     }
 

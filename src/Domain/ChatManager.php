@@ -47,7 +47,7 @@ class ChatManager {
         $res = $stmt->get_result();
         
         if ($res && $row = $res->fetch_assoc()) {
-            $lastTime = strtotime($row['created_at']);
+            $lastTime = strtotime($row['created_at'] . ' UTC'); // MLP-322: created_at — UTC; без суффикса strtotime брал TZ сервера
             $currentTime = time();
             if (($currentTime - $lastTime) < $limitSeconds) {
                 return false; // Слишком быстро!
@@ -165,7 +165,7 @@ class ChatManager {
         }
 
         // Проверка времени (10 минут)
-        $msgTime = strtotime($row['created_at']);
+        $msgTime = strtotime($row['created_at'] . ' UTC'); // MLP-322: иначе окно правки уезжало на смещение TZ сервера (на проде — ~4 часа)
         // Сравниваем с UTC текущим временем, раз уж в базе UTC
         if ((time() - $msgTime) > 600) {
             return false; // Время вышло
@@ -666,7 +666,7 @@ class ChatManager {
                         
                         // Format date for quoted msg too
                          if ($qRow['created_at']) {
-                            $qRow['created_at'] = date('Y-m-d\TH:i:s\Z', strtotime($qRow['created_at']));
+                            $qRow['created_at'] = gmdate('Y-m-d\TH:i:s\Z', strtotime($qRow['created_at'] . ' UTC'));
                         }
                         
                         // Handle deleted content
@@ -692,15 +692,15 @@ class ChatManager {
         foreach ($messages as &$msg) {
             // Форматируем дату в ISO 8601 UTC (добавляем Z)
             if ($msg['created_at']) {
-                $msg['created_at'] = date('Y-m-d\TH:i:s\Z', strtotime($msg['created_at']));
+                $msg['created_at'] = gmdate('Y-m-d\TH:i:s\Z', strtotime($msg['created_at'] . ' UTC'));
             }
             if ($msg['edited_at']) {
-                $msg['edited_at'] = date('Y-m-d\TH:i:s\Z', strtotime($msg['edited_at']));
+                $msg['edited_at'] = gmdate('Y-m-d\TH:i:s\Z', strtotime($msg['edited_at'] . ' UTC'));
             } else {
                 $msg['edited_at'] = null; // Явно null, если нет
             }
             if ($msg['deleted_at']) {
-                $msg['deleted_at'] = date('Y-m-d\TH:i:s\Z', strtotime($msg['deleted_at']));
+                $msg['deleted_at'] = gmdate('Y-m-d\TH:i:s\Z', strtotime($msg['deleted_at'] . ' UTC'));
             } else {
                 $msg['deleted_at'] = null;
             }
