@@ -250,6 +250,13 @@ class LLMManager {
         } elseif ($triggerType === 'dynamic_command') {
             $command = $contextData['command'] ?? ['handler_type' => 'text', 'system_prompt' => ''];
 
+            // MLP-326: повтор той же команды в окне дедупа — короткая живая реплика вместо повторной генерации.
+            if (!empty($contextData['dedup_of'])) {
+                [$instruction, $fallback] = CommandDedup::notice($command, (array)$contextData['dedup_of'], (string)($contextData['username'] ?? 'Гость'));
+                $this->botSayLive($instruction, $fallback);
+                return true;
+            }
+
             // Диспетчер спец-хендлеров (MLP-284): каждый тип — свой путь, минуя
             // общий текстовый постинг ниже. Новый handler_type = новый case.
             switch ($command['handler_type']) {

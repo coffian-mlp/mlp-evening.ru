@@ -159,6 +159,10 @@ $config = $arResult['config']; // Helper
                 <input type="number" name="ai_reply_min_gap" value="<?= htmlspecialchars($config->getOption('ai_reply_min_gap', 20)) ?>" class="form-input">
             </div>
             <div style="flex: 1; min-width: 130px;">
+                <label class="form-label">Дедуп команд, сек (0 = выкл)</label>
+                <input type="number" name="ai_command_dedup_window" value="<?= htmlspecialchars($config->getOption('ai_command_dedup_window', 60)) ?>" class="form-input" title="Та же команда с теми же аргументами в этом окне — короткая реплика «смотри выше» вместо повторной генерации (MLP-326). Персональные команды не дедупятся.">
+            </div>
+            <div style="flex: 1; min-width: 130px;">
                 <label class="form-label">Опрос воркера, сек</label>
                 <input type="number" name="ai_worker_poll" value="<?= htmlspecialchars($config->getOption('ai_worker_poll', 3)) ?>" class="form-input">
             </div>

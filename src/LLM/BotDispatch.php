@@ -40,8 +40,23 @@ class BotDispatch {
             }
         }
 
+        // MLP-326: дедуп одинаковых команд — та же команда (с теми же аргументами) уже в очереди
+        // или отвечена в пределах окна → payload помечается dedup_of, и вместо повторной генерации
+        // уйдёт короткая реплика «смотри выше» (LLMManager). Персональные команды не дедупятся.
+        $delay = self::delayFor($type);
+        if ($type === 'dynamic_command') {
+            $window = (int)ConfigManager::getInstance()->getOption('ai_command_dedup_window', 60);
+            $key = CommandDedup::key($payload['command'] ?? [], (string)($payload['message'] ?? ''));
+            if ($window > 0 && $key !== null) {
+                $original = CommandDedup::findOriginal((new JobQueue())->recentDynamicCommands($window), $key);
+                if ($original !== null) {
+                    $payload['dedup_of'] = $original;
+                    $delay = min($delay, CommandDedup::NOTICE_DELAY);
+                }
+            }
+        }
         if (self::shouldQueue()) {
-            (new JobQueue())->enqueue($type, $payload, self::delayFor($type));
+            (new JobQueue())->enqueue($type, $payload, $delay);
             return;
         }
         // Inline-фоллбек: прежнее поведение — «раздумье» + синхронная обработка.
@@ -50,9 +65,13 @@ class BotDispatch {
         if ($type === 'greeting') {
             (new JobQueue())->logDone($type, $payload);
         }
+        // MLP-326: inline-режим — команду тоже журналируем (done) ДО обработки, чтобы дедуп её видел.
+        if ($type === 'dynamic_command' && empty($payload['dedup_of'])) {
+            (new JobQueue())->logDone($type, $payload);
+        }
         if (function_exists('set_time_limit')) { @set_time_limit(0); }
         @ignore_user_abort(true);
-        sleep(self::delayFor($type));
+        sleep($delay);
         if ($type === 'stream_command') {
             // MLP-307: обрабатывается собственным классом, не LLMManager::processTrigger.
             (new StreamCommand())->handle($payload);

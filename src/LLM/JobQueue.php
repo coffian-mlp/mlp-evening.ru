@@ -301,4 +301,28 @@ class JobQueue {
              WHERE id IN ($list)"
         );
     }
+
+    /**
+     * Недавние команды бота для дедупа (MLP-326): status, age (сек) и payload в data,
+     * свежие первыми. failed тоже отдаются — фильтрует CommandDedup::findOriginal.
+     */
+    public function recentDynamicCommands(int $seconds, int $limit = 30): array {
+        $seconds = max(1, $seconds);
+        $limit = max(1, min(200, $limit));
+        $stmt = $this->db->prepare(
+            "SELECT status, TIMESTAMPDIFF(SECOND, created_at, NOW()) AS age, payload FROM llm_jobs
+             WHERE type = 'dynamic_command' AND created_at > DATE_SUB(NOW(), INTERVAL ? SECOND)
+             ORDER BY id DESC LIMIT ?"
+        );
+        $stmt->bind_param('ii', $seconds, $limit);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $rows = [];
+        while ($row = $res->fetch_assoc()) {
+            $row['data'] = json_decode($row['payload'] ?? '{}', true) ?: [];
+            unset($row['payload']);
+            $rows[] = $row;
+        }
+        return $rows;
+    }
 }

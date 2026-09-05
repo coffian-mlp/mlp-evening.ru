@@ -104,6 +104,7 @@ class SettingsController {
         'smtp_from_name'     => 'string',
         // --- ИИ: кто в чате (MLP-323) ---
         'ai_online_in_context' => 'int', // строка присутствия + досье молчунов в контексте бота
+        'ai_command_dedup_window' => 'uint', // MLP-326: окно дедупа одинаковых команд, сек (0 = выкл)
     ];
 
     /** Сохранить глобальные настройки (admin). Бывший action update_settings. */
