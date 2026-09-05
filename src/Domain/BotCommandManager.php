@@ -62,7 +62,8 @@ class BotCommandManager {
         foreach ($activeCommands as $row) {
             $cleanPrefix = ltrim($row['command_prefix'] ?? '', '/');
             if ($cleanPrefix === '') continue;
-            $pattern = '/^\/?' . preg_quote($cleanPrefix, '/') . '(?:\s|$)/ui';
+            // MLP-324: слэш обязателен — голое слово-ритуал «Штош» 34 раза за 90 дней вызывало /штош.
+            $pattern = '/^\/' . preg_quote($cleanPrefix, '/') . '(?:\s|$)/ui';
             if (preg_match($pattern, $msg)) {
                 return $row;
             }

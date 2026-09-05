@@ -26,16 +26,20 @@ function ok($cond, $label) {
 $cmds = [
     ['command_prefix' => '/schedule', 'handler_type' => 'schedule'],
     ['command_prefix' => '/расписание', 'handler_type' => 'schedule'],
+    ['command_prefix' => '/штош', 'handler_type' => 'recap'],
 ];
 
 echo "== Совпадения ==\n";
 ok(BotCommandManager::matchCommand($cmds, '/schedule tonight')['handler_type'] === 'schedule', '/schedule с аргументом');
-ok(BotCommandManager::matchCommand($cmds, 'schedule')['command_prefix'] === '/schedule', 'без слеша тоже команда');
+ok(BotCommandManager::matchCommand($cmds, '/штош')['handler_type'] === 'recap', '/штош со слешем — команда');
 ok(BotCommandManager::matchCommand($cmds, '/расписание')['command_prefix'] === '/расписание', 'кириллический префикс');
 ok(BotCommandManager::matchCommand($cmds, '  /schedule  ') !== null, 'ведущие пробелы обрезаются');
 
 echo "\n== Не команда ==\n";
 ok(BotCommandManager::matchCommand($cmds, 'scheduler online?') === null, 'scheduler — не команда (граница слова)');
+ok(BotCommandManager::matchCommand($cmds, 'schedule') === null, 'без слеша — не команда (MLP-324)');
+ok(BotCommandManager::matchCommand($cmds, 'Штош') === null, 'голое слово-ритуал «Штош» — не команда (MLP-324)');
+ok(BotCommandManager::matchCommand($cmds, 'штош ее заклинило? %)') === null, 'слово-ритуал с хвостом — не команда');
 ok(BotCommandManager::matchCommand($cmds, 'привет, лира!') === null, 'обычное сообщение');
 ok(BotCommandManager::matchCommand($cmds, 'а что там по schedule') === null, 'префикс не в начале');
 ok(BotCommandManager::matchCommand([], '/schedule') === null, 'пустой список команд');

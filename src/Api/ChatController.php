@@ -147,7 +147,7 @@ class ChatController {
             $matchedCommand = BotCommandManager::matchCommand($botCommands->getActive(), $message);
         } else {
             // Fallback, если таблицы ещё нет (миграция не прогнана)
-            if (preg_match('/^\/?(schedule|расписание)/ui', $message)) {
+            if (preg_match('/^\/(schedule|расписание)/ui', $message)) {
                 $matchedCommand = ['handler_type' => 'schedule'];
             }
         }
