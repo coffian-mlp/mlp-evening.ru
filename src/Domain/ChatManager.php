@@ -928,4 +928,27 @@ class ChatManager {
         }
         return $rows;
     }
+
+    /**
+     * Реплики пользователя за последние $hours часов (MLP-325, /штош): id, message (как хранится,
+     * htmlspecialchars), created_at (UTC) — в хронологическом порядке, самые свежие $limit.
+     * Удалённые не отдаются.
+     */
+    public function getUserMessagesSince(int $userId, int $hours, int $limit = 500): array {
+        $hours = max(1, $hours);
+        $limit = max(1, min(2000, $limit));
+        $stmt = $this->db->prepare(
+            "SELECT id, message, created_at FROM chat_messages
+             WHERE user_id = ? AND is_deleted = 0 AND created_at > UTC_TIMESTAMP() - INTERVAL ? HOUR
+             ORDER BY id DESC LIMIT ?"
+        );
+        $stmt->bind_param('iii', $userId, $hours, $limit);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $rows = [];
+        while ($row = $res->fetch_assoc()) {
+            $rows[] = $row;
+        }
+        return array_reverse($rows);
+    }
 }

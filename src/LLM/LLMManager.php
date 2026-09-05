@@ -269,6 +269,8 @@ class LLMManager {
                     return (new LyraMemory($this))->handleForget($command, $contextData);
                 case 'reminder':      // напоминалки, свободная форма + /напомни (MLP-318)
                     return (new ReminderCommand($this))->handle($command, $contextData);
+                case 'recap':         // /штош — личный итог вечера по репликам вызвавшего (MLP-325)
+                    return (new RecapCommand($this))->handle($command, $contextData);
             }
 
             $context = $this->buildContext($this->contextLimit());
