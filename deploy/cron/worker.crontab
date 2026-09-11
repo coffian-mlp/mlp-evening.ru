@@ -1,0 +1,4 @@
+# Воркер бота Лиры (MLP-327): cron раз в минуту запускает bot_worker через cron_llm.php (крутится ~55 с, режим ai_worker_mode=auto/cron).
+# Устанавливать под пользователем сайта (FASTPANEL: fastuser): crontab -u fastuser -e
+# Контроль: site_options.bot_worker_heartbeat обновляется каждый тик; >90 с без тика = воркер мёртв (диспатч уходит в inline).
+* * * * * /usr/bin/php /var/www/fastuser/data/www/mlp-evening.ru/cron_llm.php >/dev/null 2>&1

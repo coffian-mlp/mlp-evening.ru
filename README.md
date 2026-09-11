@@ -83,7 +83,7 @@
 
 *   **Backend:** PHP 8.3 (Extensions: `curl`, `opcache`) — чистая магия, никаких фреймворков.
 *   **Frontend:** HTML5, CSS3 (Flexbox/Grid), jQuery (локальный) — легкость и скорость.
-*   **Database:** MySQL 5.7 — надежное хранилище знаний.
+*   **Database:** MySQL 8.0 — надежное хранилище знаний.
 *   **Container:** Docker & Docker Compose — развертывание одной командой.
 
 ## 🧠 Архитектура Ядра (src/)

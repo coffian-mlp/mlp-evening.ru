@@ -26,8 +26,15 @@ services:
 
   # База данных MySQL
   db:
-    image: mysql:5.7
-    platform: linux/amd64
+    # MySQL 8.0 — как на проде (коллация utf8mb4_0900_ai_ci; дамп прода импортируется без правок). MLP-327.
+    # sql_mode: на проде пустой; в dev оставлен STRICT_TRANS_TABLES (ловит переполнения колонок в тестах),
+    # но без ONLY_FULL_GROUP_BY — иначе падали бы GROUP BY-запросы, которые на проде работают.
+    image: mysql:8.0
+    command: >
+      --sql-mode=STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION
+      --default-time-zone=+00:00
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_0900_ai_ci
     environment:
       # Креды — из .env в корне проекта (compose читает его нативно); AR5-1/MLP-252.
       MYSQL_DATABASE: ${DB_NAME}

@@ -1,0 +1,20 @@
+# /etc/systemd/system/centrifugo.service — Centrifugo v5 для чата mlp-evening.ru (MLP-327).
+# Бинарник: https://github.com/centrifugal/centrifugo/releases (v5.4.x, linux_amd64) -> /usr/local/bin/centrifugo
+# Пользователь: useradd --system --no-create-home --shell /usr/sbin/nologin centrifugo
+# Конфиг: /etc/centrifugo/config.json (см. config.sample.json), права 640 root:centrifugo.
+# Включение: systemctl daemon-reload && systemctl enable --now centrifugo
+[Unit]
+Description=Centrifugo Web Real-Time Messaging
+After=network.target
+
+[Service]
+Type=simple
+User=centrifugo
+Group=centrifugo
+LimitNOFILE=65536
+ExecStart=/usr/local/bin/centrifugo --config /etc/centrifugo/config.json
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

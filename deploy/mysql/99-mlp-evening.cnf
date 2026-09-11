@@ -1,0 +1,12 @@
+# MySQL 8.0 — параметры, от которых зависит приложение mlp-evening.ru (MLP-327).
+# Drop-in: /etc/mysql/mysql.conf.d/99-mlp-evening.cnf (FASTPANEL уже пишет sql-mode= в my.cnf.fastpanel/99-fastpanel.cnf).
+# MariaDB не подходит: у боевой базы коллация utf8mb4_0900_ai_ci.
+[mysqld]
+sql-mode =                              # пустой: приложение исторически работает без ONLY_FULL_GROUP_BY / STRICT
+default-time-zone = '+00:00'            # все DATETIME хранятся в UTC; часть кода использует NOW()
+character-set-server = utf8mb4
+collation-server = utf8mb4_0900_ai_ci
+bind-address = 127.0.0.1
+mysqlx-bind-address = 127.0.0.1
+innodb_buffer_pool_size = 256M          # база ~15 МБ; при 4 ГБ RAM можно 512M
+max_allowed_packet = 16M

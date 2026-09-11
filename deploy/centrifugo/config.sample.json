@@ -1,0 +1,22 @@
+{
+  "address": "127.0.0.1",
+  "port": 8000,
+  "token_hmac_secret_key": "CHANGE_ME_token_hmac_secret",
+  "admin_password": "CHANGE_ME_admin_password",
+  "admin_secret": "CHANGE_ME_admin_secret",
+  "api_key": "CHANGE_ME_api_key",
+  "allowed_origins": [
+    "https://mlp-evening.ru"
+  ],
+  "namespaces": [
+    {
+      "name": "public",
+      "history_size": 50,
+      "history_ttl": "300s",
+      "allow_history_for_subscriber": true,
+      "allow_history_for_client": true,
+      "allow_presence_for_subscriber": true,
+      "allow_subscribe_for_client": true
+    }
+  ]
+}

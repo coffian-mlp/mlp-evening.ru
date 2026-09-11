@@ -62,7 +62,7 @@ try {
     check($caught instanceof UserError, 'пустой POST-аплоад → UserError');
 
     // --- 2. Системный сбой → НЕ UserError ---
-    // login длиннее колонки users.login (VARCHAR(50)) → strict-режим MySQL 5.7
+    // login длиннее колонки users.login (VARCHAR(50)) → strict-режим MySQL (dev-контур: STRICT_TRANS_TABLES)
     // роняет INSERT, mysqli (режим исключений PHP 8.1+) бросает mysqli_sql_exception.
     $caught = null;
     try {
