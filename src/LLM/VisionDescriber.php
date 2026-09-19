@@ -104,12 +104,29 @@ class VisionDescriber {
     }
 
     /** Живой вызов vision-модели через существующие OpenAI-совместимые провайдеры. */
-    private static function callModel(string $imagePart): ?string {
+    /**
+     * Разовый vision-вызов с собственным промптом и без кеша (MLP-337: /яос с картинкой).
+     * null — провайдер не настроен, картинка не разрешилась или сбой.
+     */
+    public static function describeWith(string $url, string $prompt): ?string {
+        $imagePart = VisionFormatter::resolveForModel($url);
+        if ($imagePart === null) return null;
+        try {
+            $out = self::callModel($imagePart, $prompt);
+        } catch (\Throwable $e) {
+            error_log('VisionDescriber::describeWith: ' . $e->getMessage());
+            return null;
+        }
+        $out = trim((string)$out);
+        return $out !== '' ? $out : null;
+    }
+
+    private static function callModel(string $imagePart, ?string $promptOverride = null): ?string {
         $c = ConfigManager::getInstance();
         $providerKey = (string)$c->getOption('ai_vision_provider', 'routerai');
         $modelName = (string)$c->getOption('ai_vision_model', 'google/gemma-3-27b-it');
-        // MLP-275: промпт помощника настраивается из дашборда (пустой = дефолт).
-        $prompt = trim((string)$c->getOption('ai_vision_prompt', '')) ?: self::PROMPT;
+        // MLP-275: промпт помощника настраивается из дашборда (пустой = дефолт). MLP-337: явный промпт вызова — приоритетнее.
+        $prompt = $promptOverride ?? (trim((string)$c->getOption('ai_vision_prompt', '')) ?: self::PROMPT);
 
         // socks5-прокси поддерживаем; vless — нет (помощник по умолчанию на RouterAI, ему прокси не нужен).
         $proxy = (string)$c->getOption('ai_proxy_url', '');

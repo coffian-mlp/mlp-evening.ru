@@ -32,12 +32,33 @@ class LyraOc {
         . "Если дан цвет ника — шёрстка этого цвета. Ничего о реальной внешности, возрасте, весе, здоровье; никаких насмешек — облик должен нравиться человеку. "
         . "Если фактов мало — придумай нейтральный симпатичный облик. Никакого другого текста.";
 
+    /** Промпт vision-помощника для /яос с картинкой (MLP-337). */
+    public const VISION_PROMPT = "Ты — служебный описатель персонажей для художника. На картинке — персонаж (обычно пони в стиле My Little Pony). "
+        . "Опиши ЕГО ВНЕШНОСТЬ одной строкой по-русски, до 150 символов, строго в формате:\n"
+        . "внешность: <вид пони или существа>, <цвет шёрстки/кожи>, <грива/волосы: цвет и форма>, <глаза>, <одна яркая деталь или аксессуар>, кьютимарка — <что на бедре, если видно>\n"
+        . "Только то, что реально видно; без имён, без оценок, без markdown, без другого текста. Если на картинке не персонаж, а что-то иное — ответь одним словом: НЕТ.";
+
     private $llm;
     private $memory;
 
     public function __construct(LLMManager $llm) {
         $this->llm = $llm;
         $this->memory = new BotMemoryManager();
+    }
+
+    /** Pure (MLP-337): URL картинки из текста сообщения (markdown-вложение чата или прямая ссылка на изображение). */
+    public static function extractImageUrl(string $message): ?string {
+        if (preg_match('/!\[[^\]]*\]\(([^)\s]+)\)/u', $message, $m)) return $m[1];
+        if (preg_match('~(https?://\S+\.(?:png|jpe?g|gif|webp)(?:\?\S*)?)~iu', $message, $m)) return $m[1];
+        if (preg_match('~(/upload/\S+\.(?:png|jpe?g|gif|webp))~iu', $message, $m)) return $m[1];
+        return null;
+    }
+
+    /** Pure (MLP-337): текст команды без картинок и ссылок — остаток можно считать пожеланием. */
+    public static function stripImages(string $text): string {
+        $t = preg_replace('/!\[[^\]]*\]\([^)]*\)/u', ' ', $text);
+        $t = preg_replace('~https?://\S+|/upload/\S+~iu', ' ', $t);
+        return trim(preg_replace('/\s+/u', ' ', $t));
     }
 
     /** Pure: есть ли у досье запись внешности. */
@@ -143,6 +164,34 @@ class LyraOc {
         }
         $payload = BotCommandManager::stripPrefix($command, (string)($contextData['message'] ?? ''), 'яос');
         $payload = trim(preg_replace('/^внешность\s*[:\-—]\s*/iu', '', $payload));
+
+        // MLP-337: /яос с картинкой — vision-помощник описывает персонажа, описание и становится обликом.
+        $imageUrl = self::extractImageUrl($payload);
+        if ($imageUrl !== null) {
+            $described = self::parse(VisionDescriber::describeWith($imageUrl, self::VISION_PROMPT));
+            $wish = self::stripImages($payload);
+            if ($described === null) {
+                $this->llm->botSay("@{$username}, не разглядела на картинке персонажа — попробуй другую или опиши словами: «/яос серая кобылка в очках».");
+                return true;
+            }
+            $look = trim(mb_substr($described, mb_strlen(self::PREFIX)));
+            if ($wish !== '' && mb_strlen($look) + mb_strlen($wish) + 3 <= 170) {
+                $look .= ' (' . $wish . ')'; // короткое пожелание текстом — рядом с описанием
+            }
+            $text = self::PREFIX . ' ' . BotMemoryManager::normalizeText($look);
+            if (!$this->memory->setAppearance($userId, $text, 'manual', $userId)) {
+                $this->llm->botSay("@{$username}, копыто дрогнуло — не записалось. Попробуй ещё раз!");
+                return true;
+            }
+            $this->llm->botSayLive(
+                "Пользователь @{$username} командой /яос прислал картинку со своей ОС. Ты рассмотрела её и записала облик: «{$look}». "
+                . "Подтверди @{$username} одной-двумя фразами в своём стиле: перескажи, что увидела, и что теперь будешь рисовать так; если что-то не так — пусть поправит словами через /яос. Не задавай других вопросов.",
+                "@{$username}, рассмотрела: {$look}. Запомнила — так и буду рисовать; если что не так, поправь «/яос описание».",
+                [], "@{$username}"
+            );
+            return true;
+        }
+
         if ($payload === '') {
             $current = null;
             foreach ($this->memory->getByUser($userId) as $row) {
@@ -150,7 +199,7 @@ class LyraOc {
             }
             $this->llm->botSay($current !== null
                 ? "@{$username}, сейчас я представляю тебя так: {$current}. Хочешь иначе — «/яос новое описание»."
-                : "@{$username}, облика у тебя пока нет. Напиши «/яос серая кобылка в очках с гривой цвета чая» — запомню.");
+                : "@{$username}, облика у тебя пока нет. Напиши «/яос серая кобылка в очках с гривой цвета чая» или пришли «/яос» с картинкой своей ОС — запомню.");
             return true;
         }
         $len = mb_strlen($payload);

@@ -25,6 +25,14 @@ ok(str_contains($t, 'любит стратегии; Стиль: молчун %)'
 ok(!str_contains($t, 'старое'), 'прежняя внешность в задание не попадает');
 ok(str_contains(LyraOc::taskText('CoFFian', 'bright pink', []), 'Цвет ника: bright pink') && str_contains(LyraOc::taskText('CoFFian', 'bright pink', []), 'Факты: нет'), 'цвет передан, фактов нет');
 
+echo "\n== extractImageUrl / stripImages (MLP-337) ==\n";
+ok(LyraOc::extractImageUrl('![изображение.png](/upload/chat/chat_6aaed07c4f062_359f75bd.png)') === '/upload/chat/chat_6aaed07c4f062_359f75bd.png', 'markdown-вложение чата');
+ok(LyraOc::extractImageUrl('вот она https://example.com/oc.PNG?x=1 смотри') === 'https://example.com/oc.PNG?x=1', 'прямая ссылка на картинку');
+ok(LyraOc::extractImageUrl('серая кобылка в очках') === null, 'текст без картинки → null');
+ok(LyraOc::extractImageUrl('https://example.com/page.html') === null, 'ссылка не на картинку → null');
+ok(LyraOc::stripImages('это моя ОС, без очков ![oc.png](/upload/chat/x.png)') === 'это моя ОС, без очков', 'картинка убрана, пожелание осталось');
+ok(LyraOc::stripImages('![oc.png](/upload/chat/x.png)') === '', 'только картинка → пусто');
+
 echo "\n== hasAppearance ==\n";
 ok(LyraOc::hasAppearance([['text' => 'любит чай'], ['text' => 'внешность: пегас']]), 'есть внешность');
 ok(!LyraOc::hasAppearance([['text' => 'любит чай']]), 'нет внешности');
