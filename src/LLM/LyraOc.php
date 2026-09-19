@@ -19,7 +19,8 @@ use Infra\ConfigManager;
  */
 class LyraOc {
     public const PREFIX = 'внешность:';
-    public const MAX_LEN = 170; // генератор выдаёт ~150 симв.; при 120 терялась кьютимарка (поле 19.09)
+    /** Ориентир длины для промптов; в коде НЕ обрезается (решение владельца 19.09). */
+    public const MAX_LEN = 170;
     public const MIN_LEN = 8;
     /** Сколько новых обликов максимум за один рисунок (иначе /нарисуйчат думает полминуты). */
     public const PER_DRAWING = 5; // решение владельца 19.09: было 2
@@ -110,10 +111,10 @@ class LyraOc {
             $line = trim(preg_replace('/[*`_>#]+/u', '', $line), " \t\"«»'");
             if ($out['look'] === null && preg_match('/^внешность\s*[:\-—]\s*(.+)$/iu', $line, $m)) {
                 $v = trim(preg_replace('/\s+/u', ' ', $m[1]), " .;\"«»'");
-                if (mb_strlen($v) >= self::MIN_LEN) $out['look'] = mb_substr($v, 0, self::MAX_LEN);
+                if (mb_strlen($v) >= self::MIN_LEN) $out['look'] = $v;
             } elseif ($out['persona'] === null && preg_match('/^(?:персонаж|ос|характер)\s*[:\-—]\s*(.+)$/iu', $line, $m)) {
                 $v = trim(preg_replace('/\s+/u', ' ', $m[1]), " .;\"«»'");
-                if (mb_strlen($v) >= 3) $out['persona'] = mb_substr($v, 0, self::PERSONA_MAX);
+                if (mb_strlen($v) >= 3) $out['persona'] = $v;
             }
         }
         return $out;
@@ -139,9 +140,9 @@ class LyraOc {
     /** Pure (MLP-340): объединить лор — старый + новый, без дублей, в пределах PERSONA_MAX. */
     public static function joinPersona(?string $current, string $addition): string {
         $addition = trim($addition, " .;");
-        if ($current === null || $current === '') return mb_substr($addition, 0, self::PERSONA_MAX);
+        if ($current === null || $current === '') return $addition;
         if (mb_stripos($current, $addition) !== false) return $current;
-        return mb_substr(rtrim($current, " .;") . '; ' . $addition, 0, self::PERSONA_MAX);
+        return rtrim($current, " .;") . '; ' . $addition; // без обрезки (решение владельца)
     }
 
     /** Pure: есть ли у досье запись внешности. */
@@ -180,12 +181,7 @@ class LyraOc {
             if (!preg_match('/^внешность\s*[:\-—]\s*(.+)$/iu', $line, $m)) continue;
             $v = trim(preg_replace('/\s+/u', ' ', $m[1]), " .;\"«»'");
             if (mb_strlen($v) < self::MIN_LEN) return null;
-            if (mb_strlen($v) > self::MAX_LEN) {
-                $cut = mb_substr($v, 0, self::MAX_LEN);
-                $pos = mb_strrpos($cut, ',') ?: mb_strrpos($cut, ' ') ?: self::MAX_LEN;
-                $v = rtrim(mb_substr($cut, 0, $pos), ' ,;');
-            }
-            return self::PREFIX . ' ' . $v;
+            return self::PREFIX . ' ' . $v; // без обрезки: длину просит промпт
         }
         return null;
     }
@@ -394,8 +390,8 @@ class LyraOc {
             return true;
         }
         $len = mb_strlen($payload);
-        if ($len < self::MIN_LEN || $len > 160) {
-            $this->llm->botSay("@{$username}, описание нужно от " . self::MIN_LEN . " до 160 символов — как пони выглядит: вид, цвет шёрстки, грива, деталь, кьютимарка.");
+        if ($len < self::MIN_LEN) {
+            $this->llm->botSay("@{$username}, слишком коротко — опиши, как пони выглядит: вид, цвет шёрстки, грива, деталь, кьютимарка.");
             return true;
         }
         // MLP-340: текст владельца — это часто и внешность, и лор персонажа; раскладываем на две записи.

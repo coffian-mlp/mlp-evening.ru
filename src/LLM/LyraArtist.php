@@ -342,14 +342,13 @@ class LyraArtist {
 
     /**
      * Pure (MLP-334): внешность участника для художника. Приоритет — факт памяти вида «внешность: …»
-     * (дословно, до 120 симв.), иначе цвет ника — грива и акценты (не шёрстка; решение владельца 19.09); дефолтный/пустой цвет → ''.
+     * (дословно, без обрезки), иначе цвет ника — грива и акценты (не шёрстка; решение владельца 19.09); дефолтный/пустой цвет → ''.
      */
     public static function appearance(array $dossierRows, string $chatColor): string {
         foreach ($dossierRows as $row) {
             $t = trim((string)($row['text'] ?? ''));
             if (preg_match('/^внешность\s*[:\-—]\s*(.+)$/iu', $t, $m)) {
-                $v = trim($m[1]);
-                return mb_strlen($v) > 120 ? mb_substr($v, 0, 119) . '…' : $v;
+                return trim($m[1]); // без обрезки (решение владельца 19.09)
             }
         }
         $name = self::colorName($chatColor);
