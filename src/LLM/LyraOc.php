@@ -41,7 +41,7 @@ class LyraOc {
     /** Промпт слияния «картинка + пожелание владельца» (MLP-337). */
     public const MERGE_PROMPT = "Ты — служебный редактор описаний пони-обликов. Даны описание персонажа с картинки (только видимое) и пожелание владельца текстом. "
         . "Составь ОДНУ строку по-русски, до 150 символов, строго в формате «внешность: <вид пони>, <шёрстка>, <грива>, <глаза>, <одежда/аксессуары>, кьютимарка — <…>». "
-        . "Приоритет у пожелания владельца: вид пони, пол, одежда и аксессуары, кьютимарка (если владелец говорит «скрыта» — так и пиши), характерные детали. Цвета и формы бери с картинки, если владелец не сказал иначе. "
+        . "Приоритет у пожелания владельца: вид пони, пол, одежда и аксессуары, кьютимарка (если владелец говорит «скрыта» — так и пиши), характерные детали. Цвета и формы бери из исходного описания, если владелец не сказал иначе; если исходное описание — уже готовый облик, СОХРАНИ все его детали и добавь новые. "
         . "Убери всё, что не про внешность (характер, навыки, привычки). Без markdown, без имени, без другого текста.";
 
     private $llm;
@@ -65,6 +65,23 @@ class LyraOc {
         $t = preg_replace('/!\[[^\]]*\]\([^)]*\)/u', ' ', $text);
         $t = preg_replace('~https?://\S+|/upload/\S+~iu', ' ', $t);
         return trim(preg_replace('/\s+/u', ' ', $t));
+    }
+
+    /** Pure (MLP-339): «/яос дополни шарф» → «шарф»; иначе null. Синонимы: добавь, дополнить, добавить, +. */
+    public static function parseAugment(string $payload): ?string {
+        if (preg_match('/^(?:дополни(?:ть)?|добав(?:ь|ить)|\+)\s*[:\-—,]?\s*(.*)$/isu', trim($payload), $m)) {
+            return trim($m[1]);
+        }
+        return null;
+    }
+
+    /** Pure: текущий облик из строк досье (без префикса) или null. */
+    public static function currentLook(array $dossierRows): ?string {
+        foreach ($dossierRows as $row) {
+            $t = (string)($row['text'] ?? '');
+            if (self::isAppearance($t)) return trim(preg_replace('/^внешность\s*[:\-—]\s*/iu', '', $t));
+        }
+        return null;
     }
 
     /** Pure: есть ли у досье запись внешности. */
@@ -163,8 +180,8 @@ class LyraOc {
     }
 
     /** Слияние описания с картинки и пожелания владельца → облик без префикса; null — сбой. */
-    public function mergeLook(string $look, string $wish): ?string {
-        $task = [['role' => 'user', 'content' => "С картинки: {$look}\nПожелание владельца: " . mb_substr($wish, 0, 400) . "\n\nСоставь облик."]];
+    public function mergeLook(string $look, string $wish, string $baseLabel = 'С картинки'): ?string {
+        $task = [['role' => 'user', 'content' => "{$baseLabel}: {$look}\nПожелание владельца: " . mb_substr($wish, 0, 400) . "\n\nСоставь облик."]];
         $merged = self::parse($this->llm->generateUtility($task, self::MERGE_PROMPT, 25));
         return $merged === null ? null : trim(mb_substr($merged, mb_strlen(self::PREFIX)));
     }
@@ -180,8 +197,43 @@ class LyraOc {
         $payload = BotCommandManager::stripPrefix($command, (string)($contextData['message'] ?? ''), 'яос');
         $payload = trim(preg_replace('/^внешность\s*[:\-—]\s*/iu', '', $payload));
 
-        // MLP-337: /яос с картинкой — vision-помощник описывает персонажа, описание и становится обликом.
+        // MLP-339: «/яос дополни шарф и очки» — текущий облик + дополнение (картинка в дополнении тоже допустима).
+        $augment = self::parseAugment(self::stripImages($payload));
         $imageUrl = self::extractImageUrl($payload);
+        if ($augment !== null) {
+            $current = self::currentLook($this->memory->getByUser($userId));
+            if ($current === null) {
+                $this->llm->botSay("@{$username}, дополнять пока нечего — облика у тебя нет. Задай его: «/яос описание» или «/яос» с картинкой.");
+                return true;
+            }
+            $addition = $augment;
+            if ($imageUrl !== null) {
+                $seen = self::parse(VisionDescriber::describeWith($imageUrl, self::VISION_PROMPT));
+                if ($seen !== null) $addition = trim(mb_substr($seen, mb_strlen(self::PREFIX)) . ($augment !== '' ? '; ' . $augment : ''));
+            }
+            if (mb_strlen($addition) < 3) {
+                $this->llm->botSay("@{$username}, а что добавить? Например: «/яос дополни красный шарф и очки».");
+                return true;
+            }
+            $merged = $this->mergeLook($current, $addition, 'Текущий облик');
+            if ($merged === null) {
+                $this->llm->botSay("@{$username}, не сообразила, как это вплести — попробуй сформулировать иначе или перепиши облик целиком.");
+                return true;
+            }
+            if (!$this->memory->setAppearance($userId, self::PREFIX . ' ' . BotMemoryManager::normalizeText($merged), 'manual', $userId)) {
+                $this->llm->botSay("@{$username}, копыто дрогнуло — не записалось. Попробуй ещё раз!");
+                return true;
+            }
+            $this->llm->botSayLive(
+                "Пользователь @{$username} командой /яос дополнил свой пони-облик: было «{$current}», добавил «{$augment}», теперь облик: «{$merged}». Запись уже обновлена. "
+                . "Подтверди @{$username} одной-двумя фразами в своём стиле, упомяни, что именно добавилось. Не задавай вопросов.",
+                "@{$username}, дополнила: теперь ты — {$merged}.",
+                [], "@{$username}"
+            );
+            return true;
+        }
+
+        // MLP-337: /яос с картинкой — vision-помощник описывает персонажа, описание и становится обликом.
         if ($imageUrl !== null) {
             $described = self::parse(VisionDescriber::describeWith($imageUrl, self::VISION_PROMPT));
             $wish = self::stripImages($payload);
@@ -216,8 +268,8 @@ class LyraOc {
                 if (self::isAppearance((string)$row['text'])) { $current = trim(mb_substr((string)$row['text'], mb_strlen(self::PREFIX))); break; }
             }
             $this->llm->botSay($current !== null
-                ? "@{$username}, сейчас я представляю тебя так: {$current}. Хочешь иначе — «/яос новое описание»."
-                : "@{$username}, облика у тебя пока нет. Напиши «/яос серая кобылка в очках с гривой цвета чая» или пришли «/яос» с картинкой своей ОС — запомню.");
+                ? "@{$username}, сейчас я представляю тебя так: {$current}. Хочешь иначе — «/яос новое описание», добавить деталь — «/яос дополни …»."
+                : "@{$username}, облика у тебя пока нет. Напиши «/яос серая кобылка в очках с гривой цвета чая» или пришли «/яос» с картинкой своей ОС — запомню. Потом можно уточнять: «/яос дополни красный шарф».");
             return true;
         }
         $len = mb_strlen($payload);

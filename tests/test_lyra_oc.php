@@ -33,6 +33,16 @@ ok(LyraOc::extractImageUrl('https://example.com/page.html') === null, 'ссыл�
 ok(LyraOc::stripImages('это моя ОС, без очков ![oc.png](/upload/chat/x.png)') === 'это моя ОС, без очков', 'картинка убрана, пожелание осталось');
 ok(LyraOc::stripImages('![oc.png](/upload/chat/x.png)') === '', 'только картинка → пусто');
 
+echo "\n== parseAugment / currentLook (MLP-339) ==\n";
+ok(LyraOc::parseAugment('дополни красный шарф и очки') === 'красный шарф и очки', '«дополни …»');
+ok(LyraOc::parseAugment('Добавь: шляпу') === 'шляпу', '«Добавь:» регистронезависимо, двоеточие снято');
+ok(LyraOc::parseAugment('+ монокль') === 'монокль', '«+ …»');
+ok(LyraOc::parseAugment('дополни') === '', '«дополни» без текста → пустая строка (а не null)');
+ok(LyraOc::parseAugment('серая кобылка в очках') === null, 'обычное описание → null');
+ok(LyraOc::parseAugment('дополнительно грустная') === null, '«дополнительно» — не команда дополнения');
+ok(LyraOc::currentLook([['text' => 'любит чай'], ['text' => 'Внешность: пегас, серый']]) === 'пегас, серый', 'текущий облик без префикса');
+ok(LyraOc::currentLook([['text' => 'любит чай']]) === null, 'нет облика → null');
+
 echo "\n== hasAppearance ==\n";
 ok(LyraOc::hasAppearance([['text' => 'любит чай'], ['text' => 'внешность: пегас']]), 'есть внешность');
 ok(!LyraOc::hasAppearance([['text' => 'любит чай']]), 'нет внешности');
