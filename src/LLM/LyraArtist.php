@@ -214,7 +214,7 @@ class LyraArtist {
             $stylePrefix = "A naive child's crayon drawing, wobbly uneven lines, smudges, drawn clumsily as if a pony held the crayon in her mouth, simple flat colors, paper texture, charming and silly. Subject:";
         }
         $stylePrefix = self::applyTechnique($stylePrefix, $config);
-        $prompt = $stylePrefix . ' ' . mb_substr($subject, 0, 1200); // MLP-341: сцена с внешностью всех присутствующих
+        $prompt = $stylePrefix . ' ' . $subject; // MLP-341: сцена целиком, без обрезки
 
         $generator = $generator ?? [ImageGenerator::class, 'generate'];
         $url = $generator($prompt);
@@ -423,8 +423,9 @@ class LyraArtist {
         if ($scene === '' || !preg_match('/[a-z][a-z][a-z]/i', $scene)) {
             return null; // пусто или без английского — это не сцена, а болтовня/молчание
         }
-        // MLP-341: было 400 — с внешностью четырёх пони последний обрезался («chuckles al…», 22:53 19.09).
-        return mb_substr($scene, 0, 1000);
+        // MLP-341: без обрезки (решение владельца) — длину держит DIRECTOR_PROMPT (2–3 предложения);
+        // лимит 400 обрезал четвёртого пони на полуслове («chuckles al…», 22:53 19.09).
+        return $scene;
     }
 
     /**
