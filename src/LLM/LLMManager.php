@@ -202,7 +202,10 @@ class LLMManager {
                 return false;
             }
 
-            // Закреп — только после гейтов, как фон
+            // MLP-328: кто сейчас в чате — тоже после гейтов (иначе строка присутствия пробивала бы
+            // проверку «пустой контекст = мёртвый чат»); раньше спонтанка шла без присутствия,
+            // и Лира в тишине считала молчунов ушедшими. Затем закреп — как фон.
+            $context = $this->prependPresenceContext($context);
             $context = $this->prependPinnedContext($context);
 
             $instruction = "Проанализируй последние сообщения. Если нужно что-то сказать (разрядить обстановку, ответить на вопрос, поддержать беседу) - напиши ответ. Если встревать не стоит - ответь ровно одним словом: SILENCE, но не нужно вообще молчать постоянно. Старайся поддерживать беседу в чате, даже если к тебе явно никто не обращается - это нормально.";
@@ -721,6 +724,27 @@ class LLMManager {
         return max(4, min(100, $limit));
     }
 
+    /**
+     * Строка «кто сейчас в чате» — фоновый блок перед сообщениями (MLP-323/328). Уважает тумблер
+     * ai_online_in_context; $online — готовый снимок getOnlineStats (иначе берётся сам). Сбой —
+     * деградация без строки.
+     */
+    private function prependPresenceContext(array $context, ?array $online = null): array {
+        if (!(int)ConfigManager::getInstance()->getOption('ai_online_in_context', 1)) {
+            return $context;
+        }
+        try {
+            $online = $online ?? (new OnlineManager())->getOnlineStats(OnlineContext::WINDOW_MIN);
+            $presence = OnlineContext::line($online['users'] ?? [], (int)($online['guests_count'] ?? 0), $this->botUserId);
+            if ($presence !== null) {
+                array_unshift($context, ['role' => 'user', 'content' => $presence]);
+            }
+        } catch (\Throwable $e) {
+            error_log("OnlineContext failed (degraded, reply continues): " . $e->getMessage());
+        }
+        return $context;
+    }
+
     /** Закреп — фоновый контекст низкого приоритета (MLP-242; вынесено из buildContext в MLP-260). */
     private function prependPinnedContext(array $context): array {
         $pinned = $this->chatManager->getPinnedMessage();
@@ -836,10 +860,7 @@ class LLMManager {
         if ($includeMemory && (int)ConfigManager::getInstance()->getOption('ai_online_in_context', 1)) {
             try {
                 $online = (new OnlineManager())->getOnlineStats(OnlineContext::WINDOW_MIN);
-                $presence = OnlineContext::line($online['users'] ?? [], (int)($online['guests_count'] ?? 0), $this->botUserId);
-                if ($presence !== null) {
-                    array_unshift($context, ['role' => 'user', 'content' => $presence]);
-                }
+                $context = $this->prependPresenceContext($context, $online);
                 $memoryUserIds = OnlineContext::appendSilent($memoryUserIds, array_column($online['users'] ?? [], 'id'), $this->botUserId);
             } catch (\Throwable $e) {
                 error_log("OnlineContext failed (degraded, reply continues): " . $e->getMessage());
