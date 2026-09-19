@@ -37,6 +37,10 @@ class LyraArtist {
 
     private LLMManager $llm;
 
+    /** MLP-335: облики, придуманные при подготовке текущего рисунка — объявляются после картинки. */
+    private array $ocCreated = [];
+    private ?string $lastDrawingUrl = null;
+
     public function __construct(LLMManager $llm) {
         $this->llm = $llm;
     }
@@ -175,7 +179,21 @@ class LyraArtist {
     }
 
     /** Общее ядро художницы (MLP-277): лимит → стиль → генерация → живой комментарий/фолбэк. */
+    /** Обёртка (MLP-335): после исхода рисунка объявляем облики, придуманные для него. */
     private function generateAndPostDrawing(string $subject, string $username, array $command, ?callable $generator = null, bool $auto = false): bool {
+        $this->lastDrawingUrl = null;
+        $result = $this->generateAndPostDrawingInner($subject, $username, $command, $generator, $auto);
+        if ($this->ocCreated) {
+            $oc = new LyraOc($this->llm);
+            foreach ($this->ocCreated as $c) {
+                try { $oc->announce($c['nick'], $c['text'], $this->lastDrawingUrl !== null); } catch (\Throwable $e) { error_log('LyraOc announce failed: ' . $e->getMessage()); }
+            }
+            $this->ocCreated = [];
+        }
+        return $result;
+    }
+
+    private function generateAndPostDrawingInner(string $subject, string $username, array $command, ?callable $generator = null, bool $auto = false): bool {
         $config = ConfigManager::getInstance();
         $limit = (int)$config->getOption('ai_image_daily_limit', 20);
         if ($limit > 0 && ImageGenerator::todayCount() >= $limit) {
@@ -232,6 +250,7 @@ class LyraArtist {
             return true;
         }
         ImageGenerator::bumpToday();
+        $this->lastDrawingUrl = $url;
 
         // MLP-276: живой комментарий — Лира «смотрит» на свой рисунок (vision)
         // и комментирует основной LLM с личностью и контекстом. Отключаемо;
@@ -323,7 +342,7 @@ class LyraArtist {
 
     /**
      * Pure (MLP-334): внешность участника для художника. Приоритет — факт памяти вида «внешность: …»
-     * (дословно, до 120 симв.), иначе «<цвет> coat» по цвету ника; дефолтный/пустой цвет → ''.
+     * (дословно, до 120 симв.), иначе цвет ника — грива и акценты (не шёрстка; решение владельца 19.09); дефолтный/пустой цвет → ''.
      */
     public static function appearance(array $dossierRows, string $chatColor): string {
         foreach ($dossierRows as $row) {
@@ -334,7 +353,7 @@ class LyraArtist {
             }
         }
         $name = self::colorName($chatColor);
-        return $name === '' ? '' : $name . ' coat (' . strtolower($chatColor) . ')';
+        return $name === '' ? '' : $name . ' mane and accents (' . strtolower($chatColor) . '), coat of any fitting colour';
     }
 
     /**
@@ -391,7 +410,7 @@ class LyraArtist {
             : [];
         // MLP-335: у кого облика нет — Лира придумает сейчас (≤2 за рисунок), запишет и объявит.
         try {
-            (new LyraOc($this->llm))->ensureFor($online, $dossiers);
+            $this->ocCreated = (new LyraOc($this->llm))->ensureFor($online, $dossiers, false);
         } catch (\Throwable $e) {
             error_log('LyraOc ensureFor failed (degraded): ' . $e->getMessage());
         }

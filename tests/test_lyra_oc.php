@@ -20,10 +20,10 @@ ok(LyraOc::parse(null) === null && LyraOc::parse('') === null, 'null/пусто 
 
 echo "\n== taskText ==\n";
 $t = LyraOc::taskText('Назар', '', ['любит стратегии', 'Внешность: старое', '**Стиль:** молчун %)']);
-ok(str_contains($t, "Ник: Назар\nЦвет ника: не задан"), 'ник и отсутствие цвета');
+ok(str_contains($t, "Ник: Назар\nЦвет ника (для гривы или акцента, не шёрстки): не задан"), 'ник и отсутствие цвета');
 ok(str_contains($t, 'любит стратегии; Стиль: молчун %)'), 'факты очищены от markdown');
 ok(!str_contains($t, 'старое'), 'прежняя внешность в задание не попадает');
-ok(str_contains(LyraOc::taskText('CoFFian', 'bright pink', []), 'Цвет ника: bright pink') && str_contains(LyraOc::taskText('CoFFian', 'bright pink', []), 'Факты: нет'), 'цвет передан, фактов нет');
+ok(str_contains(LyraOc::taskText('CoFFian', 'bright pink', []), 'не шёрстки): bright pink') && str_contains(LyraOc::taskText('CoFFian', 'bright pink', []), 'Факты: нет'), 'цвет передан, фактов нет');
 
 echo "\n== extractImageUrl / stripImages (MLP-337) ==\n";
 ok(LyraOc::extractImageUrl('![изображение.png](/upload/chat/chat_6aaed07c4f062_359f75bd.png)') === '/upload/chat/chat_6aaed07c4f062_359f75bd.png', 'markdown-вложение чата');
