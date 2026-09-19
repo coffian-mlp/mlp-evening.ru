@@ -107,8 +107,16 @@ class ImageGenerator {
             self::$lastError = self::failureReason((string)$res, $err, $code);
             return null;
         }
+        // MLP-336: Azure/RouterAI отдают отказ фильтра с HTTP 200 — keep-alive пробелы и JSON error в теле.
+        $embedded = self::extractError((string)$res);
+        if ($embedded !== null) {
+            error_log("ImageGenerator [$model]: отказ в теле 200: $embedded");
+            LlmDebugLog::log('image', $provider, $model, $payload, trim((string)$res), 'error', $ms);
+            self::$lastError = $embedded;
+            return null;
+        }
         LlmDebugLog::log('image', $provider, $model, $payload, (string)$res, 'ok', $ms);
-        $data = json_decode($res, true);
+        $data = json_decode(trim((string)$res), true);
         $b64 = $data['data'][0]['b64_json'] ?? null;
         if (!$b64) {
             error_log("ImageGenerator [$model]: нет b64_json в ответе");
@@ -132,6 +140,23 @@ class ImageGenerator {
      * Pure: короткая причина сбоя для извинения Лиры — error.message из JSON
      * провайдера (как у OpenAI/RouterAI), иначе curl-ошибка / голый HTTP-код.
      */
+    /** Pure (MLP-336): сообщение об ошибке из тела ответа (в т.ч. HTTP 200 с error-JSON после пробелов) или null. */
+    public static function extractError(string $body): ?string {
+        $body = trim($body);
+        if ($body === '' || $body[0] !== '{') return null;
+        $msg = json_decode($body, true)['error']['message'] ?? null;
+        return is_string($msg) && $msg !== '' ? mb_substr($msg, 0, 300) : null;
+    }
+
+    /** Pure (MLP-336): отказ фильтра безопасности (сюжет, а не техника) — повод перерисовать мягче. */
+    public static function isSafetyMessage(?string $msg): bool {
+        return $msg !== null && (bool)preg_match('/safety|content (policy|blocked|filter)|blocked|violat|moderation/i', $msg);
+    }
+
+    public static function lastErrorIsSafety(): bool {
+        return self::isSafetyMessage(self::$lastError);
+    }
+
     public static function failureReason(string $body, string $curlErr, int $httpCode): string {
         $msg = (string)(json_decode($body, true)['error']['message'] ?? '');
         if ($msg !== '') {

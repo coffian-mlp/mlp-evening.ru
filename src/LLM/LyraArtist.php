@@ -138,13 +138,13 @@ class LyraArtist {
     private function captionFromDescription(string $desc, string $subject, ?string $username): ?string {
         if ($username === null) {
             $instr = "Ты сама решила нарисовать сценку по мотивам беседы в чате: «" . mb_substr($subject, 0, 200) . "». "
-                . "Взглянув на результат, ты видишь: «$desc». "
+                . "Взглянув на результат, ты видишь: «{$desc}». "
                 . "Это задание ВАЖНЕЕ продолжения беседы: не отвечай на предыдущие сообщения. "
                 . "Скажи чату 1–2 предложения в своём стиле: вручи рисунок, прокомментируй что получилось (можно с самоиронией про рисование копытом). "
                 . "Без адресата и без вопросов. НЕ вставляй ссылки и картинки — рисунок приложится сам. Не пересказывай описание дословно.";
         } else {
             $instr = "Ты только что НАРИСОВАЛА картинку по просьбе @$username: «" . mb_substr($subject, 0, 200) . "». "
-                . "Взглянув на результат, ты видишь: «$desc». "
+                . "Взглянув на результат, ты видишь: «{$desc}». "
                 . "Это задание ВАЖНЕЕ продолжения беседы: не отвечай на другие сообщения. "
                 . "Ответь @$username в своём стиле, 1–2 предложения: вручи рисунок, прокомментируй что получилось (можно с самоиронией про рисование копытом). "
                 . "НЕ вставляй ссылки и картинки — рисунок приложится сам. Не пересказывай описание дословно.";
@@ -200,6 +200,14 @@ class LyraArtist {
 
         $generator = $generator ?? [ImageGenerator::class, 'generate'];
         $url = $generator($prompt);
+
+        // MLP-336: фильтр безопасности рисовальной модели (Azure) режет бытовые сюжеты — «куриные сердца»
+        // из рецепта в чате, «расстрелять» из игры. Одна повторная попытка с безобидной версией сцены:
+        // дешевле извинения и почти всегда проходит.
+        if ($url === null && ImageGenerator::lastErrorIsSafety()) {
+            error_log('LyraArtist: отказ фильтра безопасности, перерисовываю мягче: ' . (string)ImageGenerator::lastError());
+            $url = $generator($stylePrefix . ' ' . self::softenScene($subject));
+        }
 
         if ($url === null) {
             // Живое извинение (той же настройкой, что живой комментарий): Лира
@@ -405,11 +413,21 @@ class LyraArtist {
      */
     public static function excuseInstruction(string $subject, string $username, ?string $reason): string {
         $instr = "Ты пыталась НАРИСОВАТЬ картинку по просьбе @$username: «" . mb_substr($subject, 0, 200) . "», но рисунок НЕ ПОЛУЧИЛСЯ — техника подвела.";
+        if (ImageGenerator::isSafetyMessage($reason)) {
+            $reason = 'художественный фильтр рисовальной машины отказался рисовать этот сюжет — даже смягчённый вариант; попробуем с другим моментом беседы';
+        }
         if ($reason !== null && trim($reason) !== '') {
             $instr .= " Рисовальная машина ответила: «" . mb_substr(trim($reason), 0, 300) . "».";
         }
         $instr .= " Ответь @$username в своём стиле, 1–2 предложения: признайся, что не вышло, обыграй причину простыми словами (без технических терминов), предложи попросить ещё раз чуть позже. НЕ вставляй ссылки и картинки. Не делай вид, что рисунок готов.";
         return $instr;
+    }
+
+    /** Pure (MLP-336): безобидная версия сцены для повтора после отказа фильтра безопасности. */
+    public static function softenScene(string $scene): string {
+        $s = preg_replace('/\b(blood|bloody|gore|gory|corpse|dead|death|kill(ing|ed|s)?|shoot(ing|s)?|shot|gun|rifle|weapon|knife|sword|violence|violent|organ|organs|heart|hearts|liver|meat|flesh|wound|wounded|torture|hang(ed|ing)?|burn(ed|ing)?|fire|explosion|drunk|alcohol|vodka|whisky|beer|smoke|smoking|cigarette)\b/iu', 'something', $scene);
+        $s = trim(preg_replace('/\s+/u', ' ', (string)$s));
+        return mb_substr($s, 0, 380) . ' Wholesome, cute and calm children\'s-book scene: the ponies simply sit together, chat and laugh; no food, no weapons, no injuries, nothing scary.';
     }
 
     /** Живое извинение за провал генерации: основная LLM с личностью и контекстом. */
