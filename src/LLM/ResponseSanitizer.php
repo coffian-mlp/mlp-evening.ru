@@ -60,6 +60,14 @@ class ResponseSanitizer {
         return $text;
     }
 
+    /**
+     * Pure (MLP-342): есть ли в ответе хоть что-то осмысленное — минимум два буквенных символа подряд.
+     * Одинокая «[» (обрыв «[РЕАКЦИЯ: …», glm-5.3, 01:12 20.09) или пунктуация — не реплика.
+     */
+    public static function isMeaningful(?string $text): bool {
+        return $text !== null && (bool)preg_match('/\p{L}{2,}|\p{N}{2,}/u', $text);
+    }
+
     private static function stripSpeakerPrefix($s, $botNickname, $botLogin) {
         $s = preg_replace('/^\[\d{1,2}:\d{2}\]\s*[^:\n]{1,40}:\s*/u', '', $s);
         if ($botNickname !== '') {

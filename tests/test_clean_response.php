@@ -35,6 +35,11 @@ eq(ResponseSanitizer::clean("[Системное правило]: Пиши ТО�
 eq(ResponseSanitizer::clean("[Система] Проанализируй последние сообщения и ответь.", $nick, $login), '', 'cron template "[Система] Проанализируй..."');
 eq(ResponseSanitizer::clean("Ой, щекотно! [Чат]: это групповой чат, участников несколько.", $nick, $login), 'Ой, щекотно!', 'MLP-330: эхо правила [Чат] отрезается');
 contains(ResponseSanitizer::clean('@Darbel, в чате про [Чат] с Пшеницей мы не спорим', $nick, $login), '@Darbel, в чате', 'MLP-330: слово [Чат] без двоеточия в живой реплике не режется');
+eq(ResponseSanitizer::isMeaningful('['), false, 'MLP-342: одинокая скобка — не реплика');
+eq(ResponseSanitizer::isMeaningful('%) ...'), false, 'MLP-342: только пунктуация — не реплика');
+eq(ResponseSanitizer::isMeaningful('ок'), true, 'MLP-342: две буквы — реплика');
+eq(ResponseSanitizer::isMeaningful('42'), true, 'MLP-342: число — допустимо');
+eq(ResponseSanitizer::isMeaningful(null), false, 'MLP-342: null');
 
 echo "\n== Префикс-прорыв: служебное срезать, полезный текст сохранить ==\n";
 // #17773 (7 июня)

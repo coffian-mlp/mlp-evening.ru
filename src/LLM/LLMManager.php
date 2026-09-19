@@ -601,8 +601,13 @@ class LLMManager {
                 // Единая очистка + выходной guard против прорыва системных инструкций/контекста.
                 $clean = ResponseSanitizer::clean($response, $botNickname, $botLogin);
 
-                if ($clean !== null && $clean !== '') {
+                // MLP-342: для реплик с личностью пустышка без букв («[») — как молчание: следующий провайдер/null,
+                // а вызывающий уйдёт в свой фоллбек (фикс-подпись, запасная фраза). Служебные ответы не трогаем.
+                if ($clean !== null && $clean !== '' && ($logKind !== 'chat' || ResponseSanitizer::isMeaningful($clean))) {
                     return $clean;
+                }
+                if ($clean !== null && $clean !== '') {
+                    error_log("askWithFallback: бессодержательный ответ отброшен: " . json_encode(mb_substr($clean, 0, 40), JSON_UNESCAPED_UNICODE));
                 }
                 // Пусто после очистки: либо провайдер промолчал, либо это был чистый
                 // прорыв системного текста, вырезанный целиком. В чат не постим — лучше
