@@ -49,6 +49,7 @@ class SettingsController {
         'ai_openrouter_model' => 'string',
         'ai_routerai_key'    => 'string',
         'ai_routerai_model'  => 'string',
+        'ai_fast_model'      => 'string', // MLP-332: быстрая модель того же провайдера для спонтанных реплик (пусто = основная)
         'ai_yandex_key'      => 'string',
         'ai_yandex_folder_id' => 'string',
         'ai_gigachat_key'    => 'string',

@@ -16,6 +16,8 @@ use Domain\OnlineManager;
 
 class LLMManager {
     private $providers = [];
+    /** MLP-332: цепочка для спонтанных реплик — быстрая модель того же провайдера первой, затем общий фоллбек. */
+    private $fastProviders = [];
     private $botUserId;
     private $systemPrompt;
     private $chatManager;
@@ -82,6 +84,21 @@ class LLMManager {
                 $this->providers[] = $provider;
             }
         }
+
+        // MLP-332: быстрая модель для спонтанных реплик (~90% запросов) — у ТОГО ЖЕ провайдера,
+        // что и основная (одно семейство моделей — иначе разнобой в характере ответов).
+        // Пусто = спонтанка ходит по основной цепочке, как раньше. Yandex/GigaChat модель не выбирают.
+        $fastModel = trim((string)$config->getOption('ai_fast_model', ''));
+        $fast = null;
+        if ($fastModel !== '' && !empty($this->providers)) {
+            $fast = match ($primary) {
+                'routerai'   => $routerAiKey ? new RouterAIProvider($routerAiKey, $fastModel, $this->proxyUrl) : null,
+                'openrouter' => $openRouterKey ? new OpenRouterProvider($openRouterKey, $fastModel, $this->proxyUrl) : null,
+                'openai'     => $openAiKey ? new OpenAIProvider($openAiKey, $fastModel, $openAiBaseUrl, $this->proxyUrl) : null,
+                default      => null,
+            };
+        }
+        $this->fastProviders = $fast ? array_merge([$fast], $this->providers) : $this->providers;
     }
 
     public function isEnabled() {
@@ -214,7 +231,7 @@ class LLMManager {
                 'content' => $instruction
             ];
 
-            $response = $this->askWithFallback($context, $this->systemPrompt);
+            $response = $this->askWithFallback($context, $this->systemPrompt, 'chat', null, true); // MLP-332: быстрая модель
             
             $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
             
@@ -539,7 +556,11 @@ class LLMManager {
         return ['question' => $question, 'options' => $options];
     }
 
-    private function askWithFallback($context, $prompt, string $logKind = 'chat', ?int $deadlineSec = null) {
+    /**
+     * $fast (MLP-332): идти по цепочке быстрой модели (спонтанные реплики); при пустой настройке
+     * ai_fast_model цепочки совпадают. Модель видна в llm_debug_log (колонка model).
+     */
+    private function askWithFallback($context, $prompt, string $logKind = 'chat', ?int $deadlineSec = null, bool $fast = false) {
         $userManager = new UserManager();
         $botUser = $userManager->getUserById($this->botUserId);
         $botLogin = $botUser['login'] ?? 'Lyra';
@@ -563,7 +584,7 @@ class LLMManager {
             . "не сливай разных людей в одного собеседника и не отвечай «ты»/«твой» без @Имя, если в окне говорили несколько человек. "
             . "Обращаешься к конкретному человеку — начни с @Имя (только к тому, чьи слова обсуждаешь); реплика без @ — ко всем.";
 
-        foreach ($this->providers as $provider) {
+        foreach (($fast ? $this->fastProviders : $this->providers) as $provider) {
             if ($deadlineAt !== null && microtime(true) >= $deadlineAt) {
                 error_log("askWithFallback: deadline {$deadlineSec}s exhausted, aborting provider loop");
                 break;

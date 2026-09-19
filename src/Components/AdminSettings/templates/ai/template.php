@@ -55,6 +55,12 @@ $config = $arResult['config']; // Helper
             </select>
         </div>
 
+        <div class="form-group">
+            <label class="form-label">Быстрая модель для спонтанных реплик (MLP-332)</label>
+            <input type="text" name="ai_fast_model" value="<?= htmlspecialchars($config->getOption('ai_fast_model', '')) ?>" class="form-input" placeholder="пусто = основная модель">
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Спонтанные реплики (раз в несколько минут, ~90% запросов) идут на эту модель, всё остальное — упоминания, команды, анонсы, /штош — на основную. <strong>Берите модель того же семейства и того же провайдера, что основная</strong> (например, z-ai/glm-5.3-flashx при основной z-ai/glm-5.3): разные семейства дают заметно разный характер ответов. Работает для OpenAI / OpenRouter / RouterAI; при сбое быстрой модели — фоллбек на основную цепочку. Какая модель ответила — видно в debug-журнале.</p>
+        </div>
+
         <div id="ai_group_openai" class="ai-provider-group" <?= $config->getOption('ai_primary_provider', 'openai') === 'openai' ? '' : 'style="display:none;"' ?>>
             <div class="form-group">
                 <label class="form-label">OpenAI API Key (или GitHub Models)</label>
@@ -203,7 +209,7 @@ $config = $arResult['config']; // Helper
                 <input type="checkbox" name="ai_main_is_vision" value="1" <?= $config->getOption('ai_main_is_vision', 1) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
                 Основная модель понимает картинки (vision)
             </label>
-            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Если выключено — картинки описывает вспомогательная vision-модель (ниже), и Лира получает текстовое описание вместо изображения. Описания кешируются на 7 дней.</p>
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;"><strong>Включать только если картинки понимают ОБЕ модели чата</strong> — основная и быстрая (MLP-332); иначе картинки уйдут модели, которая их не видит. Если выключено — картинки описывает вспомогательная vision-модель (ниже), и Лира получает текстовое описание вместо изображения. Описания кешируются на 7 дней.</p>
         </div>
 
         <div style="display: flex; gap: 15px;">
