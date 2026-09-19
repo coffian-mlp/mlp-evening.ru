@@ -69,7 +69,7 @@ class LyraOc {
 
     /** Pure (MLP-339): «/яос дополни шарф» → «шарф»; иначе null. Синонимы: добавь, дополнить, добавить, +. */
     public static function parseAugment(string $payload): ?string {
-        if (preg_match('/^(?:дополни(?:ть)?|добав(?:ь|ить)|\+)\s*[:\-—,]?\s*(.*)$/isu', trim($payload), $m)) {
+        if (preg_match('/^(?:дополни(?:ть)?|добав(?:ь|ить)|\+)(?!\p{L})\s*[:\-—,]?\s*(.*)$/isu', trim($payload), $m)) {
             return trim($m[1]);
         }
         return null;
