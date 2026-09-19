@@ -56,7 +56,7 @@ $config = $arResult['config']; // Helper
         </div>
 
         <div class="form-group">
-            <label class="form-label">Быстрая модель для спонтанных реплик (MLP-332)</label>
+            <label class="form-label">Быстрая модель — только спонтанные реплики (у того же провайдера, что основная)</label>
             <input type="text" name="ai_fast_model" value="<?= htmlspecialchars($config->getOption('ai_fast_model', '')) ?>" class="form-input" placeholder="пусто = основная модель">
             <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Спонтанные реплики (раз в несколько минут, ~90% запросов) идут на эту модель, всё остальное — упоминания, команды, анонсы, /штош — на основную. <strong>Берите модель того же семейства и того же провайдера, что основная</strong> (например, z-ai/glm-5.3-flashx при основной z-ai/glm-5.3): разные семейства дают заметно разный характер ответов. Работает для OpenAI / OpenRouter / RouterAI; при сбое быстрой модели — фоллбек на основную цепочку. Какая модель ответила — видно в debug-журнале.</p>
         </div>
@@ -72,7 +72,7 @@ $config = $arResult['config']; // Helper
                     <input type="text" name="ai_openai_base_url" value="<?= htmlspecialchars($config->getOption('ai_openai_base_url', 'https://api.openai.com/v1/chat/completions')) ?>" class="form-input">
                 </div>
                 <div style="flex: 1;">
-                    <label class="form-label">Модель OpenAI</label>
+                    <label class="form-label">Основная модель (OpenAI)</label>
                     <input type="text" name="ai_openai_model" value="<?= htmlspecialchars($config->getOption('ai_openai_model', 'gpt-4o-mini')) ?>" class="form-input">
                 </div>
             </div>
@@ -84,7 +84,7 @@ $config = $arResult['config']; // Helper
                 <input type="password" name="ai_openrouter_key" value="<?= htmlspecialchars($config->getOption('ai_openrouter_key', '')) ?>" class="form-input">
             </div>
             <div class="form-group">
-                <label class="form-label">OpenRouter Модель</label>
+                <label class="form-label">Основная модель (OpenRouter)</label>
                 <input type="text" name="ai_openrouter_model" value="<?= htmlspecialchars($config->getOption('ai_openrouter_model', 'qwen/qwen3-coder:free')) ?>" class="form-input">
             </div>
         </div>
@@ -96,7 +96,7 @@ $config = $arResult['config']; // Helper
                 <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Российский агрегатор (routerai.ru), OpenAI-совместимый. Не блокируется по гео, прокси не нужен.</p>
             </div>
             <div class="form-group">
-                <label class="form-label">RouterAI Модель</label>
+                <label class="form-label">Основная модель (RouterAI)</label>
                 <input type="text" name="ai_routerai_model" value="<?= htmlspecialchars($config->getOption('ai_routerai_model', 'openai/gpt-4o-mini')) ?>" class="form-input">
             </div>
         </div>
@@ -207,7 +207,7 @@ $config = $arResult['config']; // Helper
             <label style="display: flex; align-items: center; cursor: pointer;">
                 <input type="hidden" name="ai_main_is_vision" value="0">
                 <input type="checkbox" name="ai_main_is_vision" value="1" <?= $config->getOption('ai_main_is_vision', 1) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
-                Основная модель понимает картинки (vision)
+                Модели чата — основная и быстрая — понимают картинки (vision)
             </label>
             <p style="font-size: 0.85em; color: #666; margin-top: 4px;"><strong>Включать только если картинки понимают ОБЕ модели чата</strong> — основная и быстрая (MLP-332); иначе картинки уйдут модели, которая их не видит. Если выключено — картинки описывает вспомогательная vision-модель (ниже), и Лира получает текстовое описание вместо изображения. Описания кешируются на 7 дней.</p>
         </div>
