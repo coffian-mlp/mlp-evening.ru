@@ -30,6 +30,21 @@ ok(LyraArtist::sceneFromRaw("A pony draws ![чат](/upload/lyra/x.jpg) at an ea
     === 'A pony draws  at an easel', 'markdown-картинка вырезана (анти-инъекция)');
 
 echo "\n== Брак: болтовня, реакции, тишина ==\n";
+echo "\n== sceneHints (MLP-333) ==\n";
+$online = [['id' => 12, 'nickname' => 'TotallyNotAPony'], ['id' => 7, 'nickname' => 'Пшеница'], ['id' => 10, 'nickname' => 'Darbel'], ['id' => 5, 'nickname' => 'Назар']];
+$doss = [7 => [['text' => 'принцесса чата'], ['text' => 'ест ромашковый чай'], ['text' => 'третий факт — лишний']], 10 => [['text' => str_repeat('лего ', 30)]]];
+$h = LyraArtist::sceneHints($online, $doss, 12);
+ok(str_starts_with($h, 'В чате сейчас: Пшеница, Darbel, Назар.'), "присутствующие без бота: $h");
+ok(str_contains($h, 'Пшеница — принцесса чата; ест ромашковый чай.'), 'максимум два факта на человека');
+ok(!str_contains($h, 'третий факт'), 'третий факт отброшен');
+ok(str_contains($h, 'Darbel — ' . str_repeat('лего ', 15) . 'лег…') || preg_match('/Darbel — .{79}…\./u', $h), 'длинный факт усечён до 80');
+ok(!str_contains($h, 'Назар —'), 'без досье — только в списке присутствующих');
+ok(LyraArtist::sceneHints([['id' => 12, 'nickname' => 'TotallyNotAPony']], [], 12) === '', 'только бот → пусто');
+ok(LyraArtist::sceneHints([], $doss, 12) === '', 'никого онлайн → пусто');
+$tight = LyraArtist::sceneHints($online, $doss, 12, 60);
+ok($tight === 'В чате сейчас: Пшеница, Darbel, Назар.', 'бюджет не вмещает приметы → только список');
+ok(mb_strlen(LyraArtist::sceneHints($online, $doss, 12, 120)) <= 120, 'бюджет соблюдается');
+
 ok(LyraArtist::sceneFromRaw(null) === null, 'null → null');
 ok(LyraArtist::sceneFromRaw('') === null, 'пустой ответ → null');
 ok(LyraArtist::sceneFromRaw('[РЕАКЦИЯ: laugh]') === null, 'только реакция → null');
