@@ -419,7 +419,7 @@ class LyraArtist {
         if ($reason !== null && trim($reason) !== '') {
             $instr .= " Рисовальная машина ответила: «" . mb_substr(trim($reason), 0, 300) . "».";
         }
-        $instr .= " Ответь @$username в своём стиле, 1–2 предложения: признайся, что не вышло, обыграй причину простыми словами (без технических терминов), предложи попросить ещё раз чуть позже. НЕ вставляй ссылки и картинки. Не делай вид, что рисунок готов.";
+        $instr .= " Это задание ВАЖНЕЕ продолжения беседы: не отвечай на другие сообщения и не обращайся к другим людям. Ответь @$username в своём стиле, 1–2 предложения: признайся, что не вышло, обыграй причину простыми словами (без технических терминов), предложи попросить ещё раз чуть позже. НЕ вставляй ссылки и картинки. Не делай вид, что рисунок готов.";
         return $instr;
     }
 
@@ -433,7 +433,12 @@ class LyraArtist {
     /** Живое извинение за провал генерации: основная LLM с личностью и контекстом. */
     private function excuseFailure(string $subject, string $username, ?string $reason): ?string {
         try {
-            $raw = $this->llm->generateReply($this->llm->buildReplyContext($this->llm->contextLimit(), null, null, true, false), self::excuseInstruction($subject, $username, $reason));
+            // MLP-338: инструкция — ПОСЛЕДНЕЙ РЕПЛИКОЙ контекста, не в system (правило проекта, MLP-293/308/317):
+            // через system живая беседа перевешивала, и извинение за рисунок для @CoFFian начиналось
+            // ответом Пшенице на её последнее сообщение (22:01, 19.09). Контекст урезан до 10, как у подписи.
+            $context = $this->llm->buildReplyContext(min(10, $this->llm->contextLimit()), null, null, true, false);
+            $context[] = ['role' => 'user', 'content' => self::excuseInstruction($subject, $username, $reason)];
+            $raw = $this->llm->generateReply($context);
             $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
             $text = trim(preg_replace('/^\[\d{1,2}:\d{2}\]\s*[^:\n]{1,40}:\s*/u', '', $text));
             return $text !== '' ? $text : null;
