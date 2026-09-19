@@ -96,6 +96,7 @@ class SettingsController {
         'ai_memory_block_limit' => 'uint', // общий кап блока в промпте, симв. (0 = блока нет)
         'ai_memory_user_limit'  => 'uint', // бюджет досье пользователя, симв.
         'ai_memory_meme_limit'  => 'uint', // бюджет мемов в блоке, симв.
+        'ai_oc_auto'            => 'int',  // MLP-335: Лира сама придумывает пони-облики участникам для рисунков
         // --- SMTP ---
         'smtp_enabled'       => 'int',
         'smtp_host'          => 'string',

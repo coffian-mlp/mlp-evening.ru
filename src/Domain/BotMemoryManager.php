@@ -17,7 +17,7 @@ use Infra\ConfigManager;
 class BotMemoryManager {
 
     public const KINDS = ['dossier', 'meme'];
-    public const SOURCES = ['manual', 'auto'];
+    public const SOURCES = ['manual', 'auto', 'oc']; // oc — облик, придуманный Лирой (MLP-335); автосжатие не трогает
     public const MAX_TEXT = 500;
 
     private $db;
@@ -278,5 +278,19 @@ class BotMemoryManager {
             return Auth::isModerator();
         }
         return Auth::isAdmin();
+    }
+
+    /**
+     * Единственная запись внешности пользователя (MLP-335): прежние «внешность: …» любого источника
+     * удаляются, новая пишется с $source ('oc' — придумала Лира, 'manual' — задал человек через /яос).
+     */
+    public function setAppearance(int $userId, string $text, string $source = 'oc', ?int $createdBy = null) {
+        if ($userId <= 0 || !in_array($source, self::SOURCES, true)) {
+            return false;
+        }
+        $stmt = $this->db->prepare("DELETE FROM bot_memory WHERE kind = 'dossier' AND user_id = ? AND LOWER(text) LIKE 'внешность%'");
+        $stmt->bind_param('i', $userId);
+        $stmt->execute();
+        return $this->add('dossier', $userId, $text, $source, $createdBy);
     }
 }

@@ -96,7 +96,7 @@ function loadMemory() {
                 : '—';
             const div = document.createElement('div');
             div.innerText = it.text; // экранирование пользовательского текста
-            const src = it.source === 'auto' ? '🤖 auto' : '✍️ manual';
+            const src = it.source === 'auto' ? '🤖 auto' : (it.source === 'oc' ? '🦄 oc' : '✍️ manual');
             const btns = '<button class="btn-small" onclick="editMemoryRow(' + it.id + ')">✏️</button> ' +
                          '<button class="btn-small" onclick="deleteMemoryRow(' + it.id + ')">🗑️</button>';
             return '<tr data-mem-id="' + it.id + '"><td>' + it.id + '</td><td>' + kindIcon + '</td><td>' + owner +

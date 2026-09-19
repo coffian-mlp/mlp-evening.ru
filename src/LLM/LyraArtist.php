@@ -381,6 +381,12 @@ class LyraArtist {
         $dossiers = (int)$c->getOption('ai_memory_enabled', 1)
             ? (new \Domain\BotMemoryManager())->getDossiers(array_column($online, 'id'))
             : [];
+        // MLP-335: у кого облика нет — Лира придумает сейчас (≤2 за рисунок), запишет и объявит.
+        try {
+            (new LyraOc($this->llm))->ensureFor($online, $dossiers);
+        } catch (\Throwable $e) {
+            error_log('LyraOc ensureFor failed (degraded): ' . $e->getMessage());
+        }
         return self::sceneHints($online, $dossiers, $this->llm->getBotUserId());
     }
 

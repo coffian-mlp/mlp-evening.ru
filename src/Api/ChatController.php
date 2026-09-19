@@ -182,6 +182,12 @@ class ChatController {
             }
         }
 
+        // MLP-335: /яос — свой облик; без прав, но только при включённой памяти (запись живёт в bot_memory).
+        if ($matchedCommand && ($matchedCommand['handler_type'] ?? '') === 'oc_set'
+            && !(int)\Infra\ConfigManager::getInstance()->getOption('ai_memory_enabled', 1)) {
+            $matchedCommand = null;
+        }
+
         // MLP-318: свободная форма напоминаний («Лира, напомни через час…») — ПЕРЕД
         // веткой стрима: «напомни включить перерыв» — это намерение напомнить, не команда.
         // Явные слэш-команды по-прежнему приоритетнее (matchCommand выше).

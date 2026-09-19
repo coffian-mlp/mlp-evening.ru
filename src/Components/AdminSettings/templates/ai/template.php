@@ -398,6 +398,15 @@ $config = $arResult['config']; // Helper
             <input type="number" name="ai_memory_interval" value="<?= htmlspecialchars($config->getOption('ai_memory_interval', 21600)) ?>" class="form-input">
         </div>
 
+        <div class="form-group">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="hidden" name="ai_oc_auto" value="0">
+                <input type="checkbox" name="ai_oc_auto" value="1" <?= $config->getOption('ai_oc_auto', 1) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                <strong>Лира придумывает пони-облики участникам (для рисунков)</strong>
+            </label>
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Когда художнице нужна внешность участника онлайн, а её нет в памяти, Лира придумывает облик (до 2 за рисунок), записывает в досье как «внешность: …» (источник «oc») и объявляет в чате с правом вето. Человек переписывает свой облик командой <code>/яос описание</code>; модератор — <code>/запомни @ник внешность: …</code>. Требует включённой памяти.</p>
+        </div>
+
         <!-- ============ 👀 Кто в чате (MLP-323) ============ -->
         <div class="form-group">
             <label style="display: flex; align-items: center; cursor: pointer;">

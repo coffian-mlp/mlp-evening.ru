@@ -297,6 +297,8 @@ class LLMManager {
                     return (new ReminderCommand($this))->handle($command, $contextData);
                 case 'recap':         // /штош — личный итог вечера по репликам вызвавшего (MLP-325)
                     return (new RecapCommand($this))->handle($command, $contextData);
+                case 'oc_set':        // /яос — свой пони-облик для художницы (MLP-335)
+                    return (new LyraOc($this))->handleSetOwn($command, $contextData);
             }
 
             $context = $this->buildContext($this->contextLimit());
