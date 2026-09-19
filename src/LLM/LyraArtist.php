@@ -282,9 +282,9 @@ class LyraArtist {
             $names[] = $nick;
             $facts = [];
             foreach (array_slice($dossiers[$id] ?? [], 0, 2) as $row) {
-                $t = trim((string)($row['text'] ?? ''));
+                $t = self::shortFact((string)($row['text'] ?? ''));
                 if ($t === '') continue;
-                $facts[] = mb_strlen($t) > 80 ? mb_substr($t, 0, 79) . '…' : $t;
+                $facts[] = $t;
             }
             if ($facts) $traits[] = $nick . ' — ' . implode('; ', $facts);
         }
@@ -300,6 +300,21 @@ class LyraArtist {
             if ($block !== "\nПриметы участников (из памяти): ") $out .= $block;
         }
         return $out;
+    }
+
+    /**
+     * Pure (MLP-333): факт досье → короткая примета: без markdown-мусора автописи (**, *, #, нумерация),
+     * до $max символов, срез по границе слова/фразы, а не посередине слова.
+     */
+    public static function shortFact(string $text, int $max = 80): string {
+        $t = preg_replace('/[*#_`]+/u', ' ', $text);
+        $t = preg_replace('/(^|\s)\d+\.\s+/u', ' ', $t);           // «1. Манера речи» → «Манера речи»
+        $t = trim(preg_replace('/\s+/u', ' ', $t), " \t\n\r\0\x0B.;:,");
+        if ($t === '' || mb_strlen($t) <= $max) return $t;
+        $cut = mb_substr($t, 0, $max);
+        $pos = max(mb_strrpos($cut, ';') ?: 0, mb_strrpos($cut, '.') ?: 0, mb_strrpos($cut, ',') ?: 0);
+        if ($pos < (int)($max * 0.5)) $pos = mb_strrpos($cut, ' ') ?: $max; // нет фразовой границы — по слову
+        return rtrim(mb_substr($cut, 0, $pos), " .;:,") . '…';
     }
 
     /** Живые данные для sceneHints: уважает тумблеры присутствия и памяти. */
