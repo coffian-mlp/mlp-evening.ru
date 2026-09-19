@@ -193,19 +193,17 @@ class LLMManager {
                 return false;
             }
 
-            // Контекст БЕЗ закрепа: «мёртвый чат» оцениваем по реальным сообщениям —
-            // одинокий закреп раньше пробивал обе защиты и бот болтал о нём в пустоту.
-            $context = $this->buildContext($this->contextLimit(), 3, null, false);
+            // Контекст без закрепа, но с памятью и присутствием (MLP-328/329): фоновые блоки идут
+            // впереди сообщений, поэтому «мёртвый чат» оцениваем не по пустоте массива, а по наличию
+            // реальных реплик — иначе блок памяти пробивал бы гейт, как когда-то закреп (MLP-260).
+            $context = $this->buildContext($this->contextLimit(), 3, null, false, true);
 
-            // If the chat has been dead for 3 hours (empty context), don't even ask the LLM
-            if (empty($context)) {
+            // Три часа тишины — LLM не беспокоим.
+            if (!self::hasChatMessages($context)) {
                 return false;
             }
 
-            // MLP-328: кто сейчас в чате — тоже после гейтов (иначе строка присутствия пробивала бы
-            // проверку «пустой контекст = мёртвый чат»); раньше спонтанка шла без присутствия,
-            // и Лира в тишине считала молчунов ушедшими. Затем закреп — как фон.
-            $context = $this->prependPresenceContext($context);
+            // Закреп — только после гейтов, как фон
             $context = $this->prependPinnedContext($context);
 
             $instruction = "Проанализируй последние сообщения. Если нужно что-то сказать (разрядить обстановку, ответить на вопрос, поддержать беседу) - напиши ответ. Если встревать не стоит - ответь ровно одним словом: SILENCE, но не нужно вообще молчать постоянно. Старайся поддерживать беседу в чате, даже если к тебе явно никто не обращается - это нормально.";
@@ -722,6 +720,19 @@ class LLMManager {
     public function contextLimit(): int {
         $limit = (int)ConfigManager::getInstance()->getOption('ai_context_messages', 24);
         return max(4, min(100, $limit));
+    }
+
+    /**
+     * Есть ли в контексте реальные реплики чата (или маркеры удалений), а не только фоновые
+     * блоки (память, присутствие, закреп). Формат «[ЧЧ:ММ] …» задаёт buildContext (MLP-329).
+     */
+    public static function hasChatMessages(array $context): bool {
+        foreach ($context as $entry) {
+            if (is_string($entry['content'] ?? null) && preg_match('/^\[\d{2}:\d{2}\]/u', $entry['content'])) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
