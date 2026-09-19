@@ -25,8 +25,9 @@ class LyraOc {
     public const PER_DRAWING = 5; // решение владельца 19.09: было 2
 
     public const PROMPT = "Ты — служебный генератор пони-обликов (ОС) для участников чата. Не персонаж, без комментариев.\n"
-        . "По нику, цвету ника и фактам о человеке придумай ОДИН облик пони в мире My Little Pony и ответь РОВНО ОДНОЙ строкой:\n"
+        . "По нику, цвету ника и фактам о человеке придумай ОДИН облик пони в мире My Little Pony и ответь РОВНО ДВУМЯ строками:\n"
         . "внешность: <вид пони>, <цвет шёрстки>, <грива>, <одна яркая деталь или аксессуар>, кьютимарка — <символ по интересам>\n"
+        . "персонаж: <роль или занятие в Понивилле, характер, 1–2 привычки — по интересам из фактов, дружелюбно, до 200 символов>\n"
         . "Правила: по-русски, до 150 символов, без markdown и без имени. Вид — земнопони/пегас/единорог по характеру. "
         . "Пол НЕ указывай (пиши «пони», не «кобылка»/«жеребец»), если из фактов он не следует явно. "
         . "Если дан цвет ника — используй его для гривы или яркого акцента (шарф, очки, кьютимарка), НЕ для шёрстки: цвет шёрстки выбери сам по характеру. Ничего о реальной внешности, возрасте, весе, здоровье; никаких насмешек — облик должен нравиться человеку. "
@@ -48,6 +49,12 @@ class LyraOc {
     /** Префикс записи лора/характера персонажа (MLP-340). */
     public const PERSONA_PREFIX = 'ОС:';
     public const PERSONA_MAX = 220;
+
+    /** Промпт лора для уже существующего облика (MLP-341, тихий бэкфилл). */
+    public const PERSONA_PROMPT = "Ты — служебный генератор лора пони-персонажей. Не персонаж, без комментариев. "
+        . "По нику, облику пони и фактам о человеке придумай лор персонажа и ответь РОВНО ОДНОЙ строкой:\n"
+        . "персонаж: <роль или занятие в Понивилле, характер, 1–2 привычки — по интересам из фактов, дружелюбно, до 200 символов>\n"
+        . "Облик не пересказывай и не меняй. Ничего о реальной внешности, возрасте, здоровье человека; никаких насмешек. Никакого другого текста.";
 
     /** Промпт разборщика: текст владельца → внешность + персонаж (MLP-340). */
     public const SPLIT_PROMPT = "Ты — служебный разборщик описаний пони-персонажа. Дан текст владельца о его персонаже. Раздели его на ДВЕ строки по-русски, без markdown:\n"
@@ -197,18 +204,47 @@ class LyraOc {
             $nick = BotMemoryManager::normalizeText((string)($u['nickname'] ?? ''));
             if ($nick === '') continue;
             $task = [['role' => 'user', 'content' => self::taskText($nick, LyraArtist::colorName((string)($u['chat_color'] ?? '')), array_column($rows, 'text'))]];
-            $text = self::parse($this->llm->generateUtility($task, self::PROMPT, 25));
+            $raw = $this->llm->generateUtility($task, self::PROMPT, 25);
+            $text = self::parse($raw);
             if ($text === null) {
                 error_log("LyraOc: генератор не дал облик для #$id ($nick)");
                 continue;
             }
             $saved = $this->memory->setAppearance($id, $text, 'oc');
             if (!$saved) continue;
+            // MLP-341: лор персонажа — второй строкой того же ответа; тихо, source=oc
+            $persona = self::parseSplit($raw)['persona'];
+            if ($persona !== null && self::currentPersona($rows) === null) {
+                $this->memory->setPersona($id, self::PERSONA_PREFIX . ' ' . BotMemoryManager::normalizeText($persona), 'oc');
+            }
             $dossiers[$id] = array_merge($rows, [['text' => $text, 'source' => 'oc']]);
             $created[$id] = ['nick' => $nick, 'text' => $text];
             if ($announce) $this->announce($nick, $text);
         }
         return $created;
+    }
+
+    /**
+     * Тихий бэкфилл лора (MLP-341): пользователям с обликом, но без «ОС: …» придумать персонажа по облику и
+     * фактам; источник oc, без объявлений. Возвращает [user_id => лор].
+     */
+    public function backfillPersona(array $userIds): array {
+        $out = [];
+        $nicks = (new \Domain\UserManager())->getUsersByIds(array_map('intval', $userIds));
+        foreach ($userIds as $id) {
+            $id = (int)$id;
+            $rows = $this->memory->getByUser($id);
+            $look = self::currentLook($rows);
+            if ($look === null || self::currentPersona($rows) !== null) continue;
+            $facts = [];
+            foreach ($rows as $r) { $t = (string)$r['text']; if (!self::isAppearance($t)) $facts[] = LyraArtist::shortFact($t, 120); }
+            $nick = (string)($nicks[$id]['nick'] ?? ('#' . $id));
+            $task = [['role' => 'user', 'content' => "Ник: {$nick}\nОблик: {$look}\nФакты: " . ($facts ? implode('; ', array_slice(array_filter($facts), 0, 5)) : 'нет') . "\n\nПридумай лор."]];
+            $persona = self::parseSplit($this->llm->generateUtility($task, self::PERSONA_PROMPT, 25))['persona'];
+            if ($persona === null) continue;
+            if ($this->memory->setPersona($id, self::PERSONA_PREFIX . ' ' . BotMemoryManager::normalizeText($persona), 'oc')) $out[$id] = $persona;
+        }
+        return $out;
     }
 
     /** Живое объявление облика с правом вето (решение владельца: не фикс-фразой). $drawn — рисунок с ним уже выше. */

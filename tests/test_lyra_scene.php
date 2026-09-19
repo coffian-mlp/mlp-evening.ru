@@ -25,7 +25,7 @@ ok(LyraArtist::sceneFromRaw('Two ponies argue about sausages while a third laugh
 ok(LyraArtist::sceneFromRaw("[РЕАКЦИЯ: laugh] Ponies CoFFian and Пшеница joke about a notebook.")
     === 'Ponies CoFFian and Пшеница joke about a notebook.', 'маркер реакции срезается, сцена с именами остаётся');
 $long = str_repeat('pony ', 200);
-ok(mb_strlen((string)LyraArtist::sceneFromRaw($long)) === 400, 'длина ограничена 400');
+ok(mb_strlen((string)LyraArtist::sceneFromRaw($long)) === 1000, 'длина ограничена 1000 (MLP-341)');
 ok(LyraArtist::sceneFromRaw("A pony draws ![чат](/upload/lyra/x.jpg) at an easel")
     === 'A pony draws  at an easel', 'markdown-картинка вырезана (анти-инъекция)');
 
