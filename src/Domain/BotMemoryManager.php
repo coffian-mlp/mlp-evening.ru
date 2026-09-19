@@ -293,4 +293,18 @@ class BotMemoryManager {
         $stmt->execute();
         return $this->add('dossier', $userId, $text, $source, $createdBy);
     }
+
+    /**
+     * Единственная запись «ОС: …» — лор/характер пони-персонажа владельца (MLP-340). Как setAppearance:
+     * прежние записи с этим префиксом удаляются, новая пишется с $source.
+     */
+    public function setPersona(int $userId, string $text, string $source = 'manual', ?int $createdBy = null) {
+        if ($userId <= 0 || !in_array($source, self::SOURCES, true)) {
+            return false;
+        }
+        $stmt = $this->db->prepare("DELETE FROM bot_memory WHERE kind = 'dossier' AND user_id = ? AND LOWER(text) LIKE 'ос:%'");
+        $stmt->bind_param('i', $userId);
+        $stmt->execute();
+        return $this->add('dossier', $userId, $text, $source, $createdBy);
+    }
 }

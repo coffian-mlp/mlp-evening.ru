@@ -45,6 +45,16 @@ class LyraOc {
         . "Характер, навыки и привычки не записывай, но роль или принадлежность, которую можно ПОКАЗАТЬ (агент принцессы Луны → эмблема полумесяца на плаще; моряк → бескозырка), преврати в одну видимую деталь. "
         . "Без markdown, без имени, без другого текста.";
 
+    /** Префикс записи лора/характера персонажа (MLP-340). */
+    public const PERSONA_PREFIX = 'ОС:';
+    public const PERSONA_MAX = 220;
+
+    /** Промпт разборщика: текст владельца → внешность + персонаж (MLP-340). */
+    public const SPLIT_PROMPT = "Ты — служебный разборщик описаний пони-персонажа. Дан текст владельца о его персонаже. Раздели его на ДВЕ строки по-русски, без markdown:\n"
+        . "внешность: <только видимое — вид пони, пол если назван, шёрстка, грива, глаза, одежда, аксессуары, кьютимарка; роль или принадлежность, которую можно показать, — одной видимой деталью>\n"
+        . "персонаж: <роль, лор, характер, привычки, стиль поведения ПЕРСОНАЖА — до 200 символов, своими словами владельца>\n"
+        . "Если для какой-то строки данных нет — не пиши её вовсе. Ничего о реальном человеке. Никакого другого текста.";
+
     private $llm;
     private $memory;
 
@@ -83,6 +93,40 @@ class LyraOc {
             if (self::isAppearance($t)) return trim(preg_replace('/^внешность\s*[:\-—]\s*/iu', '', $t));
         }
         return null;
+    }
+
+    /** Pure (MLP-340): разбор ответа разборщика → ['look' => ?string, 'persona' => ?string] (оба без префиксов). */
+    public static function parseSplit(?string $raw): array {
+        $out = ['look' => null, 'persona' => null];
+        if ($raw === null) return $out;
+        foreach (preg_split('/\R/u', $raw) as $line) {
+            $line = trim(preg_replace('/[*`_>#]+/u', '', $line), " \t\"«»'");
+            if ($out['look'] === null && preg_match('/^внешность\s*[:\-—]\s*(.+)$/iu', $line, $m)) {
+                $v = trim(preg_replace('/\s+/u', ' ', $m[1]), " .;\"«»'");
+                if (mb_strlen($v) >= self::MIN_LEN) $out['look'] = mb_substr($v, 0, self::MAX_LEN);
+            } elseif ($out['persona'] === null && preg_match('/^(?:персонаж|ос|характер)\s*[:\-—]\s*(.+)$/iu', $line, $m)) {
+                $v = trim(preg_replace('/\s+/u', ' ', $m[1]), " .;\"«»'");
+                if (mb_strlen($v) >= 3) $out['persona'] = mb_substr($v, 0, self::PERSONA_MAX);
+            }
+        }
+        return $out;
+    }
+
+    /** Pure: текущий лор персонажа из строк досье (без префикса) или null. */
+    public static function currentPersona(array $dossierRows): ?string {
+        foreach ($dossierRows as $row) {
+            $t = (string)($row['text'] ?? '');
+            if (preg_match('/^ос\s*:\s*(.+)$/iu', trim($t), $m)) return trim($m[1]);
+        }
+        return null;
+    }
+
+    /** Pure (MLP-340): объединить лор — старый + новый, без дублей, в пределах PERSONA_MAX. */
+    public static function joinPersona(?string $current, string $addition): string {
+        $addition = trim($addition, " .;");
+        if ($current === null || $current === '') return mb_substr($addition, 0, self::PERSONA_MAX);
+        if (mb_stripos($current, $addition) !== false) return $current;
+        return mb_substr(rtrim($current, " .;") . '; ' . $addition, 0, self::PERSONA_MAX);
     }
 
     /** Pure: есть ли у досье запись внешности. */
@@ -180,6 +224,22 @@ class LyraOc {
         );
     }
 
+    /** Разбор текста владельца на внешность и персонажа служебным вызовом (MLP-340). */
+    public function splitWish(string $wish): array {
+        $wish = trim($wish);
+        if ($wish === '') return ['look' => null, 'persona' => null];
+        $task = [['role' => 'user', 'content' => "Текст владельца: " . mb_substr($wish, 0, 600) . "\n\nРаздели."]];
+        return self::parseSplit($this->llm->generateUtility($task, self::SPLIT_PROMPT, 25));
+    }
+
+    /** Записать лор персонажа (объединяя с прежним); возвращает итоговый текст или null, если писать нечего. */
+    private function storePersona(int $userId, ?string $addition): ?string {
+        if ($addition === null || trim($addition) === '') return null;
+        $joined = self::joinPersona(self::currentPersona($this->memory->getByUser($userId)), $addition);
+        $this->memory->setPersona($userId, self::PERSONA_PREFIX . ' ' . BotMemoryManager::normalizeText($joined), 'manual', $userId);
+        return $joined;
+    }
+
     /** Слияние описания с картинки и пожелания владельца → облик без префикса; null — сбой. */
     public function mergeLook(string $look, string $wish, string $baseLabel = 'С картинки'): ?string {
         $task = [['role' => 'user', 'content' => "{$baseLabel}: {$look}\nПожелание владельца: " . mb_substr($wish, 0, 400) . "\n\nСоставь облик."]];
@@ -216,10 +276,15 @@ class LyraOc {
                 $this->llm->botSay("@{$username}, а что добавить? Например: «/яос дополни красный шарф и очки».");
                 return true;
             }
+            // MLP-340: лор/характер персонажа — отдельной записью «ОС: …» в досье (Лира обыгрывает в разговоре).
+            $split = $augment !== '' ? $this->splitWish($augment) : ['look' => null, 'persona' => null];
+            $persona = $this->storePersona($userId, $split['persona']);
             $merged = $this->mergeLook($current, $addition, 'Текущий облик');
             if ($merged !== null && mb_strtolower(trim($merged, ' .')) === mb_strtolower(trim($current, ' .'))) {
-                // Ничего видимого не добавилось — честно сказать, а не изображать запись (прецедент Darbel 22:39).
-                $this->llm->botSay("@{$username}, посмотрела — в облике это уже есть или это не про внешность, запись не изменилась: {$current}. Если хочешь показать это на рисунке — скажи чем (например, «/яос дополни эмблема полумесяца на плаще»).");
+                // Внешность не изменилась — честно сказать (прецедент Darbel 22:39); лор при этом мог записаться.
+                $this->llm->botSay($persona !== null
+                    ? "@{$username}, внешность не поменялась (в облике это уже есть или это не про внешность), а вот про персонажа записала: «{$persona}». Хочешь показать что-то на рисунке — скажи чем, например «/яос дополни эмблема полумесяца на плаще»."
+                    : "@{$username}, посмотрела — в облике это уже есть или это не про внешность, запись не изменилась: {$current}. Если хочешь показать это на рисунке — скажи чем (например, «/яос дополни эмблема полумесяца на плаще»).");
                 return true;
             }
             if ($merged === null) {
@@ -231,7 +296,7 @@ class LyraOc {
                 return true;
             }
             $this->llm->botSayLive(
-                "Пользователь @{$username} командой /яос дополнил свой пони-облик. Было: «{$current}». Стало (это и есть запись, других деталей в ней нет): «{$merged}». "
+                "Пользователь @{$username} командой /яос дополнил свой пони-облик. Было: «{$current}». Стало (это и есть запись, других деталей в ней нет): «{$merged}»." . ($persona !== null ? " Отдельно записан лор персонажа: «{$persona}»." : '') . " "
                 . "Подтверди @{$username} одной-двумя фразами в своём стиле и назови, что именно появилось в записи — только то, что реально есть в «стало»; не приписывай записи того, чего в ней нет. Не задавай вопросов.",
                 "@{$username}, дополнила: теперь ты — {$merged}.",
                 [], "@{$username}"
@@ -248,11 +313,13 @@ class LyraOc {
                 return true;
             }
             $look = trim(mb_substr($described, mb_strlen(self::PREFIX)));
+            $personaText = null;
             if ($wish !== '') {
                 // Пожелание владельца главнее картинки (вид, пол, одежда, кьютимарка) — сливаем служебным вызовом;
                 // раньше длинное пожелание просто отбрасывалось (Darbel, 22:17 19.09).
                 $merged = $this->mergeLook($look, $wish);
                 if ($merged !== null) $look = $merged;
+                $personaText = $this->storePersona($userId, $this->splitWish($wish)['persona']); // MLP-340
             }
             $text = self::PREFIX . ' ' . BotMemoryManager::normalizeText($look);
             if (!$this->memory->setAppearance($userId, $text, 'manual', $userId)) {
@@ -260,7 +327,7 @@ class LyraOc {
                 return true;
             }
             $this->llm->botSayLive(
-                "Пользователь @{$username} командой /яос прислал картинку со своей ОС. Ты рассмотрела её и записала облик: «{$look}». "
+                "Пользователь @{$username} командой /яос прислал картинку со своей ОС. Ты рассмотрела её и записала облик: «{$look}»." . ($personaText !== null ? " Отдельно записан лор персонажа: «{$personaText}»." : '') . " "
                 . "Подтверди @{$username} одной-двумя фразами в своём стиле: перескажи, что увидела, и что теперь будешь рисовать так; если что-то не так — пусть поправит словами через /яос. Не задавай других вопросов.",
                 "@{$username}, рассмотрела: {$look}. Запомнила — так и буду рисовать; если что не так, поправь «/яос описание».",
                 [], "@{$username}"
@@ -273,8 +340,9 @@ class LyraOc {
             foreach ($this->memory->getByUser($userId) as $row) {
                 if (self::isAppearance((string)$row['text'])) { $current = trim(mb_substr((string)$row['text'], mb_strlen(self::PREFIX))); break; }
             }
+            $persona = self::currentPersona($this->memory->getByUser($userId));
             $this->llm->botSay($current !== null
-                ? "@{$username}, сейчас я представляю тебя так: {$current}. Хочешь иначе — «/яос новое описание», добавить деталь — «/яос дополни …»."
+                ? "@{$username}, сейчас я представляю тебя так: {$current}." . ($persona !== null ? " Про персонажа помню: {$persona}." : '') . " Хочешь иначе — «/яос новое описание», добавить деталь — «/яос дополни …»."
                 : "@{$username}, облика у тебя пока нет. Напиши «/яос серая кобылка в очках с гривой цвета чая» или пришли «/яос» с картинкой своей ОС — запомню. Потом можно уточнять: «/яос дополни красный шарф».");
             return true;
         }
@@ -283,15 +351,23 @@ class LyraOc {
             $this->llm->botSay("@{$username}, описание нужно от " . self::MIN_LEN . " до 160 символов — как пони выглядит: вид, цвет шёрстки, грива, деталь, кьютимарка.");
             return true;
         }
-        $text = self::PREFIX . ' ' . BotMemoryManager::normalizeText($payload);
-        if (!$this->memory->setAppearance($userId, $text, 'manual', $userId)) {
+        // MLP-340: текст владельца — это часто и внешность, и лор персонажа; раскладываем на две записи.
+        $split = $this->splitWish($payload);
+        $lookText = $split['look'] ?? ($split['persona'] === null ? $payload : null); // разборщик молчит → весь текст как облик
+        $personaText = $this->storePersona($userId, $split['persona']);
+        if ($lookText !== null && !$this->memory->setAppearance($userId, self::PREFIX . ' ' . BotMemoryManager::normalizeText($lookText), 'manual', $userId)) {
             $this->llm->botSay("@{$username}, копыто дрогнуло — не записалось. Попробуй ещё раз!");
             return true;
         }
+        if ($lookText === null && $personaText === null) {
+            $this->llm->botSay("@{$username}, не разобрала, что тут про внешность, а что про характер — опиши, как пони выглядит: вид, шёрстка, грива, деталь, кьютимарка.");
+            return true;
+        }
+        $summary = ($lookText !== null ? "облик: «{$lookText}»" : 'облик без изменений') . ($personaText !== null ? "; лор персонажа: «{$personaText}»" : '');
         $this->llm->botSayLive(
-            "Пользователь @{$username} командой /яос задал свой пони-облик: «{$payload}». Он уже записан вместо прежнего. "
-            . "Подтверди @{$username} одной-двумя фразами в своём стиле, можно отреагировать на облик. Не задавай вопросов.",
-            "@{$username}, записала: теперь ты для меня — {$payload}. На следующем рисунке проверим!",
+            "Пользователь @{$username} командой /яос описал своего пони-персонажа. Записано ({$summary}) — это и есть записи, ничего сверх них нет. "
+            . "Подтверди @{$username} одной-двумя фразами в своём стиле, назови, что записала. Не задавай вопросов.",
+            "@{$username}, записала — {$summary}. На следующем рисунке проверим!",
             [], "@{$username}"
         );
         return true;
