@@ -36,7 +36,7 @@ ok(!str_contains($i, 'Рисовальная машина ответила'), '�
 
 echo "\n== excuseInstruction: длинное режется ==\n";
 $i = LyraArtist::excuseInstruction(str_repeat('о', 500), 'ИтПони', str_repeat('e', 900));
-ok(mb_strlen($i) < 900, 'сюжет и причина ограничены (200/300)');
+ok(mb_strlen($i) < 1000, 'сюжет и причина ограничены (200/300); инструкция с оговоркой про адресата (MLP-338) — до 1000');
 
 echo "\n== failureReason: error.message из JSON ==\n";
 $body = '{"error":{"message":"Gemini returned no image data (finish_reason: STOP)","code":400}}';
