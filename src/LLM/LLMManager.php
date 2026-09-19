@@ -753,7 +753,10 @@ class LLMManager {
         }
         try {
             $online = $online ?? (new OnlineManager())->getOnlineStats(OnlineContext::WINDOW_MIN);
-            $presence = OnlineContext::line($online['users'] ?? [], (int)($online['guests_count'] ?? 0), $this->botUserId);
+            // MLP-331: как давно человек пишет и сколько молчит — иначе давний молчун выглядит новичком
+            // (Wellerman 19.09: одна реплика в окне → «добро пожаловать в чат»).
+            $activity = $this->chatManager->getActivityByUsers(array_column($online['users'] ?? [], 'id'), 24);
+            $presence = OnlineContext::line($online['users'] ?? [], (int)($online['guests_count'] ?? 0), $this->botUserId, $activity);
             if ($presence !== null) {
                 array_unshift($context, ['role' => 'user', 'content' => $presence]);
             }

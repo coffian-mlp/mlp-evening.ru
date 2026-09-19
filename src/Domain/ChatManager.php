@@ -951,4 +951,33 @@ class ChatManager {
         }
         return array_reverse($rows);
     }
+
+    /**
+     * Первая и последняя реплика каждого пользователя за $hours часов (MLP-331, строка присутствия):
+     * [user_id => ['first' => ts, 'last' => ts]] (UTC timestamp). Кого нет в ответе — реплик не было.
+     */
+    public function getActivityByUsers(array $userIds, int $hours = 24): array {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $userIds), static fn($i) => $i > 0)));
+        if (!$ids) {
+            return [];
+        }
+        $in = implode(',', $ids);
+        $hours = max(1, $hours);
+        $stmt = $this->db->prepare(
+            "SELECT user_id, MIN(created_at) AS first_at, MAX(created_at) AS last_at FROM chat_messages
+             WHERE is_deleted = 0 AND user_id IN ($in) AND created_at > UTC_TIMESTAMP() - INTERVAL ? HOUR
+             GROUP BY user_id"
+        );
+        $stmt->bind_param('i', $hours);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $out = [];
+        while ($row = $res->fetch_assoc()) {
+            $out[(int)$row['user_id']] = [
+                'first' => strtotime($row['first_at'] . ' UTC') ?: 0,
+                'last'  => strtotime($row['last_at'] . ' UTC') ?: 0,
+            ];
+        }
+        return $out;
+    }
 }

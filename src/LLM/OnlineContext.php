@@ -21,18 +21,51 @@ final class OnlineContext {
      * Фоновая строка присутствия; null — в чате никого (кроме бота).
      * @param array $users [['id' => .., 'nickname' => ..], ...] — getOnlineStats()['users']
      */
-    public static function line(array $users, int $guests, int $botId): ?string {
+    /** Окно «в чате N» (MLP-331): первая реплика старше — «больше 8 часов». */
+    public const ACTIVITY_HOURS = 8;
+    /** Пауза, после которой к участнику приписывается «молчит N» (MLP-331). */
+    public const SILENT_AFTER_SEC = 30 * 60;
+
+    /**
+     * @param array $activity [user_id => ['first' => ts, 'last' => ts]] — первая/последняя реплика за сутки
+     *                        (ChatManager::getActivityByUsers); пусто = без пометок (старый формат)
+     */
+    public static function line(array $users, int $guests, int $botId, array $activity = [], ?int $now = null): ?string {
+        $now = $now ?? time();
         $nicks = [];
         foreach ($users as $u) {
-            if ((int)($u['id'] ?? 0) === $botId) continue;
+            $id = (int)($u['id'] ?? 0);
+            if ($id === $botId) continue;
             // Ник — недоверенный ввод: нормализация держит строку однострочной и без скобок-инструкций.
             $nick = BotMemoryManager::normalizeText((string)($u['nickname'] ?? ''));
-            if ($nick !== '') $nicks[] = $nick;
+            if ($nick === '') continue;
+            if ($activity) {
+                $nick .= ' (' . self::activityLabel($activity[$id] ?? null, $now) . ')';
+            }
+            $nicks[] = $nick;
         }
         if (!$nicks && $guests <= 0) return null;
         $s = self::MARKER . ': ' . ($nicks ? implode(', ', $nicks) : 'зарегистрированных нет');
         if ($guests > 0) $s .= '; гостей: ' . $guests;
-        return $s . '. Это фон: кто-то из них молчит, но они здесь — не окликай молчунов без повода и не зачитывай этот список.';
+        $s .= '. Это фон: кто-то из них молчит, но они здесь — не окликай молчунов без повода и не зачитывай этот список.';
+        if ($activity) {
+            $s .= ' В скобках — как давно человек пишет в чате и сколько молчит: давний участник, даже если его реплик не видно, — не новичок, не приветствуй его как вошедшего.';
+        }
+        return $s;
+    }
+
+    /** Pure: «в чате 4 ч 12 мин[, молчит 50 мин]» / «в чате больше 8 часов» / «без реплик» (MLP-331). */
+    public static function activityLabel(?array $a, int $now): string {
+        if (!$a || empty($a['first'])) return 'без реплик';
+        $first = (int)$a['first'];
+        $last  = (int)($a['last'] ?? $first);
+        $label = ($now - $first) >= self::ACTIVITY_HOURS * 3600
+            ? 'в чате больше ' . self::ACTIVITY_HOURS . ' часов'
+            : 'в чате ' . MskClock::delta($now - $first);
+        if ($now - $last >= self::SILENT_AFTER_SEC) {
+            $label .= ', молчит ' . MskClock::delta($now - $last);
+        }
+        return $label;
     }
 
     /**
