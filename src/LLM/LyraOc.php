@@ -54,7 +54,7 @@ class LyraOc {
     public const PERSONA_PROMPT = "Ты — служебный генератор лора пони-персонажей. Не персонаж, без комментариев. "
         . "По нику, облику пони и фактам о человеке придумай лор персонажа и ответь РОВНО ОДНОЙ строкой:\n"
         . "персонаж: <роль или занятие в Понивилле, характер, 1–2 привычки — по интересам из фактов, дружелюбно, до 200 символов>\n"
-        . "Облик не пересказывай и не меняй. Ничего о реальной внешности, возрасте, здоровье человека; никаких насмешек. Никакого другого текста.";
+        . "Только по-русски, без латиницы и иностранных слов. Облик не пересказывай и не меняй. Ничего о реальной внешности, возрасте, здоровье человека; никаких насмешек. Никакого другого текста.";
 
     /** Промпт разборщика: текст владельца → внешность + персонаж (MLP-340). */
     public const SPLIT_PROMPT = "Ты — служебный разборщик описаний пони-персонажа. Дан текст владельца о его персонаже. Раздели его на ДВЕ строки по-русски, без markdown:\n"
@@ -117,6 +117,14 @@ class LyraOc {
             }
         }
         return $out;
+    }
+
+    /** Pure (MLP-341): лор годен, если это русский текст без латинских вкраплений и мусора (glm-5.3: «сидрoonном», «sweet tooth»). */
+    public static function personaIsClean(?string $persona): bool {
+        if ($persona === null || mb_strlen($persona) < 10) return false;
+        if (preg_match('/[a-z]{2,}/iu', $persona)) return false;          // латиница внутри русского лора
+        if (preg_match('/[а-яё][a-z]|[a-z][а-яё]/iu', $persona)) return false; // смешанные слова
+        return true;
     }
 
     /** Pure: текущий лор персонажа из строк досье (без префикса) или null. */
@@ -214,7 +222,7 @@ class LyraOc {
             if (!$saved) continue;
             // MLP-341: лор персонажа — второй строкой того же ответа; тихо, source=oc
             $persona = self::parseSplit($raw)['persona'];
-            if ($persona !== null && self::currentPersona($rows) === null) {
+            if (self::personaIsClean($persona) && self::currentPersona($rows) === null) {
                 $this->memory->setPersona($id, self::PERSONA_PREFIX . ' ' . BotMemoryManager::normalizeText($persona), 'oc');
             }
             $dossiers[$id] = array_merge($rows, [['text' => $text, 'source' => 'oc']]);
@@ -240,8 +248,11 @@ class LyraOc {
             foreach ($rows as $r) { $t = (string)$r['text']; if (!self::isAppearance($t)) $facts[] = LyraArtist::shortFact($t, 120); }
             $nick = (string)($nicks[$id]['nick'] ?? ('#' . $id));
             $task = [['role' => 'user', 'content' => "Ник: {$nick}\nОблик: {$look}\nФакты: " . ($facts ? implode('; ', array_slice(array_filter($facts), 0, 5)) : 'нет') . "\n\nПридумай лор."]];
-            $persona = self::parseSplit($this->llm->generateUtility($task, self::PERSONA_PROMPT, 25))['persona'];
-            if ($persona === null) continue;
+            $persona = null;
+            for ($attempt = 0; $attempt < 2 && !self::personaIsClean($persona); $attempt++) { // мусор с латиницей — вторая попытка
+                $persona = self::parseSplit($this->llm->generateUtility($task, self::PERSONA_PROMPT, 25))['persona'];
+            }
+            if (!self::personaIsClean($persona)) { error_log("LyraOc backfillPersona: лор для #$id не прошёл проверку: " . (string)$persona); continue; }
             if ($this->memory->setPersona($id, self::PERSONA_PREFIX . ' ' . BotMemoryManager::normalizeText($persona), 'oc')) $out[$id] = $persona;
         }
         return $out;

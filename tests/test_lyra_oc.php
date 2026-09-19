@@ -55,6 +55,12 @@ ok(LyraOc::joinPersona('лунарный агент', 'плох в социал�
 ok(LyraOc::joinPersona('лунарный агент; плох в социалке', 'Плох в социалке') === 'лунарный агент; плох в социалке', 'дубль не дописывается');
 ok(LyraOc::currentPersona([['text' => 'внешность: пегас'], ['text' => 'ОС: агент Луны']]) === 'агент Луны', 'текущий лор без префикса');
 
+echo "\n== personaIsClean (MLP-341) ==\n";
+ok(LyraOc::personaIsClean('лунарный агент на службе принцессы Луны, работает из тени'), 'чистый русский лор');
+ok(!LyraOc::personaIsClean('единорог-бухгалклав на сидрoonном складе «Бочка и Якорь»'), 'смешанное слово с латиницей → мусор');
+ok(!LyraOc::personaIsClean('Пекарша- sweet tooth Понивилля'), 'английские слова внутри → мусор');
+ok(!LyraOc::personaIsClean('коротко') && !LyraOc::personaIsClean(null), 'коротко/null → не годится');
+
 echo "\n== hasAppearance ==\n";
 ok(LyraOc::hasAppearance([['text' => 'любит чай'], ['text' => 'внешность: пегас']]), 'есть внешность');
 ok(!LyraOc::hasAppearance([['text' => 'любит чай']]), 'нет внешности');
