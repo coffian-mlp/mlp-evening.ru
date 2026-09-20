@@ -25,9 +25,36 @@ class RecapCommand {
         $this->llm = $llm;
     }
 
+    /** Pure (MLP-345): «@ник …» в аргументе команды → ник цели, иначе null. */
+    public static function parseTarget(string $payload): ?string {
+        return preg_match('/^@([\p{L}\p{N}_.\-]{2,40})/u', trim($payload), $m) ? $m[1] : null;
+    }
+
     public function handle(array $command, array $contextData): bool {
         $username = (string)($contextData['username'] ?? 'Гость');
         $userId   = (int)($contextData['user_id'] ?? 0);
+        // MLP-345 (беклог №19): модератор подводит итог вечера за другого — «/штош @ник».
+        $target = self::parseTarget(BotCommandManager::stripPrefix($command, (string)($contextData['message'] ?? ''), 'штош'));
+        if ($target !== null) {
+            if (empty($contextData['recap_for_others'])) {
+                $this->llm->botSay("@{$username}, итог вечера за другого подводят только модераторы — а свой можно в любой момент: просто «/штош».");
+                return true;
+            }
+            $user = (new \Domain\UserManager())->findByLoginOrNickname($target);
+            if (!$user) {
+                $this->llm->botSay("@{$username}, не нашла такого пони — «{$target}». Попробуй логин.");
+                return true;
+            }
+            $targetId   = (int)$user['id'];
+            $targetNick = ($user['nickname'] !== null && $user['nickname'] !== '') ? $user['nickname'] : $user['login'];
+            $rows   = (new ChatManager())->getUserMessagesSince($targetId, self::HOURS);
+            $digest = self::digest($rows, self::MAX_MESSAGES, self::MAX_CHARS);
+            $this->llm->botSayLive(
+                self::instruction($targetNick, $digest, (string)($command['system_prompt'] ?? ''), $username),
+                "@{$targetNick}, штош! @{$username} попросил подвести итог твоего вечера — а вечер был хорош, раз ты здесь."
+            );
+            return true;
+        }
         if ($userId <= 0) {
             // У гостя нет истории реплик по id — итог не собрать, но «штош» принимаем.
             $this->llm->botSayLive(
@@ -84,10 +111,12 @@ class RecapCommand {
     }
 
     /** Pure: инструкция для botSayLive — данные + задача; промпт команды (дашборд) — тон. */
-    public static function instruction(string $username, string $digest, string $commandPrompt): string {
+    public static function instruction(string $username, string $digest, string $commandPrompt, ?string $askedBy = null): string {
         $data = $digest !== '' ? $digest : '(реплик за это время нет — молчал(а), но был(а) в чате)';
-        $s = "Пользователь @{$username} командой /штош просит подвести итог своего вечера. Его реплики за последние "
-            . self::HOURS . " часов (время МСК):\n{$data}\n\n";
+        $s = $askedBy === null
+            ? "Пользователь @{$username} командой /штош просит подвести итог своего вечера. "
+            : "Модератор @{$askedBy} командой «/штош @{$username}» просит подвести итог вечера за @{$username} (сам @{$username} команду не вызывал — можно мягко это обыграть, но итог — для него). ";
+        $s .= "Реплики @{$username} за последние " . self::HOURS . " часов (время МСК):\n{$data}\n\n";
         if (trim($commandPrompt) !== '') {
             $s .= trim($commandPrompt) . "\n";
         }

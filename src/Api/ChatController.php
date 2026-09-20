@@ -182,6 +182,10 @@ class ChatController {
             }
         }
 
+        // MLP-345 (беклог №19): «/штош @ник» — итог вечера за другого, только модераторам; право — флагом в payload
+        // (fail-closed: в воркере роли нет). Обычный /штош без адресата проходит как раньше.
+        $recapForOthers = $matchedCommand && ($matchedCommand['handler_type'] ?? '') === 'recap' && Auth::isModerator();
+
         // MLP-335: /яос — свой облик; без прав, но только при включённой памяти (запись живёт в bot_memory).
         if ($matchedCommand && ($matchedCommand['handler_type'] ?? '') === 'oc_set'
             && !(int)\Infra\ConfigManager::getInstance()->getOption('ai_memory_enabled', 1)) {
@@ -221,6 +225,9 @@ class ChatController {
             ];
             if (($matchedCommand['handler_type'] ?? '') === 'memory_show' && $memoryAllowed) {
                 $payload['allowed'] = true; // fail-closed: ставится ТОЛЬКО здесь (MLP-314)
+            }
+            if ($recapForOthers) {
+                $payload['recap_for_others'] = true; // MLP-345: модератор может /штош @ник
             }
             BotDispatch::dispatch('dynamic_command', $payload);
         } else {

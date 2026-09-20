@@ -52,6 +52,14 @@ $empty = RecapCommand::instruction('Darbel', '', '');
 ok(str_contains($empty, 'реплик за это время нет'), 'без реплик — явная пометка');
 ok(!str_contains($empty, "\n\n\nТВОЯ"), 'пустой промпт команды не оставляет дыр');
 
+echo "\n== parseTarget / инструкция за другого (MLP-345) ==\n";
+ok(RecapCommand::parseTarget('@Пшеница') === 'Пшеница', 'ник с @');
+ok(RecapCommand::parseTarget('  @Darbel, давай') === 'Darbel', 'ник с хвостом');
+ok(RecapCommand::parseTarget('') === null && RecapCommand::parseTarget('просто текст') === null && RecapCommand::parseTarget('@') === null, 'без @ / пусто → null');
+$for = RecapCommand::instruction('Пшеница', '[22:00] кек', '', 'CoFFian');
+ok(str_contains($for, 'Модератор @CoFFian') && str_contains($for, 'за @Пшеница') && str_contains($for, 'Реплики @Пшеница'), 'инструкция за другого называет заказчика и цель');
+ok(str_starts_with(RecapCommand::instruction('CoFFian', '', ''), 'Пользователь @CoFFian командой /штош'), 'без заказчика — прежняя формулировка');
+
 echo "\n== независимость от TZ ==\n";
 date_default_timezone_set('UTC');
 ok(RecapCommand::digest($rows) === $d, 'дайджест одинаков под America/New_York и UTC');
