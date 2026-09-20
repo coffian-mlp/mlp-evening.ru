@@ -2,6 +2,7 @@
 
 namespace LLM;
 
+use Domain\BotCommandManager;
 use Domain\ChatManager;
 
 /**
