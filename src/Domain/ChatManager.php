@@ -980,4 +980,15 @@ class ChatManager {
         }
         return $out;
     }
+
+    /** Публиковал ли бот рисунок (markdown-картинку из /upload/lyra/) начиная с $sinceUtc (MLP-344, дедуп рисунков). */
+    public function botPostedImageSince(string $sinceUtc, int $botId): bool {
+        if ($botId <= 0) return false;
+        $stmt = $this->db->prepare(
+            "SELECT 1 FROM chat_messages WHERE user_id = ? AND is_deleted = 0 AND created_at >= ? AND message LIKE '%/upload/lyra/%' LIMIT 1"
+        );
+        $stmt->bind_param('is', $botId, $sinceUtc);
+        $stmt->execute();
+        return $stmt->get_result()->num_rows > 0;
+    }
 }

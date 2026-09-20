@@ -40,8 +40,9 @@ $jobs = [
     ['status' => 'done',    'age' => 30, 'data' => ['command' => $draw, 'message' => '/нарисуй собаку', 'username' => 'Пшеница']],
     ['status' => 'done',    'age' => 41, 'data' => ['command' => $draw, 'message' => '/нарисуй Кота', 'username' => 'CoFFian']],
 ];
+$jobs[] = ['status' => 'done', 'age' => 3, 'data' => ['command' => $draw, 'message' => '/нарисуй кота', 'username' => '', 'auto' => true]];
 $o = CommandDedup::findOriginal($jobs, $key);
-ok($o === ['username' => 'CoFFian', 'status' => 'done', 'age' => 41], 'оригинал: не уведомление, не failed, тот же ключ: ' . json_encode($o, JSON_UNESCAPED_UNICODE));
+ok($o === ['username' => 'CoFFian', 'status' => 'done', 'age' => 41], 'оригинал: не уведомление, не failed, не авто-задача (MLP-344), тот же ключ: ' . json_encode($o, JSON_UNESCAPED_UNICODE));
 ok(CommandDedup::findOriginal($jobs, CommandDedup::key($draw, '/нарисуй лису')) === null, 'нет совпадения → null');
 $pending = CommandDedup::findOriginal([['status' => 'processing', 'age' => 5, 'data' => ['command' => $sched2, 'message' => '/расписание', 'username' => 'Darbel']]], CommandDedup::key($sched1, '/schedule'));
 ok($pending !== null && $pending['status'] === 'processing', 'processing по алиасу — оригинал найден');

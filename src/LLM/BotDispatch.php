@@ -49,6 +49,16 @@ class BotDispatch {
             $key = CommandDedup::key($payload['command'] ?? [], (string)($payload['message'] ?? ''));
             if ($window > 0 && $key !== null) {
                 $original = CommandDedup::findOriginal((new JobQueue())->recentDynamicCommands($window), $key);
+                // MLP-344: для рисовальных команд «отвечена» значит «картинка опубликована» — отказ фильтра
+                // безопасности оставляет задачу done без результата (04:13 20.09: двоим сказали «уже рисуется»).
+                if ($original !== null && $original['status'] === 'done'
+                    && in_array((string)($payload['command']['handler_type'] ?? ''), ['image', 'image_chat'], true)) {
+                    $botId = (int)ConfigManager::getInstance()->getOption('ai_bot_user_id', 0);
+                    $since = gmdate('Y-m-d H:i:s', time() - (int)$original['age'] - 5);
+                    if (!(new \Domain\ChatManager())->botPostedImageSince($since, $botId)) {
+                        $original = null;
+                    }
+                }
                 if ($original !== null) {
                     $payload['dedup_of'] = $original;
                     $delay = min($delay, CommandDedup::NOTICE_DELAY);

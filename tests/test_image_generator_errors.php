@@ -23,9 +23,9 @@ ok(!ImageGenerator::isSafetyMessage('Rate limit exceeded'), 'rate limit — не
 ok(!ImageGenerator::isSafetyMessage(null), 'null → false');
 
 echo "\n== softenScene ==\n";
-$scene = 'Darbel (unicorn with deep purple coat) explains his hour-and-a-half chicken heart preparation while CoFFian shoots a rifle at the screen and drinks beer.';
+$scene = 'Darbel (unicorn with deep purple coat) explains his hour-and-a-half chicken heart preparation while CoFFian shoots a rifle at the screen and drinks beer. A poisoned steak and a spear in the victim hint at a murder.';
 $soft = LyraArtist::softenScene($scene);
-ok(!preg_match('/heart|rifle|shoots|beer/i', $soft), 'опасные слова заменены: ' . mb_substr($soft, 0, 120));
+ok(!preg_match('/heart|rifle|shoots|beer|poison|steak|spear|victim|murder/i', $soft), 'опасные слова заменены (MLP-344: + murder/poison/stab/victim/steak/spear): ' . mb_substr($soft, 0, 120));
 ok(str_contains($soft, 'deep purple coat'), 'внешность сохранена');
 ok(str_contains($soft, 'Wholesome, cute and calm'), 'добавлено безобидное указание');
 ok(mb_strlen(LyraArtist::softenScene(str_repeat('a long scene ', 60))) < 600, 'длина ограничена');

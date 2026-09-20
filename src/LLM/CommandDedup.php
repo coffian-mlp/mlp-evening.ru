@@ -41,13 +41,14 @@ final class CommandDedup {
 
     /**
      * Первая из недавних задач с тем же ключом (pending/processing/done), не являющаяся
-     * сама уведомлением о дубле. $jobs — JobQueue::recentDynamicCommands(): status, age, data.
+     * сама уведомлением о дубле и не авто-задачей воркера (MLP-344). $jobs — JobQueue::recentDynamicCommands(): status, age, data.
      * @return array{username:string,status:string,age:int}|null
      */
     public static function findOriginal(array $jobs, string $key): ?array {
         foreach ($jobs as $job) {
             $data = $job['data'] ?? [];
             if (!empty($data['dedup_of'])) continue;
+            if (!empty($data['auto'])) continue; // MLP-344: авторисунок — не команда человека; его молчаливый сбой не должен глушить /нарисуйчат
             if (!in_array((string)($job['status'] ?? ''), ['pending', 'processing', 'done'], true)) continue;
             if (self::key($data['command'] ?? [], (string)($data['message'] ?? '')) !== $key) continue;
             return [

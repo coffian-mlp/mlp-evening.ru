@@ -224,7 +224,10 @@ class LyraArtist {
         // дешевле извинения и почти всегда проходит.
         if ($url === null && ImageGenerator::lastErrorIsSafety()) {
             error_log('LyraArtist: отказ фильтра безопасности, перерисовываю мягче: ' . (string)ImageGenerator::lastError());
-            $url = $generator($stylePrefix . ' ' . self::softenScene($subject));
+            // MLP-344: словарной замены мало (детектив: «отравленный стейк», «копьё в теле» прошли мимо списка) —
+            // сцену переписывает режиссёр; словарь остаётся запасным путём.
+            $safe = $this->rewriteSceneSafe($subject) ?? self::softenScene($subject);
+            $url = $generator($stylePrefix . ' ' . $safe);
         }
 
         if ($url === null) {
@@ -451,9 +454,27 @@ class LyraArtist {
         return $instr;
     }
 
+    /** Промпт безобидного пересказа сцены после отказа фильтра (MLP-344). */
+    const SAFE_REWRITE_PROMPT = 'You rewrite scene descriptions for a children\'s picture book illustrator whose image generator has a strict safety filter. '
+        . 'Keep every character, their names and appearance descriptions exactly, keep the setting and mood, but remove or replace anything violent, gory, deadly, criminal, medical, sexual, alcohol- or drug-related, weapons, injuries, food that looks like body parts, and any text or lettering. '
+        . 'Turn plots about murders, poison, shooting or fights into playful, harmless activities (a board game, a story being told, a pillow fight). '
+        . 'Answer with ONLY the rewritten scene in English, 2–3 sentences, no comments, no markdown.';
+
+    /** Безобидная версия сцены через режиссёра; null — сбой (тогда словарный softenScene). */
+    private function rewriteSceneSafe(string $scene): ?string {
+        try {
+            $raw = $this->llm->generateUtility([['role' => 'user', 'content' => "Scene:\n{$scene}\n\nRewrite it safely."]], self::SAFE_REWRITE_PROMPT, 30);
+            $safe = self::sceneFromRaw($raw);
+            return ($safe !== null && mb_strlen($safe) > 40) ? $safe : null;
+        } catch (\Throwable $e) {
+            error_log('LyraArtist::rewriteSceneSafe: ' . $e->getMessage());
+            return null;
+        }
+    }
+
     /** Pure (MLP-336): безобидная версия сцены для повтора после отказа фильтра безопасности. */
     public static function softenScene(string $scene): string {
-        $s = preg_replace('/\b(blood|bloody|gore|gory|corpse|dead|death|kill(ing|ed|s)?|shoot(ing|s)?|shot|gun|rifle|weapon|knife|sword|violence|violent|organ|organs|heart|hearts|liver|meat|flesh|wound|wounded|torture|hang(ed|ing)?|burn(ed|ing)?|fire|explosion|drunk|alcohol|vodka|whisky|beer|smoke|smoking|cigarette)\b/iu', 'something', $scene);
+        $s = preg_replace('/\b(blood|bloody|gore|gory|corpse|body|bodies|dead|death|die[sd]?|kill(ing|ed|s|er)?|murder(er|ed|s)?|poison(ed|ing)?|stab(bed|bing|s)?|victim|crime|shoot(ing|s)?|shot|gun|rifle|machine gun|weapon|knife|spear|sword|violence|violent|organ|organs|heart|hearts|liver|meat|steak|flesh|wound|wounded|torture|hang(ed|ing)?|burn(ed|ing)?|fire|explosion|drunk|alcohol|vodka|whisky|beer|smoke|smoking|cigarette)\b/iu', 'something', $scene);
         $s = trim(preg_replace('/\s+/u', ' ', (string)$s));
         return mb_substr($s, 0, 380) . ' Wholesome, cute and calm children\'s-book scene: the ponies simply sit together, chat and laugh; no food, no weapons, no injuries, nothing scary.';
     }
