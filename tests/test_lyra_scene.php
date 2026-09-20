@@ -46,8 +46,9 @@ ok(!str_contains($h, 'Назар —'), 'без досье — только в �
 ok(str_contains(LyraArtist::sceneHints([['id' => 12, 'nickname' => 'TotallyNotAPony']], [], 12), 'это ты сама'), 'только бот онлайн — Лира всё равно в сцене (MLP-343)');
 ok(LyraArtist::sceneHints([], $doss, 12) === '', 'никого онлайн → пусто');
 $tight = LyraArtist::sceneHints($online, $doss, 12, 60);
-ok($tight === 'В чате сейчас: Пшеница, Darbel, Назар.', 'бюджет не вмещает приметы → только список');
-ok(mb_strlen(LyraArtist::sceneHints($online, $doss, 12, 120)) <= 120, 'бюджет соблюдается');
+ok(str_starts_with($tight, 'В чате сейчас: TotallyNotAPony') && !str_contains($tight, 'Приметы участников'), 'бюджет не вмещает приметы → список и внешность есть, примет нет');
+$mid = LyraArtist::sceneHints($online, $doss, 12, 260);
+ok(!str_contains($mid, 'Приметы участников') || mb_strlen(mb_substr($mid, mb_strpos($mid, 'Приметы'))) <= 260, 'бюджет ограничивает только блок примет');
 
 echo "\n== colorName / appearance (MLP-334) ==\n";
 ok(LyraArtist::colorName('#ff1e63') === 'bright pink' || LyraArtist::colorName('#ff1e63') === 'pink', 'ff1e63 → pink: ' . LyraArtist::colorName('#ff1e63'));
