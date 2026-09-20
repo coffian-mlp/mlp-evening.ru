@@ -34,7 +34,8 @@ echo "\n== sceneHints (MLP-333) ==\n";
 $online = [['id' => 12, 'nickname' => 'TotallyNotAPony'], ['id' => 7, 'nickname' => 'Пшеница'], ['id' => 10, 'nickname' => 'Darbel'], ['id' => 5, 'nickname' => 'Назар']];
 $doss = [7 => [['text' => 'принцесса чата'], ['text' => 'ест ромашковый чай'], ['text' => 'третий факт — лишний']], 10 => [['text' => str_repeat('лего ', 30)]]];
 $h = LyraArtist::sceneHints($online, $doss, 12);
-ok(str_starts_with($h, 'В чате сейчас: Пшеница, Darbel, Назар.'), "присутствующие без бота: $h");
+ok(str_starts_with($h, 'В чате сейчас: TotallyNotAPony (это ты сама, Лира — рисуй себя в сцене тоже), Пшеница, Darbel, Назар.'), "присутствующие, Лира первой с пометкой (MLP-343): $h");
+ok(str_contains($h, 'TotallyNotAPony — мятно-зелёная единорожка'), 'внешность Лиры в блоке художника');
 ok(str_contains($h, 'Пшеница — принцесса чата; ест ромашковый чай.'), 'максимум два факта на человека');
 ok(!str_contains($h, 'третий факт'), 'третий факт отброшен');
 ok(preg_match('/Darbel — (лего ){1,16}лего…\./u', $h) === 1, 'длинный факт усечён по границе слова: ' . mb_substr($h, mb_strpos($h, 'Darbel'), 100));
@@ -42,7 +43,7 @@ ok(LyraArtist::shortFact('**Участник:** * **Стиль:** Приветс
 ok(LyraArtist::shortFact('1. Манера речи: лаконичные реплики') === 'Манера речи: лаконичные реплики', 'нумерация снята');
 ok(LyraArtist::shortFact('  коротко.  ') === 'коротко', 'короткий факт — как есть, без хвостовой точки');
 ok(!str_contains($h, 'Назар —'), 'без досье — только в списке присутствующих');
-ok(LyraArtist::sceneHints([['id' => 12, 'nickname' => 'TotallyNotAPony']], [], 12) === '', 'только бот → пусто');
+ok(str_contains(LyraArtist::sceneHints([['id' => 12, 'nickname' => 'TotallyNotAPony']], [], 12), 'это ты сама'), 'только бот онлайн — Лира всё равно в сцене (MLP-343)');
 ok(LyraArtist::sceneHints([], $doss, 12) === '', 'никого онлайн → пусто');
 $tight = LyraArtist::sceneHints($online, $doss, 12, 60);
 ok($tight === 'В чате сейчас: Пшеница, Darbel, Назар.', 'бюджет не вмещает приметы → только список');
@@ -61,7 +62,7 @@ ok(LyraArtist::appearance([], '#ff1e63') === LyraArtist::colorName('#ff1e63') . 
 ok(LyraArtist::appearance([['text' => 'любит чай'], ['text' => 'Внешность: серая кобылка с синей гривой и очками']], '#ff1e63') === 'серая кобылка с синей гривой и очками', 'факт «внешность:» перебивает цвет');
 ok(LyraArtist::appearance([['text' => 'любит чай']], '#6d2f8e') === '', 'дефолтный цвет и нет внешности → пусто');
 $h2 = LyraArtist::sceneHints([['id' => 1, 'nickname' => 'CoFFian', 'chat_color' => '#ff1e63'], ['id' => 5, 'nickname' => 'Назар', 'chat_color' => '#6d2f8e']], [], 12);
-ok(str_contains($h2, "\nВнешность (для художника): CoFFian — ") && str_contains($h2, 'accents (#ff1e63)') && !str_contains($h2, 'Назар —'), 'блок внешности: только у тех, кого можно отличить: ' . $h2);
+ok(str_contains($h2, "\nВнешность (для художника): CoFFian — ") && str_contains($h2, 'accents (#ff1e63)') && !str_contains($h2, 'Назар —'), 'блок внешности: только у тех, кого можно отличить (бота в этом наборе нет): ' . $h2);
 
 ok(LyraArtist::sceneFromRaw(null) === null, 'null → null');
 ok(LyraArtist::sceneFromRaw('') === null, 'пустой ответ → null');
