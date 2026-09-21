@@ -811,6 +811,8 @@ $(document).ready(function() {
     let contextTargetId = null;
     let contextTargetUsername = null;
     let contextTargetUserId = null;
+    // MLP-346 (прод-беклог №17): фрагмент, выделенный в сообщении на момент открытия меню.
+    let contextSelectedText = '';
 
     if (contextMenu.length) {
         // MLP-253: меню живёт в body — внутри контейнеров чата absolute-координаты
@@ -826,6 +828,10 @@ $(document).ready(function() {
             contextTargetId = targetMsgEl.data('id');
             contextTargetUsername = targetMsgEl.find('.username').text();
             contextTargetUserId = targetMsgEl.data('userId');
+            // MLP-346: снимок выделения. mousedown по пункту меню сбрасывает выделение
+            // до события click, поэтому «Цитата» из меню теряла выделенный фрагмент
+            // и всегда цитировала сообщение целиком (в отличие от кнопки ❝).
+            contextSelectedText = selectedFragmentIn(targetMsgEl[0]);
 
             // Position: вьюпорт-координаты (меню position:fixed, MLP-253)
             let x = e.clientX;
@@ -941,8 +947,8 @@ $(document).ready(function() {
 
             switch(action) {
                 case 'quote':
-                    // Trigger existing quote logic
-                    $(`.chat-message[data-id="${contextTargetId}"] .quote-btn`).click();
+                    // MLP-346: та же логика, что у кнопки ❝, но с выделением на момент открытия меню
+                    quoteMessage($(`.chat-message[data-id="${contextTargetId}"]`), contextSelectedText);
                     break;
                 case 'edit':
                     // Manually trigger edit logic
@@ -1395,20 +1401,24 @@ $(document).ready(function() {
         updateQuotePreview();
     });
 
-    // Handle Quote Button
-    $(document).on('click', '.quote-btn', function(e) {
-        e.preventDefault();
-        const msgDiv = $(this).closest('.chat-message');
+    // Выделенный текст, если он непустой и начинается внутри данного сообщения; иначе ''.
+    function selectedFragmentIn(msgEl) {
+        const selection = window.getSelection();
+        if (!msgEl || !selection || !selection.anchorNode) return '';
+        const text = selection.toString().trim();
+        return (text.length > 0 && msgEl.contains(selection.anchorNode)) ? text : '';
+    }
+
+    // Цитирование сообщения — общая логика кнопки ❝ и пункта «Цитата» контекстного меню (MLP-346).
+    // selectedText непустой → markdown-blockquote фрагмента в поле ввода; иначе — цитата-вложение.
+    function quoteMessage(msgDiv, selectedText) {
+        if (!msgDiv || !msgDiv.length) return;
         const msgId = msgDiv.attr('data-id');
         const username = msgDiv.find('.username').text().trim();
-        
-        // --- Smart Quoting (Selection) ---
-        const selection = window.getSelection();
-        const selectedText = selection.toString().trim();
         const chatInput = document.getElementById('chat-input');
-        
-        // Check if selection is non-empty AND is inside THIS message
-        if (selectedText.length > 0 && selection.anchorNode && msgDiv[0].contains(selection.anchorNode)) {
+
+        // --- Smart Quoting (Selection) ---
+        if (selectedText && selectedText.length > 0) {
             if (chatInput) {
                 // Format as Markdown Blockquote
                 const quoteText = selectedText.split('\n').map(line => `> ${line}`).join('\n') + '\n\n';
@@ -1431,7 +1441,8 @@ $(document).ready(function() {
                 chatInput.dispatchEvent(new Event('input')); // Auto-resize
                 
                 // Clear selection to avoid confusion
-                selection.removeAllRanges();
+                const selection = window.getSelection();
+                if (selection) selection.removeAllRanges();
             }
             return; // Stop here, don't add as attachment
         }
@@ -1453,6 +1464,13 @@ $(document).ready(function() {
             updateQuotePreview();
             if (chatInput) chatInput.focus();
         }
+    }
+
+    // Handle Quote Button
+    $(document).on('click', '.quote-btn', function(e) {
+        e.preventDefault();
+        const msgDiv = $(this).closest('.chat-message');
+        quoteMessage(msgDiv, selectedFragmentIn(msgDiv[0]));
     });
 
     // --- Context Navigation Logic ---
