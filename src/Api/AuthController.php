@@ -5,6 +5,7 @@ namespace Api;
 use Domain\Auth;
 use Domain\CaptchaManager;
 use Domain\UserManager;
+use Domain\OnlineManager;
 use Infra\Mailer;
 use LLM\BotDispatch;
 use Social\SocialAuthService;
@@ -231,11 +232,17 @@ class AuthController {
      */
     private static function finishThenGreet(string $responseJson, string $greetUsername): never {
         Response::finish($responseJson); // MLP-265: общий fastcgi-паттерн в Response
+        $uid = (int)(Auth::userId() ?? 0);
+        // MLP-319: штампуем присутствие при входе, иначе первый heartbeat после логина
+        // увидит старую отметку и продублирует приветствие (при ai_greeting_cooldown=0).
+        if ($uid > 0) {
+            try { (new OnlineManager())->touchUser($uid); } catch (\Throwable $e) { error_log('AuthController touchUser: ' . $e->getMessage()); }
+        }
         // MLP-294: user_id — для гейта «уже написал сам» (mention поздоровается лучше);
         // по username гейтить нельзя: greeting несёт логин, mention — ник.
         BotDispatch::dispatch('greeting', [
             'username' => $greetUsername,
-            'user_id'  => (int)(Auth::userId() ?? 0),
+            'user_id'  => $uid,
         ]);
         exit();
     }

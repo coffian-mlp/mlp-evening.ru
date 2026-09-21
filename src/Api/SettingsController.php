@@ -107,6 +107,7 @@ class SettingsController {
         // --- ИИ: кто в чате (MLP-323) ---
         'ai_online_in_context' => 'int', // строка присутствия + досье молчунов в контексте бота
         'ai_command_dedup_window' => 'uint', // MLP-326: окно дедупа одинаковых команд, сек (0 = выкл)
+        'ai_greeting_absence_hours' => 'uint', // MLP-319: приветствие по появлению в онлайне после N часов (0 = выкл)
     ];
 
     /** Сохранить глобальные настройки (admin). Бывший action update_settings. */

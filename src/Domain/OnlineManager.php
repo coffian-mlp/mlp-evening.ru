@@ -132,4 +132,44 @@ class OnlineManager {
         $stmt->bind_param("i", $minutes);
         $stmt->execute();
     }
+
+    /**
+     * Отметить присутствие пользователя в users.last_seen (MLP-319) и вернуть, сколько секунд
+     * прошло с предыдущей отметки: ['login' => string, 'gap' => ?int]; gap = null — отметки не было.
+     * Считает и пишет целиком на стороне MySQL (UTC_TIMESTAMP) — без зависимости от TZ PHP.
+     * До MLP-319 колонку писал только SSE-драйвер (chat_stream.php); на Centrifugo она не жила.
+     * @return array|null null — пользователя нет
+     */
+    public function touchUser(int $userId): ?array {
+        $stmt = $this->db->prepare(
+            "SELECT login, TIMESTAMPDIFF(SECOND, last_seen, UTC_TIMESTAMP()) AS gap FROM users WHERE id = ?"
+        );
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        if (!$row) {
+            return null;
+        }
+        $upd = $this->db->prepare("UPDATE users SET last_seen = UTC_TIMESTAMP() WHERE id = ?");
+        $upd->bind_param("i", $userId);
+        $upd->execute();
+        return [
+            'login' => (string)$row['login'],
+            'gap'   => $row['gap'] === null ? null : (int)$row['gap'],
+        ];
+    }
+
+    /**
+     * Решение «появился после отсутствия» (MLP-319). Pure.
+     * $gapSec — секунд с прошлой отметки присутствия (null = отметки не было),
+     * $thresholdSec — порог отсутствия (<= 0 = функция выключена).
+     * Первая отметка (null) — не приход: после деплоя/регистрации только штампуем,
+     * иначе первый heartbeat всех присутствующих дал бы залп приветствий.
+     */
+    public static function isArrival(?int $gapSec, int $thresholdSec): bool {
+        if ($thresholdSec <= 0 || $gapSec === null) {
+            return false;
+        }
+        return $gapSec >= $thresholdSec;
+    }
 }

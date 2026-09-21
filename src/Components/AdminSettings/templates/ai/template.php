@@ -185,6 +185,11 @@ $config = $arResult['config']; // Helper
                 <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Повторный вход пони в этом окне — без приветствия (0 = здороваться всегда).</p>
             </div>
             <div style="flex: 1; min-width: 130px;">
+                <label class="form-label">Приветствие после отсутствия, ч</label>
+                <input type="number" name="ai_greeting_absence_hours" min="0" max="168" value="<?= htmlspecialchars($config->getOption('ai_greeting_absence_hours', 4)) ?>" class="form-input">
+                <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Появился в онлайне (heartbeat) после стольких часов без визитов — Лира здоровается, как при входе. Ловит зрителей с «запомнить меня». 0 = только при входе.</p>
+            </div>
+            <div style="flex: 1; min-width: 130px;">
                 <label class="form-label">Контекст, сообщений</label>
                 <input type="number" name="ai_context_messages" min="4" max="100" value="<?= htmlspecialchars($config->getOption('ai_context_messages', 24)) ?>" class="form-input">
                 <p style="font-size: 0.8em; color: #666; margin-top: 3px;">Сколько последних сообщений чата видит модель (4–100). Мощным моделям можно больше.</p>
