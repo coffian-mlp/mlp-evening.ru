@@ -169,21 +169,22 @@ final class ModerationCommand {
             BotCommandManager::stripPrefix($command, (string)($contextData['message'] ?? ''), $action === 'mute' ? 'мут' : 'бан')
         );
         if ($args['target'] === null) {
-            $this->llm->botSay($isModerator
+            $this->say($username, $isModerator
                 ? "@{$username}, формат: {$prefix} @ник [срок] причина — срок в минутах или с единицей: 30м, 2ч, 1д"
                     . ($action === 'mute' ? ' (без срока — ' . self::MUTE_DEFAULT . ' мин).' : ' (без срока — навсегда).')
-                : "@{$username}, чтобы пожаловаться, напиши: {$prefix} @ник что случилось — я посмотрю переписку и, если нужно, позову модераторов.");
+                : "@{$username}, чтобы пожаловаться, напиши: {$prefix} @ник что случилось — я посмотрю переписку и, если нужно, позову модераторов.",
+                "{$prefix} @ник");
             return true;
         }
         if ($userId <= 0) {
-            $this->llm->botSay("@{$username}, жаловаться могут только зарегистрированные участники — а модераторов можно позвать и напрямую.");
+            $this->say($username, "@{$username}, жаловаться могут только зарегистрированные участники — а модераторов можно позвать и напрямую.");
             return true;
         }
 
         $users  = new UserManager();
         $target = $users->findByLoginOrNickname($args['target']);
         if (!$target) {
-            $this->llm->botSay("@{$username}, не нашла участника «{$args['target']}» — проверь ник или логин.");
+            $this->say($username, "@{$username}, не нашла участника «{$args['target']}» — проверь ник или логин.");
             return true;
         }
         $targetId   = (int)$target['id'];
@@ -219,7 +220,7 @@ final class ModerationCommand {
             $minutes = min(self::MUTE_MAX, $args['minutes'] ?? self::MUTE_DEFAULT);
             $label = ModerationPolicy::durationLabel($minutes);
             if (!$users->muteUser($targetId, $minutes, $actorId, $reason)) {
-                $this->llm->botSay("@{$actor}, не получилось заглушить — попробуй через меню сообщения.");
+                $this->say($actor, "@{$actor}, не получилось заглушить — попробуй через меню сообщения.");
                 return true;
             }
             $this->llm->botSayLive(
@@ -232,7 +233,7 @@ final class ModerationCommand {
         $minutes = $args['minutes']; // null — бессрочно
         $term = $minutes !== null ? 'на ' . ModerationPolicy::durationLabel($minutes) : 'навсегда';
         if (!$users->banUser($targetId, $reason, $actorId, $minutes)) {
-            $this->llm->botSay("@{$actor}, не получилось забанить — попробуй через меню сообщения.");
+            $this->say($actor, "@{$actor}, не получилось забанить — попробуй через меню сообщения.");
             return true;
         }
         $this->llm->botSayLive(
@@ -297,7 +298,7 @@ final class ModerationCommand {
         $verdict = self::parseVerdict($this->llm->generateUtility([['role' => 'user', 'content' => $task]], self::EVAL_PROMPT));
         if ($verdict === null) {
             $log("{$complaint} Оценка не удалась (оценщик не ответил по формату).");
-            $this->llm->botSay("@{$reporter}, не получилось разобраться с жалобой — позови модератора напрямую, пожалуйста.");
+            $this->say($reporter, "@{$reporter}, не получилось разобраться с жалобой — позови модератора напрямую, пожалуйста.");
             return true;
         }
 
@@ -395,13 +396,13 @@ final class ModerationCommand {
         }
         $args = self::parseArgs(BotCommandManager::stripPrefix($command, (string)($contextData['message'] ?? ''), 'разбан'));
         if ($args['target'] === null) {
-            $this->llm->botSay("@{$username}, формат: {$prefix} @ник — сниму и бан, и мут.");
+            $this->say($username, "@{$username}, формат: {$prefix} @ник — сниму и бан, и мут.", "{$prefix} @ник");
             return true;
         }
         $users  = new UserManager();
         $target = $users->findByLoginOrNickname($args['target']);
         if (!$target) {
-            $this->llm->botSay("@{$username}, не нашла участника «{$args['target']}» — проверь ник или логин.");
+            $this->say($username, "@{$username}, не нашла участника «{$args['target']}» — проверь ник или логин.");
             return true;
         }
         $targetId   = (int)$target['id'];
@@ -417,7 +418,7 @@ final class ModerationCommand {
         $banned = !empty($status['is_banned']);
         $muted  = !empty($status['muted_until']) && strtotime($status['muted_until'] . ' UTC') > time();
         if (!$banned && !$muted) {
-            $this->llm->botSay("@{$username}, у @{$targetNick} нет ни бана, ни мута — снимать нечего.");
+            $this->say($username, "@{$username}, у @{$targetNick} нет ни бана, ни мута — снимать нечего.");
             return true;
         }
         $ok = true;
@@ -428,7 +429,7 @@ final class ModerationCommand {
             $ok = $users->unmuteUser($targetId, $userId) && $ok;
         }
         if (!$ok) {
-            $this->llm->botSay("@{$username}, не получилось снять санкцию — попробуй кнопкой «Разбанить» в дашборде.");
+            $this->say($username, "@{$username}, не получилось снять санкцию — попробуй кнопкой «Разбанить» в дашборде.");
             return true;
         }
         $lifted = self::liftedLabel($banned, $muted);
@@ -450,5 +451,21 @@ final class ModerationCommand {
         $verb = mb_strpos($lifted, ' и ') !== false ? 'сняты' : 'снят';
         return "По решению модератора @{$actor} с @{$target} {$verb} {$lifted}: снова можно писать в чат. "
             . "Объяви это в чате одной короткой фразой в своём стиле: назови @{$target} и что решение за @{$actor}." . self::TONE;
+    }
+
+    /**
+     * Сообщение Лиры участнику по правилу владельца (2026-09-26): живой LLM-репликой, шаблон — только
+     * фоллбек (сбой или молчание LLM, выключенный ai_live_confirm, нет обязательной подстроки).
+     * $keep — что должно остаться дословно (синтаксис команды); по умолчанию обязательно @адресат.
+     */
+    private function say(string $to, string $message, ?string $keep = null): void {
+        $this->llm->botSayLive(self::sayInstruction($to, $message, $keep), $message, [], $keep ?? "@{$to}");
+    }
+
+    /** Pure: инструкция пересказа служебного сообщения своими словами. */
+    public static function sayInstruction(string $to, string $message, ?string $keep = null): string {
+        return "Скажи @{$to} своими словами, одной-двумя короткими фразами в своём стиле, смысл этого сообщения: «{$message}»."
+            . ($keep !== null ? " Обязательно сохрани дословно: «{$keep}»." : '')
+            . ' Обратись к @' . $to . '.' . self::TONE;
     }
 }

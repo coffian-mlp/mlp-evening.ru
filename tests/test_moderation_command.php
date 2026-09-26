@@ -94,6 +94,14 @@ ok(mb_strpos(ModerationCommand::liftInstruction('A', 'B', 'бан и мут'), '
 ok(mb_strpos(ModerationCommand::refusalInstruction('Darbel', 'Администратор неприкосновенен!', 'снять санкцию с участника'), '@Darbel хочет снять санкцию с участника') === 0, 'отказ при снятии — своими словами');
 ok(mb_strpos(ModerationCommand::refusalInstruction('Darbel', 'x'), '@Darbel хочет наказать участника') === 0, 'отказ при санкции — как раньше');
 
+echo "\n== Служебные сообщения — живые, шаблон только фоллбек ==\n";
+$say = ModerationCommand::sayInstruction('Wellerman', '@Wellerman, формат: /разбан @ник — сниму и бан, и мут.', '/разбан @ник');
+ok(mb_strpos($say, 'Скажи @Wellerman своими словами') === 0, 'пересказ своими словами, адресат');
+ok(mb_strpos($say, '«@Wellerman, формат: /разбан @ник — сниму и бан, и мут.»') !== false, 'смысл — исходная фраза в кавычках');
+ok(mb_strpos($say, 'Обязательно сохрани дословно: «/разбан @ник».') !== false, 'синтаксис команды сохраняется дословно');
+ok(mb_strpos(ModerationCommand::sayInstruction('A', 'x'), 'сохрани дословно') === false, 'без обязательной части — без требования');
+ok(mb_strpos($say, 'не высмеивай') !== false, 'ограничения тона');
+
 echo "\n";
 if ($fail > 0) { echo "FAIL: $fail\n"; exit(1); }
 echo "ALL PASS\n";
