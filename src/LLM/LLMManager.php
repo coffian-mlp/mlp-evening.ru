@@ -356,7 +356,7 @@ class LLMManager {
             $systemInstruction = !empty($contextData['message']) ? $contextData['message'] : "запрос команды";
             $context[] = [
                 'role' => 'user',
-                'content' => "[Система] Пользователь запрашивает: " . $systemInstruction . "\n" . $additionalPrompt
+                'content' => "[Система] Пользователь запрашивает: " . $systemInstruction . "\n" . $additionalPrompt . "\n\n" . self::LANG_REMINDER // MLP-355
             ];
             
             $prompt = $this->personaPrompt();
@@ -1053,7 +1053,7 @@ class LLMManager {
             // и боевой глюк подписи рисунка 22.08: беседа перевешивает system-задание).
             // Контекст урезан: подтверждению команды длинная история — конкурент.
             $context = $this->buildContext(min(10, $this->contextLimit()));
-            $context[] = ['role' => 'user', 'content' => $instruction];
+            $context[] = ['role' => 'user', 'content' => $instruction . "\n\n" . self::LANG_REMINDER]; // MLP-355
             $raw = $this->generateReply($context);
             $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
         } catch (\Throwable $e) {
@@ -1064,4 +1064,11 @@ class LLMManager {
         }
         return $text;
     }
+
+    /**
+     * Напоминание о языке в конце командной инструкции (MLP-355). Требование «только по-русски»
+     * живёт в системном промпте персоны, а инструкция команды приходит последней репликой —
+     * до неё оно доживает не всегда: glm-5.3 вставлял «reports», «ban», «sniff-sniff» (26.09).
+     */
+    public const LANG_REMINDER = 'Пиши только по-русски, без английских слов и звукоподражаний (ники и команды — как есть).';
 }

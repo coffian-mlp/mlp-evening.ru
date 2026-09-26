@@ -353,8 +353,7 @@ final class ModerationCommand {
     }
 
     /** Общие ограничения тона живых ответов модерации (MLP-352). */
-    public const TONE = ' Не оскорбляй и не высмеивай участников, не обвиняй сверх сказанного, пол участников не выдумывай.'
-        . ' Пиши только по-русски, без английских слов (кроме команд и ников).'; // 26.09: glm-5.3 вставлял «reports», «ban»
+    public const TONE = ' Не оскорбляй и не высмеивай участников, не обвиняй сверх сказанного, пол участников не выдумывай.'; // язык — LLMManager::LANG_REMINDER в liveText (MLP-355)
 
     /** Pure (MLP-352): инструкция живого объявления санкции. $minutes null — бан бессрочный. */
     public static function sanctionInstruction(string $action, string $actor, string $target, ?int $minutes, string $reason): string {

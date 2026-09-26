@@ -48,6 +48,11 @@ class JobQueue {
      * после MLP-307; purgeOld чистит только done/failed).
      */
     public const REACTIVE_TYPES = ['mention', 'greeting', 'dynamic_command', 'cron_spontaneous', 'stream_command'];
+    /**
+     * На что Лира вот-вот ответит (MLP-355): пока такая задача ждёт, спонтанная реплика молчит —
+     * иначе двойной ответ (26.09: спонтанка ответила на «/мятный» за 11 с до ответа самой команды).
+     */
+    public const ANSWER_TYPES = ['mention', 'dynamic_command', 'greeting', 'stream_command'];
 
     /**
      * Забрать созревшие ИНДИВИДУАЛЬНЫЕ задачи (greeting, dynamic_command) и пометить processing.
@@ -324,5 +329,25 @@ class JobQueue {
             $rows[] = $row;
         }
         return $rows;
+    }
+
+    /**
+     * Ждёт ли ответа задача любого из $types (pending или processing), созданная не раньше
+     * $maxAgeSec назад (MLP-355). Окно по возрасту: задача, зависшая в processing после падения
+     * процесса (20.09, фатал на /штош), не глушит спонтанные реплики навсегда.
+     */
+    public function hasPendingAny(array $types, int $maxAgeSec = 600): bool {
+        if (!$types) {
+            return false;
+        }
+        $in = implode(',', array_fill(0, count($types), '?'));
+        $stmt = $this->db->prepare(
+            "SELECT 1 FROM llm_jobs WHERE status IN ('pending','processing') AND type IN ($in)
+               AND created_at > DATE_SUB(NOW(), INTERVAL ? SECOND) LIMIT 1"
+        );
+        $params = array_merge(array_values($types), [$maxAgeSec]);
+        $stmt->bind_param(str_repeat('s', count($types)) . 'i', ...$params);
+        $stmt->execute();
+        return $stmt->get_result()->num_rows > 0;
     }
 }
