@@ -619,7 +619,7 @@ class LLMManager {
                     continue;
                 }
                 if ($clean !== null && $clean !== '' && ($logKind !== 'chat' || ResponseSanitizer::isMeaningful($clean))) {
-                    return $clean;
+                    return $this->latinChecked($clean, $provider, $context, $prompt, $logKind, $botNickname, $botLogin); // MLP-356
                 }
                 if ($clean !== null && $clean !== '') {
                     error_log("askWithFallback: бессодержательный ответ отброшен: " . json_encode(mb_substr($clean, 0, 40), JSON_UNESCAPED_UNICODE));
@@ -1071,4 +1071,75 @@ class LLMManager {
      * до неё оно доживает не всегда: glm-5.3 вставлял «reports», «ban», «sniff-sniff» (26.09).
      */
     public const LANG_REMINDER = 'Пиши только по-русски, без английских слов и звукоподражаний (ники и команды — как есть).';
+
+    /**
+     * Страж латиницы (MLP-356, по решению владельца 26.09): английские слова в реплике Лиры, которых
+     * нет ни в репликах людей, ни в данных контекста, ни среди ников, — повод для одной повторной
+     * генерации тем же провайдером с перечнем слов, которые надо переписать. Напоминание о языке
+     * (MLP-355) не спасает, когда модель копирует свой прошлый ответ из контекста («sniff-sniff»).
+     * Повтор не удался — отдаём первый вариант: ответ важнее тишины. Только kind=chat: служебные
+     * вызовы (режиссёр сцены) пишут по-английски намеренно.
+     */
+    private function latinChecked(string $clean, LLMProviderInterface $provider, array $context, string $prompt, string $logKind, string $botNickname, string $botLogin): string {
+        if ($logKind !== 'chat') {
+            return $clean;
+        }
+        $allowed = $this->allowedLatin($context, $prompt);
+        $foreign = ResponseSanitizer::foreignLatin($clean, $allowed);
+        if (!$foreign) {
+            return $clean;
+        }
+        $list = implode(', ', array_slice($foreign, 0, 6));
+        error_log("askWithFallback: латиница в ответе ({$list}) — повторная генерация");
+        $retryPrompt = $prompt . "\n\n[Язык]: в прошлом варианте ответа были английские слова ({$list}). Напиши ответ заново, полностью по-русски.";
+        $t0 = microtime(true);
+        try {
+            $again = $provider->askChat($context, $retryPrompt);
+            LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
+                ['system' => $retryPrompt, 'messages' => $context], (string)$again, 'ok',
+                (int)round((microtime(true) - $t0) * 1000));
+            $again = ResponseSanitizer::clean($again, $botNickname, $botLogin);
+            if ($again !== null && $again !== '' && !ResponseSanitizer::hasImage($again) && ResponseSanitizer::isMeaningful($again)) {
+                if (ResponseSanitizer::foreignLatin($again, $allowed)) {
+                    error_log('askWithFallback: латиница осталась и после повтора — отдаём повтор');
+                }
+                return $again;
+            }
+        } catch (\Throwable $e) {
+            error_log('askWithFallback: повтор из-за латиницы не удался: ' . $e->getMessage());
+        }
+        return $clean;
+    }
+
+    /**
+     * Латиница, которой ответу можно пользоваться (MLP-356): системный промпт (в т.ч. коды реакций),
+     * реплики людей и блоки данных контекста, ники и логины. Прошлые реплики самой Лиры (assistant)
+     * не в счёт — именно оттуда модель копировала «sniff-sniff».
+     */
+    private function allowedLatin(array $context, string $prompt): array {
+        $texts = [$prompt];
+        foreach ($context as $m) {
+            if (($m['role'] ?? '') === 'assistant') {
+                continue;
+            }
+            $c = $m['content'] ?? '';
+            if (is_array($c)) {
+                foreach ($c as $part) {
+                    if (is_array($part) && is_string($part['text'] ?? null)) {
+                        $texts[] = $part['text'];
+                    }
+                }
+            } elseif (is_string($c)) {
+                $texts[] = $c;
+            }
+        }
+        try {
+            foreach ((array)(new UserManager())->getAllUsers() as $u) {
+                $texts[] = (string)($u['nickname'] ?? '') . ' ' . (string)($u['login'] ?? '');
+            }
+        } catch (\Throwable $e) {
+            error_log('allowedLatin: список пользователей недоступен (страж строже): ' . $e->getMessage());
+        }
+        return ResponseSanitizer::latinWords(implode("\n", $texts));
+    }
 }

@@ -91,4 +91,34 @@ class ResponseSanitizer {
         return preg_match('/!\[[^\]]*\]\([^)\s]+\)/u', $text) === 1
             || preg_match('/https?:\/\/[^\s<]+\.(?:jpe?g|png|gif|webp)/iu', $text) === 1; // тот же шаблон, что у автоэмбеда чата
     }
+
+    /**
+     * Pure (MLP-356): латинские слова текста в нижнем регистре, без повторов. Не считаются: ссылки,
+     * @упоминания, /команды, части короче 3 букв и аббревиатуры КАПСОМ до 5 букв (OBS, PHP, XD).
+     * Слова через дефис разбираются по частям («sniff-sniff» → sniff).
+     */
+    public static function latinWords(string $text): array {
+        $text = (string)preg_replace('~https?://\S+~u', ' ', $text);
+        preg_match_all('~(?<![@/\w])[A-Za-z][A-Za-z\'\-]*~u', $text, $m);
+        $out = [];
+        foreach ($m[0] as $token) {
+            foreach (explode('-', $token) as $part) {
+                $part = trim($part, "'");
+                if (strlen($part) < 3 || preg_match('~^[A-Z]{3,5}$~', $part)) {
+                    continue;
+                }
+                $out[strtolower($part)] = true;
+            }
+        }
+        return array_keys($out);
+    }
+
+    /**
+     * Pure (MLP-356): латинские слова ответа, которых нет среди разрешённых — из реплик людей,
+     * данных контекста и ников. Чужая латиница в реплике Лиры — повод для повторной генерации.
+     */
+    public static function foreignLatin(string $reply, array $allowed): array {
+        $allowedSet = array_flip(array_map('strtolower', $allowed));
+        return array_values(array_filter(self::latinWords($reply), static fn($w) => !isset($allowedSet[$w])));
+    }
 }
