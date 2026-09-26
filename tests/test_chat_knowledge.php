@@ -60,6 +60,24 @@ ok(ChatKnowledge::block('П', null) === 'П', 'только правила');
 ok(ChatKnowledge::block(null, 'Р') === 'Р', 'только роли');
 ok(ChatKnowledge::block('П', 'Р') === "П\n\nР", 'правила, затем роли через пустую строку');
 
+echo "\n== Рисунки (MLP-351) ==\n";
+$both = ChatKnowledge::drawingLine([
+    ['command_prefix' => '/нарисуйчат', 'handler_type' => 'image_chat'],
+    ['command_prefix' => '/нарисуй', 'handler_type' => 'image'],
+    ['command_prefix' => '/запомни', 'handler_type' => 'memory_add'],
+]);
+ok(mb_strpos($both, 'по командам /нарисуй (картинка по описанию) и /нарисуйчат (сценка беседы)') !== false, 'обе команды, порядок стабильный: ' . mb_substr($both, 0, 60));
+ok(mb_strpos($both, 'не говори, что нарисовала, если рисунка не было') !== false, 'запрет выдавать несуществующий рисунок');
+ok(mb_strpos($both, 'подскажи команду') !== false, 'без команды — подсказать команду');
+ok(mb_strpos($both, '/запомни') === false, 'прочие команды не упоминаются');
+$one = ChatKnowledge::drawingLine([['command_prefix' => 'нарисуй', 'handler_type' => 'image']]);
+ok(mb_strpos($one, 'по команде /нарисуй (картинка по описанию)') !== false, 'одна команда, слэш добавлен');
+$alias = ChatKnowledge::drawingLine([['command_prefix' => '/нарисуй', 'handler_type' => 'image'], ['command_prefix' => '/draw', 'handler_type' => 'image']]);
+ok(mb_strpos($alias, '/draw') === false, 'алиас того же типа не дублируется');
+$none = ChatKnowledge::drawingLine([]);
+ok(mb_strpos($none, 'рисовать сейчас не можешь') !== false && mb_strpos($none, 'подскажи команду') === false, 'команд нет — не подсказывать мёртвую команду');
+ok(ChatKnowledge::block('П', null, 'Рис') === "П\n\nРис", 'склейка трёх частей с пропуском пустой');
+
 echo "\n";
 if ($fail > 0) { echo "FAIL: $fail\n"; exit(1); }
 echo "ALL PASS\n";

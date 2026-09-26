@@ -80,4 +80,15 @@ class ResponseSanitizer {
         }
         return preg_replace('/^\[\d{1,2}:\d{2}\]\s*[^:\n]{1,40}:\s*/u', '', $s);
     }
+
+    /**
+     * Pure (MLP-351): есть ли в тексте картинка, которую чат отрисует, — markdown-картинка
+     * (любой адрес) или голая http(s)-ссылка на .jpg/.jpeg/.png/.gif/.webp (как автоэмбед
+     * ChatManager::formatMessage). В ответе модели такая картинка — всегда выдумка: настоящие
+     * рисунки код приклеивает к подписи уже после ответа (LyraArtist), а стикеры :код: сюда не относятся.
+     */
+    public static function hasImage(string $text): bool {
+        return preg_match('/!\[[^\]]*\]\([^)\s]+\)/u', $text) === 1
+            || preg_match('/https?:\/\/[^\s<]+\.(?:jpe?g|png|gif|webp)/iu', $text) === 1; // тот же шаблон, что у автоэмбеда чата
+    }
 }

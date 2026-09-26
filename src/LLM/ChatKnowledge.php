@@ -2,6 +2,7 @@
 
 namespace LLM;
 
+use Domain\BotCommandManager;
 use Domain\UserManager;
 use Infra\ConfigManager;
 
@@ -90,9 +91,9 @@ final class ChatKnowledge {
         return str_replace(self::RULES_PLACEHOLDER, $rules !== '' ? $rules : '(правила пока не заданы — так и скажи)', $commandPrompt);
     }
 
-    /** Pure: блок знаний целиком (правила, затем роли); оба пусты → null. */
-    public static function block(?string $rulesBlock, ?string $rolesLine): ?string {
-        $parts = array_values(array_filter([$rulesBlock, $rolesLine], static fn($p) => $p !== null && $p !== ''));
+    /** Pure: блок знаний целиком (правила, роли, рисунки — в порядке аргументов); все пусты → null. */
+    public static function block(?string ...$parts): ?string {
+        $parts = array_values(array_filter($parts, static fn($p) => $p !== null && $p !== ''));
         return $parts ? implode("\n\n", $parts) : null;
     }
 
@@ -107,7 +108,39 @@ final class ChatKnowledge {
         $users = (new UserManager())->getAllUsers();
         return self::block(
             self::rulesBlock(self::rulesText()),
-            self::rolesLine(is_array($users) ? $users : [], $ownerId, $botId)
+            self::rolesLine(is_array($users) ? $users : [], $ownerId, $botId),
+            self::drawingLine((new BotCommandManager())->getActive()) // MLP-351
         );
+    }
+
+    /**
+     * Pure (MLP-351): как появляются рисунки — только по активным командам художницы (image,
+     * image_chat), картинку прикладывает сайт. Прецедент 26.09: спонтанная реплика «Нарисовала
+     * по памяти» с выдуманной ссылкой на просьбу без команды. Команд нет — просто не выдумывать.
+     * $activeCommands — строки bot_commands (command_prefix, handler_type).
+     */
+    public static function drawingLine(array $activeCommands): string {
+        $labels = ['image' => 'картинка по описанию', 'image_chat' => 'сценка беседы'];
+        $found = [];
+        foreach ($activeCommands as $c) {
+            $type = (string)($c['handler_type'] ?? '');
+            $prefix = trim((string)($c['command_prefix'] ?? ''));
+            if (isset($labels[$type]) && $prefix !== '' && !isset($found[$type])) {
+                $found[$type] = '/' . ltrim($prefix, '/') . ' (' . $labels[$type] . ')';
+            }
+        }
+        $never = 'Сама вставить картинку в сообщение не можешь: не пиши ссылок на картинки и не говори, что нарисовала, если рисунка не было.';
+        if (!$found) {
+            return '[Рисунки]: рисовать сейчас не можешь. ' . $never;
+        }
+        $list = [];
+        foreach (array_keys($labels) as $type) { // порядок стабилен: image, затем image_chat
+            if (isset($found[$type])) {
+                $list[] = $found[$type];
+            }
+        }
+        $cmds = count($list) > 1 ? 'командам ' . implode(' и ', $list) : 'команде ' . $list[0];
+        return "[Рисунки]: рисуешь только по {$cmds} — картинку к сообщению прикладывает сайт. {$never} "
+            . 'Просят нарисовать без команды — подскажи команду.';
     }
 }
