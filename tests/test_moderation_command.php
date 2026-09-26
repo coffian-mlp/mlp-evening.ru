@@ -15,19 +15,26 @@ function ok($cond, $label) {
     if (!$cond) $fail++;
 }
 
-echo "== Аргументы /бан ==\n";
-ok(ModerationCommand::parseArgs('@Darbel спамит стикерами', false) === ['target' => 'Darbel', 'minutes' => null, 'reason' => 'спамит стикерами'], '@ник и причина');
-ok(ModerationCommand::parseArgs('Пшеница', false) === ['target' => 'Пшеница', 'minutes' => null, 'reason' => ''], 'ник без @ и без причины');
-ok(ModerationCommand::parseArgs('   ', false)['target'] === null, 'пусто → цели нет');
-ok(ModerationCommand::parseArgs('@x', false)['target'] === null, 'слишком короткий ник → цели нет');
-ok(ModerationCommand::parseArgs('@Darbel 30 флуд', false)['reason'] === '30 флуд', 'для /бан число — часть причины');
+echo "== Аргументы: цель и причина ==\n";
+ok(ModerationCommand::parseArgs('@Darbel спамит стикерами') === ['target' => 'Darbel', 'minutes' => null, 'reason' => 'спамит стикерами'], '@ник и причина, срок не указан');
+ok(ModerationCommand::parseArgs('Пшеница') === ['target' => 'Пшеница', 'minutes' => null, 'reason' => ''], 'ник без @ и без причины');
+ok(ModerationCommand::parseArgs('   ')['target'] === null, 'пусто → цели нет');
+ok(ModerationCommand::parseArgs('@x')['target'] === null, 'слишком короткий ник → цели нет');
 
-echo "\n== Аргументы /мут ==\n";
-ok(ModerationCommand::parseArgs('@Darbel 30 флуд', true) === ['target' => 'Darbel', 'minutes' => 30, 'reason' => 'флуд'], 'минуты и причина');
-ok(ModerationCommand::parseArgs('@Darbel 10 мин капс', true) === ['target' => 'Darbel', 'minutes' => 10, 'reason' => 'капс'], '«10 мин» тоже минуты');
-ok(ModerationCommand::parseArgs('@Darbel флуд', true) === ['target' => 'Darbel', 'minutes' => null, 'reason' => 'флуд'], 'без минут — дефолт решает обработчик');
-ok(ModerationCommand::parseArgs('@Darbel 99999', true)['minutes'] === ModerationCommand::MUTE_MAX, 'минуты срезаны до суток');
-ok(ModerationCommand::parseArgs('@Darbel 0', true)['minutes'] === 1, 'ноль минут → минимум 1');
+echo "\n== Аргументы: срок (MLP-352) ==\n";
+ok(ModerationCommand::parseArgs('@Wellerman 1 чтоб не пытался банить админов)') === ['target' => 'Wellerman', 'minutes' => 1, 'reason' => 'чтоб не пытался банить админов)'], 'прецедент 26.09: «1» — минута, «ч» в «чтоб» не часы');
+ok(ModerationCommand::parseArgs('@Darbel 30 флуд') === ['target' => 'Darbel', 'minutes' => 30, 'reason' => 'флуд'], 'голое число — минуты');
+ok(ModerationCommand::parseArgs('@Darbel 30м флуд')['minutes'] === 30, '30м');
+ok(ModerationCommand::parseArgs('@Darbel 30 мин. флуд') === ['target' => 'Darbel', 'minutes' => 30, 'reason' => 'флуд'], '«30 мин.» с точкой');
+ok(ModerationCommand::parseArgs('@Darbel 2ч капс')['minutes'] === 120, '2ч');
+ok(ModerationCommand::parseArgs('@Darbel 2 часа капс') === ['target' => 'Darbel', 'minutes' => 120, 'reason' => 'капс'], '«2 часа»');
+ok(ModerationCommand::parseArgs('@Darbel 1д спам')['minutes'] === 1440, '1д');
+ok(ModerationCommand::parseArgs('@Darbel 3 дня')['minutes'] === 4320, '«3 дня» без причины');
+ok(ModerationCommand::parseArgs('@Darbel 1 день')['minutes'] === 1440, '«1 день»');
+ok(ModerationCommand::parseArgs('@Darbel 5 h')['minutes'] === 300, 'латинская единица h');
+ok(ModerationCommand::parseArgs('@Darbel 999999д')['minutes'] === ModerationCommand::BAN_MAX, 'срок срезан до года');
+ok(ModerationCommand::parseArgs('@Darbel 0')['minutes'] === 1, 'ноль → минимум 1 минута');
+ok(ModerationCommand::parseArgs('@Darbel флуд 30')['minutes'] === null, 'число после причины — часть причины');
 
 echo "\n== Вердикт оценщика ==\n";
 ok(ModerationCommand::parseVerdict("ЗВАТЬ\nОскорбления в адрес участника, пункт 1.") === ['call' => true, 'why' => 'Оскорбления в адрес участника, пункт 1.'], 'ЗВАТЬ + обоснование');
@@ -64,6 +71,17 @@ ok(mb_strpos($task, 'Причина со слов жалующегося: «сп
 ok(mb_strpos($task, "Правила чата:\n1. Не быть булочкой.") !== false, 'правила из дашборда');
 ok(mb_strpos(ModerationCommand::evaluationTask('А', 'Б', '', 'mute', '', 'x', ''), 'не заданы — суди по здравому смыслу') !== false, 'без правил — здравый смысл');
 ok(mb_strpos(ModerationCommand::evaluationTask('А', 'Б', '', 'mute', '', 'x', ''), 'просит заглушить') !== false, '/мут — «заглушить»');
+
+echo "\n== Живые ответы: инструкции (MLP-352) ==\n";
+$ban = ModerationCommand::sanctionInstruction('ban', 'CoFFian', 'Wellerman', 1, 'чтоб не пытался банить админов)');
+ok(mb_strpos($ban, 'По решению модератора @CoFFian: бан для @Wellerman на 1 мин.') === 0, 'бан на срок: кто, кому, сколько');
+ok(mb_strpos($ban, '«чтоб не пытался банить админов)»') !== false, 'причина в кавычках — как данные');
+ok(mb_strpos($ban, 'не высмеивай') !== false && mb_strpos($ban, 'пол участников не выдумывай') !== false, 'ограничения тона');
+ok(mb_strpos(ModerationCommand::sanctionInstruction('ban', 'A', 'B', null, ''), 'бан для @B навсегда. Причина: не указана.') !== false, 'бессрочный бан без причины');
+ok(mb_strpos(ModerationCommand::sanctionInstruction('mute', 'A', 'B', 90, 'капс'), 'мут для @B на 1 ч 30 мин') !== false, 'мут со сроком по-человечески');
+ok(mb_strpos(ModerationCommand::refusalInstruction('Darbel', 'Администратор неприкосновенен!'), '«Администратор неприкосновенен!»') !== false, 'отказ передаёт текст политики');
+ok(ModerationCommand::lowerFirst('Загляните, пожалуйста') === 'загляните, пожалуйста', 'после пингов — со строчной');
+ok(ModerationCommand::lowerFirst('@Назар просит…') === '@Назар просит…', 'упоминание в начале не трогаем');
 
 echo "\n";
 if ($fail > 0) { echo "FAIL: $fail\n"; exit(1); }

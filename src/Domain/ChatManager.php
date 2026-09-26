@@ -62,16 +62,17 @@ class ChatManager {
         $status = $userManager->getBanStatus($userId);
         
         if ($status) {
+            // MLP-352: UserError — текст уходит пользователю как есть. Обычное Exception граница API
+            // (MLP-261) превращала в общую ошибку, и забаненный видел «что-то пошло не так».
             if (!empty($status['is_banned'])) {
-                 throw new Exception("Вы забанены! 🚫 Причина: " . ($status['ban_reason'] ?? 'Нарушение правил'));
+                 throw new \Core\UserError(ModerationPolicy::bannedNotice($status['ban_reason'] ?? null, $status['ban_until'] ?? null, time()));
             }
             
             if (!empty($status['muted_until'])) {
                 // Assuming DB returns Y-m-d H:i:s in UTC
                 $muteUntil = strtotime($status['muted_until'] . ' UTC');
                 if ($muteUntil > time()) {
-                    $minutesLeft = ceil(($muteUntil - time()) / 60);
-                    throw new Exception("Вы заглушены 🤐 Осталось: $minutesLeft мин. Причина: " . ($status['ban_reason'] ?? ''));
+                    throw new \Core\UserError(ModerationPolicy::mutedNotice($muteUntil - time(), $status['ban_reason'] ?? null));
                 }
             }
         }

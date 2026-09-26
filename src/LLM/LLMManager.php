@@ -723,25 +723,8 @@ class LLMManager {
      * LLM ничего не решает — только формулирует; данные в инструкции минимальны.
      */
     public function botSayLive(string $instruction, string $fallback, array $quotedIds = [], ?string $mustContain = null) {
-        if (!(int)ConfigManager::getInstance()->getOption('ai_live_confirm', 1)) {
-            return $this->botSay($fallback, $quotedIds);
-        }
-        $text = null;
-        try {
-            // Инструкция — ПОСЛЕДНЕЙ РЕПЛИКОЙ контекста, не в system (уроки MLP-293/308
-            // и боевой глюк подписи рисунка 22.08: беседа перевешивает system-задание).
-            // Контекст урезан: подтверждению команды длинная история — конкурент.
-            $context = $this->buildContext(min(10, $this->contextLimit()));
-            $context[] = ['role' => 'user', 'content' => $instruction];
-            $raw = $this->generateReply($context);
-            $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
-        } catch (\Throwable $e) {
-            error_log('botSayLive degraded to fallback: ' . $e->getMessage());
-        }
-        if ($text === null || $text === '' || ($mustContain !== null && mb_stripos($text, $mustContain) === false)) {
-            return $this->botSay($fallback, $quotedIds);
-        }
-        return $this->botSay($text, $quotedIds);
+        // MLP-352: генерация вынесена в liveText() — ею пользуются и составные сообщения (пинги модераторов).
+        return $this->botSay($this->liveText($instruction, $mustContain) ?? $fallback, $quotedIds);
     }
 
     /**
@@ -1052,5 +1035,32 @@ class LLMManager {
             $this->personaPromptCache = $prompt;
         }
         return $this->personaPromptCache;
+    }
+
+    /**
+     * Живая фраза Лиры по инструкции БЕЗ постинга (MLP-352; раньше — тело botSayLive, MLP-317).
+     * null — живые подтверждения выключены (ai_live_confirm=0), сбой или молчание LLM, либо
+     * в тексте нет обязательной подстроки $mustContain: вызывающий берёт свою фикс-фразу.
+     */
+    public function liveText(string $instruction, ?string $mustContain = null): ?string {
+        if (!(int)ConfigManager::getInstance()->getOption('ai_live_confirm', 1)) {
+            return null;
+        }
+        $text = null;
+        try {
+            // Инструкция — ПОСЛЕДНЕЙ РЕПЛИКОЙ контекста, не в system (уроки MLP-293/308
+            // и боевой глюк подписи рисунка 22.08: беседа перевешивает system-задание).
+            // Контекст урезан: подтверждению команды длинная история — конкурент.
+            $context = $this->buildContext(min(10, $this->contextLimit()));
+            $context[] = ['role' => 'user', 'content' => $instruction];
+            $raw = $this->generateReply($context);
+            $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
+        } catch (\Throwable $e) {
+            error_log('liveText degraded to fallback: ' . $e->getMessage());
+        }
+        if ($text === null || $text === '' || ($mustContain !== null && mb_stripos($text, $mustContain) === false)) {
+            return null;
+        }
+        return $text;
     }
 }

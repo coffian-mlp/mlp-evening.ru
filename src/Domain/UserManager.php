@@ -48,7 +48,8 @@ class UserManager {
         if ($cached) return $cached;
 
         // Fetch users with options via JOINs
-        $sql = "SELECT u.id, u.login, u.nickname, u.email, u.role, u.created_at, u.is_banned, u.muted_until, u.ban_reason,
+        // MLP-352: is_banned — действующий бан: истёкший временный (ban_until в прошлом) не считается.
+        $sql = "SELECT u.id, u.login, u.nickname, u.email, u.role, u.created_at, (u.is_banned = 1 AND (u.ban_until IS NULL OR u.ban_until > UTC_TIMESTAMP())) AS is_banned, u.ban_until, u.muted_until, u.ban_reason,
                        uo_color.option_value as chat_color,
                        uo_avatar.option_value as avatar_url
                 FROM users u
@@ -83,7 +84,7 @@ class UserManager {
         // Keeping live DB call for critical auth/session checks
         // But we could add short cache here if needed.
         $stmt = $this->db->prepare("
-            SELECT u.id, u.login, u.nickname, u.email, u.role, u.is_banned, u.ban_reason,
+            SELECT u.id, u.login, u.nickname, u.email, u.role, (u.is_banned = 1 AND (u.ban_until IS NULL OR u.ban_until > UTC_TIMESTAMP())) AS is_banned, u.ban_until, u.ban_reason,
                    uo_color.option_value as chat_color,
                    uo_avatar.option_value as avatar_url
             FROM users u
@@ -104,7 +105,7 @@ class UserManager {
     }
 
     public function getUserByLogin($login) {
-        $stmt = $this->db->prepare("SELECT id, login, nickname, email, role, password_hash, is_banned, ban_reason FROM users WHERE login = ?");
+        $stmt = $this->db->prepare("SELECT id, login, nickname, email, role, password_hash, (is_banned = 1 AND (ban_until IS NULL OR ban_until > UTC_TIMESTAMP())) AS is_banned, ban_until, ban_reason FROM users WHERE login = ?"); // MLP-352
         $stmt->bind_param("s", $login);
         $stmt->execute();
         $res = $stmt->get_result();
@@ -462,29 +463,31 @@ class UserManager {
     // --- Moderation Methods ---
 
     public function getBanStatus($userId) {
-        $stmt = $this->db->prepare("SELECT is_banned, muted_until, ban_reason FROM users WHERE id = ?");
+        $stmt = $this->db->prepare("SELECT (is_banned = 1 AND (ban_until IS NULL OR ban_until > UTC_TIMESTAMP())) AS is_banned, ban_until, muted_until, ban_reason FROM users WHERE id = ?"); // MLP-352
         $stmt->bind_param("i", $userId);
         $stmt->execute();
         $res = $stmt->get_result();
         return $res ? $res->fetch_assoc() : null;
     }
 
-    public function banUser($userId, $reason = null, $moderatorId = null) {
-        $stmt = $this->db->prepare("UPDATE users SET is_banned = 1, ban_reason = ? WHERE id = ?");
-        $stmt->bind_param("si", $reason, $userId);
+    /** $minutes (MLP-352): срок бана; null — бессрочно. */
+    public function banUser($userId, $reason = null, $moderatorId = null, ?int $minutes = null) {
+        $banUntil = ModerationPolicy::banUntil($minutes, time());
+        $stmt = $this->db->prepare("UPDATE users SET is_banned = 1, ban_reason = ?, ban_until = ? WHERE id = ?");
+        $stmt->bind_param("ssi", $reason, $banUntil, $userId);
         $res = $stmt->execute();
         
         if ($res) {
              $this->clearUserCache($userId); // Banned status changed
              if ($moderatorId) {
-                $this->logAction($moderatorId, 'ban', $userId, "Reason: $reason");
+                $this->logAction($moderatorId, 'ban', $userId, "Reason: $reason" . ($banUntil !== null ? "; until $banUntil UTC ($minutes min)" : ''));
              }
         }
         return $res;
     }
 
     public function unbanUser($userId, $moderatorId = null) {
-        $stmt = $this->db->prepare("UPDATE users SET is_banned = 0, ban_reason = NULL WHERE id = ?");
+        $stmt = $this->db->prepare("UPDATE users SET is_banned = 0, ban_reason = NULL, ban_until = NULL WHERE id = ?"); // MLP-352
         $stmt->bind_param("i", $userId);
         $res = $stmt->execute();
 
@@ -502,7 +505,7 @@ class UserManager {
         $muteUntil = gmdate('Y-m-d H:i:s', time() + ($minutes * 60));
         
         // Also ensure is_banned is 0, so it displays as Muted, not Banned
-        $stmt = $this->db->prepare("UPDATE users SET muted_until = ?, ban_reason = ?, is_banned = 0 WHERE id = ?");
+        $stmt = $this->db->prepare("UPDATE users SET muted_until = ?, ban_reason = ?, is_banned = 0, ban_until = NULL WHERE id = ?"); // MLP-352
         $stmt->bind_param("ssi", $muteUntil, $reason, $userId);
         $res = $stmt->execute();
 
