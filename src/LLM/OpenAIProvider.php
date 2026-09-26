@@ -10,12 +10,15 @@ class OpenAIProvider implements LLMProviderInterface {
     private $model;
     private $baseUrl;
     private $proxyUrl;
+    /** Потолок токенов ответа; null — из дашборда (TokenBudget::fromConfig, MLP-348). */
+    private ?int $maxTokens;
 
-    public function __construct($apiKey, $model = 'gpt-4o-mini', $baseUrl = 'https://api.openai.com/v1/chat/completions', $proxyUrl = null) {
+    public function __construct($apiKey, $model = 'gpt-4o-mini', $baseUrl = 'https://api.openai.com/v1/chat/completions', $proxyUrl = null, ?int $maxTokens = null) {
         $this->apiKey = $apiKey;
         $this->model = $model;
         $this->baseUrl = $baseUrl; // Позволяет переопределить URL для GitHub Models, Groq и т.д.
         $this->proxyUrl = $proxyUrl;
+        $this->maxTokens = $maxTokens; // MLP-348: null — потолок из настройки ai_max_tokens
     }
 
     public function getModel(): string {
@@ -39,7 +42,7 @@ class OpenAIProvider implements LLMProviderInterface {
             'model' => $this->model,
             'messages' => $messages,
             'temperature' => 0.7,
-            'max_tokens' => self::MAX_TOKENS
+            'max_tokens' => $this->maxTokens ?? TokenBudget::fromConfig() // MLP-347/348
         ];
 
         $ch = curl_init($this->baseUrl);
@@ -72,18 +75,12 @@ class OpenAIProvider implements LLMProviderInterface {
         }
 
         $decoded = json_decode($response, true);
-        if (isset($decoded['choices'][0]['message']['content'])) {
-            return trim($decoded['choices'][0]['message']['content']);
+        // MLP-348: finish_reason = length → TruncatedResponseException (обрубок не выдаётся за ответ).
+        $content = TokenBudget::contentOf(is_array($decoded) ? $decoded : [], 'OpenAI');
+        if ($content !== null) {
+            return $content;
         }
 
         throw new Exception("OpenAI Invalid Response: " . $response);
     }
-
-    /**
-     * Потолок completion-токенов на ответ (MLP-347). У reasoning-моделей (z-ai/glm-5.3 и т.п.)
-     * рассуждения входят в тот же лимит, что и текст ответа: при прежних 2000 длинное рассуждение
-     * (до ~1950 токенов) оставляло на ответ несколько слов, и сцена режиссёра обрывалась на полуслове
-     * (8 из 40 вызовов за неделю, 2 пустых). Это потолок, а не расход: оплачиваются фактические токены.
-     */
-    public const MAX_TOKENS = 5000;
 }

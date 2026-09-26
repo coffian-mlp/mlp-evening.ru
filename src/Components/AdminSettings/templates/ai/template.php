@@ -61,6 +61,12 @@ $config = $arResult['config']; // Helper
             <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Спонтанные реплики (раз в несколько минут, ~90% запросов) идут на эту модель, всё остальное — упоминания, команды, анонсы, /штош — на основную. <strong>Берите модель того же семейства и того же провайдера, что основная</strong> (например, z-ai/glm-5.3-flashx при основной z-ai/glm-5.3): разные семейства дают заметно разный характер ответов. Работает для OpenAI / OpenRouter / RouterAI; при сбое быстрой модели — фоллбек на основную цепочку. Какая модель ответила — видно в debug-журнале.</p>
         </div>
 
+        <div class="form-group">
+            <label class="form-label">Бюджет ответа, токенов</label>
+            <input type="number" name="ai_max_tokens" min="<?= \LLM\TokenBudget::MIN ?>" max="<?= \LLM\TokenBudget::MAX ?>" step="500" value="<?= \LLM\TokenBudget::fromConfig() ?>" class="form-input">
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Потолок токенов на один ответ модели (RouterAI, OpenRouter, OpenAI; все вызовы: чат, режиссёр, память, зрение). У reasoning-моделей (z-ai/glm-5.3 и её flashx) рассуждения тратят тот же бюджет, что и ответ: при нехватке ответ обрывается. Оборванный ответ не публикуется и не уходит художнице — режиссёр повторит запрос; в debug-журнале такие вызовы помечены статусом <code>truncated</code>. Это потолок, а не расход: оплачиваются фактически сгенерированные токены. По умолчанию <?= \LLM\TokenBudget::DEFAULT ?>, допустимо <?= \LLM\TokenBudget::MIN ?>–<?= \LLM\TokenBudget::MAX ?>.</p>
+        </div>
+
         <div id="ai_group_openai" class="ai-provider-group" <?= $config->getOption('ai_primary_provider', 'openai') === 'openai' ? '' : 'style="display:none;"' ?>>
             <div class="form-group">
                 <label class="form-label">OpenAI API Key (или GitHub Models)</label>

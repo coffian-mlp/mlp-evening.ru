@@ -158,8 +158,9 @@ class VisionDescriber {
         try {
             $out = $provider->askChat($messages, $prompt);
         } catch (\Throwable $e) {
+            $cut = $e instanceof TruncatedResponseException; // MLP-348: обрыв по потолку токенов
             LlmDebugLog::log('vision', $providerKey, $modelName, ['system' => $prompt, 'messages' => $messages],
-                $e->getMessage(), 'error', (int)round((microtime(true) - $t0) * 1000));
+                $cut ? $e->partial : $e->getMessage(), $cut ? 'truncated' : 'error', (int)round((microtime(true) - $t0) * 1000));
             throw $e; // describe() выше сам решает, что делать со сбоем
         }
         LlmDebugLog::log('vision', $providerKey, $modelName, ['system' => $prompt, 'messages' => $messages],

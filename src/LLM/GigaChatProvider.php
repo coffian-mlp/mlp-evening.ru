@@ -101,8 +101,10 @@ class GigaChatProvider implements LLMProviderInterface {
         }
 
         $decoded = json_decode($response, true);
-        if (isset($decoded['choices'][0]['message']['content'])) {
-            return trim($decoded['choices'][0]['message']['content']);
+        // MLP-348: finish_reason = length → TruncatedResponseException (обрубок не выдаётся за ответ).
+        $content = TokenBudget::contentOf(is_array($decoded) ? $decoded : [], 'GigaChat');
+        if ($content !== null) {
+            return $content;
         }
 
         throw new Exception("GigaChat Invalid Response: " . $response);

@@ -612,6 +612,15 @@ class LLMManager {
                 // Пусто после очистки: либо провайдер промолчал, либо это был чистый
                 // прорыв системного текста, вырезанный целиком. В чат не постим — лучше
                 // тишина, чем «системщина». Пробуем следующего провайдера.
+            } catch (TruncatedResponseException $e) {
+                // MLP-348: ответ оборван потолком токенов — обрубок не отдаём вызывающему: режиссёр
+                // повторит запрос, автопись не сдвинет маркер, сжатие памяти не затрёт записи, чат
+                // промолчит. В журнал — статус truncated и полученный обрубок. Следующий провайдер — как при сбое.
+                error_log("LLM Provider truncated (" . get_class($provider) . "): " . $e->getMessage());
+                LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
+                    ['system' => $prompt, 'messages' => $context], $e->partial, 'truncated',
+                    (int)round((microtime(true) - $t0) * 1000));
+                continue;
             } catch (Exception $e) {
                 error_log("LLM Provider Error (" . get_class($provider) . "): " . $e->getMessage());
                 LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
