@@ -44,7 +44,7 @@ class RouterAIProvider implements LLMProviderInterface {
             'model' => $this->model,
             'messages' => $messages,
             'temperature' => 0.7,
-            'max_tokens' => 2000
+            'max_tokens' => self::MAX_TOKENS
         ];
 
         $ch = curl_init($url);
@@ -84,4 +84,12 @@ class RouterAIProvider implements LLMProviderInterface {
 
         throw new Exception("RouterAI Invalid Response: " . $response);
     }
+
+    /**
+     * Потолок completion-токенов на ответ (MLP-347). У reasoning-моделей (z-ai/glm-5.3 и т.п.)
+     * рассуждения входят в тот же лимит, что и текст ответа: при прежних 2000 длинное рассуждение
+     * (до ~1950 токенов) оставляло на ответ несколько слов, и сцена режиссёра обрывалась на полуслове
+     * (8 из 40 вызовов за неделю, 2 пустых). Это потолок, а не расход: оплачиваются фактические токены.
+     */
+    public const MAX_TOKENS = 5000;
 }
