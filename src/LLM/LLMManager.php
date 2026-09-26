@@ -570,7 +570,7 @@ class LLMManager {
      * $fast (MLP-332): идти по цепочке быстрой модели (спонтанные реплики); при пустой настройке
      * ai_fast_model цепочки совпадают. Модель видна в llm_debug_log (колонка model).
      */
-    private function askWithFallback($context, $prompt, string $logKind = 'chat', ?int $deadlineSec = null, bool $fast = false) {
+    private function askWithFallback($context, $prompt, string $logKind = 'chat', ?int $deadlineSec = null, bool $fast = false, ?int $timeoutSec = null) {
         $userManager = new UserManager();
         $botUser = $userManager->getUserById($this->botUserId);
         $botLogin = $botUser['login'] ?? 'Lyra';
@@ -601,7 +601,9 @@ class LLMManager {
             }
             $t0 = microtime(true);
             try {
-                $response = $provider->askChat($context, $prompt);
+                // MLP-358: свой таймаут вызова — через копию провайдера (общий экземпляр не меняется).
+                $call = ($timeoutSec !== null && method_exists($provider, 'withTimeout')) ? $provider->withTimeout($timeoutSec) : $provider;
+                $response = $call->askChat($context, $prompt);
                 LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
                     ['system' => $prompt, 'messages' => $context], (string)$response, 'ok',
                     (int)round((microtime(true) - $t0) * 1000));
@@ -737,8 +739,9 @@ class LLMManager {
      * перебор прекращается (null). Нужен фоновым задачам (автопись), чей вызов не должен
      * удерживать тик воркера дольше порога живости heartbeat (90с).
      */
-    public function generateUtility(array $context, string $systemPrompt, ?int $deadlineSec = null): ?string {
-        return $this->askWithFallback($context, $systemPrompt, 'utility', $deadlineSec);
+    public function generateUtility(array $context, string $systemPrompt, ?int $deadlineSec = null, ?int $timeoutSec = null): ?string {
+        // $timeoutSec (MLP-358): таймаут HTTP-запроса к провайдеру для этого вызова; null — 60 с по умолчанию.
+        return $this->askWithFallback($context, $systemPrompt, 'utility', $deadlineSec, false, $timeoutSec);
     }
 
     /**

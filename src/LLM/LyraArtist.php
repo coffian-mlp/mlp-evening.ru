@@ -105,7 +105,7 @@ class LyraArtist {
             ]];
             // Две попытки: модель изредка молчит/чатится — второй заход дешевле извинений.
             for ($attempt = 0; $attempt < 2; $attempt++) {
-                $scene = self::sceneFromRaw($this->llm->generateUtility($task, self::DIRECTOR_PROMPT));
+                $scene = self::sceneFromRaw($this->llm->generateUtility($task, self::DIRECTOR_PROMPT, null, self::DIRECTOR_TIMEOUT));
                 if ($scene !== null) {
                     return $scene;
                 }
@@ -514,4 +514,11 @@ class LyraArtist {
             return null;
         }
     }
+
+    /**
+     * Таймаут запроса режиссёра сцены, с (MLP-358, решение владельца 26.09). За неделю журнала при
+     * общих 60 с — 7 таймаутов из 46 вызовов, удачные доходили до 59 с; таймаут стоит целого рисунка.
+     * Цена: во время рисования воркер занят дольше (две попытки — до ~4 минут).
+     */
+    public const DIRECTOR_TIMEOUT = 120;
 }

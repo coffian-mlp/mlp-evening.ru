@@ -11,6 +11,8 @@ class OpenRouterProvider implements LLMProviderInterface {
     private $proxyUrl;
     /** Потолок токенов ответа; null — из дашборда (TokenBudget::fromConfig, MLP-348). */
     private ?int $maxTokens;
+    /** Таймаут HTTP-запроса, с; для отдельного вызова — копия через withTimeout() (MLP-358). */
+    private int $timeoutSec = 60;
 
     public function __construct($apiKey, $model = 'qwen/qwen-2.5-coder-32b-instruct:free', $proxyUrl = null, ?int $maxTokens = null) {
         $this->apiKey = $apiKey;
@@ -49,7 +51,7 @@ class OpenRouterProvider implements LLMProviderInterface {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         // MLP-314: таймауты внешних вызовов — зависший провайдер не держит воркер/веб-запрос.
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeoutSec); // MLP-358: по умолчанию 60 с
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
@@ -85,5 +87,15 @@ class OpenRouterProvider implements LLMProviderInterface {
         }
 
         throw new Exception("OpenRouter Invalid Response: " . $response);
+    }
+
+    /**
+     * Копия провайдера с другим таймаутом запроса (MLP-358): долгим задачам вроде режиссёра сцены —
+     * больше времени, не трогая общий экземпляр и остальные вызовы. Минимум 5 с.
+     */
+    public function withTimeout(int $sec): static {
+        $copy = clone $this;
+        $copy->timeoutSec = max(5, $sec);
+        return $copy;
     }
 }
