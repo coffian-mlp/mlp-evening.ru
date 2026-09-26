@@ -2502,7 +2502,43 @@ if (typeof window.openProfileModal !== 'function') {
 }
 
 // === MLP-278: превью команд при вводе «/» (как в Telegram/Discord) ===
+// MLP-354 (прод-беклог №21, №23): выделенная команда показывает описание целиком, стрелки
+// выбирают, Tab подставляет. Enter по-прежнему отправляет сообщение (полностью набранная
+// команда не должна требовать двух нажатий).
 (function () {
+    let cmdActive = 0; // индекс выделенной команды в текущем списке
+
+    function cmdItems() {
+        const el = document.getElementById('cmd-preview');
+        return el ? el.querySelectorAll('.cmd-preview-item') : [];
+    }
+
+    function cmdPreviewOpen() {
+        const el = document.getElementById('cmd-preview');
+        return !!el && el.style.display !== 'none' && cmdItems().length > 0;
+    }
+
+    function setCmdActive(idx) {
+        const items = cmdItems();
+        if (!items.length) return;
+        cmdActive = (idx % items.length + items.length) % items.length;
+        items.forEach(function (it, i) {
+            const on = i === cmdActive;
+            it.classList.toggle('active', on);
+            it.setAttribute('aria-selected', on ? 'true' : 'false');
+            if (on) it.scrollIntoView({ block: 'nearest' });
+        });
+    }
+
+    function acceptCmd(input, item) {
+        const it = item || cmdItems()[cmdActive] || cmdItems()[0];
+        if (!it || !input) return false;
+        input.value = it.dataset.prefix + ' ';
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+        input.dispatchEvent(new Event('input', { bubbles: true })); // авторесайз; превью скроется (есть пробел)
+        return true;
+    }
     function ensureCmdPreview() {
         let el = document.getElementById('cmd-preview');
         if (!el) {
@@ -2531,10 +2567,13 @@ if (typeof window.openProfileModal !== 'function') {
         // MLP-289 (AR7-L1): узлы вместо innerHTML-конкатенации — префикс и
         // описание команды экранированы, как пользовательский текст в беклоге.
         el.innerHTML = '';
+        el.setAttribute('role', 'listbox');
         cmds.forEach(function (c) {
             const item = document.createElement('div');
             item.className = 'cmd-preview-item';
             item.dataset.prefix = c.prefix;
+            item.setAttribute('role', 'option');
+            item.title = c.prefix + (c.description ? ' — ' + c.description : ''); // MLP-354: полный текст при наведении
             const prefix = document.createElement('span');
             prefix.className = 'cmd-preview-prefix';
             prefix.textContent = c.prefix;
@@ -2545,7 +2584,12 @@ if (typeof window.openProfileModal !== 'function') {
             item.appendChild(desc);
             el.appendChild(item);
         });
+        const hint = document.createElement('div');
+        hint.className = 'cmd-preview-hint';
+        hint.textContent = 'Tab — подставить · ↑↓ — выбрать · Esc — закрыть';
+        el.appendChild(hint);
         el.style.display = 'block';
+        setCmdActive(0); // по мере набора выделена самая подходящая (верхняя) команда
     }
 
     $(document).on('input', '#chat-input', function () {
@@ -2559,16 +2603,26 @@ if (typeof window.openProfileModal !== 'function') {
     });
 
     $(document).on('keydown', '#chat-input', function (e) {
-        if (e.key === 'Escape') hideCmdPreview();
+        if (e.key === 'Escape') { hideCmdPreview(); return; }
+        if (!cmdPreviewOpen()) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setCmdActive(cmdActive + 1);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setCmdActive(cmdActive - 1);
+        } else if (e.key === 'Tab' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault(); // Tab подставляет команду, а не уводит фокус
+            acceptCmd(this);
+        }
+    });
+
+    $(document).on('mouseenter', '.cmd-preview-item', function () {
+        setCmdActive(Array.prototype.indexOf.call(cmdItems(), this)); // мышь и стрелки — одно выделение
     });
 
     $(document).on('click', '.cmd-preview-item', function () {
-        const input = document.getElementById('chat-input');
-        if (input) {
-            input.value = $(this).data('prefix') + ' ';
-            input.focus();
-            input.dispatchEvent(new Event('input', { bubbles: true })); // авторесайз; превью скроется (есть пробел)
-        }
+        acceptCmd(document.getElementById('chat-input'), this);
     });
 
     $(document).on('click', function (e) {
