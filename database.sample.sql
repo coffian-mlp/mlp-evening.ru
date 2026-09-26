@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `is_banned` tinyint(1) DEFAULT 0,
   `muted_until` datetime DEFAULT NULL,
   `ban_reason` varchar(255) DEFAULT NULL,
+  `ban_until` datetime DEFAULT NULL,
   `last_seen` datetime DEFAULT NULL,
   `reset_token_hash` varchar(255) DEFAULT NULL,
   `reset_token_expires` datetime DEFAULT NULL,
