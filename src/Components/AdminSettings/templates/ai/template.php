@@ -24,6 +24,12 @@ $config = $arResult['config']; // Helper
         </div>
 
         <div class="form-group">
+            <label class="form-label">Правила чата</label>
+            <textarea name="ai_chat_rules" class="form-input" rows="5" placeholder="1. …&#10;2. …"><?= htmlspecialchars($config->getOption('ai_chat_rules', '')) ?></textarea>
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Лира знает эти правила во всех репликах и вспоминает их к месту, но не обвиняет участников в нарушениях. Команда <code>/правила</code> берёт текст отсюда же через плейсхолдер <code>{rules}</code> в своём промпте. Пусто — Лира правил не знает.</p>
+        </div>
+
+        <div class="form-group">
             <label class="form-label">Имена-упоминания (через запятую)</label>
             <input type="text" name="ai_aliases" value="<?= htmlspecialchars($config->getOption('ai_aliases', 'лира, lyra, хартстрингс, lyra heartstrings, лирочка')) ?>" class="form-input" placeholder="Например: лира, lyra, хартстрингс">
             <p style="font-size: 0.85em; color: #666; margin-top: 4px;">На эти слова бот будет откликаться без @. Работает без учета регистра.</p>
@@ -33,6 +39,12 @@ $config = $arResult['config']; // Helper
             <label class="form-label">ID Пользователя Бота</label>
             <input type="number" name="ai_bot_user_id" value="<?= htmlspecialchars($config->getOption('ai_bot_user_id', '')) ?>" class="form-input" placeholder="ID пользователя (например, 2)">
             <p style="font-size: 0.85em; color: #666; margin-top: 4px;">От имени этого пользователя бот будет писать в чат.</p>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">ID владельца сайта</label>
+            <input type="number" name="ai_owner_user_id" min="0" value="<?= (int)$config->getOption('ai_owner_user_id', 0) ?>" class="form-input" placeholder="0 — не задан">
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Лира знает роли участников: владельца сайта, админов и модераторов (роли — из карточек пользователей). 0 — владелец не указывается.</p>
         </div>
 
         <div class="form-group">

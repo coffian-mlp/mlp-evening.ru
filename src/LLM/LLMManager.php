@@ -20,6 +20,8 @@ class LLMManager {
     private $fastProviders = [];
     private $botUserId;
     private $systemPrompt;
+    /** MLP-349: промпт персоны + знания о чате (правила, роли); собирается лениво, см. personaPrompt(). */
+    private ?string $personaPromptCache = null;
     private $chatManager;
     private $proxyUrl;
     private $vlessLink;
@@ -193,7 +195,7 @@ class LLMManager {
                 }
 
                 $context = $this->buildContext($this->contextLimit());
-                $response = $this->askWithFallback($context, $this->systemPrompt);
+                $response = $this->askWithFallback($context, $this->personaPrompt());
                 
                 $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
                 
@@ -231,7 +233,7 @@ class LLMManager {
                 'content' => $instruction
             ];
 
-            $response = $this->askWithFallback($context, $this->systemPrompt, 'chat', null, true); // MLP-332: быстрая модель
+            $response = $this->askWithFallback($context, $this->personaPrompt(), 'chat', null, true); // MLP-332: быстрая модель
             
             $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
             
@@ -258,7 +260,7 @@ class LLMManager {
                 'content' => $instruction
             ];
 
-            $response = $this->askWithFallback($context, $this->systemPrompt);
+            $response = $this->askWithFallback($context, $this->personaPrompt());
             
             $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
             
@@ -342,7 +344,9 @@ class LLMManager {
                 $additionalPrompt .= "\n" . ScheduleData::taskLine($snap);
             } else {
                 // Обычный текстовый обработчик
-                $additionalPrompt = "\n\n" . ($command['system_prompt'] ?: "Тебя вызвали с помощью специальной команды. Ответь коротко и в тему.");
+                // MLP-349: {rules} в промпте команды (/правила) — правила чата из дашборда, единый источник.
+                $commandPrompt = ChatKnowledge::withRules((string)($command['system_prompt'] ?? ''), ChatKnowledge::rulesText());
+                $additionalPrompt = "\n\n" . ($commandPrompt ?: "Тебя вызвали с помощью специальной команды. Ответь коротко и в тему.");
             }
             
             $systemInstruction = !empty($contextData['message']) ? $contextData['message'] : "запрос команды";
@@ -351,7 +355,7 @@ class LLMManager {
                 'content' => "[Система] Пользователь запрашивает: " . $systemInstruction . "\n" . $additionalPrompt
             ];
             
-            $prompt = $this->systemPrompt;
+            $prompt = $this->personaPrompt();
             $response = $this->askWithFallback($context, $prompt);
             
             $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
@@ -465,7 +469,7 @@ class LLMManager {
             'role' => 'user',
             'content' => "[Система] Сгенерируй опрос строго в заданном формате." . $instruction,
         ];
-        return self::parsePoll($this->askWithFallback($context, $this->systemPrompt));
+        return self::parsePoll($this->askWithFallback($context, $this->personaPrompt()));
     }
 
     /**
@@ -501,7 +505,7 @@ class LLMManager {
             . "«Голосовалочка! Обожаю такие штуки.»"
         ];
 
-        $raw = $this->askWithFallback($context, $this->systemPrompt);
+        $raw = $this->askWithFallback($context, $this->personaPrompt());
         $parsed = self::parseBotVote($raw, count($poll['options']));
 
         $idx = $parsed['index'];
@@ -748,7 +752,7 @@ class LLMManager {
      * $extraInstruction — доп. указание режима (адресация/сводность) из ReplyPolicy::instruction().
      */
     public function generateReply(array $context, string $extraInstruction = ''): ?string {
-        $prompt = $this->systemPrompt;
+        $prompt = $this->personaPrompt();
         if ($extraInstruction !== '') {
             $prompt .= "\n\n" . $extraInstruction;
         }
@@ -1015,5 +1019,28 @@ class LLMManager {
                 ConfigManager::getInstance()->setOption('ai_bot_user_id', $newId);
             }
         }
+    }
+
+    /**
+     * Промпт персоны Лиры (MLP-349): характер из дашборда + знания о чате — правила и роли
+     * (ChatKnowledge). Собирается лениво и один раз на экземпляр: LLMManager создаётся и для
+     * дешёвых проверок (BotDispatch::messageAddressesBot), там список ролей не нужен.
+     * Воркер живёт ~55 с — правки правил и ролей подхватываются не позже чем через минуту
+     * (+ до 5 минут кеша списка пользователей). Сбой — персона без знаний, ответ не ломается.
+     */
+    private function personaPrompt(): string {
+        if ($this->personaPromptCache === null) {
+            $prompt = (string)$this->systemPrompt;
+            try {
+                $knowledge = ChatKnowledge::forPersona($this->botUserId);
+                if ($knowledge !== null) {
+                    $prompt .= "\n\n" . $knowledge;
+                }
+            } catch (\Throwable $e) {
+                error_log('ChatKnowledge failed (degraded, persona without rules/roles): ' . $e->getMessage());
+            }
+            $this->personaPromptCache = $prompt;
+        }
+        return $this->personaPromptCache;
     }
 }
