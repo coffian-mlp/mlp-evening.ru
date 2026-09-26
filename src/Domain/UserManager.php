@@ -45,7 +45,7 @@ class UserManager {
 
     public function getAllUsers() {
         $cached = $this->getCache('all_users', 300); // 5 minutes TTL for list
-        if ($cached) return $cached;
+        if ($cached) return self::withActiveBans($cached); // MLP-352: бан мог истечь, пока жил кеш
 
         // Fetch users with options via JOINs
         // MLP-352: is_banned — действующий бан: истёкший временный (ban_until в прошлом) не считается.
@@ -77,7 +77,7 @@ class UserManager {
         }
 
         $this->setCache('all_users', $users);
-        return $users;
+        return self::withActiveBans($users);
     }
 
     public function getUserById($id) {
@@ -654,5 +654,20 @@ class UserManager {
             ];
         }
         return $map;
+    }
+
+    /**
+     * Pure (MLP-352): действующий бан в строках списка. Флаг is_banned вычисляется в SQL на момент
+     * запроса, а список кешируется на 5 минут: истёкший за это время временный бан гасим при чтении.
+     */
+    public static function withActiveBans(array $users, ?int $now = null): array {
+        $now = $now ?? time();
+        foreach ($users as &$u) {
+            if (!empty($u['is_banned']) && !empty($u['ban_until']) && strtotime($u['ban_until'] . ' UTC') <= $now) {
+                $u['is_banned'] = 0;
+            }
+        }
+        unset($u);
+        return $users;
     }
 }

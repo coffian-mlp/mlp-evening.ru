@@ -47,6 +47,18 @@ ok(ModerationPolicy::bannedNotice('x', '2026-09-26 19:00:00', $now) === '🚫 Т
 ok(ModerationPolicy::mutedNotice(610, 'капс') === '🤐 Ты в муте — писать можно будет через 11 мин. Причина: капс.', 'мут: остаток и причина');
 ok(ModerationPolicy::mutedNotice(30, '') === '🤐 Ты в муте — писать можно будет через 1 мин.', 'мут без причины');
 
+echo "\n== Кеш списка пользователей: истёкший бан гасится при чтении (MLP-352) ==\n";
+$rows = Domain\UserManager::withActiveBans([
+    ['id' => 17, 'is_banned' => '1', 'ban_until' => '2026-09-26 19:29:00'], // истёк
+    ['id' => 1,  'is_banned' => '1', 'ban_until' => null],                  // бессрочный
+    ['id' => 2,  'is_banned' => '1', 'ban_until' => '2026-09-26 20:00:00'], // ещё действует
+    ['id' => 3,  'is_banned' => '0', 'ban_until' => null],
+], $now);
+ok((int)$rows[0]['is_banned'] === 0, 'истёкший временный бан из кеша — не бан');
+ok((int)$rows[1]['is_banned'] === 1, 'бессрочный бан остаётся');
+ok((int)$rows[2]['is_banned'] === 1, 'действующий временный бан остаётся');
+ok((int)$rows[3]['is_banned'] === 0, 'без бана — без изменений');
+
 echo "\n";
 if ($fail > 0) { echo "FAIL: $fail\n"; exit(1); }
 echo "ALL PASS\n";

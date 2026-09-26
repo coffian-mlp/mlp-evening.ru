@@ -353,7 +353,7 @@ function loadUsers() {
 
                     // Status
                     var status = '';
-                    if (u.is_banned == 1) status += '<span class="status-badge old" title="'+escapeHtml(u.ban_reason)+'">BANNED</span> ';
+                    if (u.is_banned == 1) status += '<span class="status-badge old" title="'+escapeHtml((u.ban_reason || '') + ' · ' + banTermLabel(u.ban_until))+'">BANNED</span> ';
                     if (u.is_muted) status += '<span class="status-badge" style="background:orange;color:white;" title="Until: '+u.muted_until+'">MUTED</span>';
                     if (!status) status = '<span style="color:#aaa;">OK</span>';
 
@@ -417,7 +417,7 @@ function loadPunishedUsers() {
                     if (u.is_banned == 1) type += 'BAN ';
                     if (u.is_muted) type += 'MUTE ';
                     
-                    var expires = u.is_banned == 1 ? 'Навсегда' : (u.muted_until || '-');
+                    var expires = u.is_banned == 1 ? banTermLabel(u.ban_until) : (u.muted_until || '-'); // MLP-352: срок бана
 
                     var row = `
                         <tr>
@@ -557,7 +557,7 @@ function editUser(user) {
     $('#user-meta-created').text(created ? '📅 С нами с ' + created : '');
     var badges = '';
     if (parseInt(user.is_banned, 10) === 1) {
-        badges += '<span class="badge badge-ban" title="' + escapeHtml(user.ban_reason || '') + '">🔨 Забанен</span>';
+        badges += '<span class="badge badge-ban" title="' + escapeHtml(user.ban_reason || '') + '">🔨 Забанен ' + escapeHtml(banTermLabel(user.ban_until).toLowerCase()) + '</span>';
     }
     if (user.muted_until && new Date(user.muted_until.replace(' ', 'T') + 'Z') > new Date()) {
         badges += '<span class="badge badge-mute">🤐 Мут до ' + escapeHtml(user.muted_until) + ' UTC</span>';
@@ -967,4 +967,12 @@ function deleteMenuItem(id) {
         window.showFlashMessage(res.message, res.type);
         if (res.success) loadMenuItems();
     }, 'json');
+}
+
+// MLP-352: срок бана — users.ban_until (UTC); пусто — бессрочный бан.
+function banTermLabel(banUntil) {
+    if (!banUntil) return 'Навсегда';
+    var d = new Date(String(banUntil).replace(' ', 'T') + 'Z');
+    if (isNaN(d.getTime())) return 'Навсегда';
+    return 'до ' + d.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + ' МСК';
 }
