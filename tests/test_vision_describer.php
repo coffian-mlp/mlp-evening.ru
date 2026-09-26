@@ -78,6 +78,24 @@ try {
     $out4 = VisionDescriber::maybeDescribe($msgs4, $stickerModel, $cache);
     ok(str_contains($out4[0]['content'], '[Картинка: '), 'обычный alt -> метка [Картинка: …] как раньше');
 
+    echo "\n== Кеш неудач (MLP-357) ==\n";
+    $real1210 = 'RouterAI Invalid Response: {"error":"{\\"error\\":{\\"message\\":\\"Provider returned error\\",\\"code\\":400,\\"metadata\\":{\\"raw\\":\\"{\\\\\\"error\\\\\\":{\\\\\\"code\\\\\\":\\\\\\"1210\\\\\\"}}\\"}}}"}';
+    ok(VisionDescriber::isPermanentFailure($real1210), 'ответ провайдера с кодом 1210 — постоянная ошибка');
+    ok(VisionDescriber::isPermanentFailure('RouterAI HTTP Error 404: not found'), 'HTTP 404 — постоянная');
+    ok(VisionDescriber::isPermanentFailure('Provider returned error, "code": 415'), '«code»: 415 — постоянная');
+    ok(!VisionDescriber::isPermanentFailure('RouterAI HTTP Error 429: rate limit'), '429 — временная (лимит)');
+    ok(!VisionDescriber::isPermanentFailure('RouterAI HTTP Error 408: timeout'), '408 — временная');
+    ok(!VisionDescriber::isPermanentFailure('RouterAI HTTP Error 502: bad gateway'), '5xx — временная');
+    ok(!VisionDescriber::isPermanentFailure('RouterAI cURL Error: Operation timed out after 60002 milliseconds'), 'таймаут — временный');
+
+    $rejected = function () use ($real1210) { throw new RuntimeException($real1210); };
+    ok(VisionDescriber::describe('https://example.com/broken.png', $rejected, $cache) === null, 'отвергнутая картинка → null');
+    $before = $calls;
+    ok(VisionDescriber::describe('https://example.com/broken.png', $fake, $cache) === null && $calls === $before, 'в течение часа — без повторного вызова модели');
+    $transient = function () { throw new RuntimeException('RouterAI cURL Error: Operation timed out after 60002 milliseconds'); };
+    VisionDescriber::describe('https://example.com/slow.png', $transient, $cache);
+    ok(VisionDescriber::describe('https://example.com/slow.png', $fake, $cache) === 'рисунок пони с лирой', 'после таймаута — пробуем снова и получаем описание');
+
 } finally {
     foreach (glob("$root/*.json") ?: [] as $f) @unlink($f);
     @rmdir($root);

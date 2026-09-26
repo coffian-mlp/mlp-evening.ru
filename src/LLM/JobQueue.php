@@ -350,4 +350,25 @@ class JobQueue {
         $stmt->execute();
         return $stmt->get_result()->num_rows > 0;
     }
+
+    /**
+     * Реапер зависших processing для нескольких типов (MLP-357): старше порога по claimed_at —
+     * failed с attempts+1. Задача 21364 (/штош) висела 6 дней после фатала воркера 20.09 —
+     * реапер был только у memory_scribe. Возвращает число закрытых.
+     */
+    public function failStaleAny(array $types, int $olderSec = 600): int {
+        if (!$types) {
+            return 0;
+        }
+        $sec = max(60, (int)$olderSec);
+        $in = implode(',', array_fill(0, count($types), '?'));
+        $stmt = $this->db->prepare(
+            "UPDATE llm_jobs SET status='failed', attempts = attempts + 1
+             WHERE status='processing' AND type IN ($in) AND claimed_at < DATE_SUB(NOW(), INTERVAL ? SECOND)"
+        );
+        $params = array_merge(array_values($types), [$sec]);
+        $stmt->bind_param(str_repeat('s', count($types)) . 'i', ...$params);
+        $stmt->execute();
+        return $stmt->affected_rows;
+    }
 }

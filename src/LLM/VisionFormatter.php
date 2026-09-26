@@ -146,6 +146,12 @@ class VisionFormatter {
         }
         // Локальный путь на сайте: /upload/... -> ресайз в превью + base64
         if ($url !== '' && $url[0] === '/' && $webroot !== null) {
+            // MLP-357: файла нет — описывать нечего. Раньше уходил запасной абсолютный URL, модель
+            // получала 404 и падала с кодом 1210 (26.09: выдуманная Лирой ссылка на «рисунок»);
+            // в режиме «основная модель видит картинки» такой URL ронял весь ответ.
+            if (!is_file($webroot . rawurldecode((string)strtok($url, '?#')))) {
+                return null;
+            }
             $dataUri = self::thumbnailDataUri($webroot . $url);
             if ($dataUri !== null) {
                 return $dataUri;

@@ -21,6 +21,8 @@ class VisionDescriber {
     const MAX_IMAGES = VisionFormatter::MAX_IMAGES;   // тот же бюджет, что у мультимодального пути
     const RECENT_MSGS = VisionFormatter::RECENT_MSGS; // и то же окно свежести
     const CACHE_TTL = 604800; // 7 дней
+    /** MLP-357: картинку, которую провайдер отверг (4xx, код 1210), час не пробуем снова. */
+    const FAIL_TTL = 3600;
     const MAX_LEN = 600;      // жёсткий потолок длины описания, символов
 
     const PROMPT = 'Опиши изображение подробно и по делу: что изображено, какой текст виден (процитируй), обстановка. 2–4 предложения на русском. Без вступлений, оценок и вопросов.';
@@ -75,6 +77,10 @@ class VisionDescriber {
         if ($hit !== null && isset($hit['d']) && $hit['d'] !== '') {
             return $hit['d'];
         }
+        // MLP-357: недавно провайдер отверг эту картинку — не повторяем на каждой сборке контекста.
+        if ($cache->get($key . '_fail', self::FAIL_TTL) !== null) {
+            return null;
+        }
 
         // Превью готовим только на живом пути (ConfigManager→БД); с инжектированной
         // моделью (тесты) отдаём URL как есть — resolveForModel там не нужен.
@@ -88,6 +94,9 @@ class VisionDescriber {
             $desc = $model($imagePart);
         } catch (\Throwable $e) {
             error_log('VisionDescriber: ' . get_class($e) . ': ' . $e->getMessage());
+            if (self::isPermanentFailure($e->getMessage())) {
+                $cache->set($key . '_fail', ['fail' => time(), 'url' => $url, 'why' => mb_substr($e->getMessage(), 0, 200)]);
+            }
             return null;
         }
 
@@ -166,5 +175,20 @@ class VisionDescriber {
         LlmDebugLog::log('vision', $providerKey, $modelName, ['system' => $prompt, 'messages' => $messages],
             (string)$out, 'ok', (int)round((microtime(true) - $t0) * 1000));
         return $out;
+    }
+
+    /**
+     * Pure (MLP-357): провайдер отверг саму картинку — постоянная ошибка, её можно кешировать:
+     * код провайдера 1210 («ошибка формата картинки») или клиентская 4xx, кроме 408 и 429.
+     * Таймауты, 5xx и 429 — временные: такую картинку надо пробовать снова.
+     */
+    public static function isPermanentFailure(string $message): bool {
+        if (preg_match('/\b1210\b/', $message)) {
+            return true;
+        }
+        if (preg_match('/HTTP Error (4\d\d)\b/', $message, $m) || preg_match('/\bcode\W{0,4}(4\d\d)\b/', $message, $m)) {
+            return !in_array((int)$m[1], [408, 429], true);
+        }
+        return false;
     }
 }

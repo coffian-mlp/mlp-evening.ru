@@ -93,5 +93,22 @@ check($out[2]['content'] === 'а это :neizvestnyj: код и просто 10:
 check(is_array($out[3]['content']), 'мультимодальный content не тронут');
 check(VisionFormatter::expandStickers([['role' => 'user', 'content' => ':a:']], [], 3)[0]['content'] === ':a:', 'пустая карта — вход нетронут');
 
+echo "\n== Локальный файл, которого нет (MLP-357) ==\n";
+$webroot = sys_get_temp_dir() . '/mlp_vf_test_' . getmypid();
+@mkdir($webroot . '/upload/lyra', 0777, true);
+$png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+file_put_contents($webroot . '/upload/lyra/real.png', $png);
+$missing = [['role' => 'user', 'content' => '[21:34] TotallyNotAPony: лови! ![рисунок](/upload/lyra/lyra_9d2f1c7e40aa3_8c11b2f7.jpg)']];
+$out = VisionFormatter::expand($missing, $base, $webroot);
+check($out[0]['content'] === $missing[0]['content'], 'прецедент 26.09: файла нет — картинка не уходит модели (раньше — URL с 404 и код 1210)');
+$present = [['role' => 'user', 'content' => '![рисунок](/upload/lyra/real.png)']];
+$out = VisionFormatter::expand($present, $base, $webroot);
+$img = is_array($out[0]['content']) ? end($out[0]['content']) : null;
+check($img !== null && $img['type'] === 'image_url', 'файл есть — картинка уходит модели');
+check($img !== null && (str_starts_with($img['image_url']['url'], 'data:image/') || $img['image_url']['url'] === $base . '/upload/lyra/real.png'), 'превью data-URI или абсолютный URL');
+$q = [['role' => 'user', 'content' => '![рисунок](/upload/lyra/real.png?v=2)']];
+check(is_array(VisionFormatter::expand($q, $base, $webroot)[0]['content']), 'параметры в адресе не мешают найти файл');
+@unlink($webroot . '/upload/lyra/real.png'); @rmdir($webroot . '/upload/lyra'); @rmdir($webroot . '/upload'); @rmdir($webroot);
+
 echo "\n" . ($fail === 0 ? "ALL PASS\n" : "FAILURES: $fail\n");
 exit($fail === 0 ? 0 : 1);

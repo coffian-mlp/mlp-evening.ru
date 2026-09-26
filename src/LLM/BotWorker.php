@@ -26,6 +26,8 @@ class BotWorker {
     private $commands;
     private $events;
     private $polls;
+    /** MLP-357: когда последний раз запускался реапер зависших реактивных задач (раз в минуту). */
+    private int $lastReapAt = 0;
 
     public function __construct() {
         $this->config   = ConfigManager::getInstance();
@@ -48,6 +50,7 @@ class BotWorker {
         if (!$row || (int)$row['ok'] !== 1) {
             return; // другой тик уже идёт
         }
+        try { $this->reapStale(); } catch (\Throwable $e) { error_log('BotWorker reaper error: ' . $e->getMessage()); } // MLP-357
         // reactive и proactive изолированы: сбой одного (напр. миграция ещё не прогнана) не роняет другой.
         try { $this->reactive(); }  catch (\Throwable $e) { error_log('BotWorker reactive error: ' . $e->getMessage()); }
         try { $this->proactive(); } catch (\Throwable $e) { error_log('BotWorker proactive error: ' . $e->getMessage()); }
@@ -469,6 +472,22 @@ class BotWorker {
                 error_log('MemoryScribe failed: ' . $e->getMessage());
                 $this->queue->fail([$id]); // маркер не сдвинут — батч повторится
             }
+        }
+    }
+
+    /**
+     * Реапер зависших реактивных задач (MLP-357): processing дольше 10 минут — мёртв (живая реакция,
+     * даже рисунок с режиссёром и повторами, укладывается в минуты). Закрываем как failed — отвечать
+     * на реплику десятиминутной давности уже поздно. Не чаще раза в минуту: тик идёт каждые ~3 с.
+     */
+    private function reapStale(): void {
+        if (time() - $this->lastReapAt < 60) {
+            return;
+        }
+        $this->lastReapAt = time();
+        $n = $this->queue->failStaleAny(JobQueue::REACTIVE_TYPES, 600);
+        if ($n > 0) {
+            error_log("BotWorker: реапер закрыл зависших задач: {$n}");
         }
     }
 }
