@@ -5,6 +5,7 @@ namespace Api;
 use Domain\Auth;
 use Domain\ChatManager;
 use Domain\UserManager;
+use Domain\ModerationPolicy;
 
 /**
  * Обработчики API-действий модерации (MLP-255) — перенос из legacy-switch
@@ -19,30 +20,9 @@ class ModerationController {
      * moderator не трогает коллег. true = можно, иначе — текст отказа.
      */
     private static function checkHierarchy(int $targetUserId): bool|string {
-        // Self-check
-        if ($targetUserId == Auth::userId()) {
-            return "Нельзя применять санкции к самому себе!";
-        }
-
-        $um = new UserManager();
-        $target = $um->getUserById($targetUserId);
-        if (!$target) return "Пользователь не найден.";
-
-        $actorRole = Auth::role();
-        $targetRole = $target['role'];
-
-        if ($actorRole === 'admin') {
-            if ($targetRole === 'admin') return "Администратор неприкосновенен!";
-            return true; // Admin can moderate everyone else
-        }
-
-        if ($actorRole === 'moderator') {
-            if ($targetRole === 'admin') return "Это Администратор. Не шали!";
-            if ($targetRole === 'moderator') return "Модераторы не могут трогать своих коллег.";
-            return true; // Can moderate users
-        }
-
-        return "У вас нет прав модератора.";
+        // MLP-350: правила иерархии — в Domain\ModerationPolicy, общие с чат-командами /бан и /мут.
+        $target = (new UserManager())->getUserById($targetUserId);
+        return ModerationPolicy::check((int)Auth::userId(), Auth::role(), $targetUserId, $target['role'] ?? null);
     }
 
     /** Забанить пользователя (moderator+). */

@@ -186,6 +186,11 @@ class ChatController {
         // (fail-closed: в воркере роли нет). Обычный /штош без адресата проходит как раньше.
         $recapForOthers = $matchedCommand && ($matchedCommand['handler_type'] ?? '') === 'recap' && Auth::isModerator();
 
+        // MLP-350: /бан и /мут — модератору санкция, остальным жалоба. Роль — флагом (fail-closed:
+        // в воркере сессии нет); иерархию проверит ModerationPolicy уже в воркере.
+        $moderatorRole = ($matchedCommand && in_array($matchedCommand['handler_type'] ?? '', ['ban', 'mute'], true)
+            && Auth::isModerator()) ? Auth::role() : null;
+
         // MLP-335: /яос — свой облик; без прав, но только при включённой памяти (запись живёт в bot_memory).
         if ($matchedCommand && ($matchedCommand['handler_type'] ?? '') === 'oc_set'
             && !(int)\Infra\ConfigManager::getInstance()->getOption('ai_memory_enabled', 1)) {
@@ -228,6 +233,9 @@ class ChatController {
             }
             if ($recapForOthers) {
                 $payload['recap_for_others'] = true; // MLP-345: модератор может /штош @ник
+            }
+            if ($moderatorRole !== null) {
+                $payload['moderator_role'] = $moderatorRole; // MLP-350: санкция вместо жалобы
             }
             BotDispatch::dispatch('dynamic_command', $payload);
         } else {

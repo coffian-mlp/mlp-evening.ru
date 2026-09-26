@@ -40,6 +40,8 @@ use Domain\Auth;
                         <option value="reminder">Напоминалки /напомни (LLM-парсер времени)</option>
                         <option value="recap">Личный итог вечера /штош (LLM, реплики вызвавшего)</option>
                         <option value="oc_set">Свой пони-облик /яос (память, без прав)</option>
+                        <option value="ban">Бан /бан (модераторам — бан, остальным — жалоба с оценкой LLM)</option>
+                        <option value="mute">Мут /мут (модераторам — мут, остальным — жалоба с оценкой LLM)</option>
                     </select>
                 </div>
 
@@ -107,6 +109,8 @@ use Domain\Auth;
                                         'reminder'      => ['Remind', '#0d6efd'],
                                         'recap'         => ['Recap',  '#20c997'],
                                         'oc_set'        => ['OC',     '#e83e8c'],
+                                        'ban'           => ['Ban',    '#dc3545'],
+                                        'mute'          => ['Mute',   '#6c757d'],
                                         'text'       => ['Text',     '#28a745'],
                                     ];
                                     [$badgeLabel, $badgeColor] = $badges[$cmd['handler_type']] ?? ['Text', '#28a745'];

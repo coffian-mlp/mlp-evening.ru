@@ -301,6 +301,9 @@ class LLMManager {
                     return (new RecapCommand($this))->handle($command, $contextData);
                 case 'oc_set':        // /яос — свой пони-облик для художницы (MLP-335)
                     return (new LyraOc($this))->handleSetOwn($command, $contextData);
+                case 'ban':
+                case 'mute':          // /бан, /мут: модератору — санкция, остальным — жалоба с оценкой LLM (MLP-350)
+                    return (new ModerationCommand($this))->handle($command, $contextData);
             }
 
             $context = $this->buildContext($this->contextLimit());
