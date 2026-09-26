@@ -42,6 +42,7 @@ use Domain\Auth;
                         <option value="oc_set">Свой пони-облик /яос (память, без прав)</option>
                         <option value="ban">Бан /бан (модераторам — бан, остальным — жалоба с оценкой LLM)</option>
                         <option value="mute">Мут /мут (модераторам — мут, остальным — жалоба с оценкой LLM)</option>
+                        <option value="unban">Разбан /разбан (модераторы: снять бан и мут)</option>
                     </select>
                 </div>
 
@@ -111,6 +112,7 @@ use Domain\Auth;
                                         'oc_set'        => ['OC',     '#e83e8c'],
                                         'ban'           => ['Ban',    '#dc3545'],
                                         'mute'          => ['Mute',   '#6c757d'],
+                                        'unban'         => ['Unban',  '#198754'],
                                         'text'       => ['Text',     '#28a745'],
                                     ];
                                     [$badgeLabel, $badgeColor] = $badges[$cmd['handler_type']] ?? ['Text', '#28a745'];

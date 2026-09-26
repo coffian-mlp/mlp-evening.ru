@@ -161,6 +161,9 @@ final class ModerationCommand {
         $userId   = (int)($contextData['user_id'] ?? 0);
         $actorRole = (string)($contextData['moderator_role'] ?? '');
         $isModerator = $userId > 0 && ModerationPolicy::isStaff($actorRole);
+        if (($command['handler_type'] ?? '') === 'unban') {
+            return $this->lift($command, $contextData, $username, $userId, $actorRole, $isModerator); // MLP-353
+        }
 
         $args = self::parseArgs(
             BotCommandManager::stripPrefix($command, (string)($contextData['message'] ?? ''), $action === 'mute' ? 'мут' : 'бан')
@@ -361,8 +364,8 @@ final class ModerationCommand {
     }
 
     /** Pure (MLP-352): инструкция живого отказа модератору (иерархия санкций). */
-    public static function refusalInstruction(string $actor, string $check): string {
-        return "@{$actor} хочет наказать участника, но правила модерации не позволяют: «{$check}». "
+    public static function refusalInstruction(string $actor, string $check, string $what = 'наказать участника'): string {
+        return "@{$actor} хочет {$what}, но правила модерации не позволяют: «{$check}». "
             . "Ответь @{$actor} одной короткой фразой в своём стиле, передай смысл отказа." . self::TONE;
     }
 
@@ -373,5 +376,79 @@ final class ModerationCommand {
             return $text;
         }
         return mb_strtolower(mb_substr($text, 0, 1)) . mb_substr($text, 1);
+    }
+
+    /**
+     * /разбан (MLP-353): модератор или админ снимает с участника всё, что действует, — бан и мут.
+     * Иерархия — как у кнопки «Разбанить» (ModerationPolicy). Остальным — только объяснение.
+     */
+    private function lift(array $command, array $contextData, string $username, int $userId, string $actorRole, bool $isModerator): bool {
+        $prefix = '/' . ltrim((string)($command['command_prefix'] ?? 'разбан'), '/');
+        if (!$isModerator) {
+            $this->llm->botSayLive(
+                "@{$username} пробует командой {$prefix} снять с кого-то бан или мут, но снимать санкции могут только модераторы и админы. "
+                    . "Ответь @{$username} одной короткой фразой в своём стиле." . self::TONE,
+                "@{$username}, снимать бан и мут могут только модераторы и админы.",
+                [], "@{$username}"
+            );
+            return true;
+        }
+        $args = self::parseArgs(BotCommandManager::stripPrefix($command, (string)($contextData['message'] ?? ''), 'разбан'));
+        if ($args['target'] === null) {
+            $this->llm->botSay("@{$username}, формат: {$prefix} @ник — сниму и бан, и мут.");
+            return true;
+        }
+        $users  = new UserManager();
+        $target = $users->findByLoginOrNickname($args['target']);
+        if (!$target) {
+            $this->llm->botSay("@{$username}, не нашла участника «{$args['target']}» — проверь ник или логин.");
+            return true;
+        }
+        $targetId   = (int)$target['id'];
+        $targetNick = trim((string)($target['nickname'] ?? '')) ?: (string)$target['login'];
+        $check = ModerationPolicy::check($userId, $actorRole, $targetId, (string)($target['role'] ?? 'user'));
+        if ($check !== true) {
+            $this->llm->botSayLive(self::refusalInstruction($username, $check, 'снять санкцию с участника'), "@{$username}, {$check}", [], "@{$username}");
+            return true;
+        }
+
+        // Действующие санкции: бан — с учётом срока (getBanStatus, MLP-352), мут — по времени.
+        $status = $users->getBanStatus($targetId) ?? [];
+        $banned = !empty($status['is_banned']);
+        $muted  = !empty($status['muted_until']) && strtotime($status['muted_until'] . ' UTC') > time();
+        if (!$banned && !$muted) {
+            $this->llm->botSay("@{$username}, у @{$targetNick} нет ни бана, ни мута — снимать нечего.");
+            return true;
+        }
+        $ok = true;
+        if ($banned) {
+            $ok = $users->unbanUser($targetId, $userId) && $ok;
+        }
+        if ($muted) {
+            $ok = $users->unmuteUser($targetId, $userId) && $ok;
+        }
+        if (!$ok) {
+            $this->llm->botSay("@{$username}, не получилось снять санкцию — попробуй кнопкой «Разбанить» в дашборде.");
+            return true;
+        }
+        $lifted = self::liftedLabel($banned, $muted);
+        $this->llm->botSayLive(
+            self::liftInstruction($username, $targetNick, $lifted),
+            "🕊️ @{$targetNick} снова может писать: {$lifted} " . ($banned && $muted ? 'сняты' : 'снят') . " по решению @{$username}.",
+            [], "@{$targetNick}"
+        );
+        return true;
+    }
+
+    /** Pure (MLP-353): что снято — «бан», «мут» или «бан и мут». */
+    public static function liftedLabel(bool $ban, bool $mute): string {
+        return ($ban && $mute) ? 'бан и мут' : ($ban ? 'бан' : 'мут');
+    }
+
+    /** Pure (MLP-353): инструкция живого объявления о снятой санкции. */
+    public static function liftInstruction(string $actor, string $target, string $lifted): string {
+        $verb = mb_strpos($lifted, ' и ') !== false ? 'сняты' : 'снят';
+        return "По решению модератора @{$actor} с @{$target} {$verb} {$lifted}: снова можно писать в чат. "
+            . "Объяви это в чате одной короткой фразой в своём стиле: назови @{$target} и что решение за @{$actor}." . self::TONE;
     }
 }

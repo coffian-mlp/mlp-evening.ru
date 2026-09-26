@@ -83,6 +83,17 @@ ok(mb_strpos(ModerationCommand::refusalInstruction('Darbel', 'Администр
 ok(ModerationCommand::lowerFirst('Загляните, пожалуйста') === 'загляните, пожалуйста', 'после пингов — со строчной');
 ok(ModerationCommand::lowerFirst('@Назар просит…') === '@Назар просит…', 'упоминание в начале не трогаем');
 
+echo "\n== /разбан (MLP-353) ==\n";
+ok(ModerationCommand::parseArgs('@Wellerman') === ['target' => 'Wellerman', 'minutes' => null, 'reason' => ''], 'цель без срока и причины');
+ok(ModerationCommand::liftedLabel(true, false) === 'бан', 'снят только бан');
+ok(ModerationCommand::liftedLabel(false, true) === 'мут', 'снят только мут');
+ok(ModerationCommand::liftedLabel(true, true) === 'бан и мут', 'сняты оба');
+$lift = ModerationCommand::liftInstruction('CoFFian', 'Wellerman', 'бан');
+ok(mb_strpos($lift, 'По решению модератора @CoFFian с @Wellerman снят бан: снова можно писать в чат.') === 0, 'объявление: кто, с кого, что');
+ok(mb_strpos(ModerationCommand::liftInstruction('A', 'B', 'бан и мут'), 'с @B сняты бан и мут') !== false, 'согласование числа: «сняты»');
+ok(mb_strpos(ModerationCommand::refusalInstruction('Darbel', 'Администратор неприкосновенен!', 'снять санкцию с участника'), '@Darbel хочет снять санкцию с участника') === 0, 'отказ при снятии — своими словами');
+ok(mb_strpos(ModerationCommand::refusalInstruction('Darbel', 'x'), '@Darbel хочет наказать участника') === 0, 'отказ при санкции — как раньше');
+
 echo "\n";
 if ($fail > 0) { echo "FAIL: $fail\n"; exit(1); }
 echo "ALL PASS\n";

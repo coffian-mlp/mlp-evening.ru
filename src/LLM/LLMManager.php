@@ -303,6 +303,7 @@ class LLMManager {
                     return (new LyraOc($this))->handleSetOwn($command, $contextData);
                 case 'ban':
                 case 'mute':          // /бан, /мут: модератору — санкция, остальным — жалоба с оценкой LLM (MLP-350)
+                case 'unban':         // /разбан: модератор снимает бан и мут (MLP-353)
                     return (new ModerationCommand($this))->handle($command, $contextData);
             }
 

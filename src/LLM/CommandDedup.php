@@ -15,7 +15,7 @@ use Domain\BotCommandManager;
  */
 final class CommandDedup {
     /** handler_type, для которых повтор — дубль. */
-    public const TYPES = ['text', 'schedule', 'poll', 'image', 'image_chat', 'ban', 'mute']; // MLP-350: повтор жалобы не зовёт модераторов дважды
+    public const TYPES = ['text', 'schedule', 'poll', 'image', 'image_chat', 'ban', 'mute', 'unban']; // MLP-350/353: повтор жалобы не зовёт модераторов дважды
     /** Аргументы и алиасы не различают вызовы: «/расписание пожалуйста» = «/schedule». */
     public const IGNORE_ARGS = ['schedule', 'image_chat'];
     /** Задержка реплики-уведомления, сек (короче lifelike: человек ждёт ответа на команду). */

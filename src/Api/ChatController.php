@@ -188,7 +188,7 @@ class ChatController {
 
         // MLP-350: /бан и /мут — модератору санкция, остальным жалоба. Роль — флагом (fail-closed:
         // в воркере сессии нет); иерархию проверит ModerationPolicy уже в воркере.
-        $moderatorRole = ($matchedCommand && in_array($matchedCommand['handler_type'] ?? '', ['ban', 'mute'], true)
+        $moderatorRole = ($matchedCommand && in_array($matchedCommand['handler_type'] ?? '', ['ban', 'mute', 'unban'], true)
             && Auth::isModerator()) ? Auth::role() : null;
 
         // MLP-335: /яос — свой облик; без прав, но только при включённой памяти (запись живёт в bot_memory).

@@ -92,6 +92,10 @@ class ChatComponent extends Component {
                     if ($ht === 'memory_show' && !$canViewOwnMemory) {
                         continue;
                     }
+                    // MLP-353: /разбан — только модераторам (остальным команда бесполезна)
+                    if ($ht === 'unban' && !Auth::isModerator()) {
+                        continue;
+                    }
                     $prefix = trim((string)($cmd['command_prefix'] ?? ''));
                     if ($prefix === '') continue;
                     $botCommands[] = [
