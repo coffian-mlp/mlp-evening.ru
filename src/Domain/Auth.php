@@ -229,7 +229,7 @@ class Auth {
     private static function fetchUserForSession($userId) {
         // AR2-2 (MLP-250): через владельца таблицы users.
         $u = (new UserManager())->getUserById((int)$userId);
-        if (!$u || !empty($u['is_banned'])) return null; // забаненных не авто-логиним
+        if (!$u) return null; // Бан ограничивает отправку сообщений, не восстановление входа.
         return $u;
     }
 

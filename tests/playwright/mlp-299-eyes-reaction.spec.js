@@ -69,5 +69,5 @@ test('UI: пикер реакций показывает 👀 (MLP-299)', async 
   await addBtn.hover();
   const picker = page.locator('.reaction-picker');
   await expect(picker).toBeVisible({ timeout: 5000 });
-  await expect(picker.locator('.reaction-picker-item[title="eyes"]')).toHaveText('👀');
+  await expect(picker.locator('.reaction-picker-item[data-reaction="eyes"]')).toHaveText('👀');
 });

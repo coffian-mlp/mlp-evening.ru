@@ -52,7 +52,7 @@ class SocialAuthService {
 
             // Логиним пользователя (если не залогинен)
             if (!Auth::check()) {
-                // Проверяем бан и существование юзера
+                // Проверяем существование пользователя; бан ограничивает отправку, не вход.
                 $user = $this->userManager->getUserById($userId);
                 if (!$user) {
                      // Сирота в user_socials? Удалим связь.
@@ -60,10 +60,6 @@ class SocialAuthService {
                      return ['success' => false, 'message' => 'Связанный пользователь не найден. Попробуйте снова.'];
                 }
                 
-                if ($user['is_banned']) {
-                     return ['success' => false, 'message' => 'Вы забанены: ' . ($user['ban_reason'] ?? 'Нарушение правил')];
-                }
-
                 // Вход
                 Auth::regenerateSession(); // M1: защита от session fixation
                 $_SESSION['user_id'] = $user['id'];

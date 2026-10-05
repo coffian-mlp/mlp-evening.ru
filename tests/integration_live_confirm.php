@@ -9,6 +9,9 @@
 require_once __DIR__ . '/integration_helpers.php';
 
 $conn = it_require_db();
+// MySQL 8 кеширует AUTO_INCREMENT в information_schema на 24 часа.
+// Тест сверяет следующий id с INSERT в этой изолированной БД, поэтому читает свежую статистику.
+$conn->query('SET SESSION information_schema_stats_expiry = 0');
 $marker = 'itlc_' . getmypid();
 
 $optBackup = [];

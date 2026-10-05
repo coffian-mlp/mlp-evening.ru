@@ -118,12 +118,17 @@ class ChatController {
         }
 
         $chat = new ChatManager();
-        $rateLimit = (int)ConfigManager::getInstance()->getOption('chat_rate_limit', 0);
-        if (!$chat->checkRateLimit($userId, $rateLimit)) {
-            Response::json(false, "Не так быстро, сахарок! Подожди $rateLimit сек.", 'error');
-        }
+        try {
+            $chat->assertCanSend((int)$userId);
+            $rateLimit = (int)ConfigManager::getInstance()->getOption('chat_rate_limit', 0);
+            if (!$chat->checkRateLimit($userId, $rateLimit)) {
+                Response::json(false, "Не так быстро, сахарок! Подожди $rateLimit сек.", 'error');
+            }
 
-        $newMsgId = $chat->addMessage($userId, $username, $message, $quotedMsgIds);
+            $newMsgId = $chat->addMessage($userId, $username, $message, $quotedMsgIds);
+        } catch (\Core\UserError $e) {
+            Response::caught($e);
+        }
         if (!$newMsgId) {
             Response::json(false, "Ой, что-то пошло не так при отправке...", 'error');
         }

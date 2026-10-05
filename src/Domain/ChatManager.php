@@ -56,7 +56,8 @@ class ChatManager {
         return true;
     }
 
-    public function addMessage($userId, $username, $message, $quotedMsgIds = []) {
+    /** Проверить санкции перед отправкой; не записывает данные. */
+    public function assertCanSend(int $userId): void {
         // --- Moderation Check ---
         $userManager = new UserManager();
         $status = $userManager->getBanStatus($userId);
@@ -77,6 +78,11 @@ class ChatManager {
             }
         }
         // ------------------------
+
+    }
+
+    public function addMessage($userId, $username, $message, $quotedMsgIds = []) {
+        $this->assertCanSend((int)$userId);
 
         $message = trim($message);
         if (empty($message)) {
@@ -508,7 +514,7 @@ class ChatManager {
 
     public function toggleReaction($messageId, $userId, $reactionType) {
         // Validate reaction type
-        $allowed = ['like', 'dislike', 'laugh', 'cry', 'neutral', 'heart', 'fire', 'wow', 'think', 'party', 'cool', 'eyes'];
+        $allowed = ['like', 'dislike', 'laugh', 'cry', 'neutral', 'heart', 'fire', 'wow', 'think', 'party', 'cool', 'eyes', 'skull', 'clown', 'hundred', 'poop'];
         if (!in_array($reactionType, $allowed)) {
             return ['success' => false, 'message' => 'Неизвестная реакция'];
         }

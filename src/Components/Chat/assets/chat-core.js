@@ -102,7 +102,17 @@ $(document).ready(function() {
         neutral: '😐',
         cry: '😢',
         eyes: '👀',
-        dislike: '👎'
+        dislike: '👎',
+        skull: '💀',
+        clown: '🤡',
+        hundred: '💯',
+        poop: '💩'
+    };
+    const REACTION_LABELS = {
+        like: 'Нравится', heart: 'Сердце', laugh: 'Смех', wow: 'Удивление',
+        fire: 'Огонь', party: 'Праздник', cool: 'Круто', think: 'Задумчивость',
+        neutral: 'Без эмоций', cry: 'Грусть', eyes: 'Глазки', dislike: 'Не нравится',
+        skull: 'Череп', clown: 'Клоун', hundred: 'Сто процентов', poop: 'Какашка'
     };
 
     function toggleReaction(msgId, reaction) {
@@ -192,7 +202,10 @@ $(document).ready(function() {
         const picker = $('<div class="reaction-picker"></div>');
         
         for (const [type, icon] of Object.entries(REACTION_ICONS)) {
-            const item = $(`<div class="reaction-picker-item" title="${type}">${icon}</div>`);
+            const label = REACTION_LABELS[type] || type;
+            const item = $('<button type="button" class="reaction-picker-item"></button>')
+                .attr({ 'data-reaction': type, 'title': label, 'aria-label': label })
+                .text(icon);
             item.click(function(e) {
                 e.stopPropagation();
                 toggleReaction(msgId, type);
@@ -224,16 +237,20 @@ $(document).ready(function() {
         
         btn.append(picker);
 
+        // Горизонтальный клэмп: узкий контейнер у края окна может выбрать
+        // сторону, на которой пикер выходит за viewport.
+        const pickerRect = picker[0].getBoundingClientRect();
+        const shiftX = pickerRect.left < 4 ? 4 - pickerRect.left
+            : pickerRect.right > window.innerWidth - 4 ? window.innerWidth - 4 - pickerRect.right : 0;
+        let shiftY = 0;
         // Вертикальный клэмп: держим пикер внутри контейнера чата (для нижних/верхних сообщений).
         if (container && container.length) {
-            const pr = picker[0].getBoundingClientRect();
             const cr = container[0].getBoundingClientRect();
-            let shift = 0;
-            if (pr.bottom > cr.bottom - 4) shift = (cr.bottom - 4) - pr.bottom;      // уехал вниз -> поднять
-            else if (pr.top < cr.top + 4) shift = (cr.top + 4) - pr.top;             // уехал вверх -> опустить
-            if (shift !== 0) {
-                picker.css('transform', 'translateY(calc(-50% + ' + Math.round(shift) + 'px))');
-            }
+            if (pickerRect.bottom > cr.bottom - 4) shiftY = cr.bottom - 4 - pickerRect.bottom;
+            else if (pickerRect.top < cr.top + 4) shiftY = cr.top + 4 - pickerRect.top;
+        }
+        if (shiftX !== 0 || shiftY !== 0) {
+            picker.css('transform', 'translate(' + Math.round(shiftX) + 'px, calc(-50% + ' + Math.round(shiftY) + 'px))');
         }
     }
 

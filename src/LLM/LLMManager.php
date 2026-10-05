@@ -755,7 +755,7 @@ class LLMManager {
         }
         if (ConfigManager::getInstance()->getOption('ai_reactions', 1)) {
             $prompt .= "\n\n[Реакции]: можешь поставить реакцию на сообщение — добавь в начале ответа маркер"
-                . " [РЕАКЦИЯ: X], где X одно из: like, heart, laugh, wow, fire, party, cool, think, neutral, cry, eyes, dislike."
+                . " [РЕАКЦИЯ: X], где X одно из: like, heart, laugh, wow, fire, party, cool, think, neutral, cry, eyes, dislike, skull, clown, hundred, poop."
                 . " Ставь по настроению, не каждый раз. Если хочешь только отреагировать без слов — верни ТОЛЬКО маркер.";
         }
         return $this->askWithFallback($context, $prompt);

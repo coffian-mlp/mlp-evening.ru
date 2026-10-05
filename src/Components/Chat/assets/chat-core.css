@@ -1198,7 +1198,7 @@
     right: auto !important;
     margin-right: 0 !important;
     margin-left: 8px !important;
-    transform: translateY(-50%) !important;
+    transform: translateY(-50%);
     animation: pickerFadeInRight 0.2s ease-out;
 }
 
@@ -1208,16 +1208,23 @@
 }
 
 @keyframes pickerFadeIn {
-    from { opacity: 0; transform: translateY(-50%) translateX(10px); }
-    to { opacity: 1; transform: translateY(-50%); }
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 @keyframes pickerFadeInRight {
-    from { opacity: 0; transform: translateY(-50%) translateX(-10px); }
-    to { opacity: 1; transform: translateY(-50%); }
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 .reaction-picker-item {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font-family: inherit;
+    line-height: normal;
+    margin: 0;
     font-size: 20px;
     cursor: pointer;
     padding: 2px 4px;
@@ -1226,6 +1233,10 @@
 }
 .reaction-picker-item:hover {
     transform: scale(1.2);
+}
+.reaction-picker-item:focus-visible {
+    outline: 2px solid var(--text-primary, #fff);
+    outline-offset: 1px;
 }
 
 /* Кнопка закрепа (MLP-253): активна = сообщение сейчас закреплено */
