@@ -45,7 +45,7 @@ try {
         // CSRF: публичное чтение событий — без токена; всё остальное для залогиненных
         // проверяется строго (L4/MLP-229: убран прежний bypass для save/delete_event —
         // дашборд теперь шлёт window.csrfToken, проставленный в header.php).
-        if (in_array($action, ['get_public_events', 'get_poll', 'get_pinned'], true)) {
+        if (in_array($action, ['get_public_events', 'get_poll', 'get_pinned', 'get_command_interaction'], true)) {
             // публичное чтение — без CSRF
         } elseif ($isLoggedIn && !Auth::checkCsrfToken($csrfToken)) {
             echo json_encode([
@@ -63,6 +63,13 @@ try {
     }
 
     $action = $_POST['action'] ?? '';
+
+    if (in_array($action, ['get_command_interaction', 'act_command_interaction'], true)) {
+        \Api\CommandInteractionController::configure(
+            \LLM\PlaylistCommand::interactionRegistry(),
+            [\LLM\PlaylistCommand::class, 'queueInteractionReply']
+        );
+    }
 
     // --- Тонкий роутер (MLP-229/255): action → роль → контроллер.
     // Карта — в src/Api/routes.php (отдельный файл, чтобы её видели тесты).

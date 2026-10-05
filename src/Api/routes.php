@@ -8,6 +8,9 @@
  */
 
 return [
+    'get_command_interaction' => ['role' => 'public', 'handler' => [\Api\CommandInteractionController::class, 'get']],
+    'act_command_interaction' => ['role' => 'user', 'handler' => [\Api\CommandInteractionController::class, 'act']],
+    'correct_playlist_completion' => ['role' => 'admin', 'handler' => [\Api\PlaylistController::class, 'correct']],
     'get_public_events' => ['role' => 'public', 'handler' => [\Api\EventController::class, 'getPublic']],
     'save_event'        => ['role' => 'admin',  'handler' => [\Api\EventController::class, 'save']],
     'delete_event'      => ['role' => 'admin',  'handler' => [\Api\EventController::class, 'delete']],

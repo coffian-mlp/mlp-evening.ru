@@ -14,7 +14,7 @@
 
 ```bash
 docker compose up -d db php       # только БД и PHP: nginx/centrifugo не нужны
-docker compose exec php php migrate.php        # догнать миграции (идемпотентно)
+docker compose exec php php migrate.php --status # проверить журнал; не переигрывать старый SQL на fresh sample
 docker compose exec php php tests/run_all.php  # все тесты
 ```
 
@@ -162,3 +162,84 @@ $c->flushCache(); unlink($p);'
 ```
 
 После восстановления настройки выполни `mlp_test_compose stop php`: остановится только PHP-контейнер выделенного тестового проекта, БД и том сохранятся. Ctrl+C у клиента `docker exec` сам по себе может оставить workers PHP CLI server. Production процессы не участвуют.
+
+
+## MLP-361: плейлист, интерактивные команды и LLM-поиск
+
+Подтверждённая приёмка: 93 PHP-скрипта, 20 Playwright-сценариев Chromium/Firefox и четыре визуальных случая (embedded/popup, 1280/360 px). Тесты используют реальную MySQL, HTTP, DOM и SSE; fake допускается только на внешних LLM/curl/Centrifugo границах. Browser Centrifugo service не подменяется доказательством SSE: publish payload проверяется отдельно через настоящий ChatManager.
+
+Пожелания, completion, коррекции и тестовые сообщения изменяют БД: запускать только локально, `DB_HOST=db`. Browser fixture дополнительно проверяет CLI, Docker и localhost. Production интеграционные SKIP не являются PASS.
+
+### Подготовка среды
+
+Из корня репозитория, после локальной настройки `.env` по `.env.example`:
+
+```bash
+mkdir -p docs/tests/MLP-359
+cat > docs/tests/MLP-359/compose.override.yml <<'YAML'
+services:
+  php:
+    image: mlp-eveningru-php
+    ports:
+      - "127.0.0.1:8091:8091"
+YAML
+mlp_test_compose() {
+  docker compose -p mlp359 -f docker-compose.yml \
+    -f docs/tests/MLP-359/compose.override.yml "$@"
+}
+mlp_test_compose up -d --build db php
+```
+
+Override хранится локально вне Git; путь совпадает с CLI fixture/spec. Для новой БД Compose импортирует актуальный `database.sample.sql`. Не импортировать sample поверх существующей БД. Три миграции MLP-361 можно применить выборочно командой ниже, не повторяя всю историческую цепочку. На старой БД сначала сверить схему/журнал и предварительно применённые версии; исторические ENUM-миграции могут сузить современные значения даже при пустом sql_mode.
+
+```bash
+mlp_test_compose exec -T php php <<'PHP'
+<?php
+require 'autoload.php';
+require 'migrate.php';
+if (Infra\Env::get('DB_HOST') !== 'db') exit(1);
+$db = Infra\Database::getInstance()->getConnection();
+migrate_ensure_table($db);
+$applied = migrate_applied($db);
+foreach (['2026_10_05_playlist_wishes.sql',
+          '2026_10_05_command_interactions.sql',
+          '2026_10_05_playlist_commands.sql'] as $name) {
+    if (in_array($name, $applied, true)) continue;
+    migrate_apply_file($db, 'migrations/' . $name);
+    migrate_record($db, $name);
+}
+PHP
+mlp_test_compose exec -T php php tests/run_all.php
+```
+
+Не использовать `--baseline` без проверки соответствия всей схемы: он помечает историю выполненной, но не добавляет отсутствующие изменения. `php migrate.php` без ограничения допустим только после проверки, что в pending действительно находятся нужные новые файлы.
+
+### HTTP и браузеры
+
+Создать игнорируемую `.env.local` с `LOCAL_URL=http://127.0.0.1:8091`. В отдельном терминале запустить принадлежащий тестовой среде сервер:
+
+```bash
+mlp_test_compose exec -T -e PHP_CLI_SERVER_WORKERS=24 php \
+  php -S 0.0.0.0:8091 -t /var/www/html
+```
+
+24 workers нужны полному набору SSE-сценариев: восемь workers вместе с родительским обработчиком в диагностике были заняты девятью SSE-подключениями, блокируя login/read API. Это настройка локального тестового сервера, не требование изменить production PHP-FPM.
+
+Установить Playwright/browser runtimes по разделу выше; затем последовательно:
+
+```bash
+mlp_test_compose exec -T php php tests/playwright/mlp-361-interactions-fixture.php setup
+MLP_BASE_URL=http://127.0.0.1:8091 npx playwright test \
+  -c tests/playwright/playwright.config.js \
+  tests/playwright/mlp-361-command-interactions.ui.spec.js \
+  --project=chromium-ui --project=firefox-ui
+mlp_test_compose exec -T php php tests/playwright/mlp-361-interactions-fixture.php cleanup
+```
+
+Cleanup обязателен и при FAIL: восстанавливает AI/bot/queue/mode, удаляет только собственные изолированные данные и локальный mode-600 credentials-файл. Во время активного browser fixture не запускать PHP suite: оба изменяют глобальные опции БД. После cleanup остановить только тестовый PHP-контейнер (`mlp_test_compose stop php`); production процессы не затрагиваются. Ctrl+C клиента `docker exec` может оставить CLI workers.
+
+### Диагностика и coverage
+
+При widget «Загрузка выбора…» проверить HTTP read API и занятость SSE workers; повышение таймаутов не заменяет устранение исчерпания пула. Screenshot должен отражать реальный renderer, а не скопированную разметку. При случайном FAIL теста рисования проверить уникальность fixture автора и URL: одинаковая подпись/URL штатно подавляется защитой от duplicate сообщения; действующий regression fixture изолирован.
+
+PCOV-приёмка MLP-361: 889/978=90.90% изменённых исполняемых PHP-строк относительно HEAD до коммита, объединённые PHP suite и browser HTTP. Это line coverage изменения, не всего проекта, не ветвей и не JS/CSS. Инструментирование остаётся локальным; не включать его или credentials в релиз.

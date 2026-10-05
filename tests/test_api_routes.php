@@ -121,6 +121,10 @@ $expected = [
     'get_memory'          => 'admin',
     'save_memory'         => 'admin',
     'delete_memory'       => 'admin',
+    // MLP-361: public read, authenticated choice, administrator correction.
+    'get_command_interaction' => 'public',
+    'act_command_interaction' => 'user',
+    'correct_playlist_completion' => 'admin',
 ];
 
 echo "== Карта ролей: каждый action объявлен с гейтом «как было» ==\n";

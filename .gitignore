@@ -6,6 +6,7 @@ playwright-report/
 # Боевые конфиги (создаются из *.sample.*, содержат секреты — не коммитим)
 config.php
 .env
+.env.local
 centrifugo_config.json
 # VLESS/Xray: бинарники и конфиг с секретами — НЕ коммитим (провижн вне git), см. MLP-221
 src/LLM/bin/
@@ -33,3 +34,7 @@ dev_knowledge/
 PROJECT_PROFILE.md
 USER_PROJECT_PROFILE.md
 __pycache__/
+
+# Generated runtime caches; keep only the directory placeholder in Git.
+cache/*
+!cache/.gitkeep

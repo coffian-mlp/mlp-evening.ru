@@ -505,6 +505,10 @@ $(document).ready(function() {
                 return `<div class="poll-widget" data-poll-id="${id}"></div>`;
             });
 
+            text = text.replace(/\[\[command:(\d+)\]\]/g, function(match, id) {
+                return `<div class="command-interaction" data-interaction-id="${id}"></div>`;
+            });
+
             // New lines
             return text.replace(/\n/g, '<br>');
         }
@@ -1088,6 +1092,7 @@ $(document).ready(function() {
         if (!pinned) { banner.style.display = 'none'; banner.innerHTML = ''; return; }
         const canUnpin = (window.currentUserRole === 'admin' || window.currentUserRole === 'moderator');
         const body = String(pinned.message || '')
+            .replace(/\[\[command:\d+\]\]/g, '[Выбор команды]')
             .replace(/\[\[poll:(\d+)\]\]/g, (m, id) => `<div class="poll-widget" data-poll-id="${id}"></div>`)
             .replace(/\n/g, '<br>');
         banner.innerHTML =
@@ -1163,6 +1168,11 @@ $(document).ready(function() {
         
         if (existingMsg) {
             const newMsg = createMessageElement(data);
+            // History/SSE may repeat the same message. Preserve mounted choice state and in-flight requests.
+            newMsg.querySelectorAll('.command-interaction[data-interaction-id]').forEach(placeholder => {
+                const previous = existingMsg.querySelector(`.command-interaction[data-interaction-id="${placeholder.dataset.interactionId}"]`);
+                if (previous) placeholder.replaceWith(previous);
+            });
             if (chatMessages.contains(existingMsg)) {
                 chatMessages.replaceChild(newMsg, existingMsg);
             } else {

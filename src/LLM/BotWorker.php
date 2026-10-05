@@ -51,6 +51,7 @@ class BotWorker {
             return; // другой тик уже идёт
         }
         try { $this->reapStale(); } catch (\Throwable $e) { error_log('BotWorker reaper error: ' . $e->getMessage()); } // MLP-357
+        try { (new \Domain\PlaylistLifecycle())->tick(); } catch (\Throwable $e) { error_log('BotWorker playlist lifecycle error: ' . get_class($e)); }
         // reactive и proactive изолированы: сбой одного (напр. миграция ещё не прогнана) не роняет другой.
         try { $this->reactive(); }  catch (\Throwable $e) { error_log('BotWorker reactive error: ' . $e->getMessage()); }
         try { $this->proactive(); } catch (\Throwable $e) { error_log('BotWorker proactive error: ' . $e->getMessage()); }
@@ -88,11 +89,14 @@ class BotWorker {
         // Индивидуальные задачи: приветствия и команды (переиспользуем существующие триггеры).
         foreach ($this->queue->claimDue(50) as $job) {
             $id = (int)$job['id'];
-            if ($enabled) {
+            $playlistJob = $job['type'] === 'dynamic_command' && in_array($job['data']['command']['handler_type'] ?? '', ['playlist', 'command_interaction_reply'], true);
+            if ($enabled || $playlistJob) {
                 if ($job['type'] === 'greeting') {
                     $this->llm->processTrigger('greeting', $job['data'] ?? []);
                 } elseif ($job['type'] === 'dynamic_command') {
-                    $this->llm->processTrigger('dynamic_command', $job['data'] ?? []);
+                    if ($playlistJob) $this->config->setOption('bot_worker_heartbeat', (string)time());
+                    try { $this->llm->processTrigger('dynamic_command', $job['data'] ?? []); }
+                    finally { if ($playlistJob) $this->config->setOption('bot_worker_heartbeat', (string)time()); }
                 } elseif ($job['type'] === 'stream_command') {
                     // MLP-307: ответ Лиры на команду управления стримом
                     (new StreamCommand())->handle($job['data'] ?? []);
@@ -269,11 +273,17 @@ class BotWorker {
                 $msg = $follow
                     ? "Событие '{$evt['title']}' подошло к концу, но вечер продолжается: дальше по расписанию — '{$follow['title']}' (данные ниже). Поблагодари за первую часть и позови на следующую."
                     : "Спасибо всем за просмотр! Вечерок подошёл к концу.";
-                if (!empty($evt['generate_new_playlist'])) {
-                    (new EpisodeManager())->regeneratePlaylist();
+                $episodeManager = new EpisodeManager();
+                $outcome = $episodeManager->getOccurrenceOutcome($runId);
+                $playlistPrepared = !empty($evt['generate_new_playlist'])
+                    && $outcome && ($outcome['run_id'] ?? '') === $runId
+                    && ($outcome['state'] ?? '') === 'completed'
+                    && (int)($outcome['generated_snapshot_id'] ?? 0) > 0
+                    && $episodeManager->getSnapshot((int)$outcome['generated_snapshot_id']) !== null;
+                if ($playlistPrepared) {
                     $msg .= " А вот и расписание на следующий раз! Напиши об этом в чат в своём стиле.";
                 } else {
-                    $msg .= " Напиши об этом в чат тепло и дружелюбно.";
+                    $msg .= " Напиши об этом в чат тепло и дружелюбно. Подготовка новой подборки для этого события не подтверждена; не утверждай, что она готова.";
                 }
                 $this->announce($msg, $scheduleCmd, $runId);
                 $announced[$runId]['finished'] = true; $sent = true;

@@ -61,6 +61,7 @@ class ChatComponent extends Component {
         // ассетов (includeTemplate ниже), чтобы popup/style.css мог переопределять.
         global $app;
         $app->addCss('/src/Components/Chat/assets/chat-core.css');
+        $app->addJs('/src/Components/Chat/assets/command-interactions.js');
         $app->addJs('/src/Components/Chat/assets/chat-core.js');
 
         // Виджет опросов монтируется внутри DOM чата — подключаем его ассеты вместе с чатом (MLP-239).

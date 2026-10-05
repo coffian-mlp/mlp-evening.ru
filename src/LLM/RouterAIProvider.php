@@ -18,6 +18,9 @@ class RouterAIProvider implements LLMProviderInterface {
     private ?int $maxTokens;
     /** Таймаут HTTP-запроса, с; для отдельного вызова — копия через withTimeout() (MLP-358). */
     private int $timeoutSec = 60;
+    private ?array $webSearch = null;
+    private array $searchEvidence = [];
+    private ?string $reasoningEffort = null;
 
     public function __construct($apiKey, $model = 'openai/gpt-4o-mini', $proxyUrl = null, ?int $maxTokens = null) {
         $this->apiKey = $apiKey;
@@ -51,6 +54,12 @@ class RouterAIProvider implements LLMProviderInterface {
             'temperature' => 0.7,
             'max_tokens' => $this->maxTokens ?? TokenBudget::fromConfig() // MLP-347/348
         ];
+        if ($this->webSearch !== null) {
+            $data['plugins'] = [$this->webSearch];
+        }
+        if ($this->reasoningEffort !== null) {
+            $data['reasoning'] = ['effort' => $this->reasoningEffort];
+        }
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -83,6 +92,16 @@ class RouterAIProvider implements LLMProviderInterface {
         }
 
         $decoded = json_decode($response, true);
+        $this->searchEvidence = [];
+        if ($this->webSearch !== null) {
+            foreach (($decoded['choices'][0]['message']['annotations'] ?? []) as $annotation) {
+                $citation = $annotation['url_citation'] ?? null;
+                if (is_array($citation) && filter_var($citation['url'] ?? '', FILTER_VALIDATE_URL)
+                    && preg_match('~^https?://~i', $citation['url'])) {
+                    $this->searchEvidence[] = ['url' => $citation['url'], 'title' => (string)($citation['title'] ?? '')];
+                }
+            }
+        }
         // MLP-348: finish_reason = length → TruncatedResponseException (обрубок не выдаётся за ответ).
         $content = TokenBudget::contentOf(is_array($decoded) ? $decoded : [], 'RouterAI');
         if ($content !== null) {
@@ -99,6 +118,28 @@ class RouterAIProvider implements LLMProviderInterface {
     public function withTimeout(int $sec): static {
         $copy = clone $this;
         $copy->timeoutSec = max(5, $sec);
+        return $copy;
+    }
+
+    /** Search is opt-in on an isolated utility-provider clone. */
+    public function withWebSearch(int $maxResults = 3): static {
+        $copy = clone $this;
+        $copy->webSearch = ['id' => 'web', 'engine' => 'exa', 'max_results' => max(1, min(3, $maxResults))];
+        $copy->searchEvidence = [];
+        return $copy;
+    }
+
+    public function getSearchEvidence(): array {
+        return $this->searchEvidence;
+    }
+
+    /** RouterAI unified reasoning control; ordinary provider keeps its model default. */
+    public function withReasoningEffort(string $effort): static {
+        if (!in_array($effort, ['low', 'high', 'max'], true)) {
+            throw new \InvalidArgumentException('Unsupported reasoning effort');
+        }
+        $copy = clone $this;
+        $copy->reasoningEffort = $effort;
         return $copy;
     }
 }

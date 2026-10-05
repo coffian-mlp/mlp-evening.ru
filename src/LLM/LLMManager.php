@@ -109,6 +109,15 @@ class LLMManager {
     }
 
     public function processTrigger($triggerType, $contextData = []) {
+        if ($triggerType === 'dynamic_command') {
+            $handler = (string)($contextData['command']['handler_type'] ?? '');
+            if ($handler === 'playlist') {
+                return (new PlaylistCommand($this))->handle($contextData);
+            }
+            if ($handler === 'command_interaction_reply') {
+                return (new PlaylistCommand($this))->handleInteractionReply($contextData);
+            }
+        }
         if (!$this->isEnabled()) return false;
 
         // A3 (MLP-228): схема/seed bot_commands больше НЕ создаются здесь на каждый
@@ -331,7 +340,18 @@ class LLMManager {
 
                 if ($event && ($event['use_playlist'] || $event['generate_new_playlist'])) {
                     $epManager = new EpisodeManager();
-                    $playlist = $epManager->getSavedPlaylist();
+                    $eventEnded = (int)$event['real_start_time'] + 60 * (int)$event['duration_minutes'] <= $now;
+                    $bound = !empty($event['use_playlist']) && !empty($event['run_id'])
+                        ? $epManager->getOccurrenceSnapshot((string)$event['run_id']) : null;
+                    if ($eventEnded && !empty($event['generate_new_playlist'])) {
+                        $outcome = $epManager->getOccurrenceOutcome((string)($event['run_id'] ?? ''));
+                        $prepared = $outcome && (int)($outcome['generated_snapshot_id'] ?? 0) > 0
+                            ? $epManager->getSnapshot((int)$outcome['generated_snapshot_id']) : null;
+                        $playlist = $prepared ? $prepared['stories'] : null;
+                        if (!$prepared) $additionalPrompt .= "\nПодготовка следующего плейлиста именно для этого события не подтверждена; не сообщай, что он готов.";
+                    } else {
+                        $playlist = $bound ? $bound['stories'] : $epManager->getSavedPlaylist();
+                    }
                     if (!empty($playlist)) {
                         $additionalPrompt .= "- Плейлист серий: ";
                         foreach ($playlist as $key => $story) {
@@ -742,6 +762,66 @@ class LLMManager {
     public function generateUtility(array $context, string $systemPrompt, ?int $deadlineSec = null, ?int $timeoutSec = null): ?string {
         // $timeoutSec (MLP-358): таймаут HTTP-запроса к провайдеру для этого вызова; null — 60 с по умолчанию.
         return $this->askWithFallback($context, $systemPrompt, 'utility', $deadlineSec, false, $timeoutSec);
+    }
+
+    /** Absolute deadline, one scoped provider call; no unbounded fallback or language retry. */
+    public function generateBoundedUtility(array $context, string $prompt, int $deadlineSec, int $timeoutSec = 20): ?string {
+        return $this->scopedCall($context, $prompt, $deadlineSec, $timeoutSec, false);
+    }
+
+    /** JSON envelope with actual provider citations, never fabricated source URLs. */
+    public function generateSearchUtility(array $context, string $prompt, ?int $deadlineSec = null): ?string {
+        if (!$this->isEnabled()) return null;
+        $remaining = ($deadlineSec ?? (time() + 25)) - time();
+        if ($remaining < 5) return null;
+        $provider = $this->fastProviders[0] ?? null;
+        if (!$provider instanceof RouterAIProvider) return null;
+        try {
+            if (!$this->prepareScopedProxy()) return null;
+            $remaining = ($deadlineSec ?? (time() + 25)) - time();
+            if ($remaining < 5) return null;
+            $call = $provider->withWebSearch(3)->withReasoningEffort('low')->withTimeout(min(25, $remaining));
+            $raw = $call->askChat($context, $prompt);
+            if (!$raw || !$call->getSearchEvidence()) return null;
+            return json_encode(['content' => $raw, 'sources' => $call->getSearchEvidence()], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        } catch (\Throwable $e) {
+            error_log('Playlist search unavailable: ' . get_class($e));
+            return null;
+        }
+    }
+
+    public function liveTextBounded(string $instruction, ?string $mustContain, int $deadlineSec, int $timeoutSec = 10): ?string {
+        if (!(int)ConfigManager::getInstance()->getOption('ai_live_confirm', 1)) return null;
+        $raw = $this->scopedCall([['role' => 'user', 'content' => $instruction . "\n" . self::LANG_REMINDER]],
+            $this->personaPrompt(), $deadlineSec, $timeoutSec, true);
+        $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
+        if ($text === '' || ($mustContain !== null && mb_stripos($text, $mustContain) === false)) return null;
+        return $text;
+    }
+
+    private function scopedCall(array $context, string $prompt, int $deadlineSec, int $timeoutSec, bool $chat): ?string {
+        if (!$this->isEnabled()) return null;
+        $remaining = $deadlineSec - time();
+        $provider = $this->providers[0] ?? null;
+        if ($remaining < 5 || !$provider || !method_exists($provider, 'withTimeout')) return null;
+        try {
+            if (!$this->prepareScopedProxy()) return null;
+            $remaining = $deadlineSec - time();
+            if ($remaining < 5) return null;
+            $call = $provider->withTimeout(min($timeoutSec, $remaining));
+            if ($call instanceof RouterAIProvider) $call = $call->withReasoningEffort('low');
+            $raw = $call->askChat($context, $prompt);
+            $clean = ResponseSanitizer::clean($raw);
+            if (!$clean || ($chat && (!ResponseSanitizer::isMeaningful($clean) || ResponseSanitizer::hasImage($clean)))) return null;
+            return $clean;
+        } catch (\Throwable $e) {
+            error_log('Playlist utility unavailable: ' . get_class($e));
+            return null;
+        }
+    }
+
+    private function prepareScopedProxy(): bool {
+        return !$this->vlessLink || (new XrayManager())->ensureRunning($this->vlessLink);
     }
 
     /**

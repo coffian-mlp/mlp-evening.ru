@@ -149,7 +149,9 @@ class ChatController {
         // A3 (MLP-228): активные команды читаем через владельца таблицы.
         $botCommands = new BotCommandManager();
         if ($botCommands->isAvailable()) {
-            $matchedCommand = BotCommandManager::matchCommand($botCommands->getActive(), $message);
+            $activeCommands = $botCommands->getActive();
+            $matchedCommand = \LLM\PlaylistCommand::matchActive($activeCommands, $message)
+                ?? BotCommandManager::matchCommand($activeCommands, $message);
         } else {
             // Fallback, если таблицы ещё нет (миграция не прогнана)
             if (preg_match('/^\/(schedule|расписание)/ui', $message)) {

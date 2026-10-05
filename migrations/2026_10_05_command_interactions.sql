@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS command_interactions (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    type VARCHAR(64) NOT NULL,
+    owner_id INT NOT NULL,
+    source_message_id INT NOT NULL,
+    source_version CHAR(64) NOT NULL,
+    bot_message_id INT NULL,
+    bot_user_id INT NULL,
+    options_json JSON NOT NULL,
+    expires_at DATETIME NOT NULL,
+    state VARCHAR(16) NOT NULL DEFAULT 'pending',
+    selected_key VARCHAR(64) NULL,
+    outcome_json JSON NULL,
+    result_message_id INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY interaction_source (type, owner_id, source_message_id),
+    UNIQUE KEY interaction_bot_message (bot_message_id),
+    KEY interaction_expiry (state, expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

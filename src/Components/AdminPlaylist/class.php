@@ -13,7 +13,18 @@ class AdminPlaylistComponent extends Component {
         }
 
         $manager = new EpisodeManager();
+        $manager->importLegacySnapshot();
         $eveningPlaylist = $manager->getEveningPlaylist();
+        $selectedSnapshot = isset($_GET['snapshot_id']) ? $manager->getSnapshot((int)$_GET['snapshot_id']) : $manager->getCurrentSnapshot();
+        $this->result['correction_snapshot'] = $selectedSnapshot;
+        $this->result['completions'] = $selectedSnapshot ? $manager->getCompletions($selectedSnapshot['id']) : [];
+        $this->result['selected_completion'] = null;
+        foreach ($this->result['completions'] as $completion) {
+            if ($this->result['selected_completion'] === null || ($completion['completion_key'] === ($_GET['completion_key'] ?? null))) $this->result['selected_completion'] = $completion;
+            if ($completion['completion_key'] === ($_GET['completion_key'] ?? null)) break;
+        }
+        $this->result['recent_snapshots'] = $manager->getRecentSnapshots();
+        $this->result['correction_key'] = 'correction:' . bin2hex(random_bytes(16));
         
         // Extract meta
         $this->result['meta'] = $eveningPlaylist['_meta'] ?? null;

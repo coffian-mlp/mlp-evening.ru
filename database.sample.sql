@@ -229,6 +229,7 @@ CREATE TABLE IF NOT EXISTS `episode_list` (
   `WANNA_WATCH` int(11) NOT NULL DEFAULT '0',
   `TWOPART_ID` int(11) DEFAULT NULL,
   `LENGTH` int(11) NOT NULL DEFAULT '1',
+  `legacy_wanna_watch` int NOT NULL DEFAULT 0,
   PRIMARY KEY (`ID`)
 ) ENGINE=InnoDB AUTO_INCREMENT=225 DEFAULT CHARSET=utf8mb4;
 
@@ -576,3 +577,77 @@ CREATE TABLE IF NOT EXISTS `reminders` (
 INSERT INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`)
 SELECT '/напомни', 'Напоминание ко времени: «/напомни через час достать колу», «покажи напоминалки», «отмени №N»', 'reminder', '', 1
 WHERE NOT EXISTS (SELECT 1 FROM `bot_commands` WHERE `handler_type` = 'reminder');
+
+-- MLP-361 additive playlist and interaction schema.
+CREATE TABLE IF NOT EXISTS episode_wish_locks (user_id INT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS episode_wishes (user_id INT NOT NULL,episode_id INT NOT NULL,status VARCHAR(20) NOT NULL,accepted_at DATETIME NOT NULL,updated_at DATETIME NOT NULL,fulfilled_snapshot_id INT NULL,PRIMARY KEY(user_id,episode_id),INDEX(status,episode_id)) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS episode_wish_events (id BIGINT AUTO_INCREMENT PRIMARY KEY,operation_key VARCHAR(190) NOT NULL UNIQUE,user_id INT NULL,episode_id INT NOT NULL,kind VARCHAR(20) NOT NULL,status VARCHAR(20) NOT NULL,created_at DATETIME NOT NULL,outcome_json JSON NOT NULL,snapshot_id INT NULL,INDEX(user_id,created_at),INDEX(episode_id,created_at)) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS playlist_snapshots (id INT AUTO_INCREMENT PRIMARY KEY,created_at DATETIME NOT NULL,payload_json JSON NOT NULL,completed_at DATETIME NULL,completion_json JSON NULL,origin VARCHAR(30) NOT NULL) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS playlist_occurrences (run_id VARCHAR(100) PRIMARY KEY,event_id INT NOT NULL,start_at DATETIME NOT NULL,end_at DATETIME NOT NULL,snapshot_id INT NOT NULL,state VARCHAR(30) NOT NULL DEFAULT 'pending',metadata_json JSON NOT NULL,INDEX(state,end_at)) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS playlist_corrections (id BIGINT AUTO_INCREMENT PRIMARY KEY,snapshot_id INT NOT NULL,actor_id INT NOT NULL,operation_key VARCHAR(190) NOT NULL UNIQUE,created_at DATETIME NOT NULL,before_json JSON NOT NULL,after_json JSON NOT NULL) ENGINE=InnoDB;
+SET @has_column=(SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='episode_list' AND column_name='legacy_wanna_watch');
+SET @ddl=IF(@has_column=0,'ALTER TABLE episode_list ADD COLUMN legacy_wanna_watch INT NOT NULL DEFAULT 0','SELECT 1');
+PREPARE playlist_stmt FROM @ddl; EXECUTE playlist_stmt; DEALLOCATE PREPARE playlist_stmt;
+START TRANSACTION;
+INSERT IGNORE INTO site_options (key_name,`value`) VALUES ('playlist_rollout_watermark',UTC_TIMESTAMP());
+UPDATE episode_list SET legacy_wanna_watch=WANNA_WATCH WHERE NOT EXISTS (SELECT 1 FROM site_options WHERE key_name='playlist_legacy_imported');
+INSERT IGNORE INTO episode_wish_events(operation_key,user_id,episode_id,kind,status,created_at,outcome_json) SELECT CONCAT('legacy:',ID),NULL,ID,'legacy','active',UTC_TIMESTAMP(),JSON_OBJECT('count',legacy_wanna_watch) FROM episode_list WHERE legacy_wanna_watch>0;
+INSERT IGNORE INTO site_options (key_name,`value`) VALUES ('playlist_legacy_imported','1');
+COMMIT;
+CREATE TABLE IF NOT EXISTS playlist_completions (completion_key VARCHAR(100) PRIMARY KEY,snapshot_id INT NOT NULL,run_id VARCHAR(100) NULL,start_at DATETIME NOT NULL,completed_at DATETIME NOT NULL,shown_json JSON NOT NULL,INDEX(snapshot_id)) ENGINE=InnoDB;
+
+SET @has_column=(SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='episode_wishes' AND column_name='fulfilled_completion_key');
+SET @ddl=IF(@has_column=0,'ALTER TABLE episode_wishes ADD COLUMN fulfilled_completion_key VARCHAR(100) NULL','SELECT 1');
+PREPARE playlist_stmt FROM @ddl; EXECUTE playlist_stmt; DEALLOCATE PREPARE playlist_stmt;
+
+SET @has_column=(SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='episode_wish_events' AND column_name='fulfilled_completion_key');
+SET @ddl=IF(@has_column=0,'ALTER TABLE episode_wish_events ADD COLUMN fulfilled_completion_key VARCHAR(100) NULL','SELECT 1');
+PREPARE playlist_stmt FROM @ddl; EXECUTE playlist_stmt; DEALLOCATE PREPARE playlist_stmt;
+
+SET @has_column=(SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='playlist_corrections' AND column_name='completion_key');
+SET @ddl=IF(@has_column=0,'ALTER TABLE playlist_corrections ADD COLUMN completion_key VARCHAR(100) NULL','SELECT 1');
+PREPARE playlist_stmt FROM @ddl; EXECUTE playlist_stmt; DEALLOCATE PREPARE playlist_stmt;
+
+SET @has_column=(SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='playlist_occurrences' AND column_name='generated_snapshot_id');
+SET @ddl=IF(@has_column=0,'ALTER TABLE playlist_occurrences ADD COLUMN generated_snapshot_id INT NULL','SELECT 1');
+PREPARE playlist_stmt FROM @ddl; EXECUTE playlist_stmt; DEALLOCATE PREPARE playlist_stmt;
+
+SET @has_column=(SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='playlist_occurrences' AND column_name='outcome_json');
+SET @ddl=IF(@has_column=0,'ALTER TABLE playlist_occurrences ADD COLUMN outcome_json JSON NULL','SELECT 1');
+PREPARE playlist_stmt FROM @ddl; EXECUTE playlist_stmt; DEALLOCATE PREPARE playlist_stmt;
+
+CREATE TABLE IF NOT EXISTS command_interactions (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    type VARCHAR(64) NOT NULL,
+    owner_id INT NOT NULL,
+    source_message_id INT NOT NULL,
+    source_version CHAR(64) NOT NULL,
+    bot_message_id INT NULL,
+    bot_user_id INT NULL,
+    options_json JSON NOT NULL,
+    expires_at DATETIME NOT NULL,
+    state VARCHAR(16) NOT NULL DEFAULT 'pending',
+    selected_key VARCHAR(64) NULL,
+    outcome_json JSON NULL,
+    result_message_id INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY interaction_source (type, owner_id, source_message_id),
+    UNIQUE KEY interaction_bot_message (bot_message_id),
+    KEY interaction_expiry (state, expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- MLP-361: extend the existing enum instead of replacing its historical values.
+SET @playlist_handler_type = (SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='bot_commands' AND COLUMN_NAME='handler_type');
+SET @playlist_handler_ddl = IF(LOCATE("'playlist'", @playlist_handler_type)=0, CONCAT('ALTER TABLE bot_commands MODIFY handler_type ', LEFT(@playlist_handler_type,LENGTH(@playlist_handler_type)-1), ",'playlist') NOT NULL DEFAULT 'text'"), 'SELECT 1');
+PREPARE playlist_handler_stmt FROM @playlist_handler_ddl;
+EXECUTE playlist_handler_stmt;
+DEALLOCATE PREPARE playlist_handler_stmt;
+INSERT IGNORE INTO bot_commands(command_prefix,description,handler_type,system_prompt,is_active) VALUES
+('/хочу','Пожелание посмотреть эпизод: номер, название, сезонный код или описание','playlist','',1),
+('/желания','Собственные активные пожелания','playlist','',1),
+('/передумал','Отмена собственного пожелания','playlist','',1),
+('/передумала','Отмена собственного пожелания','playlist','',1),
+('/топ','Пять эпизодов с наибольшим числом пожеланий','playlist','',1),
+('/плейлист','Опубликованный плейлист следующего вечерка','playlist','',1);

@@ -11,7 +11,7 @@
     <form method="post" action="/api.php" style="margin-top: 15px;">
         <input type="hidden" name="action" value="vote">
         <label for="episode_id">ID Эпизода:</label>
-        <input type="number" id="episode_id" name="episode_id" min="1" max="221" required placeholder="1-221" style="width: 100px;">
+        <input type="number" id="episode_id" name="episode_id" min="1"  required placeholder="1-221" style="width: 100px;">
         <button type="submit" class="btn-primary">Добавить голос (+1 Wanna Watch)</button>
     </form>
 </div>

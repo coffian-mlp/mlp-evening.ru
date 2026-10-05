@@ -403,6 +403,24 @@ class ChatManager {
         return null;
     }
 
+    /** Locate an existing live bot reply for retry recovery; no direct chat SQL in consumers. */
+    public function findBotReplyTo(int $sourceMessageId, ?string $requiredMarker = null): ?array {
+        $botId = (int)ConfigManager::getInstance()->getOption('ai_bot_user_id', 0);
+        if ($botId < 1 || $sourceMessageId < 1) return null;
+        $stmt = $this->db->prepare('SELECT id,message,quoted_msg_ids FROM chat_messages WHERE user_id=? AND id>? AND is_deleted=0 AND quoted_msg_ids IS NOT NULL ORDER BY id DESC');
+        $stmt->bind_param('ii', $botId, $sourceMessageId);
+        $stmt->execute();
+        $rows = $stmt->get_result();
+        while ($row = $rows->fetch_assoc()) {
+            $quotes = json_decode($row['quoted_msg_ids'], true);
+            if (!is_array($quotes) || !in_array($sourceMessageId, array_map('intval', $quotes), true)) continue;
+            $text = html_entity_decode($row['message'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            if ($requiredMarker !== null && !str_contains($text, $requiredMarker)) continue;
+            return $this->getMessageById((int)$row['id']);
+        }
+        return null;
+    }
+
     // --- Закреплённое сообщение (MLP-242): одно активное на весь чат ---
 
     /** Закрепить сообщение (снимает прошлое закрепление). Возвращает false, если цель не найдена/удалена. */
@@ -443,6 +461,7 @@ class ChatManager {
 
     // ✨ Parse Markdown and Mentions (Safe after htmlspecialchars)
     private function parseMarkdown($text) {
+        $text = preg_replace('/\[\[command-delivery:(?:source|interaction)_\d+\]\]/', '', $text);
         // 0. Blockquote: > text (standard Markdown style)
         // We use multiline modifier 'm'
         // Regex matches lines starting with > (possibly with space) and wraps content in <blockquote>
@@ -686,6 +705,8 @@ class ChatManager {
                             // ведёт к оригиналу с живым виджетом). Вопрос — через владельца polls.
                             $poll = (new PollManager())->getPoll((int)$pm[1]);
                             $qRow['message'] = '📊 Опрос' . ($poll ? ': ' . htmlspecialchars($poll['question']) : '');
+                        } elseif (str_contains($qRow['message'], '[[command:')) {
+                            $qRow['message'] = $this->parseMarkdown(preg_replace('/\[\[command:\d+\]\]/', '[Выбор команды]', $qRow['message']));
                         } else {
                             // Parse markdown in quote too!
                             $qRow['message'] = $this->parseMarkdown($qRow['message']);

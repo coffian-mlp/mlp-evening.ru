@@ -1395,3 +1395,10 @@
     .cmd-preview-hint { display: none; }
     .cmd-preview { scroll-padding-bottom: 0; }
 }
+/* Shared command choices; labels remain plain text. */
+.command-interaction { margin-top: 6px; padding: 7px; border: 1px solid rgba(180,140,220,.35); border-radius: 6px; max-width: 100%; }
+.command-interaction-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.command-interaction-options button { color: inherit; background: rgba(130,80,180,.22); border: 1px solid rgba(180,140,220,.5); border-radius: 5px; padding: 7px 9px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
+.command-interaction-options button:disabled { opacity: .55; cursor: default; }
+.command-interaction-status, .command-interaction-error { display: block; font-size: .85em; }
+.command-interaction-error { margin-top: 5px; color: #ef9a9a; }
