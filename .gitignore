@@ -24,6 +24,9 @@ scripts/*
 .cursorrules
 AIDD_PROCESS.md
 CLAUDE.md
+AGENTS.md
+.codex/
+.agents/
 
 # AIDD: слой знаний и профили проекта (локальные, не коммитим)
 dev_knowledge/
