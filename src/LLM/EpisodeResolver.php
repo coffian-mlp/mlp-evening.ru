@@ -158,7 +158,7 @@ final class EpisodeResolver
     private static function resolveKnownAlternateTitle(array $candidate, array $catalog): array
     {
         $missing = ['status' => 'missing', 'episodes' => []];
-        if (!in_array(self::storyTitle((string)($candidate['title'] ?? '')), ['mare in the moon', 'the mare in the moon'], true)) return $missing;
+        if (!in_array(self::storyTitle((string)($candidate['title'] ?? '')), ['mare in the moon', 'the mare in the moon', 'mare in the moon: part 1', 'the mare in the moon: part 1'], true)) return $missing;
         if (!preg_match('/^S0?1E0?1$/i', trim((string)($candidate['episode_code'] ?? '')))) return $missing;
         $match = EpisodeCatalog::resolveExact((string)($candidate['episode_code'] ?? ''), $catalog);
         if ($match['status'] !== 'found' || count($match['episodes']) !== 1) return $missing;

@@ -102,6 +102,27 @@ $setSearch([$appearance]);$badCanonical=$appearanceCatalog;$badCanonical[0]['TIT
 expect($resolver->resolve('твоё первое появление',$badCanonical,time()+55,false)['status']==='need_clarification','finite alias requires matching canonical metadata, not arbitrary valid code');
 $setSearch([array_merge($appearance,['title'=>'The Mare in the Moon'])]);$llm->verify='{"verified":[413]}';
 expect($resolver->resolve('твоё первое появление',$appearanceCatalog,time()+55,false)['status']==='found','known title with definite article admits exact canonical identity');
+// Captured deployed provider candidate; replay preserves actual citation membership.
+$partOneSearch=['content'=>'```json
+{"candidates":[{"episode_code":"S01E01","title":"Mare in the Moon: Part 1","evidence":"Lyra Heartstrings — фоновая единорог из Понивилля; её первое появление в сериале — дебютная серия первого сезона","source_url":"https://equestripedia.org/wiki/Lyra_Heartstrings_(Friendship_is_Magic)"}]}
+```','sources'=>[['url'=>'https://equestripedia.org/wiki/Lyra_Heartstrings_(Friendship_is_Magic)','title'=>'Lyra Heartstrings (Friendship is Magic) - Equestripedia'],['url'=>'https://thesouthernnerd.com/2017/08/03/lyra-the-human-obsessed-pony/','title'=>'Lyra, the human-obsessed pony – The Southern Nerd'],['url'=>'http://www.mylittlewiki.org/wiki/The_Mare_in_the_Moon:_Part_1','title'=>'The Mare in the Moon: Part 1 - My Little Wiki']]];
+$llm->search=json_encode($partOneSearch,JSON_UNESCAPED_UNICODE);$llm->calls=[];$llm->verify='{"verified":[413]}';
+$partOneResult=$resolver->resolve("серию про тебя\nУточнение: Скорее твоё первое появление",$appearanceCatalog,time()+55,false);
+expect($partOneResult['status']==='found' && array_column($partOneResult['candidates'],'episode_id')===[413] && array_column($llm->calls,0)===['normalize','search','verify'],'captured deployed Part 1 provider response reaches independent verifier');
+if (isset($llm->calls[2])) {
+ $partOneInput=json_decode($llm->calls[2][2][0]['content'],true);
+ expect($partOneInput['candidates'][0]['reported_title']==='Mare in the Moon: Part 1' && $partOneInput['original_query']==="серию про тебя\nУточнение: Скорее твоё первое появление",'captured alias retains reported identity and original refinement at verifier');
+} else expect(false,'captured alias retains reported identity and original refinement at verifier');
+foreach (['Mare in the Moon: Part 1','The Mare in the Moon: Part 1'] as $title) {
+ $setSearch([array_merge($appearance,['title'=>$title])]);$llm->calls=[];$llm->verify='{"verified":[413]}';
+ expect($resolver->resolve('твоё первое появление',$appearanceCatalog,time()+55,false)['status']==='found' && array_column($llm->calls,0)===['normalize','search','verify'],'finite Part 1 alias passes independent verification: '.$title);
+ $llm->verify='{"verified":[]}';expect($resolver->resolve('твоё первое появление',$appearanceCatalog,time()+55,false)['status']==='need_clarification','Part 1 alias cannot bypass verifier rejection: '.$title);
+}
+foreach (['Mare in the Moon: Part 2','The Mare in the Moon: Part 2'] as $title) {
+ $setSearch([array_merge($appearance,['title'=>$title])]);$llm->calls=[];$llm->verify='{"verified":[413]}';
+ expect($resolver->resolve('твоё первое появление',$appearanceCatalog,time()+55,false)['status']==='need_clarification' && count($llm->calls)===2,'Part 2 title cannot map to S01E01: '.$title);
+}
+$setSearch([array_merge($appearance,['title'=>'The Mare in the Moon'])]);
 $ambiguous=[...$appearanceCatalog,['ID'=>414,'TITLE'=>$appearanceCatalog[0]['TITLE']]];
 expect($resolver->resolve('твоё первое появление',$ambiguous,time()+55,false)['status']==='need_clarification','ambiguous code has no alternate admission');
 echo $fail?"FAILURES: $fail\n":"ALL PASS\n";exit($fail?1:0);
