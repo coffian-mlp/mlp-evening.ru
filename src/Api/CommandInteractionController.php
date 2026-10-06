@@ -33,7 +33,7 @@ final class CommandInteractionController
         $outcome = $manager->consume($id, (string)($_POST['option_key'] ?? ''), $actorId);
         // Delivery failure cannot change the already committed domain result.
         try {
-            if (self::$notifier !== null) (self::$notifier)($id, $actorId);
+            if (self::$notifier !== null) (self::$notifier)($id, $actorId, $outcome);
         } catch (\Throwable $error) {
             error_log('Command interaction delivery failed: id=' . $id . ' ' . $error->getMessage());
         }

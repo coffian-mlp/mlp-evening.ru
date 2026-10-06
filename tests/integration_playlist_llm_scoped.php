@@ -31,8 +31,15 @@ namespace {
     $GLOBALS['playlist_scoped_annotations'] = [['url_citation' => [
         'url' => 'https://example.org/episode', 'title' => 'Fixture source',
     ]]];
+    $originalOptions = $db->query('SELECT key_name,value FROM site_options')->fetch_all(MYSQLI_ASSOC);
+    $originalCommands = $db->query('SELECT id,is_active FROM bot_commands')->fetch_all(MYSQLI_ASSOC);
+    $originalJobs = $db->query('SELECT id,run_after FROM llm_jobs')->fetch_all(MYSQLI_ASSOC);
+    $beforeUsers = (int)$db->query('SELECT COALESCE(MAX(id),0) AS n FROM users')->fetch_assoc()['n'];
+    $beforeEpisodes = (int)$db->query('SELECT COALESCE(MAX(ID),0) AS n FROM episode_list')->fetch_assoc()['n'];
+    $beforeJobs = (int)$db->query('SELECT COALESCE(MAX(id),0) AS n FROM llm_jobs')->fetch_assoc()['n'];
     try {
-        Infra\Transaction::run($db, static function () {
+        // Publication owns its transaction and sends realtime after commit; the fixture restores explicitly.
+        $runFixture = static function () {
             $config = Infra\ConfigManager::getInstance();
             foreach (['ai_enabled' => '1', 'ai_live_confirm' => '1', 'ai_bot_user_id' => '1',
                 'ai_primary_provider' => 'routerai', 'ai_routerai_key' => 'fixture-key',
@@ -105,7 +112,7 @@ namespace {
             $missingButtons=$run('историю с очень многими взрывами');
             check(str_contains($missingButtons['raw_message'],'уточни описание') && !str_contains($missingButtons['raw_message'],'кноп'),'actual clarification rejects captured nonexistent button instruction');
             $clarificationSystem=json_decode($GLOBALS['playlist_scoped_options'][CURLOPT_POSTFIELDS],true)['messages'][0]['content'];
-            check(str_contains($clarificationSystem,'кнопок выбора нет') && !str_contains($clarificationSystem,'Кнопки исправны'),'clarification trusted task scoped to no choices instead of proposal instructions');
+            check(str_contains($clarificationSystem,'Кандидатов сейчас нет') && str_contains($clarificationSystem,'Передумал') && !str_contains($clarificationSystem,'Кнопки исправны'),'clarification trusted task describes no candidates and the real cancellation control');
             $GLOBALS['playlist_scoped_text']='Жми на кнопочку под ответом — этот выбор за тобой!';
             $calls=$GLOBALS['playlist_scoped_calls'];
             $reply=$run('самую первую серию');
@@ -126,7 +133,8 @@ namespace {
             (new Domain\CommandInteractionManager(LLM\PlaylistCommand::interactionRegistry()))->consume($proposalId,'cancel',$actor);
             $GLOBALS['playlist_scoped_text']='Упс, кажется, ты передумал! Мои пожелания остались при мне.';
             check($manager->processTrigger('dynamic_command',['interaction_id'=>$proposalId,'user_id'=>$actor,'command'=>['handler_type'=>'command_interaction_reply']]),'actual choice cancellation reply dispatcher handled');
-            $cancelReply=$chat->findBotReplyTo((int)$reply['id']);
+            $cancelBinding=(new Domain\CommandInteractionManager(LLM\PlaylistCommand::interactionRegistry()))->getResult($proposalId,$actor);
+            $cancelReply=$chat->getMessageById((int)$cancelBinding['reply_message_id']);
             check(str_contains($cancelReply['raw_message'],'пожелания не изменены') && !str_contains($cancelReply['raw_message'],'Мои пожелания'),'actual choice cancellation rejects captured wrong wish owner');
             $GLOBALS['playlist_scoped_text']='Твой голос принят.';
             $falsePassive=$run('самую первую серию');
@@ -160,7 +168,7 @@ namespace {
             check($pairInteraction>0,'actual command cited range creates bound pair options');
             $pairManager=new Domain\CommandInteractionManager(LLM\PlaylistCommand::interactionRegistry());
             $pairOptions=$pairManager->readPublic($pairInteraction,$actor,(int)$pairReply['id']);
-            check(count($pairOptions['options'])===3 && str_contains($pairOptions['options'][0]['label'],'Part 1') && str_contains($pairOptions['options'][1]['label'],'Part 2'),'actual range UI contract contains two ordered parts and cancellation');
+            check(count($pairOptions['options'])===4 && str_contains($pairOptions['options'][0]['label'],'Part 1') && str_contains($pairOptions['options'][1]['label'],'Part 2'),'actual range UI contract contains two ordered parts, refinement and cancellation');
             $pairResult=$pairManager->consume($pairInteraction,'episode_'.$pairIds[0],$actor);
             check($pairResult['status']==='accepted','one range button confirms its separate wish');
             $wishes=(new Domain\EpisodeManager())->getUserWishes($actor);
@@ -182,6 +190,75 @@ namespace {
             check($workerReply && str_contains($workerReply['raw_message'],'[[command:'),'actual BotWorker reactive queue delivers semantic movie proposal');
             check($db->query('SELECT status FROM llm_jobs WHERE id='.(int)$jobId)->fetch_assoc()['status']==='done','actual worker marks command job done');
             check(count((new Domain\EpisodeManager())->getUserWishes($actor))===1,'actual worker proposal does not mutate existing votes');
+            // MLP-364: actual persisted source, generic router, queue and worker; only curl is replaced.
+            $refiner=(new Domain\UserManager())->createUser('it_mlp364_scoped_'.bin2hex(random_bytes(6)),bin2hex(random_bytes(24)),'user');
+            $config->setOption('ai_use_queue','0');$config->setOption('ai_worker_mode','inline');
+            $GLOBALS['playlist_scoped_text']='Выбирай подходящий вариант кнопкой — этот выбор за тобой!';
+            $initial='!хочу самую первую серию';$initialId=$chat->addMessage($refiner,'refinement fixture',$initial);
+            LLM\BotDispatch::dispatch('dynamic_command',['message_id'=>$initialId,'user_id'=>$refiner,'message'=>$initial,'command'=>['handler_type'=>'playlist']]);
+            $scopedWorker=new LLM\BotWorker();(new ReflectionMethod($scopedWorker,'reactive'))->invoke($scopedWorker);
+            $initialReply=$chat->findBotReplyTo($initialId);preg_match('/\[\[command:(\d+)\]\]/',$initialReply['raw_message']??'',$initialMarker);$initialInteraction=(int)($initialMarker[1]??0);
+            check($initialInteraction>0,'actual queued producer creates reusable initial proposal with queue disabled');
+            $continuations=new Domain\CommandInteractionManager(LLM\PlaylistCommand::interactionRegistry());
+            $continuations->requestRefinement($initialInteraction,$refiner);
+            $plain=(string)$pairIds[1];$plainId=$chat->addMessage($refiner,'refinement fixture',$plain,[(int)$initialReply['id']]);
+            check(LLM\CommandInteractionContinuation::routeMessage(['message_id'=>$plainId,'user_id'=>$refiner],LLM\PlaylistCommand::interactionRegistry()),'real router accepts plain quoted clarification before question delivery');
+            check(count((new Domain\EpisodeManager())->getUserWishes($refiner))===0,'exact contextual ID never votes synchronously');
+            (new ReflectionMethod($scopedWorker,'reactive'))->invoke($scopedWorker);
+            $row=$db->query('SELECT * FROM command_interactions WHERE owner_id='.(int)$refiner.' ORDER BY id DESC LIMIT 1')->fetch_assoc();
+            $childId=(int)$row['id'];$childView=$continuations->readPublic($childId,$refiner,(int)$row['bot_message_id']);
+            check($childId!==$initialInteraction && $childView['state']==='pending' && $childView['options'][0]['key']==='episode_'.$pairIds[1],'exact latest clarification replaces initial first-series semantic proposal with confirmed child');
+            check($continuations->readPublic($initialInteraction,$refiner,(int)$initialReply['id'])['state']==='superseded','activation atomically closes prior source proposal');
+            check(count((new Domain\EpisodeManager())->getUserWishes($refiner))===0,'worker child proposal also spends no vote');
+            $providerCount=$GLOBALS['playlist_scoped_calls'];(new ReflectionMethod($scopedWorker,'reactive'))->invoke($scopedWorker);
+            check($GLOBALS['playlist_scoped_calls']===$providerCount,'worker replay performs no extra resolver or delivery');
+            $continuations->consume($childId,'episode_'.$pairIds[1],$refiner);
+            check(count((new Domain\EpisodeManager())->getUserWishes($refiner))===1,'only owner child confirmation records one real wish');
+            $continuations->consume($childId,'cancel',$refiner);
+            check(count((new Domain\EpisodeManager())->getUserWishes($refiner))===1,'cancel replay does not cancel an already recorded wish');
+            $negativeActor=(new Domain\UserManager())->createUser('it_mlp364_negative_'.bin2hex(random_bytes(6)),bin2hex(random_bytes(24)),'user');
+            $negativeText='!хочу самую первую серию';$negativeSource=$chat->addMessage($negativeActor,'negative fixture',$negativeText);
+            LLM\BotDispatch::dispatch('dynamic_command',['message_id'=>$negativeSource,'user_id'=>$negativeActor,'message'=>$negativeText,'command'=>['handler_type'=>'playlist']]);
+            (new ReflectionMethod($scopedWorker,'reactive'))->invoke($scopedWorker);
+            $negativeReply=$chat->findBotReplyTo($negativeSource);preg_match('/\[\[command:(\d+)\]\]/',$negativeReply['raw_message'],$negativeMarker);$negativeInteraction=(int)$negativeMarker[1];
+            $negText='нет, не эта — там была Рэрити';$negId=$chat->addMessage($negativeActor,'negative fixture',$negText,[(int)$negativeReply['id']]);
+            check(LLM\CommandInteractionContinuation::routeMessage(['message_id'=>$negId,'user_id'=>$negativeActor],LLM\PlaylistCommand::interactionRegistry()),'negative and plot details accepted together by actual router');
+            $GLOBALS['playlist_scoped_responses']=['Rarity scene dragon smoke','{"candidates":[]}','Уточни описание и ответь с цитатой на моё сообщение.'];
+            (new ReflectionMethod($scopedWorker,'reactive'))->invoke($scopedWorker);
+            $negativeRow=$db->query('SELECT * FROM command_interactions WHERE id='.$negativeInteraction)->fetch_assoc();$negativeContext=json_decode($negativeRow['context_json'],true);
+            check($negativeRow['state']==='clarifying' && count($negativeContext['question_bindings'])===1,'empty verified search persists quoteable question and cancel state');
+            $questionId=(int)$negativeContext['question_bindings'][0]['id'];
+            check(!str_contains($chat->getMessageById($questionId)['raw_message'],'[[command:'),'question is quoteable text without second unavailable command widget');
+            $retryId=$chat->addMessage($negativeActor,'negative fixture','повтори поиск',[$questionId]);
+            check(LLM\CommandInteractionContinuation::routeMessage(['message_id'=>$retryId,'user_id'=>$negativeActor],LLM\PlaylistCommand::interactionRegistry()),'actual question binding supports explicit retry');
+            $GLOBALS['playlist_scoped_responses']=['Rarity scene dragon smoke',json_encode(['candidates'=>[['episode_id'=>$pairIds[1],'evidence'=>'Rarity fixture plot','source_url'=>'https://example.org/episode']]]),json_encode(['verified'=>[$pairIds[1]]]),'Выбирай подходящий вариант кнопкой — этот выбор за тобой!'];
+            $traceOffset=count($GLOBALS['playlist_scoped_payloads']);(new ReflectionMethod($scopedWorker,'reactive'))->invoke($scopedWorker);
+            $verifyPayload=$GLOBALS['playlist_scoped_payloads'][$traceOffset+2]['messages'][1]['content'];$verifiedInput=json_decode($verifyPayload,true);
+            check(str_contains($verifiedInput['original_query'],'самую первую серию') && str_contains($verifiedInput['original_query'],'Рэрити'),'actual verifier preserves original and new facts after retry');
+            check(count((new Domain\EpisodeManager())->getUserWishes($negativeActor))===0,'retry and empty search never spend quota');
+            foreach ([false, true] as $editBeforeTerminalDelivery) {
+                $terminalActor=(new Domain\UserManager())->createUser('it_mlp364_terminal_'.bin2hex(random_bytes(6)),bin2hex(random_bytes(24)),'user');
+                $terminalSource=$chat->addMessage($terminalActor,'terminal fixture','!хочу самую первую серию');
+                $GLOBALS['playlist_scoped_text']='Выбирай подходящий вариант кнопкой — этот выбор за тобой!';
+                LLM\BotDispatch::dispatch('dynamic_command',['message_id'=>$terminalSource,'user_id'=>$terminalActor,'message'=>'!хочу самую первую серию','command'=>['handler_type'=>'playlist']]);
+                (new ReflectionMethod(LLM\BotWorker::class,'reactive'))->invoke(new LLM\BotWorker());
+                $terminalProposal=$chat->findBotReplyTo($terminalSource);preg_match('/\[\[command:(\d+)\]\]/',$terminalProposal['raw_message'],$terminalMarker);$terminalId=(int)$terminalMarker[1];
+                // Commit cancellation without a producer enqueue: a fresh worker must recover persisted work.
+                $continuations->cancelActive($terminalId,$terminalActor);
+                $terminalRow=$db->query('SELECT * FROM command_interactions WHERE id='.$terminalId)->fetch_assoc();
+                check($terminalRow['state']==='cancelled' && $terminalRow['result_message_id']===null && json_decode($terminalRow['context_json'],true)['pending_work']['kind']==='terminal','cancel atomically persists terminal delivery intent without queued producer');
+                $ownJobs=$db->query('SELECT COUNT(*) AS n FROM llm_jobs WHERE status="pending" AND JSON_EXTRACT(payload,"$.user_id")='.(int)$terminalActor)->fetch_assoc();
+                check((int)$ownJobs['n']===0,'terminal recovery fixture starts with no owner queued work');
+                if ($editBeforeTerminalDelivery) $chat->editMessage($terminalSource,$terminalActor,'edited terminal source');
+                $GLOBALS['playlist_scoped_text']='Хорошо, выбор отменён; пожелания не изменились.';
+                (new ReflectionMethod(LLM\BotWorker::class,'reactive'))->invoke(new LLM\BotWorker());
+                $terminalResult=$continuations->getResult($terminalId,$terminalActor);$terminalReplyId=(int)($terminalResult['reply_message_id']??0);
+                check($editBeforeTerminalDelivery ? $terminalReplyId===0 : $terminalReplyId>0,'fresh actual worker '.($editBeforeTerminalDelivery?'suppresses edited terminal source':'recovers one bound cancellation reply'));
+                if ($terminalReplyId>0) check(str_contains($chat->getMessageById($terminalReplyId)['raw_message'],'отмен'),'recovered terminal reply states actual cancellation');
+                (new ReflectionMethod(LLM\BotWorker::class,'reactive'))->invoke(new LLM\BotWorker());
+                check((int)($continuations->getResult($terminalId,$terminalActor)['reply_message_id']??0)===$terminalReplyId,'terminal worker replay never binds second reply');
+                check(count((new Domain\EpisodeManager())->getUserWishes($terminalActor))===0 && (int)$db->query('SELECT COUNT(*) AS n FROM episode_wish_events WHERE user_id='.(int)$terminalActor)->fetch_assoc()['n']===0,'terminal recovery leaves real wishes and quota events unchanged');
+            }
             $config->setOption('ai_live_confirm', '0');
             $calls = $GLOBALS['playlist_scoped_calls'];
             check($manager->liveTextBounded('Confirm', null, time() + 12) === null && $GLOBALS['playlist_scoped_calls'] === $calls, 'disabled live makes no HTTP call');
@@ -197,11 +274,28 @@ namespace {
                 && $manager->generateBoundedUtility([], 'Disabled AI', time() + 12) === null
                 && $manager->generateSearchQueryUtility([], 'Disabled AI', time()+8) === null
                 && $GLOBALS['playlist_scoped_calls'] === $calls, 'disabled AI skips search and verifier transport');
-            throw new RuntimeException('scoped fixture rollback');
-        });
-    } catch (RuntimeException $error) {
-        if ($error->getMessage() !== 'scoped fixture rollback') throw $error;
+        };
+        $runFixture();
     } finally {
+        $newUsers = $db->query('SELECT id,login FROM users WHERE id>' . $beforeUsers)->fetch_all(MYSQLI_ASSOC);
+        foreach ($newUsers as $user) {
+            if (!preg_match('/^it_mlp(?:362|364)_/', $user['login'])) throw new RuntimeException('Scoped fixture author ownership mismatch');
+            $id = (int)$user['id'];
+            foreach (['command_interactions' => 'owner_id', 'episode_wishes' => 'user_id', 'episode_wish_events' => 'user_id', 'episode_wish_locks' => 'user_id', 'chat_messages' => 'user_id'] as $table => $column) $db->query("DELETE FROM $table WHERE $column=$id");
+            $db->query('DELETE FROM users WHERE id=' . $id);
+        }
+        $db->query('DELETE FROM llm_jobs WHERE id>' . $beforeJobs);
+        $db->query('DELETE FROM episode_list WHERE ID>' . $beforeEpisodes);
+        foreach ($originalCommands as $command) $db->query('UPDATE bot_commands SET is_active=' . (int)$command['is_active'] . ' WHERE id=' . (int)$command['id']);
+        foreach ($originalJobs as $job) {
+            $stmt = $db->prepare('UPDATE llm_jobs SET run_after=? WHERE id=?'); $stmt->bind_param('si', $job['run_after'], $job['id']); $stmt->execute();
+        }
+        $originalKeys = array_column($originalOptions, 'key_name');
+        foreach ($db->query('SELECT key_name FROM site_options')->fetch_all(MYSQLI_ASSOC) as $option) {
+            if (in_array($option['key_name'], $originalKeys, true)) continue;
+            $stmt = $db->prepare('DELETE FROM site_options WHERE key_name=?'); $stmt->bind_param('s', $option['key_name']); $stmt->execute();
+        }
+        foreach ($originalOptions as $option) Infra\ConfigManager::getInstance()->setOption($option['key_name'], $option['value']);
         Infra\ConfigManager::getInstance()->flushCache();
     }
     it_done();

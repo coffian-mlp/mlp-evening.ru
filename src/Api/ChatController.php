@@ -133,14 +133,6 @@ class ChatController {
             Response::json(false, "Ой, что-то пошло не так при отправке...", 'error');
         }
 
-        // Отдаём ответ клиенту сразу — бот думает уже без него.
-        Response::finish(json_encode([
-            'success' => true,
-            'message' => "Сообщение отправлено",
-            'type' => 'success',
-            'data' => []
-        ]));
-
         $mid = ($newMsgId === true) ? null : $newMsgId;
 
         // Быстрое (без LLM) определение: команда или обычное упоминание.
@@ -158,6 +150,18 @@ class ChatController {
                 $matchedCommand = ['handler_type' => 'schedule'];
             }
         }
+
+        // Persist recognized continuation before finishing the request, without model calls.
+        $continuationHandled = false;
+        if (!$matchedCommand && $mid !== null) {
+            $continuationHandled = \LLM\CommandInteractionContinuation::routeMessage([
+                'message_id' => $mid, 'user_id' => (int)$userId,
+            ], \LLM\PlaylistCommand::interactionRegistry());
+        }
+        Response::finish(json_encode([
+            'success' => true, 'message' => 'Сообщение отправлено', 'type' => 'success', 'data' => []
+        ]));
+        if ($continuationHandled) exit();
 
         // AR4-1: команда-опрос уважает polls_create_role — как и прямое создание.
         // Нет прав → сбрасываем в обычное упоминание (Лира поболтает, опрос не создаст).

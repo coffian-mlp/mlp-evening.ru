@@ -115,6 +115,7 @@ class LLMManager {
                 return (new PlaylistCommand($this))->handle($contextData);
             }
             if ($handler === 'command_interaction_reply') {
+                if (!empty($contextData['continuation_work'])) return CommandInteractionContinuation::processWork($contextData, PlaylistCommand::interactionRegistry());
                 return (new PlaylistCommand($this))->handleInteractionReply($contextData);
             }
         }

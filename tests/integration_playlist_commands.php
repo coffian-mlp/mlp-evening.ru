@@ -43,7 +43,7 @@ try{
  $reply=$chat->findBotReplyTo($mid);$handler->handle($payload);check($chat->findBotReplyTo($mid)['id']===$reply['id'],'job retry no duplicate reply');
  $spoof=$payload;$spoof['user_id']=$bot;check($handler->handle($spoof)===false,'source author forged rejected');
  $liveBefore=count($fake->live);$searchBefore=$fake->searchCalls;
- foreach (['!хочу 99999999', '/хочу серию 99999999', '/хочу S99E99'] as $missingText) {[$missingMid]=$run($missingText);check(str_contains($chat->findBotReplyTo($missingMid)['raw_message']??'','Эпизод не найден'),'missing exact reference truthful refusal');}
+ foreach (['!хочу 99999999', '/хочу серию 99999999', '/хочу S99E99'] as $missingText) {[$missingMid]=$run($missingText);$missingReply=$chat->findBotReplyTo($missingMid)['raw_message']??'';check(str_contains($missingReply,'Подтверждённых вариантов пока нет') && str_contains($missingReply,'[[command:'),'missing exact reference offers truthful clarification without candidates');}
  check($fake->searchCalls===$searchBefore,'missing ID/code never search LLM');check(count((new EpisodeManager())->getUserWishes($u))===1,'missing references never create wishes');check(count($fake->live)===$liveBefore+3,'missing exact refusals still use live reply path');
  $fake->candidate=$episodeIds[1];[$searchMid,$searchPayload]=$run('/хочу описание неизвестной истории');
  $proposal=$chat->findBotReplyTo($searchMid);preg_match('/\[\[command:(\d+)\]\]/',$proposal['raw_message']??'',$match);$interaction=(int)($match[1]??0);$interactionIds[]=$interaction;
@@ -75,6 +75,7 @@ try{
  }finally{$config->setOption('ai_enabled',$oldAI);$config->setOption('ai_worker_mode',$oldMode);$config->setOption('ai_use_queue',$oldQueue);$config->setOption('bot_worker_heartbeat',$oldHeartbeat);}
 }finally{
  $db->query('DELETE FROM command_interactions WHERE owner_id='.(int)$u);
+ $db->query('DELETE FROM llm_jobs WHERE JSON_EXTRACT(payload,"$.user_id")='.(int)$u);
  $db->query('DELETE FROM episode_wish_events WHERE user_id='.(int)$u);$db->query('DELETE FROM episode_wishes WHERE user_id='.(int)$u);$db->query('DELETE FROM episode_wish_locks WHERE user_id='.(int)$u);
  $db->query('DELETE FROM chat_messages WHERE user_id IN ('.(int)$u.','.(int)$bot.')');
  foreach($episodeIds as $id)$db->query('DELETE FROM episode_list WHERE ID='.(int)$id);

@@ -461,7 +461,7 @@ class ChatManager {
 
     // ✨ Parse Markdown and Mentions (Safe after htmlspecialchars)
     private function parseMarkdown($text) {
-        $text = preg_replace('/\[\[command-delivery:(?:source|interaction)_\d+\]\]/', '', $text);
+        $text = preg_replace('/\[\[command-delivery:(?:(?:source|interaction|notice)_\d+|work_[a-zA-Z0-9_-]+)\]\]/', '', $text);
         // 0. Blockquote: > text (standard Markdown style)
         // We use multiline modifier 'm'
         // Regex matches lines starting with > (possibly with space) and wraps content in <blockquote>
@@ -1019,4 +1019,61 @@ class ChatManager {
         $stmt->execute();
         return $stmt->get_result()->num_rows > 0;
     }
+    /** Caller must hold a transaction. Bindings: id, user_id, optional version/marker. */
+    public function lockInteractionMessages(array $bindings): array {
+        if (\Infra\Transaction::depth($this->db) < 1) {
+            throw new \RuntimeException('Interaction guards require a transaction');
+        }
+        usort($bindings, static fn($a, $b) => $a['id'] <=> $b['id']);
+        $result = [];
+        foreach ($bindings as $binding) {
+            $id = (int)($binding['id'] ?? 0);
+            $stmt = $this->db->prepare('SELECT * FROM chat_messages WHERE id=? FOR UPDATE');
+            $stmt->bind_param('i', $id);
+            $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc();
+            if (!$row || !empty($row['is_deleted']) || (int)$row['user_id'] !== (int)$binding['user_id']) {
+                throw new \Core\UserError('Исходная команда недоступна. Повтори команду.');
+            }
+            $row['raw_message'] = html_entity_decode($row['message'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $version = hash('sha256', $row['raw_message'] . '|' . ($row['edited_at'] ?? ''));
+            if (isset($binding['version']) && !hash_equals($binding['version'], $version)
+                || isset($binding['marker']) && !str_contains($row['raw_message'], $binding['marker'])) {
+                throw new \Core\UserError('Исходная команда недоступна. Повтори команду.');
+            }
+            $result[$id] = $row;
+        }
+        return $result;
+    }
+
+    /** Owns a short transaction; guard/bind callbacks perform DB work only, transport follows commit. */
+    public function addInteractionMessageGuarded(int $botId, string $username, string $text,
+        array $quotes, callable $guard, callable $bind, bool $deferTransport = false): int {
+        if (\Infra\Transaction::depth($this->db) !== 0) {
+            throw new \RuntimeException('Guarded publication must own its transaction');
+        }
+        $id = \Infra\Transaction::run($this->db, function () use ($botId, $username, $text, $quotes, $guard, $bind) {
+            $guard();
+            $this->assertCanSend($botId);
+            if (trim($text) === '') throw new \RuntimeException('Empty interaction reply');
+            $escaped = htmlspecialchars(trim($text), ENT_QUOTES, 'UTF-8');
+            $quotedJson = json_encode(array_values(array_unique(array_map('intval', $quotes))), JSON_THROW_ON_ERROR);
+            $stmt = $this->db->prepare('INSERT INTO chat_messages (user_id,username,message,created_at,quoted_msg_ids) VALUES (?,?,?,UTC_TIMESTAMP(),?)');
+            $stmt->bind_param('isss', $botId, $username, $escaped, $quotedJson);
+            $stmt->execute();
+            $id = (int)$stmt->insert_id;
+            $bind($id);
+            return $id;
+        });
+        if (!$deferTransport) $this->publishInteractionMessage($id);
+        return $id;
+    }
+
+    /** Invoke after releasing interaction locks. SSE reads the already committed row. */
+    public function publishInteractionMessage(int $id): void {
+        if (\Infra\Transaction::depth($this->db) !== 0) throw new \RuntimeException('Publication requires commit');
+        $message = $this->getMessageById($id);
+        if ($message) { $message['type'] = 'message'; $this->broadcast($message); }
+    }
+
 }

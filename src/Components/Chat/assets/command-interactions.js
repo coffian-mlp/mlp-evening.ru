@@ -4,13 +4,14 @@
     const widgets = new Set();
     const queue = [];
     let activeReads = 0;
+    const activeStates = new Set(['pending', 'clarifying', 'resolving']);
     const visibility = new IntersectionObserver(entries => {
         entries.forEach(entry => {
             entry.target._commandVisible = entry.isIntersecting;
-            if (entry.isIntersecting && entry.target._commandState === 'pending') refresh(entry.target);
+            if (entry.isIntersecting && activeStates.has(entry.target._commandState)) refresh(entry.target);
         });
     });
-    const states = { consumed: 'Выбор завершён', cancelled: 'Выбор отменён', expired: 'Срок выбора истёк', unavailable: 'Выбор недоступен' };
+    const states = { clarifying: 'Ответь Лире с цитатой и уточни описание', resolving: 'Ищем подходящий вариант…', superseded: 'Выбор заменён новым предложением', consumed: 'Выбор завершён', cancelled: 'Выбор отменён', expired: 'Срок выбора истёк', unavailable: 'Выбор недоступен' };
 
     async function post(action, data) {
         const form = new URLSearchParams({ action, ...data });
@@ -33,10 +34,12 @@
         status.className = 'command-interaction-status';
         status.textContent = states[data.state] || (data.can_act ? 'Выбери вариант:' : 'Выбор доступен автору команды');
         widget.append(status);
-        if (data.state !== 'pending') return;
+        if (!activeStates.has(data.state)) return;
         const controls = document.createElement('div');
         controls.className = 'command-interaction-options';
         (data.options || []).forEach(option => {
+            if (data.state !== 'pending' && (option.key !== 'cancel' || !data.capabilities?.cancel)) return;
+            if (option.key === 'refine' && data.capabilities && !data.capabilities.refine) return;
             const button = document.createElement('button');
             button.type = 'button';
             button.textContent = option.label;
@@ -55,7 +58,7 @@
                 } catch (error) {
                     // The request may have committed before a network failure: always refetch first.
                     await refresh(widget);
-                    if (widget._commandState === 'pending') {
+                    if (activeStates.has(widget._commandState)) {
                         const notice = document.createElement('span');
                         notice.className = 'command-interaction-error';
                         notice.textContent = error.message;
@@ -113,7 +116,7 @@
         setInterval(() => {
             widgets.forEach(widget => {
                 if (!widget.isConnected) { widgets.delete(widget); visibility.unobserve(widget); return; }
-                if (widget._commandState === 'pending' && !widget._commandSending && widget._commandVisible) refresh(widget);
+                if (activeStates.has(widget._commandState) && !widget._commandSending && widget._commandVisible) refresh(widget);
             });
         }, 5000);
     }

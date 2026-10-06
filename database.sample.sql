@@ -625,6 +625,7 @@ CREATE TABLE IF NOT EXISTS command_interactions (
     bot_message_id INT NULL,
     bot_user_id INT NULL,
     options_json JSON NOT NULL,
+    context_json JSON NULL,
     expires_at DATETIME NOT NULL,
     state VARCHAR(16) NOT NULL DEFAULT 'pending',
     selected_key VARCHAR(64) NULL,

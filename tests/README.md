@@ -266,3 +266,26 @@ mlp_test_compose exec -T php php tests/integration_playlist_llm_scoped.php
 Если описание не найдено, проверить фактические источники поиска и отказ независимой проверки; добавление произвольного ID или ослабление citation guard недопустимо. Такой исход требует честного уточнения без кнопок, а не сообщения о поломке интерфейса. Ограниченный read-only smoke реальных провайдеров охватывает пять исходных запросов; отдельные успешные ответы не гарантируют точность произвольного описания.
 
 PCOV для MLP-362: 111/111 изменённых исполняемых PHP-строк покрыты относительно коммита до исправления. Это покрытие строк изменения, а не всего проекта, ветвей, JavaScript или CSS. Полные логи, предыдущие неудачные попытки и итоговая приёмка хранятся локально в `docs/tests/MLP-362.tests.md`; рабочие материалы и инструментирование в релиз не включаются.
+
+
+## MLP-364: уточнение и отмена выбора
+
+Независимая приёмка: 95 PHP-скриптов PASS без SKIP/FAIL, 34 новых и 24 регрессионных Playwright-сценария PASS в Chromium/Firefox. Покрытие изменённых исполняемых PHP-строк: 788/862 = 91.42%; это не покрытие ветвей или JavaScript. Исторические числа разделов выше относятся к их тикетам.
+
+Использовать изолированный Docker-контур, функцию `mlp_test_compose` и HTTP-сервер с 24 workers из раздела MLP-361. Для обновляемой тестовой схемы отдельно применить и зарегистрировать `migrations/2026_10_06_command_interaction_context.sql` тем же ограниченным способом; свежий sample уже содержит nullable `context_json`. Не переигрывать всю историю миграций поверх sample. PHP suite и браузерные fixtures выполняются последовательно:
+
+```bash
+mlp_test_compose exec -T php php tests/run_all.php
+mlp_test_compose exec -T php php tests/playwright/mlp-361-interactions-fixture.php setup
+MLP_BASE_URL=http://127.0.0.1:8091 npx playwright test \
+  -c tests/playwright/playwright.config.js mlp-364-command-refinement.ui.spec.js
+mlp_test_compose exec -T php php tests/playwright/mlp-361-interactions-fixture.php cleanup
+mlp_test_compose exec -T php php tests/playwright/mlp-361-interactions-fixture.php setup
+MLP_BASE_URL=http://127.0.0.1:8091 npx playwright test \
+  -c tests/playwright/playwright.config.js mlp-361-command-interactions.ui.spec.js
+mlp_test_compose exec -T php php tests/playwright/mlp-361-interactions-fixture.php cleanup
+```
+
+Cleanup обязателен после FAIL и перед следующей fixture. После проверки завершить только принадлежащий тестовому контуру HTTP-сервер: Ctrl+C клиента `docker exec` может оставить PHP workers. Проверить отсутствие fixture credentials, восстановление настроек и завершение точных процессов своего CLI-сервера; остальные процессы не затрагивать.
+
+Проверки используют реальные source/quotes, HTTP actions, очередь, worker и renderer; подменяется внешний provider transport. Покрыты цитированное и однозначное адресное уточнение, contextual exact ID, неизменный TTL, пределы 600/300/8, источник после edit/delete, гонки accept/refine/cancel, enqueue crash, lease/replay и сохранённый verified result. Terminal recovery доставляет сохранённый outcome без повторного эффекта; устаревший источник подавляет публикацию. PHP-диагностика доступна через `test_command_interaction_continuation.php` и `integration_command_interaction_continuation.php`; итоговые команды, логи и ограничения доказательств — в локальном `docs/tests/MLP-364.tests.md`.

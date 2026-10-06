@@ -8,11 +8,11 @@ final class EpisodeResolver
 {
     public function __construct(private LLMManager $llm) {}
 
-    public function resolve(string $description, array $catalog, ?int $deadline = null): array
+    public function resolve(string $description, array $catalog, ?int $deadline = null, bool $allowSemanticProposals = true): array
     {
         $deadline ??= time() + 55;
         if (trim($description) === '' || mb_strlen($description) > 600) return ['status' => 'need_clarification', 'candidates' => []];
-        $semantic = EpisodeCatalog::resolveSemantic($description, $catalog);
+        $semantic = $allowSemanticProposals ? EpisodeCatalog::resolveSemantic($description, $catalog) : ['status' => 'missing'];
         if ($semantic['status'] === 'found') return ['status' => 'found', 'candidates' => array_map(
             static fn($row) => ['episode_id' => (int)$row['ID'], 'title' => (string)$row['TITLE']], $semantic['episodes'])];
         if ($semantic['status'] === 'ambiguous') return ['status' => 'need_clarification', 'candidates' => []];

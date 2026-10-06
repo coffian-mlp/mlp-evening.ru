@@ -1,6 +1,6 @@
 <?php
 /** Docker-only real domain fixture. Credentials stay in an ignored mode-600 file. */
-if (PHP_SAPI === 'cli' && is_file('/.dockerenv') && ($argv[1] ?? '') === 'live') require_once __DIR__ . '/mlp-363-live-transport.php';
+if (PHP_SAPI === 'cli' && is_file('/.dockerenv') && in_array($argv[1] ?? '', ['live', 'continuation-worker'], true)) require_once __DIR__ . '/mlp-363-live-transport.php';
 require_once dirname(__DIR__) . '/integration_helpers.php';
 if (PHP_SAPI !== 'cli' || !is_file('/.dockerenv') || (it_config()['db']['host'] ?? '') !== 'db') exit(1);
 it_require_db();
@@ -19,7 +19,8 @@ $save = function (array $fixture) use ($path) {
 if ($mode === 'setup') {
     if (is_file($path)) throw new RuntimeException('Cleanup existing fixture first');
     $fixture = ['saved' => ['ai_enabled' => $config->getOption('ai_enabled', null), 'ai_bot_user_id' => $config->getOption('ai_bot_user_id', null),
-        'ai_use_queue' => $config->getOption('ai_use_queue', null), 'ai_worker_mode' => $config->getOption('ai_worker_mode', null)],
+        'ai_use_queue' => $config->getOption('ai_use_queue', null), 'ai_worker_mode' => $config->getOption('ai_worker_mode', null),
+        'chat_rate_limit' => $config->getOption('chat_rate_limit', null)],
         'users' => [], 'messages' => [], 'interactions' => [], 'cases' => []];
     $bot = $users->createUser('it_user_mlp361_ui_bot_' . bin2hex(random_bytes(6)), bin2hex(random_bytes(24)), 'user');
     $fixture['users'][] = $bot; $fixture['botId'] = $bot;
@@ -27,8 +28,93 @@ if ($mode === 'setup') {
     $config->setOption('ai_use_queue', '1');
     $config->setOption('ai_worker_mode', 'cron');
     $config->setOption('ai_bot_user_id', (string)$bot);
+    $config->setOption('chat_rate_limit', '0');
     $save($fixture);
     echo "Fixture ready\n";
+} elseif ($mode === 'continuation-user') {
+    $fixture = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+    $key = $argv[2] ?? '';
+    if (!preg_match('/^[a-zA-Z0-9_-]{1,80}$/D', $key)) throw new RuntimeException('Invalid fixture case');
+    $login = 'it_user_mlp361_ui_' . bin2hex(random_bytes(6)); $password = bin2hex(random_bytes(24));
+    $owner = $users->createUser($login, $password, 'user', 'Refinement Fixture');
+    $fixture['users'][] = $owner;
+    $title = 'MLP364 isolated dragon Rarity ' . $key;
+    $stmt = $db->prepare('INSERT INTO episode_list(TITLE,LENGTH) VALUES (?,1)'); $stmt->bind_param('s', $title); $stmt->execute();
+    $target = (int)$db->insert_id; $fixture['episodes'][] = $target;
+    $fixture['cases'][$key] = ['login' => $login, 'password' => $password, 'userId' => $owner, 'targetId' => $target];
+    $save($fixture); echo "Continuation user ready\n";
+} elseif ($mode === 'continuation-inspect') {
+    $fixture = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+    $case = $fixture['cases'][$argv[2] ?? ''] ?? null;
+    if (!$case) throw new RuntimeException('Missing continuation case');
+    $stmt = $db->prepare('SELECT * FROM command_interactions WHERE owner_id=? ORDER BY id');
+    $stmt->bind_param('i', $case['userId']); $stmt->execute(); $rows = [];
+    $cursor = $stmt->get_result();
+    while ($row = $cursor->fetch_assoc()) {
+        $context = json_decode($row['context_json'] ?? 'null', true);
+        $rows[] = ['id' => (int)$row['id'], 'state' => $row['state'], 'sourceId' => (int)$row['source_message_id'], 'messageId' => (int)$row['bot_message_id'],
+            'resultMessageId' => (int)$row['result_message_id'], 'expiresAt' => $row['expires_at'], 'revision' => $context['revision'] ?? null,
+            'childId' => $context['child_id'] ?? null, 'questionBindings' => $context['question_bindings'] ?? [],
+            'work' => $context['pending_work'] ?? null, 'options' => array_map(static fn($o) => ['key' => $o['key'], 'label' => $o['label']], json_decode($row['options_json'], true))];
+    }
+    $stmt = $db->prepare('SELECT COUNT(*) AS n FROM episode_wish_events WHERE user_id=?'); $stmt->bind_param('i', $case['userId']); $stmt->execute();
+    $events = (int)$stmt->get_result()->fetch_assoc()['n'];
+    $stmt = $db->prepare('SELECT id FROM chat_messages WHERE user_id=? AND is_deleted=0 ORDER BY id');
+    $stmt->bind_param('i', $case['userId']); $stmt->execute(); $sources = $stmt->get_result(); $notices = [];
+    while ($source = $sources->fetch_assoc()) {
+        $reply = $chat->findBotReplyTo((int)$source['id'], '[[command-delivery:notice_' . (int)$source['id'] . ']]');
+        if ($reply) $notices[] = ['id' => (int)$reply['id'], 'sourceId' => (int)$source['id'], 'raw' => $reply['raw_message'], 'rendered' => $reply['message']];
+    }
+    echo json_encode(['interactions' => $rows, 'wishes' => count((new Domain\EpisodeManager())->getUserWishes((int)$case['userId'])), 'events' => $events,
+        'trace' => $case['trace'] ?? [], 'notices' => $notices], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+} elseif ($mode === 'continuation-discard-jobs') {
+    $fixture = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+    $case = $fixture['cases'][$argv[2] ?? ''] ?? null;
+    if (!$case || !in_array((int)$case['userId'], $fixture['users'], true)) throw new RuntimeException('Missing owned fixture user');
+    $stmt = $db->prepare('DELETE FROM llm_jobs WHERE type="dynamic_command" AND JSON_EXTRACT(payload,"$.user_id")=? AND JSON_UNQUOTE(JSON_EXTRACT(payload,"$.command.handler_type"))="command_interaction_reply" AND status="pending"');
+    $stmt->bind_param('i', $case['userId']); $stmt->execute();
+    echo json_encode(['removed' => $stmt->affected_rows], JSON_THROW_ON_ERROR);
+} elseif ($mode === 'continuation-worker') {
+    $fixture = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+    $key = $argv[2] ?? ''; $case = $fixture['cases'][$key] ?? null;
+    if (!$case) throw new RuntimeException('Missing continuation case');
+    $GLOBALS['mlp364_transport'] = true; $GLOBALS['mlp364_trace'] = [];
+    $GLOBALS['mlp364_target'] = (int)$case['targetId']; $GLOBALS['mlp364_scenario'] = $argv[3] ?? 'found';
+    if ($GLOBALS['mlp364_scenario'] === 'cancel-during-search') {
+        $GLOBALS['mlp364_on_transport'] = static function (string $stage) use ($db, $case) {
+            if ($stage !== 'search') return;
+            $row = $db->query("SELECT id FROM command_interactions WHERE state='resolving' AND owner_id=" . (int)$case['userId'] . ' ORDER BY id LIMIT 1')->fetch_assoc();
+            if ($row) (new Domain\CommandInteractionManager(LLM\PlaylistCommand::interactionRegistry()))->cancelActive((int)$row['id'], (int)$case['userId']);
+        };
+    }
+    $restore = [];
+    foreach (['ai_enabled' => '1', 'ai_live_confirm' => '1', 'ai_primary_provider' => 'routerai', 'ai_routerai_key' => 'fixture-key', 'ai_routerai_model' => 'fixture-main',
+        'ai_fast_model' => 'fixture-fast', 'ai_proxy_url' => '', 'ai_openai_key' => '', 'ai_openrouter_key' => '', 'ai_yandex_key' => '', 'ai_gigachat_key' => '',
+        'ai_proactive_interval' => '99999999', 'bot_last_proactive' => (string)time(), 'ai_image_auto_interval' => '0', 'ai_memory_auto' => '0', 'bot_worker_heartbeat' => (string)time()] as $option => $value) {
+        $restore[$option] = $config->getOption($option, null); $config->setOption($option, $value);
+    }
+    try { (new LLM\BotWorker())->tick(); }
+    finally {
+        foreach ($restore as $option => $value) {
+            if ($value === null) { $stmt = $db->prepare('DELETE FROM site_options WHERE key_name=?'); $stmt->bind_param('s', $option); $stmt->execute(); }
+            else $config->setOption($option, $value);
+        }
+        $config->flushCache();
+        $fixture['cases'][$key]['trace'] = [...($case['trace'] ?? []), ...$GLOBALS['mlp364_trace']]; $save($fixture);
+    }
+    echo json_encode(['calls' => $GLOBALS['mlp364_trace']], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+} elseif ($mode === 'continuation-invalidate') {
+    $fixture = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+    $case = $fixture['cases'][$argv[2] ?? ''] ?? null;
+    if (!$case) throw new RuntimeException('Missing continuation case');
+    $action = $argv[3] ?? '';
+    $stmt = $db->prepare('SELECT id,source_message_id FROM command_interactions WHERE owner_id=? ORDER BY id DESC LIMIT 1'); $stmt->bind_param('i', $case['userId']); $stmt->execute(); $row = $stmt->get_result()->fetch_assoc();
+    if (!$row) throw new RuntimeException('Missing interaction');
+    if ($action === 'expire') $db->query('UPDATE command_interactions SET expires_at=UTC_TIMESTAMP()-INTERVAL 1 SECOND WHERE owner_id=' . (int)$case['userId']);
+    elseif ($action === 'edit') $chat->editMessage((int)$row['source_message_id'], (int)$case['userId'], 'Edited refinement source');
+    elseif ($action === 'ban') $users->banUser((int)$case['userId'], 'Refinement fixture sanction');
+    else throw new RuntimeException('Invalid continuation state action');
+    echo "Continuation invalidated\n";
 } elseif ($mode === 'correction') {
     $fixture = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
     $key = $argv[2] ?? '';

@@ -8,6 +8,8 @@ use Domain\EpisodeCatalog;
 use Domain\EpisodeManager;
 use Domain\UserManager;
 use Infra\Database;
+use Infra\ConfigManager;
+use Core\UserError;
 
 /** Command adapters only; domain mutations and interaction payloads remain server-owned. */
 final class PlaylistCommand
@@ -63,11 +65,22 @@ final class PlaylistCommand
                 'execute' => static fn(int $actorId, array $payload, string $key): array => (new EpisodeManager())->$method($actorId, (int)$payload['episode_id'], $key),
             ];
         }
+        $registry['episode_wish']['continuation'] = [
+            'classify' => [self::class, 'classifyContinuation'],
+            'prepare' => [self::class, 'prepareContinuation'],
+            'resolve' => static fn(array $context, int $deadline): array => (new self(new LLMManager()))->resolveContinuation($context, $deadline),
+            'format' => static fn(string $state, array $result): string => (new self(new LLMManager()))->continuationReplyText($state, $result),
+            'permission' => static function (int $actor, array $context): bool {
+                self::assertActor($actor);
+                return self::actionEnabled((new BotCommandManager())->getActive(), 'wish');
+            },
+        ];
         return $registry;
     }
 
-    public static function queueInteractionReply(int $id, int $actorId): void
+    public static function queueInteractionReply(int $id, int $actorId, ?array $outcome = null): void
     {
+        if (isset($outcome['operation_key'])) { CommandInteractionContinuation::enqueue($outcome, $actorId); return; }
         BotDispatch::dispatch('dynamic_command', [
             'command' => ['handler_type' => 'command_interaction_reply'],
             'interaction_id' => $id, 'user_id' => $actorId,
@@ -85,6 +98,7 @@ final class PlaylistCommand
         $messageId = (int)($payload['message_id'] ?? 0);
         $actor = (int)($payload['user_id'] ?? 0);
         if ($messageId <= 0 || $actor <= 0) return false;
+        if ((self::match((string)($payload['message'] ?? ''))['action'] ?? '') === 'wish') return $this->handleWish($payload);
         return $this->serialized('playlist_command:' . $messageId, function () use ($payload, $messageId, $actor): bool {
             $chat = new ChatManager();
             $source = $chat->getMessageById($messageId);
@@ -160,25 +174,20 @@ final class PlaylistCommand
         $id = (int)($payload['interaction_id'] ?? 0);
         $actor = (int)($payload['user_id'] ?? 0);
         if ($id <= 0 || $actor <= 0) return false;
-        return $this->serialized('playlist_reply:' . $id, function () use ($id, $actor): bool {
-            $manager = new CommandInteractionManager(self::interactionRegistry());
-            $result = $manager->getResult($id, $actor);
-            if (!empty($result['reply_message_id'])) return true;
-            if (empty($result['outcome'])) return false;
-            $quote = (int)($result['bot_message_id'] ?? $result['source_message_id']);
-            $existing = (new ChatManager())->findBotReplyTo($quote, '[[command-delivery:interaction_' . $id . ']]');
-            if ($existing) { $manager->bindResultMessage($id, (int)$existing['id']); return true; }
-            $replyId = $this->say($result['outcome'], $quote, time() + 10, '', 'interaction_' . $id);
-            $manager->bindResultMessage($id, $replyId);
-            return true;
-        });
+        $manager = new CommandInteractionManager(self::interactionRegistry());
+        $result = $manager->getResult($id, $actor);
+        if (empty($result['outcome'])) return false;
+        if (!empty($result['reply_message_id'])) return $manager->publishResult($id, $actor, '') !== null;
+        // Factual text is generated before the owner locks any rows or performs delivery.
+        $text = $this->replyText($result['outcome'], time() + 10);
+        return $manager->publishResult($id, $actor, $text) !== null;
     }
 
-    private function serialized(string $name, callable $fn): bool
+    private function serialized(string $name, callable $fn, int $waitSeconds = 0): bool
     {
         $db = Database::getInstance()->getConnection();
-        $stmt = $db->prepare('SELECT GET_LOCK(?,0) AS ok');
-        $stmt->bind_param('s', $name); $stmt->execute();
+        $stmt = $db->prepare('SELECT GET_LOCK(?,?) AS ok');
+        $stmt->bind_param('si', $name, $waitSeconds); $stmt->execute();
         if ((int)($stmt->get_result()->fetch_assoc()['ok'] ?? 0) !== 1) throw new \RuntimeException('Command delivery busy');
         try { return $fn(); } finally {
             $stmt = $db->prepare('SELECT RELEASE_LOCK(?)'); $stmt->bind_param('s', $name); $stmt->execute();
@@ -218,6 +227,7 @@ final class PlaylistCommand
         if ($code === 'cancelled' && preg_match('/\bне\s+(?:(?:был[аои]?|стал[аои]?)\s+)?(?:отмен[её]н[аоы]?|отменил[аи]?)\b|не (?:удалось|получилось|смог[лаи]*).{0,40}отмен/iu', $text)) return true;
         if (in_array($code, ['accepted', 'refreshed'], true) && preg_match('/не (?:запис|принят|учт|засчит)|не удалось|нельзя|не могу|отклон[её]н|отказ/iu', $text)) return true;
         if (in_array($code, ['need_clarification', 'unavailable'], true) && preg_match('/кноп|button|нажми|кликни/iu', $text)) return true;
+        if (in_array($code, ['choice_clarifying', 'search_empty', 'search_failed', 'context_overflow', 'ambiguous_choice', 'choice_busy'], true) && self::claims($text, '/\b(?:нашл[аи]|найден[аоы]?|подобрал[аи]|наш[её]л)\b/iu')) return true;
         return $code === 'confirmation_required' && self::claimsFalseChoice($text);
     }
 
@@ -234,6 +244,7 @@ final class PlaylistCommand
         $facts = $outcome['facts'] ?? [];
         $expected = (int)($facts['episode_id'] ?? 0);
         $require = in_array($outcome['code'] ?? '', ['accepted', 'refreshed'], true);
+        if (in_array($outcome['code'] ?? '', ['choice_clarifying', 'search_empty', 'search_failed', 'ambiguous_choice'], true) && !preg_match('/цитат/iu', $text)) return false;
         if (isset($facts['candidates']) && !self::hasCandidateIds($text, $facts['candidates'])) return false;
         if ($expected && !self::hasEpisodeData($text, $expected, (string)($facts['title'] ?? ''), $require)) return false;
         if (isset($facts['quota_remaining']) && !self::hasQuantity($text, (int)$facts['quota_remaining'], '/(?:остал[оа]сь|доступн[оа]|ещ[её])(?:\s+сегодня)?\s*:?\s*(\d+|ноль|нуль|один|одна|одно|два|две|три)/iu', $require)) return false;
@@ -318,6 +329,12 @@ final class PlaylistCommand
         $states = ['confirmation_required'=>'Операция ещё не выполнена. Доступны варианты эпизодов и кнопки выбора. Выбор делает пользователь.',
             'accepted'=>'Пожелание пользователя успешно сохранено.', 'refreshed'=>'Пожелание пользователя успешно обновлено.',
             'cancelled'=>'Существовавшее пожелание пользователя отменено.', 'choice_cancelled'=>'Пользователь отменил выбор варианта. Его пожелания не изменились.',
+            'choice_clarifying'=>'Выбор эпизода не выполнен. Пользователь может ответить с цитатой на предложение и описать эпизод подробнее либо отменить выбор.',
+            'search_empty'=>'Подтверждённых кандидатов нет. Поиск можно уточнить ответом с цитатой; можно отменить незавершённый выбор.',
+            'search_failed'=>'Поиск не завершился успешно. Можно повторить поиск или уточнить ответом с цитатой; пожелания не менялись.',
+            'context_overflow'=>'Новое уточнение не принято: общий запрос превысит 600 символов либо лимит уточнений. Предыдущий контекст сохранён. Нужно начать новую команду /хочу.',
+            'ambiguous_choice'=>'Цель действия не определена. Пользователь должен ответить с цитатой на конкретное своё актуальное предложение.',
+            'choice_busy'=>'Предыдущий поиск ещё выполняется. Можно дождаться результатов или отменить выбор.',
             'missing_query'=>'В команде отсутствует указание эпизода.', 'unavailable'=>'Внешний поиск недоступен. Кандидатов и кнопок выбора нет.',
             'need_clarification'=>'Подходящих подтверждённых эпизодов не найдено. Для нового поиска требуется более подробное описание. Кнопок выбора нет.',
             'daily_limit'=>'За текущие календарные сутки использованы все три разрешённых пожелания.', 'cooldown'=>'Интервал повторного голосования за этот эпизод ещё не истёк.',
@@ -341,7 +358,7 @@ final class PlaylistCommand
         return $lines;
     }
 
-    private function say(array $outcome, int $quote, int $deadline, string $marker = '', ?string $deliveryKey = null): int
+    public function replyText(array $outcome, int $deadline): string
     {
         [$mandatory, $fallback] = self::factsText($outcome);
         $task = 'Коротко и естественно озвучь результат команды пожеланий в характере Лиры. '
@@ -353,11 +370,19 @@ final class PlaylistCommand
             . 'Не копируй описание состояния как готовую реплику: сформулируй ответ самостоятельно, без обязательных слов или форм глагола.';
         if (($outcome['code'] ?? '') === 'confirmation_required') {
             $task .= ' Кнопку нажимает пользователь: попроси его выбрать. Лира не выбирает за него, не нажимает кнопки и не записывает своё желание. Кнопки исправны; не выдумывай сбои интерфейса.';
+        } elseif (in_array($outcome['code'] ?? '', ['choice_clarifying', 'search_empty', 'search_failed'], true)) {
+            $task .= ' Кандидатов сейчас нет; управляющая кнопка «Передумал» доступна. Попроси ответить с цитатой и подробностями; явный формат: «Уточнение: …». Не объявляй найденный эпизод или записанный голос.';
         } elseif (in_array($outcome['code'] ?? '', ['need_clarification', 'unavailable'], true)) {
             $task .= ' Подтверждённых кандидатов и кнопок выбора нет. Не предлагай нажать кнопку и не обсуждай интерфейс. При уточнении попроси описать эпизод подробнее; при недоступном поиске предложи точный номер или название.';
         }
         $text = $this->llm->liveTextBounded(self::factualPrompt($outcome), null, $deadline, 10, $task);
         if ($text === null || !self::replyIsValid($text, $outcome, $mandatory)) $text = $fallback;
+        return $text;
+    }
+
+    private function say(array $outcome, int $quote, int $deadline, string $marker = '', ?string $deliveryKey = null): int
+    {
+        $text = $this->replyText($outcome, $deadline);
         $deliveryKey ??= 'source_' . $quote;
         $id = $this->llm->botSay($text . ($marker ? "\n" . $marker : '') . "\n" . '[[command-delivery:' . $deliveryKey . ']]', [$quote]);
         if (!is_int($id) || $id <= 0) throw new \RuntimeException('Command reply failed');
@@ -380,10 +405,204 @@ final class PlaylistCommand
             foreach (($facts['snapshot']['stories'] ?? []) as $story) foreach ($story['titles'] as $title) $titles[] = $title;
             $text = 'Плейлист: ' . ($titles ? implode('; ', $titles) : 'пока не подготовлен') . '.';
         } else {
-            $labels = ['missing_query' => 'Укажи номер, название или описание эпизода.', 'unavailable' => 'Поиск сейчас недоступен; попробуй номер или точное название.', 'need_clarification' => 'Не удалось уверенно найти эпизод; уточни описание.', 'daily_limit' => 'Сегодня уже использованы три пожелания.', 'cooldown' => 'За этот эпизод пока нельзя голосовать повторно.', 'missing' => 'Эпизод не найден.', 'not_found' => 'Эпизод не найден.', 'not_active' => 'Активного пожелания за этот эпизод нет.'];
+            $labels = ['choice_clarifying' => 'Ответь с цитатой на предложение и опиши эпизод подробнее: Уточнение: … Можно нажать «Передумал».', 'search_empty' => 'Подтверждённых вариантов пока нет. Ответь с цитатой и уточни описание: Уточнение: … Или нажми «Передумал».', 'search_failed' => 'Поиск сейчас не завершился. Ответь с цитатой: «Повтори поиск» или «Уточнение: …». Можно нажать «Передумал».', 'context_overflow' => 'Уточнение слишком длинное либо достигнут лимит уточнений. Предыдущий запрос сохранён; начни новую команду /хочу с описанием до 600 символов.', 'ambiguous_choice' => 'Ответь с цитатой на конкретное своё актуальное предложение.', 'choice_busy' => 'Поиск ещё выполняется. Дождись результата или нажми «Передумал».', 'missing_query' => 'Укажи номер, название или описание эпизода.', 'unavailable' => 'Поиск сейчас недоступен; попробуй номер или точное название.', 'need_clarification' => 'Не удалось уверенно найти эпизод; уточни описание.', 'daily_limit' => 'Сегодня уже использованы три пожелания.', 'cooldown' => 'За этот эпизод пока нельзя голосовать повторно.', 'missing' => 'Эпизод не найден.', 'not_found' => 'Эпизод не найден.', 'not_active' => 'Активного пожелания за этот эпизод нет.'];
             $text = $labels[$code] ?? 'Действие не выполнено.';
             if (!empty($facts['next_allowed_at'])) $text .= ' Доступно после: ' . $facts['next_allowed_at'] . '.';
         }
         return ['', $text];
     }
+    /** Deterministic control intents; the target is always selected by the owner. */
+    public static function classifyContinuation(string $text, string $state): array
+    {
+        $text = trim($text);
+        $aliases = array_filter(array_map('trim', explode(',', (string)ConfigManager::getInstance()->getOption('ai_aliases', 'лира, lyra, хартстрингс, lyra heartstrings, лирочка'))));
+        $bot = (new UserManager())->getUserById((int)ConfigManager::getInstance()->getOption('ai_bot_user_id', 0));
+        foreach (array_filter([$bot['login'] ?? null, $bot['nickname'] ?? null]) as $name) $aliases[] = '@' . $name;
+        return self::classifyContinuationText($text, $state, $aliases);
+    }
+
+    public static function classifyContinuationText(string $text, string $state, array $aliases = []): array
+    {
+        $text = self::normalizeContinuationAddress($text, $aliases);
+        $control = self::classifyContinuationControl($text);
+        if ($control !== null) return $control;
+        if (preg_match('/^(?:нет|не\s+знаю|спасибо|ок(?:ей)?|ладно)[.!]*$/iu', $text)) return ['intent' => 'unknown', 'text' => ''];
+        if (in_array($state, ['clarifying', 'resolving'], true) && self::hasContinuationDescription($text)) return ['intent' => 'clarification', 'text' => $text];
+        return ['intent' => 'unknown', 'text' => ''];
+    }
+
+    private static function normalizeContinuationAddress(string $text, array $aliases): string
+    {
+        $text = trim($text);
+        usort($aliases, static fn($a, $b) => mb_strlen($b) <=> mb_strlen($a));
+        foreach ($aliases as $alias) $text = preg_replace('/^' . preg_quote($alias, '/') . '(?=[\s,!:—-]|$)[\s,!:—-]*/iu', '', $text);
+        return $text;
+    }
+
+    private static function classifyContinuationControl(string $text): ?array
+    {
+        if (preg_match('/^(?:я\s+)?передумал[а]?[\s.!]*$/iu', $text)) return ['intent' => 'cancel', 'text' => ''];
+        if (preg_match('/^не\s+(?:передумал|передумала)|\b(?:передумал|передумала)\b/iu', $text)) return ['intent' => 'unknown', 'text' => ''];
+        if (preg_match('/^(?:повтори(?:ть)?\s+поиск|попробуй\s+(?:снова|ещ[её]\s+раз))[.!]*$/iu', $text)) return ['intent' => 'retry', 'text' => ''];
+        if (preg_match('/^уточнение\s*:\s*(.*)$/ius', $text, $m)) return ['intent' => 'refine', 'text' => trim($m[1])];
+        if (preg_match('/^(?:нет[,!\s—-]*)?(?:не\s+(?:эта|этот|то|те|та\s+серия)|не\s+подходит|хочу\s+уточнить|уточнить)(?:\b|$)[\s,.:;!—-]*(.*)$/ius', $text, $m)) return ['intent' => 'refine', 'text' => trim($m[1])];
+        return null;
+    }
+
+    private static function hasContinuationDescription(string $text): bool
+    {
+        return (mb_strlen($text) >= 3 || self::isExactReference($text)) && (bool)preg_match('/[\p{L}\p{N}]/u', $text);
+    }
+
+    public static function composeContinuationQuery(array $context): string
+    {
+        $query = (string)($context['original_query'] ?? '');
+        foreach ($context['clarifications'] ?? [] as $part) $query .= "\nУточнение: " . $part;
+        return $query;
+    }
+
+    public static function prepareContinuation(array $context, array $input): array
+    {
+        $parts = $context['clarifications'] ?? [];
+        if (($input['intent'] ?? '') !== 'retry') {
+            $text = trim((string)($input['text'] ?? ''));
+            if ($text === '' || mb_strlen($text) > 300 || count($parts) >= 8) throw new UserError('Уточнение пустое или превышает лимит. Начни новую команду /хочу.');
+            $parts[] = $text;
+        }
+        $prepared = ['original_query' => (string)($context['original_query'] ?? ''), 'clarifications' => $parts];
+        $query = self::composeContinuationQuery($prepared);
+        if ($prepared['original_query'] === '' || mb_strlen($query) > 600) throw new UserError('Общий запрос превышает 600 символов. Начни новую команду /хочу.');
+        return $prepared;
+    }
+
+    public function resolveContinuation(array $context, int $deadline): array
+    {
+        $catalog = (new EpisodeManager())->getAllEpisodes();
+        $parts = $context['clarifications'] ?? [];
+        $latest = $parts ? trim((string)end($parts)) : '';
+        if ($latest !== '' && self::isExactReference($latest)) {
+            $exact = EpisodeCatalog::resolveExact($latest, $catalog);
+            $result = ['status' => $exact['status'] === 'found' ? 'found' : 'need_clarification', 'candidates' => array_map(static fn($row) => ['episode_id' => (int)$row['ID'], 'title' => $row['TITLE']], $exact['episodes'] ?? [])];
+        } else {
+            $result = (new EpisodeResolver($this->llm))->resolve(self::composeContinuationQuery($context), $catalog, $deadline, false);
+        }
+        return ['status' => $result['status'] === 'found' ? 'candidates' : ($result['status'] === 'unavailable' ? 'error' : 'empty'),
+            'options' => array_map(static fn($row) => ['key' => 'episode_' . $row['episode_id'], 'label' => mb_substr($row['title'], 0, 160), 'payload' => ['episode_id' => (int)$row['episode_id']]], array_slice($result['candidates'], 0, 6)),
+            'facts' => ['candidates' => $result['candidates'], 'action' => 'wish'], 'code' => $result['status'] === 'unavailable' ? 'search_failed' : 'search_empty'];
+    }
+
+    public function continuationReplyText(string $state, array $result): string
+    {
+        if ($state === 'terminal') return $this->replyText($result['outcome'], (int)($result['_deadline'] ?? time() + 10));
+        $code = $state === 'candidates' ? 'confirmation_required' : ($result['code'] ?? 'choice_clarifying');
+        $facts = $state === 'candidates' ? ($result['facts'] ?? ['action' => 'wish']) : [];
+        return $this->replyText(['status' => 'rejected', 'code' => $code, 'facts' => $facts], (int)($result['_deadline'] ?? time() + 10));
+    }
+
+    private function handleWish(array $payload): bool
+    {
+        $input = $this->wishInput($payload);
+        if ($input === null) return false;
+        ['source' => $source, 'match' => $match, 'text' => $text] = $input;
+        $sourceId = (int)$source['id']; $actor = (int)$source['user_id'];
+        if ($match['query'] === '') return $this->sayMissingWish($sourceId);
+        if (mb_strlen($match['query']) > 600) {
+            $this->say(['status' => 'rejected', 'code' => 'context_overflow', 'facts' => []], $sourceId, time() + 10);
+            return true;
+        }
+        $interactions = new CommandInteractionManager(self::interactionRegistry());
+        try {
+            $accepted = $interactions->acceptNewCommand('episode_wish', $actor, $sourceId,
+                fn(): array|false => $this->acceptWishLocally($text, $match, $actor, $sourceId),
+                hash('sha256', ($source['raw_message'] ?? '') . '|' . ($source['edited_at'] ?? '')));
+            if ($accepted === false) return false;
+            if ($this->recoverWishReply($interactions, $sourceId)) return true;
+            $deadline = time() + 55;
+            if ($accepted['kind'] === 'direct') return $this->publishWishOutcome($accepted['outcome'], $source, $actor, $deadline);
+            return $this->publishWishProposal($interactions, $actor, $sourceId, $match['query'], $deadline);
+        } catch (UserError $error) { return false; }
+    }
+
+    private function wishInput(array $payload): ?array
+    {
+        $source = (new ChatManager())->getMessageById((int)$payload['message_id']);
+        if (!$source || !empty($source['is_deleted']) || (int)$source['user_id'] !== (int)$payload['user_id']) return null;
+        $text = html_entity_decode((string)$source['raw_message'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if (trim($text) !== trim((string)($payload['message'] ?? ''))) return null;
+        $match = self::match($text);
+        if (!$match || !self::matchActive((new BotCommandManager())->getActive(), $text)) return null;
+        return ['source' => $source, 'match' => $match, 'text' => $text];
+    }
+
+    private function acceptWishLocally(string $text, array $match, int $actor, int $sourceId): array|false
+    {
+        if (!self::matchActive((new BotCommandManager())->getActive(), $text)) return false;
+        self::assertActor($actor);
+        $exact = EpisodeCatalog::resolveExact($match['query'], (new EpisodeManager())->getAllEpisodes());
+        if ($exact['status'] === 'found' && count($exact['episodes']) === 1) {
+            $id = (int)$exact['episodes'][0]['ID'];
+            return ['kind' => 'direct', 'outcome' => (new EpisodeManager())->wish($actor, $id, 'command:' . $sourceId . ':wish:' . $id)];
+        }
+        return ['kind' => 'search', 'query' => $match['query']];
+    }
+
+    private function recoverWishReply(CommandInteractionManager $interactions, int $sourceId): bool
+    {
+        $existing = (new ChatManager())->findBotReplyTo($sourceId, '[[command-delivery:source_' . $sourceId . ']]');
+        if (!$existing) return false;
+        if (preg_match('/\[\[command:(\d+)\]\]/', $existing['raw_message'] ?? '', $m)) $interactions->bindMessage((int)$m[1], (int)$existing['id']);
+        return true;
+    }
+
+    private function publishWishProposal(CommandInteractionManager $interactions, int $actor, int $sourceId, string $query, int $deadline): bool
+    {
+        $result = $this->resolveInitialWish($query, $deadline);
+        $options = array_map(static fn($row) => ['key' => 'episode_' . $row['episode_id'], 'label' => mb_substr($row['title'], 0, 160), 'payload' => ['episode_id' => (int)$row['episode_id']]], $result['candidates']);
+        $found = $result['status'] === 'found';
+        $id = $interactions->createContinuation('episode_wish', $actor, $sourceId, $options, ['original_query' => $query, 'clarifications' => []], $found ? 'pending' : 'clarifying');
+        $code = $found ? 'confirmation_required' : ($result['status'] === 'unavailable' ? 'search_failed' : 'search_empty');
+        $outcome = ['status' => 'rejected', 'code' => $code, 'facts' => $found ? ['candidates' => $result['candidates'], 'action' => 'wish'] : []];
+        $reply = $this->replyText($outcome, $deadline) . "\n[[command:" . $id . ']]';
+        $interactions->publishProposal($id, $reply);
+        return true;
+    }
+
+    private function resolveInitialWish(string $query, int $deadline): array
+    {
+        $catalog = (new EpisodeManager())->getAllEpisodes();
+        $exact = EpisodeCatalog::resolveExact($query, $catalog);
+        if ($exact['status'] === 'missing' && self::isExactReference($query)) return ['status' => 'need_clarification', 'candidates' => []];
+        if ($exact['status'] === 'ambiguous') return ['status' => 'found', 'candidates' => array_map(static fn($row) => ['episode_id' => (int)$row['ID'], 'title' => $row['TITLE']], array_slice($exact['episodes'], 0, 6))];
+        return (new EpisodeResolver($this->llm))->resolve($query, $catalog, $deadline);
+    }
+
+    private function publishWishOutcome(array $outcome, array $source, int $actor, int $deadline): bool
+    {
+        $text = $this->replyText($outcome, $deadline);
+        $sourceId = (int)$source['id'];
+        $version = hash('sha256', ($source['raw_message'] ?? '') . '|' . ($source['edited_at'] ?? ''));
+        $chat = new ChatManager();
+        $published = null;
+        $ok = $this->serialized('playlist_delivery:' . $sourceId, function () use ($chat, $sourceId, $version, $actor, $text, &$published): bool {
+            $marker = '[[command-delivery:source_' . $sourceId . ']]';
+            if ($chat->findBotReplyTo($sourceId, $marker)) return true;
+            $botId = (int)ConfigManager::getInstance()->getOption('ai_bot_user_id', 0);
+            $published = $chat->addInteractionMessageGuarded($botId, 'Лира', $text . "\n" . $marker, [$sourceId],
+                function () use ($chat, $sourceId, $actor, $version) {
+                    self::assertActor($actor);
+                    if (!self::actionEnabled((new BotCommandManager())->getActive(), 'wish')) throw new UserError('Команда сейчас недоступна.');
+                    $chat->lockInteractionMessages([['id' => $sourceId, 'user_id' => $actor, 'version' => $version]]);
+                }, static function ($id) {}, true);
+            return true;
+        }, 2);
+        if ($published !== null) $chat->publishInteractionMessage($published);
+        return $ok;
+    }
+
+    private function sayMissingWish(int $source): bool
+    {
+        $this->say(['status' => 'rejected', 'code' => 'missing_query', 'facts' => []], $source, time() + 10);
+        return true;
+    }
+
 }

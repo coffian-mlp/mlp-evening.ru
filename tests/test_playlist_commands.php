@@ -26,6 +26,13 @@ expect(PlaylistCommand::actionEnabled([['command_prefix'=>'/передумала
 expect(!PlaylistCommand::actionEnabled([['command_prefix'=>'/хочу','handler_type'=>'text']], 'wish'), 'wrong handler does not enable action');
 expect(!PlaylistCommand::replyIsValid('Пожелания не изменены. Твоё желание отменено.', ['status'=>'cancelled','code'=>'choice_cancelled','facts'=>[]], 'пожелания не изменены'), 'cancel choice does not claim wish cancellation');
 $clarify=['status'=>'rejected','code'=>'need_clarification','facts'=>[]];
+foreach (['choice_clarifying','search_empty','search_failed','ambiguous_choice'] as $code) {
+ $continuation=['status'=>'rejected','code'=>$code,'facts'=>[]];
+ expect(PlaylistCommand::replyIsValid('Ответь с цитатой и уточни описание.',$continuation,''),'continuation factual free quote guidance '.$code);
+ expect(!PlaylistCommand::replyIsValid('Уточни описание.',$continuation,''),'continuation requires useful quote guidance '.$code);
+ foreach(['Нашла нужный эпизод, ответь с цитатой.','Голос записан, ответь с цитатой.','Твоё желание отменено, ответь с цитатой.'] as $bad) expect(!PlaylistCommand::replyIsValid($bad,$continuation,''),'continuation rejects invented search/effect '.$code);
+}
+foreach (['context_overflow','choice_busy'] as $code) expect(!PlaylistCommand::replyIsValid('Я записала голос.',['status'=>'rejected','code'=>$code,'facts'=>[]],''),'continuation refusal never asserts vote '.$code);
 foreach (['Уточн. Детерминированный исход: {"status":"rejected"}; уточни', 'Уточни. code: need_clarification', 'Уточни. Обязательно сохрани дословно: уточни', 'Уточни, я записала голос.', 'Уточни. Ответь в характере Лиры.', 'Уточн — уточни', 'Уточни. Я получила инструкцию и выполняю её.'] as $bad) expect(!PlaylistCommand::replyIsValid($bad,$clarify,'уточни'),'meta leak or false success rejected');
 expect(PlaylistCommand::replyIsValid('Уточни, пожалуйста: кто был в сцене и что происходило?',$clarify,'уточни'),'natural clarification accepted');
 $proposal=['status'=>'rejected','code'=>'confirmation_required','facts'=>[]];

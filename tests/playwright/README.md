@@ -43,3 +43,19 @@ docker compose -p mlp359 -f docker-compose.yml -f docs/tests/MLP-359/compose.ove
 Сервер localhost должен работать отдельно. Полный PHP suite выполняется до setup или после cleanup: браузерный fixture временно меняет общие настройки. Cleanup обязателен также после FAIL. Credentials сохраняются только в ignored файле с правами 0600. Production API и provider данным fixture не вызываются.
 
 Для диагностики живых реплик различай транспортный timeout и отклонение фактической проверки: оба случая штатно приводят к fallback. Live-режим не гарантирует генерацию при каждом вызове. Наличие работающих кнопок и отсутствие голосования до выбора проверяются независимо от формулировки; сценарий с выключенным AI не подтверждает live path.
+
+## MLP-364 — уточнение и отмена незавершённого выбора
+
+`mlp-364-command-refinement.ui.spec.js` проверяет реальный `send_message` producer, CommandInteractionContinuation, JobQueue/BotWorker, HTTP actions, историю/SSE и DOM Chromium/Firefox. Кнопка «Не то, уточнить» закрывает прежние варианты; цитированный ответ до доставки вопроса запускает поиск; новый вариант требует отдельного подтверждения даже при точном номере. Проверяются текстовый отказ, цитата вопроса, повтор неуспешного поиска, отмена resolving, адресация, supersede, TTL, source edit и санкции.
+
+Modes fixture `continuation-user`, `continuation-worker`, `continuation-inspect`, `continuation-invalidate`, `continuation-discard-jobs` доступны только в изолированном Docker. Последний режим удаляет только pending dynamic reply jobs конкретного принадлежащего fixture пользователя для моделирования потерянного enqueue. Worker mode заменяет только внешний curl transport и временно настраивает provider; остальные владельцы данных, callbacks, очередь и публикация выполняются настоящим кодом. Настройки provider возвращаются в finally. Trace содержит только тестовые факты и тип вызова; credentials остаются в ignored mode600 файле и удаляются общим cleanup. Setup/cleanup и все проверки shared DB выполняются последовательно; полный PHP suite запускается отдельно от браузерного fixture.
+
+Дополнительные regression cases проверяют generic notice через actual HTTP/worker: private marker остаётся в raw storage для replay, но отсутствует в API-rendered message и DOM. Durable terminal cancellation восстанавливает один bound reply свежим worker после потери queue entry; повтор не доставляет второй ответ, редактирование source до recovery подавляет доставку без изменения committed outcome или quota events.
+
+```bash
+docker compose -p mlp359 -f docker-compose.yml -f docs/tests/MLP-359/compose.override.yml exec -T php php tests/playwright/mlp-361-interactions-fixture.php setup
+MLP_BASE_URL=http://127.0.0.1:8091 npx playwright test -c tests/playwright/playwright.config.js mlp-364-command-refinement.ui.spec.js
+docker compose -p mlp359 -f docker-compose.yml -f docs/tests/MLP-359/compose.override.yml exec -T php php tests/playwright/mlp-361-interactions-fixture.php cleanup
+```
+
+HTTP localhost :8091 должен быть готов до запуска. На машине с встроенным PHP server требуется несколько HTTP workers для SSE и actions; тесты Playwright сохраняют workers=1, не выполняя shared fixture cases параллельно. Actual reports и screenshots находятся в `docs/tests/MLP-364/`; отсутствие runtime либо SKIP не является PASS.

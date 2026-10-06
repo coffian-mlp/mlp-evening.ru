@@ -86,6 +86,9 @@ class BotWorker {
     private function reactive(): void {
         $enabled = $this->llm->isEnabled();
 
+        // Durable interaction intent survives queue enqueue/claim/process failures.
+        CommandInteractionContinuation::reconcile(PlaylistCommand::interactionRegistry());
+
         // Индивидуальные задачи: приветствия и команды (переиспользуем существующие триггеры).
         foreach ($this->queue->claimDue(50) as $job) {
             $id = (int)$job['id'];

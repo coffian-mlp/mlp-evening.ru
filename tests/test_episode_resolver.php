@@ -39,6 +39,12 @@ $before=count($llm->calls);$semantic=[['ID'=>413,'TITLE'=>'My Little Pony Friend
 expect($resolver->resolve('самую первую серию',$semantic)['candidates'][0]['episode_id']===413,'first semantic proposal');
 expect($resolver->resolve('полнометражку',$semantic)['candidates'][0]['episode_id']===77,'movie semantic proposal');
 expect(count($llm->calls)===$before,'semantic hints make zero provider calls');
+$llm->calls=[];$llm->search=json_encode(['content'=>json_encode(['candidates'=>[['episode_id'=>77,'evidence'=>'Clarified movie plot','source_url'=>'https://example.org/episode']]]),'sources'=>[['url'=>'https://example.org/episode']]]);$llm->verify='{"verified":[77]}';
+$refined=$resolver->resolve("самую первую серию\nУточнение: фильм с Темпест",$semantic,time()+55,false);
+expect(array_column($refined['candidates'],'episode_id')===[77] && array_column($llm->calls,0)===['normalize','search','verify'],'contextual search disables initial semantic shortcut and uses clarification');
+$llm->calls=[];$llm->search=json_encode(['content'=>json_encode(['candidates'=>[['episode_id'=>77,'evidence'=>'Movie plot','source_url'=>'https://example.org/episode']]]),'sources'=>[['url'=>'https://example.org/episode']]]);
+$resolver->resolve('полнометражку',$semantic,time()+55,false);
+expect(array_column($llm->calls,0)===['normalize','search','verify'],'contextual semantic hint still requires actual verified search');
 $llm->search=json_encode(['content'=>json_encode(['candidates'=>[['title'=>'My Little Pony: The Movie','evidence'=>'2017 movie','source_url'=>'https://example.org/episode']]]),'sources'=>[['url'=>'https://example.org/episode']]]);$llm->verify='{"verified":[77]}';
 expect($resolver->resolve('фильм с Темпест',$semantic)['candidates'][0]['episode_id']===77,'verified canonical movie title without year resolves safely');
 $llm->search=json_encode(['content'=>json_encode(['candidates'=>[['title'=>'My Little Pony: The Movie (1986)','evidence'=>'wrong movie','source_url'=>'https://example.org/episode']]]),'sources'=>[['url'=>'https://example.org/episode']]]);
