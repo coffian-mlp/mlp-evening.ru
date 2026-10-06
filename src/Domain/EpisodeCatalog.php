@@ -35,6 +35,24 @@ final class EpisodeCatalog {
         return $stories;
     }
 
+    /** Anchored catalogue hints return proposals, never an exact voting reference. */
+    public static function resolveSemantic(string $query, array $rows): array {
+        $q = mb_strtolower(trim($query));
+        $q = preg_replace('/\s+/u', ' ', $q);
+        $first = (bool)preg_match('/^(?:(?:самую?|самая) )?перв(?:ую|ая) сери(?:ю|я)$|^(?:самый )?первый эпизод$/u', $q);
+        $movie = (bool)preg_match('/^(?:(?:полнометражн(?:ый|ую) )?(?:фильм|мультфильм)|полнометражк(?:у|а))(?:(?: про пони| mlp| my little pony))?(?: (?:2017|\(2017\)))?$/u', $q);
+        $movie = $movie || (bool)preg_match('/^my little pony(?::| -)? the movie(?: \(2017\)| 2017)?$/u', $q);
+        if (!$first && !$movie) return ['status' => 'missing', 'episodes' => []];
+        $matches = [];
+        foreach ($rows as $row) {
+            $meta = self::metadata((string)$row['TITLE']);
+            $title = mb_strtolower(trim((string)$row['TITLE']));
+            if (($first && $meta && $meta['season'] === 1 && $meta['episode'] === 1)
+                || ($movie && preg_match('/^my little pony(?::| -)? the movie(?: \(2017\)| 2017)?$/u', $title))) $matches[] = $row;
+        }
+        return ['status' => count($matches) === 1 ? 'found' : (count($matches) > 1 ? 'ambiguous' : 'missing'), 'episodes' => $matches];
+    }
+
     public static function resolveExact(string $query, array $rows): array {
         $q = mb_strtolower(trim($query));
         $matches = [];

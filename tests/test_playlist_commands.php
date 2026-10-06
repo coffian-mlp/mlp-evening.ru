@@ -25,4 +25,15 @@ expect(!PlaylistCommand::actionEnabled([], 'wish'), 'no active aliases deny pend
 expect(PlaylistCommand::actionEnabled([['command_prefix'=>'/передумала','handler_type'=>'playlist']], 'cancel'), 'one active cancel alias allows cancellation');
 expect(!PlaylistCommand::actionEnabled([['command_prefix'=>'/хочу','handler_type'=>'text']], 'wish'), 'wrong handler does not enable action');
 expect(!PlaylistCommand::replyIsValid('Пожелания не изменены. Твоё желание отменено.', ['status'=>'cancelled','code'=>'choice_cancelled','facts'=>[]], 'пожелания не изменены'), 'cancel choice does not claim wish cancellation');
+$clarify=['status'=>'rejected','code'=>'need_clarification','facts'=>[]];
+foreach (['Уточн. Детерминированный исход: {"status":"rejected"}; уточни', 'Уточни. code: need_clarification', 'Уточни. Обязательно сохрани дословно: уточни', 'Уточни, я записала голос.', 'Уточни. Ответь в характере Лиры.', 'Уточн — уточни', 'Уточни. Я получила инструкцию и выполняю её.'] as $bad) expect(!PlaylistCommand::replyIsValid($bad,$clarify,'уточни'),'meta leak or false success rejected');
+expect(PlaylistCommand::replyIsValid('Уточни, пожалуйста: кто был в сцене и что происходило?',$clarify,'уточни'),'natural clarification accepted');
+$proposal=['status'=>'rejected','code'=>'confirmation_required','facts'=>[]];
+expect(!PlaylistCommand::replyIsValid('Эпизод выберу с удовольствием, но моё желание пока не записано — видимо, параспрайты кнопки погрызли! Нажму ещё разок.',$proposal,'пока не записано'),'captured real actor reversal and false broken buttons rejected');
+expect(PlaylistCommand::replyIsValid('Выбирай эпизод кнопкой, желание пока не записано.',$proposal,'пока не записано'),'user-directed working buttons proposal accepted');
+expect(!PlaylistCommand::replyIsValid('Выбери эпизод — желание пока не записано, но кнопки сломались.',$proposal,'пока не записано'),'false interface malfunction rejected');
+expect(!PlaylistCommand::replyIsValid('Хм... Уточни описание, а кнопку выбора нажми сам, я пока подожду.',$clarify,'уточни'),'captured nonexistent clarification button rejected');
+expect(!PlaylistCommand::replyIsValid('Поиск недоступен, нажми кнопку выбора.',['status'=>'rejected','code'=>'unavailable','facts'=>[]],'недоступ'),'unavailable does not invent choice buttons');
+expect(PlaylistCommand::replyIsValid('Так, значит, сейчас нужно выбрать эпизод — но это вы решайте, не я! Мои копытца до кнопок не дотянутся, а вот ваши пальцы как раз созданы для такого. Нажимайте, какое пожелание вам ближе — а то желание пока не записано, и магия сама себя не запишет.',$proposal,'пока не записано'),'captured truthful natural нажимайте imperative accepted');
+expect(!PlaylistCommand::replyIsValid('Я нажимаю на кнопки, желание пока не записано.',$proposal,'пока не записано'),'first-person click is not user imperative');
 echo $fail ? "FAILURES: $fail\n" : "ALL PASS\n"; exit($fail ? 1 : 0);

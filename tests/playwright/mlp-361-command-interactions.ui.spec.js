@@ -143,3 +143,23 @@ test('MLP-361 administrator corrects and restores an old completion', async ({pa
   expect(JSON.parse(cli('inspect',key))).toEqual([1,1]);
   await expect(form.locator('input[name="story_ids[]"]').first()).toBeChecked();
 });
+
+test('MLP-362 first episode actual command proposes clean buttons before vote', async ({page,browserName}) => {
+  test.skip(!BASE,'MLP_BASE_URL required');
+  const key=`${browserName}_semantic`;
+  cli('semantic',key);
+  const f=JSON.parse(fs.readFileSync(path.join(repo,'docs/private/mlp361-interactions-local.json'),'utf8')).cases[key];
+  await login(page,f);await page.goto(BASE+'/',{waitUntil:'domcontentloaded'});
+  const choice=widget(page,f);await reveal(choice);
+  await expect(choice.getByRole('button').first()).toContainText(/Season 1 Episode 0?1 /);
+  const message=page.locator(`.chat-message[data-id="${f.messageId}"]`);
+  await expect(message).toContainText('желание пока не записано');
+  await expect(message).not.toContainText('Детерминированный');
+  await expect(message).not.toContainText('confirmation_required');
+  fs.mkdirSync(path.join(repo,'docs/tests/MLP-362/screenshots'),{recursive:true});
+  await page.screenshot({path:path.join(repo,`docs/tests/MLP-362/screenshots/${browserName}-semantic.png`)});
+  await choice.getByRole('button').first().click();
+  await expect(choice).toContainText('Выбор завершён');
+  await page.reload({waitUntil:'domcontentloaded'});await reveal(widget(page,f));
+  await expect(widget(page,f)).toContainText('Выбор завершён');
+});

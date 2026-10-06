@@ -17,8 +17,9 @@ class PlaylistCommandFixtureLlm extends LLMManager {
     public $onSearch=null;
     public int $searchCalls=0;
     public function __construct(private int $fixtureBot) {}
-    public function liveTextBounded(string $instruction,?string $mustContain,int $deadlineSec,int $timeoutSec=10):?string{$this->live[]=$instruction;if($this->natural && preg_match('/Обязательно сохрани дословно: (.*?)\. Детерминированный/s',$instruction,$m)) return 'С радостью помогу! '.$m[1].' — учла твой выбор.';return $this->reply;}
+    public function liveTextBounded(string $instruction,?string $mustContain,int $deadlineSec,int $timeoutSec=10,?string $trustedTask=null):?string{$this->live[]=$instruction;if($this->natural) return 'С радостью помогу! '.$instruction;return $this->reply;}
     public function botSay(string $text,array $quotedIds=[]){return (new ChatManager())->addMessage($this->fixtureBot,'MLP361 fixture bot',$text,$quotedIds);}
+    public function generateSearchQueryUtility(array $context,string $prompt,int $deadlineSec,int $timeoutSec=8):?string{return null;}
     public function generateSearchUtility(array $context,string $prompt,?int $deadlineSec=null):?string{++$this->searchCalls;if($this->onSearch)($this->onSearch)();return $this->candidate ? json_encode(['content'=>json_encode(['candidates'=>[['episode_id'=>$this->candidate,'evidence'=>'Matched description','source_url'=>'https://example.org/fixture']]]),'sources'=>[['url'=>'https://example.org/fixture']]]) : null;}
     public function generateBoundedUtility(array $context,string $prompt,int $deadlineSec,int $timeoutSec=20):?string{return json_encode(['verified'=>[$this->candidate]]);}
 }

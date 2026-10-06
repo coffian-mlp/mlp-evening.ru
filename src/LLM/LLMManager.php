@@ -769,6 +769,25 @@ class LLMManager {
         return $this->scopedCall($context, $prompt, $deadlineSec, $timeoutSec, false);
     }
 
+    /** One bounded fast call without web search or chat persona; retrieval wording only. */
+    public function generateSearchQueryUtility(array $context, string $prompt, int $deadlineSec, int $timeoutSec = 8): ?string {
+        if (!$this->isEnabled()) return null;
+        $remaining = $deadlineSec - time();
+        $provider = $this->fastProviders[0] ?? null;
+        if ($remaining < 5 || !$provider || !method_exists($provider, 'withTimeout')) return null;
+        try {
+            if (!$this->prepareScopedProxy()) return null;
+            $remaining = $deadlineSec - time();
+            if ($remaining < 5) return null;
+            $call = $provider->withTimeout(min(8, $timeoutSec, $remaining));
+            if ($call instanceof RouterAIProvider) $call = $call->withReasoningEffort('low');
+            return $call->askChat($context, $prompt);
+        } catch (\Throwable $e) {
+            error_log('Playlist query normalization unavailable: ' . get_class($e));
+            return null;
+        }
+    }
+
     /** JSON envelope with actual provider citations, never fabricated source URLs. */
     public function generateSearchUtility(array $context, string $prompt, ?int $deadlineSec = null): ?string {
         if (!$this->isEnabled()) return null;
@@ -790,10 +809,10 @@ class LLMManager {
         }
     }
 
-    public function liveTextBounded(string $instruction, ?string $mustContain, int $deadlineSec, int $timeoutSec = 10): ?string {
+    public function liveTextBounded(string $instruction, ?string $mustContain, int $deadlineSec, int $timeoutSec = 10, ?string $trustedTask = null): ?string {
         if (!(int)ConfigManager::getInstance()->getOption('ai_live_confirm', 1)) return null;
         $raw = $this->scopedCall([['role' => 'user', 'content' => $instruction . "\n" . self::LANG_REMINDER]],
-            $this->personaPrompt(), $deadlineSec, $timeoutSec, true);
+            $this->personaPrompt() . ($trustedTask !== null ? "\n\n[Текущая служебная задача, обязательна]:\n" . $trustedTask : ''), $deadlineSec, $timeoutSec, true);
         $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
         if ($text === '' || ($mustContain !== null && mb_stripos($text, $mustContain) === false)) return null;
         return $text;

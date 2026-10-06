@@ -54,6 +54,18 @@ if ($mode === 'setup') {
     $fixture['cases'][$key] = ['login' => $login, 'password' => $password, 'userId' => $owner,
         'snapshotId' => $snapshotId, 'episodeIds' => array_column($episodes, 'ID'), 'storyIds' => array_column($stories, 'story_id')];
     $save($fixture); echo "Correction fixture ready\n";
+ } elseif ($mode === 'semantic') {
+    $fixture=json_decode(file_get_contents($path),true,512,JSON_THROW_ON_ERROR);
+    $key=$argv[2] ?? '';
+    if(!preg_match('/^[a-zA-Z0-9_-]{1,80}$/D',$key)) throw new RuntimeException('Invalid fixture key');
+    $login='it_user_mlp361_ui_'.bin2hex(random_bytes(6));$password=bin2hex(random_bytes(24));
+    $owner=$users->createUser($login,$password,'user','Semantic Fixture');$fixture['users'][]=$owner;
+    $text='!хочу самую первую серию';$source=$chat->addMessage($owner,$login,$text);
+    (new LLM\LLMManager())->processTrigger('dynamic_command',['message_id'=>$source,'user_id'=>$owner,'message'=>$text,'command'=>['handler_type'=>'playlist']]);
+    $reply=$chat->findBotReplyTo($source);
+    if(!$reply || !preg_match('/\[\[command:(\d+)\]\]/',$reply['raw_message'],$match)) throw new RuntimeException('Semantic command has no proposal');
+    $fixture['cases'][$key]=['login'=>$login,'password'=>$password,'userId'=>$owner,'sourceId'=>$source,'messageId'=>(int)$reply['id'],'interactionId'=>(int)$match[1]];
+    $save($fixture);echo "Semantic fixture ready\n";
 } elseif ($mode === 'inspect') {
     $fixture = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
     $case = $fixture['cases'][$argv[2] ?? ''] ?? null;

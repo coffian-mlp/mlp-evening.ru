@@ -16,4 +16,10 @@ foreach ([[0,2147483647],[2147483647,2147483647]] as [$votes,$views]) {
     check(is_finite($normalized[0]['weight']) && $normalized[0]['weight']>0,'large DB counters positive finite');
     check(count(Domain\PlaylistSelector::select($normalized,1,fn()=>0.5))===1,'viewed story remains available');
 }
+$semanticRows = [['ID'=>901,'TITLE'=>'My Little Pony Friendship is Magic - Season 1 Episode 2 - Friendship is Magic, part 2'], ['ID'=>411,'TITLE'=>'My Little Pony Friendship is Magic - Season 1 Episode 1 - Friendship is Magic, part 1'], ['ID'=>77,'TITLE'=>'My Little Pony: The Movie (2017)','LENGTH'=>99]];
+foreach (['самую первую серию','первую серию','первый эпизод'] as $query) check(EpisodeCatalog::resolveSemantic($query,$semanticRows)['episodes'][0]['ID']===411,'first is S1E1, not smallest ID: '.$query);
+foreach (['полнометражку','фильм','полнометражный фильм 2017'] as $query) check(EpisodeCatalog::resolveSemantic($query,$semanticRows)['episodes'][0]['ID']===77,'canonical movie identity: '.$query);
+foreach (['первую серию про Лиру','фильм 1986','фильм про взрывы','самую первую серию другого сериала'] as $query) check(EpisodeCatalog::resolveSemantic($query,$semanticRows)['status']==='missing','unanchored semantic rejected: '.$query);
+check(EpisodeCatalog::resolveSemantic('фильм',[['ID'=>9,'TITLE'=>'Some long episode','LENGTH'=>99]])['status']==='missing','movie not selected by length');
+check(EpisodeCatalog::resolveSemantic('фильм',array_merge($semanticRows,[['ID'=>78,'TITLE'=>'My Little Pony The Movie']]))['status']==='ambiguous','duplicate movie identity needs clarification');
 echo "ALL PASS\n";
