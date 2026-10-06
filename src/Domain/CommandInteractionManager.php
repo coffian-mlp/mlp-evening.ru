@@ -44,7 +44,7 @@ final class CommandInteractionManager
         }
         $json = json_encode($options, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
         if (strlen($json) > 32768) throw new RuntimeException('Interaction payload too large');
-        $version = $this->sourceVersion($source);
+        $version = $this->sourceVersion($source, 'getter_read_v1');
         $expiry = gmdate('Y-m-d H:i:s', time() + $ttlSeconds);
         $stmt = $this->db->prepare('INSERT INTO command_interactions (type,owner_id,source_message_id,source_version,options_json,expires_at) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)');
         $stmt->bind_param('siisss', $type, $ownerId, $sourceMessageId, $version, $json, $expiry);
@@ -73,7 +73,7 @@ final class CommandInteractionManager
             $stmt->execute();
             if (($row['context_json'] ?? null) !== null) {
                 $context = $this->requireContext($row);
-                $context['proposal_binding'] = ['id' => $botMessageId, 'user_id' => $botId, 'version' => $this->sourceVersion($message), 'marker' => '[[command:' . $interactionId . ']]'];
+                $context['proposal_binding'] = ['id' => $botMessageId, 'user_id' => $botId, 'version' => $this->sourceVersion($message), 'version_encoding' => 'storage_v2', 'marker' => '[[command:' . $interactionId . ']]'];
                 $this->saveContext($interactionId, $context, $row['state']);
             }
         });
@@ -204,9 +204,9 @@ final class CommandInteractionManager
         return $handler;
     }
 
-    private function sourceVersion(array $message): string
+    private function sourceVersion(array $message, string $encoding = 'storage_v2'): string
     {
-        return hash('sha256', ($message['raw_message'] ?? '') . '|' . ($message['edited_at'] ?? ''));
+        return ChatManager::interactionSourceVersion($message, $encoding);
     }
 
     private function validBinding(array $row): bool
@@ -221,7 +221,7 @@ final class CommandInteractionManager
         $bot = $chat->getMessageById((int)$row['bot_message_id']);
         return $source && $bot && empty($source['deleted']) && empty($bot['deleted'])
             && (int)$source['user_id'] === (int)$row['owner_id'] && (int)$bot['user_id'] === (int)$row['bot_user_id']
-            && hash_equals($row['source_version'], $this->sourceVersion($source))
+            && hash_equals($row['source_version'], $this->sourceVersion($source, 'getter_read_v1'))
             && str_contains($bot['raw_message'] ?? '', '[[command:' . $row['id'] . ']]');
     }
 
@@ -256,14 +256,15 @@ final class CommandInteractionManager
                 if ($existing && empty($this->context($existing)['acceptance_only'])) return (int)$existing['id'];
                 $this->assertAllowed($ownerId);
                 $this->lockOwnerRows($type, $ownerId);
-                $source = (new ChatManager())->lockInteractionMessages([array_filter(['id' => $sourceMessageId, 'user_id' => $ownerId, 'version' => $existing['source_version'] ?? null], static fn($v) => $v !== null)])[$sourceMessageId];
+                $source = (new ChatManager())->lockInteractionMessages([array_filter(['id' => $sourceMessageId, 'user_id' => $ownerId, 'version' => $existing['source_version'] ?? null, 'version_encoding' => $existing ? $this->rowSourceEncoding($existing) : 'storage_v2'], static fn($v) => $v !== null)])[$sourceMessageId];
                 $this->capPermission($type, $ownerId, $handlerContext);
                 $options = $this->continuationOptions($options, $initialState);
                 $id = $this->create($type, $ownerId, $sourceMessageId, $options);
                 $row = $this->row($id, true);
-                $context = ['version' => 1, 'root_id' => $id, 'parent_id' => null, 'root_expires_at' => $row['expires_at'],
+                $this->setCanonicalRowSource($id, $source);
+                $context = ['version' => 1, 'source_version_encoding' => 'storage_v2', 'root_id' => $id, 'parent_id' => null, 'root_expires_at' => $row['expires_at'],
                     'revision' => 0, 'handler_context' => $handlerContext,
-                    'source_bindings' => [['id' => $sourceMessageId, 'user_id' => $ownerId, 'version' => $this->sourceVersion($source)]],
+                    'source_bindings' => [['id' => $sourceMessageId, 'user_id' => $ownerId, 'version' => $this->sourceVersion($source), 'version_encoding' => 'storage_v2']],
                     'operations' => [], 'pending_work' => null, 'child_id' => null, 'resolver_result' => null,
                     'question_bindings' => [], 'staged' => false];
                 if ($existing) {
@@ -381,12 +382,14 @@ final class CommandInteractionManager
     public function submitClarification(int $id, int $actorId, int $messageId, array $parsedInput): array
     {
         return $this->mutate($id, function ($row) use ($actorId, $messageId, $parsedInput) {
-            $binding = array_filter(['id' => $messageId, 'user_id' => $actorId, 'version' => $parsedInput['source_version'] ?? null], static fn($value) => $value !== null);
+            $binding = array_filter(['id' => $messageId, 'user_id' => $actorId, 'version' => $parsedInput['source_version'] ?? null, 'version_encoding' => $parsedInput['source_version_encoding'] ?? 'storage_v2'], static fn($value) => $value !== null);
             $this->guard($row, $actorId, true, true, [$binding]);
             if ($row['bot_message_id'] === null) throw new UserError('Предложение ещё не опубликовано.');
             $context = $this->requireContext($row);
             $source = (new ChatManager())->lockInteractionMessages([$binding])[$messageId];
             $version = $this->sourceVersion($source);
+            $saved = $this->acceptedInputOperation($context, $messageId);
+            if ($saved !== null) return $saved;
             $key = 'input:' . $messageId . ':' . $version;
             if (isset($context['operations'][$key])) return $context['operations'][$key];
             if (!in_array($row['state'], ['pending', 'clarifying'], true) || $context['staged']) throw new UserError('Поиск уже выполняется или выбор закрыт.');
@@ -398,7 +401,7 @@ final class CommandInteractionManager
             if (!is_array($prepared)) throw new RuntimeException('Invalid prepared context');
             $this->capPermission($row['type'], $actorId, $prepared);
             $context['handler_context'] = $prepared;
-            $context['source_bindings'][] = ['id' => $messageId, 'user_id' => $actorId, 'version' => $version];
+            $context['source_bindings'][] = ['id' => $messageId, 'user_id' => $actorId, 'version' => $version, 'version_encoding' => 'storage_v2'];
             $context['revision']++;
             $context['resolver_result'] = null;
             $context['child_id'] = null;
@@ -539,7 +542,9 @@ final class CommandInteractionManager
             $stmt = $this->db->prepare('INSERT INTO command_interactions (type,owner_id,source_message_id,source_version,options_json,expires_at,state) VALUES (?,?,?,?,?,?,?)');
             $stmt->bind_param('siissss', $type, $owner, $source, $version, $json, $expiry, $state); $stmt->execute();
             $childId = (int)$stmt->insert_id;
-            $child = $context; $child['parent_id'] = (int)$row['id']; $child['child_id'] = null; $child['pending_work'] = null; $child['staged'] = true; $child['question_bindings'] = []; unset($child['proposal_binding']);
+            $child = $context;
+            if (isset($binding['version_encoding'])) $child['source_version_encoding'] = $binding['version_encoding'];
+            $child['parent_id'] = (int)$row['id']; $child['child_id'] = null; $child['pending_work'] = null; $child['staged'] = true; $child['question_bindings'] = []; unset($child['proposal_binding']);
             $this->saveContext($childId, $child, 'resolving');
             $context['child_id'] = $childId;
             $this->saveContext((int)$row['id'], $context, 'resolving');
@@ -576,7 +581,7 @@ final class CommandInteractionManager
             $marker = $this->deliveryMarker($id, $revision, $operationKey);
             $messages = (new ChatManager())->lockInteractionMessages([['id' => $messageId, 'user_id' => $botId, 'marker' => $marker]]);
             foreach ($context['question_bindings'] as $binding) if ($binding['id'] === $messageId) return true;
-            $context['question_bindings'][] = ['id' => $messageId, 'user_id' => $botId, 'version' => $this->sourceVersion($messages[$messageId]), 'marker' => $marker];
+            $context['question_bindings'][] = ['id' => $messageId, 'user_id' => $botId, 'version' => $this->sourceVersion($messages[$messageId]), 'version_encoding' => 'storage_v2', 'marker' => $marker];
             $context['pending_work'] = null;
             $this->saveContext($id, $context, 'clarifying');
             return true;
@@ -675,8 +680,9 @@ final class CommandInteractionManager
             if ($result === false) return false;
             $id = $this->create($type, $actorId, $sourceId, [['key' => 'cancel', 'label' => 'Передумал', 'payload' => []]]);
             $row = $this->row($id, true);
-            $context = ['version' => 1, 'root_id' => $id, 'parent_id' => null, 'root_expires_at' => $row['expires_at'],
-                'revision' => 0, 'handler_context' => [], 'source_bindings' => [['id' => $sourceId, 'user_id' => $actorId, 'version' => $this->sourceVersion($source)]],
+            $this->setCanonicalRowSource($id, $source);
+            $context = ['version' => 1, 'source_version_encoding' => 'storage_v2', 'root_id' => $id, 'parent_id' => null, 'root_expires_at' => $row['expires_at'],
+                'revision' => 0, 'handler_context' => [], 'source_bindings' => [['id' => $sourceId, 'user_id' => $actorId, 'version' => $this->sourceVersion($source), 'version_encoding' => 'storage_v2']],
                 'operations' => [], 'pending_work' => null, 'child_id' => null, 'resolver_result' => null,
                 'question_bindings' => [], 'staged' => false, 'acceptance_only' => true, 'acceptance_result' => $result];
             $this->saveContext($id, $context, 'consumed');
@@ -777,7 +783,7 @@ final class CommandInteractionManager
     {
         if ($binding === null) return [];
         if (!is_int($binding['id'] ?? null) || $binding['id'] < 1 || !preg_match('/^[a-f0-9]{64}$/D', $binding['version'] ?? '')) throw new RuntimeException('Invalid control source binding');
-        return [['id' => $binding['id'], 'user_id' => $actorId, 'version' => $binding['version']]];
+        return [['id' => $binding['id'], 'user_id' => $actorId, 'version' => $binding['version'], 'version_encoding' => $binding['version_encoding'] ?? 'storage_v2']];
     }
 
     private function appendControlSource(array $context, int $actorId, ?array $binding): array
@@ -812,6 +818,7 @@ final class CommandInteractionManager
             || !is_array($context['question_bindings'] ?? null) || count($context['question_bindings']) > 10
             || !is_bool($context['staged'] ?? null) || !is_string($context['root_expires_at'] ?? null)
             || strlen(json_encode($context, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)) > 32768) throw new RuntimeException('Invalid continuation envelope');
+        if (isset($context['source_version_encoding']) && $context['source_version_encoding'] !== 'storage_v2') throw new RuntimeException('Invalid source version encoding');
         foreach (['parent_id', 'child_id'] as $key) if (($context[$key] ?? null) !== null && (!is_int($context[$key]) || $context[$key] < 1)) throw new RuntimeException('Invalid lineage');
         if (($context['pending_work'] ?? null) !== null) {
             $work = $context['pending_work'];
@@ -825,7 +832,8 @@ final class CommandInteractionManager
                 || !preg_match('/^[0-9]{16}$/D', $work['scanned_at'] ?? '')
                 || ($work['lease_token'] !== null && !preg_match('/^[a-f0-9]{32}$/D', $work['lease_token']))) throw new RuntimeException('Invalid pending work');
         }
-        foreach (array_merge($context['source_bindings'], $context['question_bindings'], isset($context['operations']['cancel_source']['source_binding']) ? [$context['operations']['cancel_source']['source_binding']] : []) as $binding) {
+        foreach (array_merge($context['source_bindings'], $context['question_bindings'], isset($context['proposal_binding']) ? [$context['proposal_binding']] : [], isset($context['operations']['cancel_source']['source_binding']) ? [$context['operations']['cancel_source']['source_binding']] : []) as $binding) {
+            if (isset($binding['version_encoding']) && $binding['version_encoding'] !== 'storage_v2') throw new RuntimeException('Invalid source binding encoding');
             if (!is_int($binding['id'] ?? null) || $binding['id'] < 1 || !is_int($binding['user_id'] ?? null)
                 || !preg_match('/^[a-f0-9]{64}$/D', $binding['version'] ?? '')) throw new RuntimeException('Invalid source binding');
         }
@@ -851,15 +859,17 @@ final class CommandInteractionManager
         if ($checkExpiry && strtotime($row['expires_at'] . ' UTC') <= time()) throw new UserError('Срок выбора истёк. Повтори команду.');
         $context = $this->context($row);
         if ($context) $this->capPermission($row['type'], $actor, $context['handler_context']);
-        $bindings = $context['source_bindings'] ?? [['id' => (int)$row['source_message_id'], 'user_id' => $actor, 'version' => $row['source_version']]];
-        if ($row['bot_message_id'] !== null) $bindings[] = $context['proposal_binding'] ?? ['id' => (int)$row['bot_message_id'], 'user_id' => (int)$row['bot_user_id'], 'marker' => '[[command:' . $row['id'] . ']]'];
-        $bindings = array_merge($bindings, $context['question_bindings'] ?? [], isset($context['operations']['cancel_source']['source_binding']) ? [$context['operations']['cancel_source']['source_binding']] : [], $extraBindings);
+        $bindings = $context ? $this->contextSourceBindings($context) : [['id' => (int)$row['source_message_id'], 'user_id' => $actor, 'version' => $row['source_version'], 'version_encoding' => 'getter_read_v1']];
+        if ($row['bot_message_id'] !== null) $bindings[] = isset($context['proposal_binding']) ? $this->historicalBinding($context['proposal_binding'], 'lock_decoded_v1') : ['id' => (int)$row['bot_message_id'], 'user_id' => (int)$row['bot_user_id'], 'marker' => '[[command:' . $row['id'] . ']]'];
+        $questions = array_map(fn($binding) => $this->historicalBinding($binding, 'lock_decoded_v1'), $context['question_bindings'] ?? []);
+        $cancel = isset($context['operations']['cancel_source']['source_binding']) ? [$this->historicalBinding($context['operations']['cancel_source']['source_binding'], 'getter_read_v1')] : [];
+        $bindings = array_merge($bindings, $questions, $cancel, $extraBindings);
         if ($lock) (new ChatManager())->lockInteractionMessages($bindings);
         else {
             foreach ($bindings as $binding) {
                 $message = (new ChatManager())->getMessageById($binding['id']);
                 if (!$message || !empty($message['deleted']) || (int)$message['user_id'] !== $binding['user_id']
-                    || isset($binding['version']) && !hash_equals($binding['version'], $this->sourceVersion($message))
+                    || isset($binding['version']) && !hash_equals($binding['version'], $this->sourceVersion($message, $binding['version_encoding'] ?? 'storage_v2'))
                     || isset($binding['marker']) && !str_contains($message['raw_message'] ?? '', $binding['marker'])) throw new UserError('Исходная команда недоступна.');
             }
         }
@@ -968,4 +978,57 @@ final class CommandInteractionManager
         $stmt->bind_param('sssi', $state, $key, $json, $id); $stmt->execute();
     }
 
+    private function setCanonicalRowSource(int $id, array $source): void
+    {
+        $version = $this->sourceVersion($source);
+        $stmt = $this->db->prepare('UPDATE command_interactions SET source_version=? WHERE id=?');
+        $stmt->bind_param('si', $version, $id); $stmt->execute();
+    }
+
+    private function rowSourceEncoding(array $row): string
+    {
+        $context = $this->context($row);
+        if (isset($context['source_version_encoding'])) return $context['source_version_encoding'];
+        return ($context['parent_id'] ?? null) !== null ? 'lock_decoded_v1' : 'getter_read_v1';
+    }
+
+    private function historicalBinding(array $binding, string $encoding): array
+    {
+        $binding['version_encoding'] ??= $encoding;
+        return $binding;
+    }
+
+    private function contextSourceBindings(array $context): array
+    {
+        $result = [];
+        foreach ($context['source_bindings'] as $index => $binding) {
+            if (isset($binding['version_encoding'])) { $result[] = $binding; continue; }
+            $key = 'input:' . $binding['id'] . ':' . $binding['version'];
+            if ($index === 0 || isset($context['operations'][$key])) {
+                $result[] = $this->historicalBinding($binding, 'lock_decoded_v1');
+            } else {
+                $this->assertHistoricalRefineSource($context);
+                $result[] = $this->historicalBinding($binding, 'getter_read_v1');
+            }
+        }
+        return $result;
+    }
+
+    private function assertHistoricalRefineSource(array $context): void
+    {
+        foreach ($context['operations'] as $key => $operation) {
+            if (preg_match('/^refine:\d+$/D', $key)) return;
+        }
+        throw new UserError('Неизвестная версия исходного сообщения.');
+    }
+    /** Source guards have already validated the one immutable persisted binding. */
+    private function acceptedInputOperation(array $context, int $messageId): ?array
+    {
+        foreach ($context['source_bindings'] as $binding) {
+            if ($binding['id'] !== $messageId) continue;
+            $key = 'input:' . $messageId . ':' . $binding['version'];
+            if (isset($context['operations'][$key])) return $context['operations'][$key];
+        }
+        return null;
+    }
 }

@@ -226,3 +226,38 @@ for (const invalidation of ['expire', 'edit', 'ban']) {
     }
   });
 }
+
+test('MLP-364 регрессия кавычек: пустой поиск доступен после reload и обычная цитата запускает worker', async ({ page, browserName }) => {
+  const f = await actor(page, `${browserName}_quoted_regression`);
+  await send(page, '!хочу серию "про тебя" & характерный момент'); runWorker(f, 'quoted-noresults');
+  const parent = inspect(f).interactions.findLast(r => r.state === 'clarifying'); expect(parent).toBeTruthy();
+  await expect(choice(page, parent)).toBeVisible({ timeout: 15000 }); await refresh(page, parent);
+  await expect(choice(page, parent).getByRole('button', { name: 'Передумал', exact: true })).toBeEnabled();
+  const body = page.locator(`.chat-message[data-id="${parent.messageId}"] .chat-text`).first();
+  await expect(body).toContainText('"вспомни сцену" & опиши детали');
+  await page.reload({ waitUntil: 'domcontentloaded' }); await refresh(page, parent);
+  await expect(choice(page, parent)).not.toContainText('Выбор недоступен');
+  await expect(choice(page, parent).getByRole('button', { name: 'Передумал', exact: true })).toBeEnabled();
+  await sendQuotedUI(page, 'там "Рэрити" & дым, а не буквальное &quot; название', parent.messageId);
+  expect(inspect(f).interactions.find(r => r.id === parent.id).state).toBe('resolving');
+  runWorker(f, 'quoted-found'); const state = inspect(f); const child = state.interactions.findLast(r => r.state === 'pending');
+  expect(child).toBeTruthy(); expect(child.expiresAt).toBe(parent.expiresAt); expect(state.wishes).toBe(0);
+  expect(state.trace.some(c => c.stage === 'verify' && c.user.includes('Рэрити') && c.user.includes('&quot;'))).toBeTruthy();
+  await expect(choice(page, child)).toBeVisible({ timeout: 15000 }); await refresh(page, child);
+  await expect(choice(page, child).getByRole('button', { name: 'Не то, уточнить', exact: true })).toBeEnabled();
+  fs.mkdirSync(path.join(repo, 'docs/tests/MLP-364-regression/screenshots'), { recursive: true });
+  await page.screenshot({ path: path.join(repo, `docs/tests/MLP-364-regression/screenshots/${browserName}-quoted-choice.png`) });
+  await choice(page, child).getByRole('button', { name: 'Передумал', exact: true }).click();
+  runWorker(f); await refresh(page, child); await expect(choice(page, child)).toContainText('Выбор отменён');
+});
+test('MLP-364 пустой поиск не публикует crowdsourcing ответ провайдера', async ({ page, browserName }) => {
+  const f = await actor(page, `${browserName}_empty_owner_regression`);
+  await send(page, '!хочу серию про незнакомый момент'); runWorker(f, 'bad-noresults');
+  const parent = inspect(f).interactions.findLast(r => r.state === 'clarifying'); expect(parent).toBeTruthy();
+  await expect(choice(page, parent)).toBeVisible({ timeout: 15000 }); await refresh(page, parent);
+  const body = page.locator(`.chat-message[data-id="${parent.messageId}"] .chat-text`).first();
+  await expect(body).toContainText('Не удалось подтвердить подходящий эпизод');
+  await expect(body).not.toContainText('никто не отозвался'); await expect(body).not.toContainText('Если кто-то');
+  await expect(body).not.toContainText('Уточнение:');
+  await expect(choice(page, parent).getByRole('button', { name: 'Передумал', exact: true })).toBeEnabled();
+});

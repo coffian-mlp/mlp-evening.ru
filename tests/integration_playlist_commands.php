@@ -43,7 +43,7 @@ try{
  $reply=$chat->findBotReplyTo($mid);$handler->handle($payload);check($chat->findBotReplyTo($mid)['id']===$reply['id'],'job retry no duplicate reply');
  $spoof=$payload;$spoof['user_id']=$bot;check($handler->handle($spoof)===false,'source author forged rejected');
  $liveBefore=count($fake->live);$searchBefore=$fake->searchCalls;
- foreach (['!хочу 99999999', '/хочу серию 99999999', '/хочу S99E99'] as $missingText) {[$missingMid]=$run($missingText);$missingReply=$chat->findBotReplyTo($missingMid)['raw_message']??'';check(str_contains($missingReply,'Подтверждённых вариантов пока нет') && str_contains($missingReply,'[[command:'),'missing exact reference offers truthful clarification without candidates');}
+ foreach (['!хочу 99999999', '/хочу серию 99999999', '/хочу S99E99'] as $missingText) {[$missingMid]=$run($missingText);$missingReply=$chat->findBotReplyTo($missingMid)['raw_message']??'';check(str_contains($missingReply,'Не удалось подтвердить подходящий эпизод') && str_contains($missingReply,'[[command:'),'missing exact reference offers truthful clarification without candidates');}
  check($fake->searchCalls===$searchBefore,'missing ID/code never search LLM');check(count((new EpisodeManager())->getUserWishes($u))===1,'missing references never create wishes');check(count($fake->live)===$liveBefore+3,'missing exact refusals still use live reply path');
  $fake->candidate=$episodeIds[1];[$searchMid,$searchPayload]=$run('/хочу описание неизвестной истории');
  $proposal=$chat->findBotReplyTo($searchMid);preg_match('/\[\[command:(\d+)\]\]/',$proposal['raw_message']??'',$match);$interaction=(int)($match[1]??0);$interactionIds[]=$interaction;

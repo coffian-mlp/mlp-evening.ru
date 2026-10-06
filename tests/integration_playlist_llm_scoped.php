@@ -112,7 +112,7 @@ namespace {
             $missingButtons=$run('историю с очень многими взрывами');
             check(str_contains($missingButtons['raw_message'],'уточни описание') && !str_contains($missingButtons['raw_message'],'кноп'),'actual clarification rejects captured nonexistent button instruction');
             $clarificationSystem=json_decode($GLOBALS['playlist_scoped_options'][CURLOPT_POSTFIELDS],true)['messages'][0]['content'];
-            check(str_contains($clarificationSystem,'Кандидатов сейчас нет') && str_contains($clarificationSystem,'Передумал') && !str_contains($clarificationSystem,'Кнопки исправны'),'clarification trusted task describes no candidates and the real cancellation control');
+            check(str_contains($clarificationSystem,'указанное в фактах состояние') && str_contains($clarificationSystem,'самому автору пожелания') && str_contains($clarificationSystem,'необязателен') && str_contains($clarificationSystem,'Передумал') && !str_contains($clarificationSystem,'Кнопки исправны'),'clarification trusted task describes no candidates and the real cancellation control');
             $GLOBALS['playlist_scoped_text']='Жми на кнопочку под ответом — этот выбор за тобой!';
             $calls=$GLOBALS['playlist_scoped_calls'];
             $reply=$run('самую первую серию');

@@ -83,4 +83,22 @@ $cancelledWish=['status'=>'cancelled','code'=>'cancelled','facts'=>[]];
 foreach (['Твоё пожелание не отменено.', 'Не отменила твой голос.', 'Пожелание не было отменено.', 'Не удалось отменить твой голос.'] as $bad) expect(!PlaylistCommand::replyIsValid($bad,$cancelledWish,''),'successful cancellation rejects false negative outcome: '.$bad);
 expect(PlaylistCommand::replyIsValid('Твоё пожелание отменено.',$cancelledWish,''),'successful cancellation truthful free wording');
 expect(PlaylistCommand::replyIsValid('Выбор отменён. Твоё пожелание не отменено.',$choice,''),'choice cancellation retains unchanged wish');
+
+
+$reportedEmptyReply = '@CoFFian, пока никто не отозвался — тихо, как в Понивилле во вторник. Если кто-то вспомнит подходящий момент, пусть ответит с цитатой и подробностями в формате "Уточнение: …". А передумать всегда можно — кнопочка "Передумал" на месте.';
+expect(!PlaylistCommand::replyIsValid($reportedEmptyReply, ['status' => 'rejected', 'code' => 'search_empty', 'facts' => []], ''), 'empty search cannot invent crowdsourcing or invite foreign actors');
+
+foreach (['Пока другие зрители не ответили. Пусть участники ответят с цитатой.', 'Если кто-то вспомнит серию, пусть ответит с цитатой.', 'Спросим других участников: ответьте с цитатой.'] as $wrongAudience) {
+    expect(!PlaylistCommand::replyIsValid($wrongAudience, ['status'=>'rejected', 'code'=>'search_empty', 'facts'=>[]], ''), 'empty search refuses invented crowd guidance: ' . $wrongAudience);
+}
+foreach (['Не удалось подтвердить подходящую серию. Ответь с цитатой и опиши, что помнишь.', 'Я пока не нашла надёжный вариант. Уточни описание ответом с цитатой; можно нажать «Передумал».'] as $truthful) {
+    expect(PlaylistCommand::replyIsValid($truthful, ['status'=>'rejected', 'code'=>'search_empty', 'facts'=>[]], ''), 'empty search retains truthful natural owner wording');
+}
+foreach (['Поиск не завершился. Ответь с цитатой на своё пожелание.', 'Поиск не завершился. Цитируй свою команду и повтори поиск.', 'Ответь с цитатой на первоначальную команду.'] as $wrongTarget) expect(!PlaylistCommand::replyIsValid($wrongTarget,['status'=>'rejected','code'=>'search_failed','facts'=>[]],''),'clarification refuses original command quote target: '.$wrongTarget);
+expect(PlaylistCommand::replyIsValid('Поиск не завершился. Ответь с цитатой на моё предложение, опиши свою пожеланную серию.',['status'=>'rejected','code'=>'search_failed','facts'=>[]],''),'clarification keeps correct Lyra quote and ordinary description');
+expect(!PlaylistCommand::replyIsValid('Если кто-нибудь вспомнит подходящую серию, ответьте с цитатой.',['status'=>'rejected','code'=>'search_empty','facts'=>[]],''),'empty search rejects indefinite third-party invitation');
+expect(!PlaylistCommand::replyIsValid('Если кто-либо вспомнит момент, пусть ответит с цитатой.',['status'=>'rejected','code'=>'search_empty','facts'=>[]],''),'empty search rejects alternate indefinite third-party invitation');
+expect(PlaylistCommand::replyIsValid('Хорошо, этот вариант не подошёл. Процитируй моё сообщение и опиши серию подробнее.',['status'=>'rejected','code'=>'choice_clarifying','facts'=>[]],''),'natural owner citation instruction is accepted without formal quote noun');
+expect(!PlaylistCommand::replyIsValid('Ответь с цитатой на своё сообщение и уточни детали.',['status'=>'rejected','code'=>'search_empty','facts'=>[]],''),'clarification refuses own message as the quote target');
+expect(!PlaylistCommand::replyIsValid('Процитируй свой ответ и уточни детали.',['status'=>'rejected','code'=>'search_empty','facts'=>[]],''),'clarification refuses own reply as the quote target');
 echo $fail ? "FAILURES: $fail\n" : "ALL PASS\n"; exit($fail ? 1 : 0);

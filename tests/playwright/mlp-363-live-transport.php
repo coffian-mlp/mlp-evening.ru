@@ -17,7 +17,7 @@ namespace LLM {
             $id = (int)($GLOBALS['mlp364_target'] ?? 0);
             $text = match ($stage) {
                 'normalize' => 'Rarity scene dragon smoke',
-                'search' => json_encode(['candidates' => ($GLOBALS['mlp364_scenario'] ?? '') === 'noresults' ? [] : [['episode_id' => $id, 'evidence' => 'Fixture plot evidence', 'source_url' => 'https://example.org/fixture']]]),
+                'search' => json_encode(['candidates' => in_array($GLOBALS['mlp364_scenario'] ?? '', ['noresults','quoted-noresults','bad-noresults'], true) ? [] : [['episode_id' => $id, 'evidence' => 'Fixture plot evidence', 'source_url' => 'https://example.org/fixture']]]),
                 'verify' => json_encode(['verified' => [$id]]),
                 default => 'Уточни описание и ответь с цитатой на моё сообщение.',
             };
@@ -25,6 +25,9 @@ namespace LLM {
             if ($stage === 'live' && str_contains($user, 'Выбор делает пользователь')) $text = 'Выбирай подходящий вариант кнопкой — этот выбор за тобой!';
             if ($stage === 'live' && str_contains($user, 'Пользователь отменил выбор')) $text = 'Хорошо, выбор отменён; пожелания не изменились.';
             if ($stage === 'live' && preg_match('/Номер эпизода: (\d+)\nПолное название эпизода: (.+)\nКоличество доступных пожеланий сегодня: (\d+)/u', $user, $facts)) $text = '№' . $facts[1] . ' — ' . $facts[2] . '. Осталось ' . $facts[3] . '.';
+            if ($stage === 'live' && ($GLOBALS['mlp364_scenario'] ?? '') === 'quoted-noresults') $text = 'Не удалось подтвердить подходящий эпизод. Ответь с цитатой на моё сообщение: "вспомни сцену" & опиши детали. Можно нажать "Передумал".';
+            if ($stage === 'live' && ($GLOBALS['mlp364_scenario'] ?? '') === 'bad-noresults') $text = 'Пока никто не отозвался. Если кто-то вспомнит момент, пусть ответит с цитатой в формате "Уточнение: …". Можно нажать "Передумал".';
+            if ($stage === 'live' && ($GLOBALS['mlp364_scenario'] ?? '') === 'quoted-found' && str_contains($user, 'Доступный вариант:')) $text = 'Выбери вариант №' . $id . ' кнопкой "подтвердить" — решение за тобой & пожелание пока не записано.';
             $message = ['content' => $text];
             if ($stage === 'search') $message['annotations'] = [['url_citation' => ['url' => 'https://example.org/fixture', 'title' => 'Fixture evidence']]];
             return json_encode(['choices' => [['finish_reason' => 'stop', 'message' => $message]]]);

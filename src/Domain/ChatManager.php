@@ -718,6 +718,7 @@ class ChatManager {
         }
 
         foreach ($messages as &$msg) {
+            if (empty($msg['is_deleted'])) $msg['interaction_source_version'] = self::interactionSourceVersion($msg);
             // Форматируем дату в ISO 8601 UTC (добавляем Z)
             if ($msg['created_at']) {
                 $msg['created_at'] = gmdate('Y-m-d\TH:i:s\Z', strtotime($msg['created_at'] . ' UTC'));
@@ -1035,8 +1036,9 @@ class ChatManager {
             if (!$row || !empty($row['is_deleted']) || (int)$row['user_id'] !== (int)$binding['user_id']) {
                 throw new \Core\UserError('Исходная команда недоступна. Повтори команду.');
             }
-            $row['raw_message'] = html_entity_decode($row['message'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-            $version = hash('sha256', $row['raw_message'] . '|' . ($row['edited_at'] ?? ''));
+            $row['raw_message'] = $row['message'];
+            $row['interaction_source_version'] = self::interactionSourceVersion($row);
+            $version = self::interactionSourceVersion($row, $binding['version_encoding'] ?? 'storage_v2');
             if (isset($binding['version']) && !hash_equals($binding['version'], $version)
                 || isset($binding['marker']) && !str_contains($row['raw_message'], $binding['marker'])) {
                 throw new \Core\UserError('Исходная команда недоступна. Повтори команду.');
@@ -1076,4 +1078,34 @@ class ChatManager {
         if ($message) { $message['type'] = 'message'; $this->broadcast($message); }
     }
 
+    /** Exact persisted HTML text and one UTC timestamp form; legacy encodings are origin-specific. */
+    public static function interactionSourceVersion(array $message, string $encoding = 'storage_v2'): string
+    {
+        $text = (string)($message['raw_message'] ?? $message['message'] ?? '');
+        $edited = $message['edited_at'] ?? null;
+        $sqlTime = self::interactionEditedAt($edited);
+        if ($encoding === 'getter_read_v1') {
+            $edited = $sqlTime === '' ? '' : str_replace(' ', 'T', $sqlTime) . 'Z';
+        } elseif ($encoding === 'lock_decoded_v1') {
+            $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $edited = $sqlTime;
+        } elseif ($encoding === 'storage_v2') {
+            $edited = $sqlTime;
+        } else {
+            throw new \RuntimeException('Unknown interaction version encoding');
+        }
+        return hash('sha256', $text . '|' . $edited);
+    }
+
+    private static function interactionEditedAt(mixed $edited): string
+    {
+        if ($edited === null) return '';
+        if (!is_string($edited) || !preg_match('/^\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2}:\d{2}|T\d{2}:\d{2}:\d{2}Z)$/D', $edited)) {
+            throw new \RuntimeException('Invalid interaction edit timestamp');
+        }
+        $sql = str_replace(['T', 'Z'], [' ', ''], $edited);
+        $time = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $sql, new \DateTimeZone('UTC'));
+        if (!$time || $time->format('Y-m-d H:i:s') !== $sql) throw new \RuntimeException('Invalid interaction edit timestamp');
+        return $sql;
+    }
 }

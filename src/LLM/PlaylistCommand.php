@@ -200,7 +200,8 @@ final class PlaylistCommand
         if (trim($text) === '' || ($mandatory !== '' && mb_stripos($text, $mandatory) === false)
             || preg_match('/\[\[|<[^>]*>|[{}]|детерминированн(?:ый|ого) исход|обязательно сохрани|служебн(?:ая|ые) задач|(?:status|code|facts|confirmation_required|need_clarification|episode_id|quota_remaining)\s*[:=]|\bуточн\b|ответь в характере|системн(?:ая|ые|ую) инструкц|я (?:получила|выполняю) инструкц/iu', $text)) return false;
         return !self::claims($text, '/\bмо(?:[её]|и|й|я)\s+(?:желани\p{L}*|пожелани\p{L}*|голос\p{L}*)\b/iu')
-            && !self::contradictsOutcome($text, $outcome) && self::hasRequiredData($text, $outcome);
+            && !self::contradictsOutcome($text, $outcome) && self::hasRequiredData($text, $outcome)
+            && self::isOwnerDirectedClarification($text, $outcome);
     }
 
     /** Match affirmative predicates, preserving nearby explicit grammatical negation. */
@@ -244,7 +245,7 @@ final class PlaylistCommand
         $facts = $outcome['facts'] ?? [];
         $expected = (int)($facts['episode_id'] ?? 0);
         $require = in_array($outcome['code'] ?? '', ['accepted', 'refreshed'], true);
-        if (in_array($outcome['code'] ?? '', ['choice_clarifying', 'search_empty', 'search_failed', 'ambiguous_choice'], true) && !preg_match('/цитат/iu', $text)) return false;
+        if (in_array($outcome['code'] ?? '', ['choice_clarifying', 'search_empty', 'search_failed', 'ambiguous_choice'], true) && !preg_match('/цит(?:ат|ир)/iu', $text)) return false;
         if (isset($facts['candidates']) && !self::hasCandidateIds($text, $facts['candidates'])) return false;
         if ($expected && !self::hasEpisodeData($text, $expected, (string)($facts['title'] ?? ''), $require)) return false;
         if (isset($facts['quota_remaining']) && !self::hasQuantity($text, (int)$facts['quota_remaining'], '/(?:остал[оа]сь|доступн[оа]|ещ[её])(?:\s+сегодня)?\s*:?\s*(\d+|ноль|нуль|один|одна|одно|два|две|три)/iu', $require)) return false;
@@ -330,7 +331,7 @@ final class PlaylistCommand
             'accepted'=>'Пожелание пользователя успешно сохранено.', 'refreshed'=>'Пожелание пользователя успешно обновлено.',
             'cancelled'=>'Существовавшее пожелание пользователя отменено.', 'choice_cancelled'=>'Пользователь отменил выбор варианта. Его пожелания не изменились.',
             'choice_clarifying'=>'Выбор эпизода не выполнен. Пользователь может ответить с цитатой на предложение и описать эпизод подробнее либо отменить выбор.',
-            'search_empty'=>'Подтверждённых кандидатов нет. Поиск можно уточнить ответом с цитатой; можно отменить незавершённый выбор.',
+            'search_empty'=>'Поиск не смог подтвердить подходящий эпизод по описанию автора пожелания. Только этот собеседник может уточнить своё описание ответом с цитатой; пожелание не записано, незавершённый выбор можно отменить.',
             'search_failed'=>'Поиск не завершился успешно. Можно повторить поиск или уточнить ответом с цитатой; пожелания не менялись.',
             'context_overflow'=>'Новое уточнение не принято: общий запрос превысит 600 символов либо лимит уточнений. Предыдущий контекст сохранён. Нужно начать новую команду /хочу.',
             'ambiguous_choice'=>'Цель действия не определена. Пользователь должен ответить с цитатой на конкретное своё актуальное предложение.',
@@ -371,7 +372,7 @@ final class PlaylistCommand
         if (($outcome['code'] ?? '') === 'confirmation_required') {
             $task .= ' Кнопку нажимает пользователь: попроси его выбрать. Лира не выбирает за него, не нажимает кнопки и не записывает своё желание. Кнопки исправны; не выдумывай сбои интерфейса.';
         } elseif (in_array($outcome['code'] ?? '', ['choice_clarifying', 'search_empty', 'search_failed'], true)) {
-            $task .= ' Кандидатов сейчас нет; управляющая кнопка «Передумал» доступна. Попроси ответить с цитатой и подробностями; явный формат: «Уточнение: …». Не объявляй найденный эпизод или записанный голос.';
+            $task .= ' Объясни именно указанное в фактах состояние: уточнение отвергнутого выбора, отсутствие подтверждённых результатов либо незавершённый поиск. Кнопка «Передумал» доступна. Объясни результат поиска самому автору пожелания и попроси его ответить с цитатой на сообщение Лиры с предложением или вопросом, описав эпизод подробнее обычными словами. Цитировать нужно сообщение Лиры, а не собственную команду или пожелание пользователя. Префикс «Уточнение:» необязателен, не навязывай формат. Не приглашай других людей, не выдумывай ожидание чужого ответа и не объявляй найденный эпизод или записанный голос.';
         } elseif (in_array($outcome['code'] ?? '', ['need_clarification', 'unavailable'], true)) {
             $task .= ' Подтверждённых кандидатов и кнопок выбора нет. Не предлагай нажать кнопку и не обсуждай интерфейс. При уточнении попроси описать эпизод подробнее; при недоступном поиске предложи точный номер или название.';
         }
@@ -405,7 +406,7 @@ final class PlaylistCommand
             foreach (($facts['snapshot']['stories'] ?? []) as $story) foreach ($story['titles'] as $title) $titles[] = $title;
             $text = 'Плейлист: ' . ($titles ? implode('; ', $titles) : 'пока не подготовлен') . '.';
         } else {
-            $labels = ['choice_clarifying' => 'Ответь с цитатой на предложение и опиши эпизод подробнее: Уточнение: … Можно нажать «Передумал».', 'search_empty' => 'Подтверждённых вариантов пока нет. Ответь с цитатой и уточни описание: Уточнение: … Или нажми «Передумал».', 'search_failed' => 'Поиск сейчас не завершился. Ответь с цитатой: «Повтори поиск» или «Уточнение: …». Можно нажать «Передумал».', 'context_overflow' => 'Уточнение слишком длинное либо достигнут лимит уточнений. Предыдущий запрос сохранён; начни новую команду /хочу с описанием до 600 символов.', 'ambiguous_choice' => 'Ответь с цитатой на конкретное своё актуальное предложение.', 'choice_busy' => 'Поиск ещё выполняется. Дождись результата или нажми «Передумал».', 'missing_query' => 'Укажи номер, название или описание эпизода.', 'unavailable' => 'Поиск сейчас недоступен; попробуй номер или точное название.', 'need_clarification' => 'Не удалось уверенно найти эпизод; уточни описание.', 'daily_limit' => 'Сегодня уже использованы три пожелания.', 'cooldown' => 'За этот эпизод пока нельзя голосовать повторно.', 'missing' => 'Эпизод не найден.', 'not_found' => 'Эпизод не найден.', 'not_active' => 'Активного пожелания за этот эпизод нет.'];
+            $labels = ['choice_clarifying' => 'Ответь с цитатой на предложение и опиши эпизод подробнее обычными словами. Можно нажать «Передумал».', 'search_empty' => 'Не удалось подтвердить подходящий эпизод. Ответь с цитатой на моё предложение и уточни описание обычными словами. Или нажми «Передумал».', 'search_failed' => 'Поиск сейчас не завершился. Ответь с цитатой на моё сообщение: «Повтори поиск» или опиши эпизод подробнее обычными словами. Можно нажать «Передумал».', 'context_overflow' => 'Уточнение слишком длинное либо достигнут лимит уточнений. Предыдущий запрос сохранён; начни новую команду /хочу с описанием до 600 символов.', 'ambiguous_choice' => 'Ответь с цитатой на конкретное своё актуальное предложение.', 'choice_busy' => 'Поиск ещё выполняется. Дождись результата или нажми «Передумал».', 'missing_query' => 'Укажи номер, название или описание эпизода.', 'unavailable' => 'Поиск сейчас недоступен; попробуй номер или точное название.', 'need_clarification' => 'Не удалось уверенно найти эпизод; уточни описание.', 'daily_limit' => 'Сегодня уже использованы три пожелания.', 'cooldown' => 'За этот эпизод пока нельзя голосовать повторно.', 'missing' => 'Эпизод не найден.', 'not_found' => 'Эпизод не найден.', 'not_active' => 'Активного пожелания за этот эпизод нет.'];
             $text = $labels[$code] ?? 'Действие не выполнено.';
             if (!empty($facts['next_allowed_at'])) $text .= ' Доступно после: ' . $facts['next_allowed_at'] . '.';
         }
@@ -514,7 +515,7 @@ final class PlaylistCommand
         try {
             $accepted = $interactions->acceptNewCommand('episode_wish', $actor, $sourceId,
                 fn(): array|false => $this->acceptWishLocally($text, $match, $actor, $sourceId),
-                hash('sha256', ($source['raw_message'] ?? '') . '|' . ($source['edited_at'] ?? '')));
+                ChatManager::interactionSourceVersion($source));
             if ($accepted === false) return false;
             if ($this->recoverWishReply($interactions, $sourceId)) return true;
             $deadline = time() + 55;
@@ -580,7 +581,7 @@ final class PlaylistCommand
     {
         $text = $this->replyText($outcome, $deadline);
         $sourceId = (int)$source['id'];
-        $version = hash('sha256', ($source['raw_message'] ?? '') . '|' . ($source['edited_at'] ?? ''));
+        $version = ChatManager::interactionSourceVersion($source);
         $chat = new ChatManager();
         $published = null;
         $ok = $this->serialized('playlist_delivery:' . $sourceId, function () use ($chat, $sourceId, $version, $actor, $text, &$published): bool {
@@ -605,4 +606,10 @@ final class PlaylistCommand
         return true;
     }
 
+    private static function isOwnerDirectedClarification(string $text, array $outcome): bool
+    {
+        if (!in_array($outcome['code'] ?? '', ['choice_clarifying', 'search_empty', 'search_failed'], true)) return true;
+        if (preg_match('/(?:цитат|цитир).{0,45}(?:сво[еёюй]|тво[еёюй])(?:му|го|й)?\s+(?:пожелани|команд|запрос|сообщени|реплик|ответ)|(?:цитат|цитир).{0,45}(?:исходн|первоначальн).{0,20}(?:команд|пожелани|запрос)/iu', $text)) return false;
+        return !preg_match('/никто.{0,35}(?:отозв|ответ|вспом)|кто(?:[- ](?:то|нибудь|либо)|нибудь).{0,90}(?:ответ|вспом|уточн)|пусть.{0,35}(?:ответ|уточн)|(?:другие|остальные|участники|зрители).{0,45}(?:ответ|вспом|уточн)|(?:спроси|спросим|попросим).{0,35}(?:других|остальных|участников|зрителей)/iu', $text);
+    }
 }

@@ -71,9 +71,10 @@ final class CommandInteractionContinuation
     private static function applyTarget(CommandInteractionManager $manager, array $selected, array $source, array $parsed): void
     {
         $actor = (int)$source['user_id']; $sourceId = (int)$source['id'];
-        $version = hash('sha256', ($source['raw_message'] ?? '') . '|' . ($source['edited_at'] ?? ''));
+        $version = ChatManager::interactionSourceVersion($source);
         $parsed['source_version'] = $version;
-        $followup = ['id' => $sourceId, 'user_id' => $actor, 'version' => $version];
+        $parsed['source_version_encoding'] = 'storage_v2';
+        $followup = ['id' => $sourceId, 'user_id' => $actor, 'version' => $version, 'version_encoding' => 'storage_v2'];
         try {
             if ($parsed['intent'] === 'cancel') {
                 $manager->cancelActive($selected['id'], $actor, $followup);
@@ -183,7 +184,7 @@ final class CommandInteractionContinuation
     {
         BotDispatch::dispatch('dynamic_command', ['command' => ['handler_type' => 'command_interaction_reply'], 'continuation_work' => true,
             'notice' => ['type' => $type, 'code' => $code], 'message_id' => (int)$source['id'], 'user_id' => (int)$source['user_id'],
-            'source_version' => hash('sha256', ($source['raw_message'] ?? '') . '|' . ($source['edited_at'] ?? ''))]);
+            'source_version' => ChatManager::interactionSourceVersion($source), 'source_version_encoding' => 'storage_v2']);
     }
 
     private static function deliverNotice(array $payload, array $registry): bool
@@ -203,7 +204,7 @@ final class CommandInteractionContinuation
         $sourceId = (int)($payload['message_id'] ?? 0); $actor = (int)($payload['user_id'] ?? 0);
         $source = (new ChatManager())->getMessageById($sourceId);
         if (!$source || !empty($source['is_deleted']) || (int)$source['user_id'] !== $actor
-            || !hash_equals((string)($payload['source_version'] ?? ''), hash('sha256', ($source['raw_message'] ?? '') . '|' . ($source['edited_at'] ?? '')))) return false;
+            || !hash_equals((string)($payload['source_version'] ?? ''), ChatManager::interactionSourceVersion($source, $payload['source_version_encoding'] ?? 'getter_read_v1'))) return false;
         try { (new ChatManager())->assertCanSend($actor); } catch (UserError $error) { return false; }
         return true;
     }
@@ -232,6 +233,6 @@ final class CommandInteractionContinuation
         $actor = (int)$payload['user_id'];
         $chat->assertCanSend($actor);
         if (($handler['permission'])($actor, []) === false) throw new UserError('Команда сейчас недоступна.');
-        $chat->lockInteractionMessages([['id' => (int)$payload['message_id'], 'user_id' => $actor, 'version' => $payload['source_version']]]);
+        $chat->lockInteractionMessages([['id' => (int)$payload['message_id'], 'user_id' => $actor, 'version' => $payload['source_version'], 'version_encoding' => $payload['source_version_encoding'] ?? 'getter_read_v1']]);
     }
 }
