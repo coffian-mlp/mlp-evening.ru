@@ -1,5 +1,6 @@
 <?php
 /** Docker-only real domain fixture. Credentials stay in an ignored mode-600 file. */
+if (PHP_SAPI === 'cli' && is_file('/.dockerenv') && ($argv[1] ?? '') === 'live') require_once __DIR__ . '/mlp-363-live-transport.php';
 require_once dirname(__DIR__) . '/integration_helpers.php';
 if (PHP_SAPI !== 'cli' || !is_file('/.dockerenv') || (it_config()['db']['host'] ?? '') !== 'db') exit(1);
 it_require_db();
@@ -54,18 +55,41 @@ if ($mode === 'setup') {
     $fixture['cases'][$key] = ['login' => $login, 'password' => $password, 'userId' => $owner,
         'snapshotId' => $snapshotId, 'episodeIds' => array_column($episodes, 'ID'), 'storyIds' => array_column($stories, 'story_id')];
     $save($fixture); echo "Correction fixture ready\n";
- } elseif ($mode === 'semantic') {
+ } elseif ($mode === 'semantic' || $mode === 'live') {
     $fixture=json_decode(file_get_contents($path),true,512,JSON_THROW_ON_ERROR);
     $key=$argv[2] ?? '';
     if(!preg_match('/^[a-zA-Z0-9_-]{1,80}$/D',$key)) throw new RuntimeException('Invalid fixture key');
     $login='it_user_mlp361_ui_'.bin2hex(random_bytes(6));$password=bin2hex(random_bytes(24));
     $owner=$users->createUser($login,$password,'user','Semantic Fixture');$fixture['users'][]=$owner;
     $text='!хочу самую первую серию';$source=$chat->addMessage($owner,$login,$text);
-    (new LLM\LLMManager())->processTrigger('dynamic_command',['message_id'=>$source,'user_id'=>$owner,'message'=>$text,'command'=>['handler_type'=>'playlist']]);
+    $savedLive=[];
+    if ($mode === 'live') {
+        foreach (['ai_enabled'=>'1','ai_live_confirm'=>'1','ai_primary_provider'=>'routerai','ai_routerai_key'=>'fixture-key','ai_routerai_model'=>'fixture-main','ai_fast_model'=>'fixture-fast','ai_proxy_url'=>'','ai_openai_key'=>'','ai_openrouter_key'=>'','ai_yandex_key'=>'','ai_gigachat_key'=>''] as $option=>$value) {
+            $savedLive[$option]=$config->getOption($option,null); $config->setOption($option,$value);
+        }
+    }
+    try {
+        (new LLM\LLMManager())->processTrigger('dynamic_command',['message_id'=>$source,'user_id'=>$owner,'message'=>$text,'command'=>['handler_type'=>'playlist']]);
+    } finally {
+        foreach ($savedLive as $option=>$value) {
+            if ($value===null) { $stmt=$db->prepare('DELETE FROM site_options WHERE key_name=?');$stmt->bind_param('s',$option);$stmt->execute(); }
+            else $config->setOption($option,$value);
+        }
+        $config->flushCache();
+    }
     $reply=$chat->findBotReplyTo($source);
     if(!$reply || !preg_match('/\[\[command:(\d+)\]\]/',$reply['raw_message'],$match)) throw new RuntimeException('Semantic command has no proposal');
     $fixture['cases'][$key]=['login'=>$login,'password'=>$password,'userId'=>$owner,'sourceId'=>$source,'messageId'=>(int)$reply['id'],'interactionId'=>(int)$match[1]];
+    if ($mode === 'live') {
+        $fixture['cases'][$key]['liveCalls']=$GLOBALS['mlp363_calls'] ?? 0;
+        $fixture['cases'][$key]['liveUser']=$GLOBALS['mlp363_payload']['messages'][1]['content'] ?? '';
+    }
     $save($fixture);echo "Semantic fixture ready\n";
+} elseif ($mode === 'wish-count') {
+    $fixture=json_decode(file_get_contents($path),true,512,JSON_THROW_ON_ERROR);
+    $case=$fixture['cases'][$argv[2] ?? ''] ?? null;
+    if (!$case) throw new RuntimeException('Missing fixture case');
+    echo json_encode(['count'=>count((new Domain\EpisodeManager())->getUserWishes((int)$case['userId']))]);
 } elseif ($mode === 'inspect') {
     $fixture = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
     $case = $fixture['cases'][$argv[2] ?? ''] ?? null;

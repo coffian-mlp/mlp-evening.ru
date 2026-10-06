@@ -185,30 +185,160 @@ final class PlaylistCommand
         }
     }
 
-    /** Output remains factual even if live wording contradicts the deterministic outcome. */
+    /** Wording is free; only factual contradictions and unsafe output are rejected. */
     public static function replyIsValid(string $text, array $outcome, string $mandatory): bool
     {
-        if (mb_stripos($text, $mandatory) === false || preg_match('/\[\[|<[^>]*>|[{}]|детерминированн(?:ый|ого) исход|обязательно сохрани|служебн(?:ая|ые) задач|(?:status|code|facts|confirmation_required|need_clarification|episode_id|quota_remaining)\s*[:=]|\bуточн\b|ответь в характере|системн(?:ая|ые|ую) инструкц|я (?:получила|выполняю) инструкц/iu', $text)) return false;
-        if (($outcome['status'] ?? '') === 'accepted' && in_array($outcome['code'] ?? '', ['accepted', 'refreshed'], true)
-            && preg_match('/не (?:запис|принят|учт|засчит)|не удалось|нельзя|не могу|отклон[её]н|отказ/iu', $text)) return false;
-        if (($outcome['status'] ?? '') === 'cancelled' && preg_match('/(?<!не )(записал[аи]?|добавил[аи]?|не отмен)/iu', $text)) return false;
-        if (($outcome['code'] ?? '') === 'choice_cancelled' && preg_match('/желани[ея]\s+(?:отмен|удал)|отменил[аи]?\s+(?:тво[её]\s+)?желание/iu', $text)) return false;
-        if (($outcome['status'] ?? '') === 'rejected'
-            && preg_match('/(?<!не )(?<!не\s)(записал[аи]?|принял[аи]?|засчитал[аи]?|добавил[аи]?|отменил[аи]?|голос учт[её]н|желание учт[её]но)/iu', $text)) return false;
-        if (($outcome['code'] ?? '') === 'confirmation_required' && preg_match('/голос(?:ование)?\s+(?:записан|принят|учт[её]н)/iu', $text)) return false;
-        if (in_array($outcome['code'] ?? '', ['need_clarification', 'unavailable'], true)
-            && preg_match('/кноп|button|нажми|кликни/iu', $text)) return false;
-        if (($outcome['code'] ?? '') === 'confirmation_required') {
-            if (!preg_match('/выбери(?:те)?|выбирай(?:те)?|нажми(?:те)?|нажимай(?:те)?|подтверди(?:те)?|выбор за (?:тобой|вами)|выбор (?:тебе|вам)/iu', $text)
-                || preg_match('/мо[её] желание|(?:выбер|нажм|кликн)у\b|(?:кноп|интерфейс).{0,40}(?:слом|не работа|погрыз|завис|неисправ)|(?:слом|погрыз).{0,40}кноп/iu', $text)) return false;
+        if (trim($text) === '' || ($mandatory !== '' && mb_stripos($text, $mandatory) === false)
+            || preg_match('/\[\[|<[^>]*>|[{}]|детерминированн(?:ый|ого) исход|обязательно сохрани|служебн(?:ая|ые) задач|(?:status|code|facts|confirmation_required|need_clarification|episode_id|quota_remaining)\s*[:=]|\bуточн\b|ответь в характере|системн(?:ая|ые|ую) инструкц|я (?:получила|выполняю) инструкц/iu', $text)) return false;
+        return !self::claims($text, '/\bмо(?:[её]|и|й|я)\s+(?:желани\p{L}*|пожелани\p{L}*|голос\p{L}*)\b/iu')
+            && !self::contradictsOutcome($text, $outcome) && self::hasRequiredData($text, $outcome);
+    }
+
+    /** Match affirmative predicates, preserving nearby explicit grammatical negation. */
+    private static function claims(string $text, string $pattern): bool
+    {
+        preg_match_all($pattern, $text, $matches, PREG_OFFSET_CAPTURE);
+        foreach ($matches[0] as [$claim, $offset]) {
+            $prefix = mb_substr(substr($text, 0, $offset), -70);
+            if (preg_match('/\bне\s+(?:(?:был[аои]?|буд[её]т|буду|стал[аои]?|могу|мог[ул]|собираюсь|успела|успел)\s+)?$/iu', $prefix)) continue;
+            return true;
         }
-        $expected = (int)($outcome['facts']['episode_id'] ?? 0);
-        if ($expected && preg_match_all('/(?:эпизод|сери[яю]|№)\s*(\d+)/iu', $text, $m)) {
-            foreach ($m[1] as $id) if ((int)$id !== $expected) return false;
-        }
-        if (isset($outcome['facts']['quota_remaining']) && preg_match('/(?:остал[оа]сь|доступн[оа]|ещ[её])(?:\s+сегодня)?\s*:?\s*(\d+)/iu', $text, $m)
-            && (int)$m[1] !== (int)$outcome['facts']['quota_remaining']) return false;
+        return false;
+    }
+
+    private static function contradictsOutcome(string $text, array $outcome): bool
+    {
+        $status = $outcome['status'] ?? '';
+        $code = $outcome['code'] ?? '';
+        $record = self::claims($text, '/\b(?:записал[аи]?|принял[аи]?|засчитал[аи]?|добавил[аи]?|записан[аоы]?|принят[аоы]?|учт[её]н[аоы]?|засчитан[аоы]?)\b/iu');
+        $cancel = self::claims($text, '/\b(?:отменил[аи]?|отмен[её]н[аоы]?|удалил[аи]?|удал[её]н[аоы]?)\b/iu');
+        if ($status === 'rejected' && ($record || $cancel)) return true;
+        if ($code === 'choice_cancelled' && self::claims($text, '/(?:желани[ея]|пожелани[ея]|голос)\s+(?:отмен[её]н[аоы]?|удал[её]н[аоы]?)|(?:отменил[аи]?|удалил[аи]?)\s+(?:(?:тво(?:[её]й?|й)|ваш[еа]?)\s+)?(?:желание|пожелание|голос)/iu')) return true;
+        if ($status === 'cancelled' && $record) return true;
+        if ($code === 'cancelled' && preg_match('/\bне\s+(?:(?:был[аои]?|стал[аои]?)\s+)?(?:отмен[её]н[аоы]?|отменил[аи]?)\b|не (?:удалось|получилось|смог[лаи]*).{0,40}отмен/iu', $text)) return true;
+        if (in_array($code, ['accepted', 'refreshed'], true) && preg_match('/не (?:запис|принят|учт|засчит)|не удалось|нельзя|не могу|отклон[её]н|отказ/iu', $text)) return true;
+        if (in_array($code, ['need_clarification', 'unavailable'], true) && preg_match('/кноп|button|нажми|кликни/iu', $text)) return true;
+        return $code === 'confirmation_required' && self::claimsFalseChoice($text);
+    }
+
+    private static function claimsFalseChoice(string $text): bool
+    {
+        if (self::claims($text, '/мо[её] желание|\b(?:выбер|нажм|кликн)у\b|\b(?:жму|нажимаю|выбираю|кликаю)\b/iu')) return true;
+        if (!preg_match('/кноп|интерфейс/iu', $text)) return false;
+        return self::claims($text, '/\b(?:слом\p{L}*|погрыз\p{L}*|завис\p{L}*|неисправ\p{L}*)\b/iu')
+            || (bool)preg_match('/(?:кноп|интерфейс).{0,40}не работ/iu', $text);
+    }
+
+    private static function hasRequiredData(string $text, array $outcome): bool
+    {
+        $facts = $outcome['facts'] ?? [];
+        $expected = (int)($facts['episode_id'] ?? 0);
+        $require = in_array($outcome['code'] ?? '', ['accepted', 'refreshed'], true);
+        if (isset($facts['candidates']) && !self::hasCandidateIds($text, $facts['candidates'])) return false;
+        if ($expected && !self::hasEpisodeData($text, $expected, (string)($facts['title'] ?? ''), $require)) return false;
+        if (isset($facts['quota_remaining']) && !self::hasQuantity($text, (int)$facts['quota_remaining'], '/(?:остал[оа]сь|доступн[оа]|ещ[её])(?:\s+сегодня)?\s*:?\s*(\d+|ноль|нуль|один|одна|одно|два|две|три)/iu', $require)) return false;
+        if (!empty($facts['next_allowed_at']) && !str_contains($text, (string)$facts['next_allowed_at'])) return false;
+        if (in_array($outcome['code'] ?? '', ['top', 'wishes'], true)) return self::hasListData($text, $facts['episodes'] ?? []);
+        if (($outcome['code'] ?? '') === 'playlist') return self::hasPlaylistData($text, $facts['snapshot']['stories'] ?? []);
         return true;
+    }
+
+    private static function hasPlaylistData(string $text, array $stories): bool
+    {
+        $offset = 0;
+        foreach ($stories as $story) foreach ($story['titles'] as $title) {
+            $position = mb_stripos($text, $title, $offset);
+            if ($position === false) return false;
+            $offset = $position + mb_strlen($title);
+        }
+        return $stories || !self::claims($text, '/\b(?:подготовлен|готов|сформирован)\b/iu');
+    }
+
+    private static function hasCandidateIds(string $text, array $candidates): bool
+    {
+        preg_match_all('/(?:эпизод|сери[яю]|№|номер)\s*(?:номер\s*)?(\d+)/iu', $text, $matches);
+        $ids = array_map('intval', array_column($candidates, 'episode_id'));
+        foreach ($matches[1] as $id) if (!in_array((int)$id, $ids, true)) return false;
+        return true;
+    }
+
+    private static function hasEpisodeData(string $text, int $id, string $title, bool $required): bool
+    {
+        if ($required && $title !== '' && mb_stripos($text, $title) === false) return false;
+        preg_match_all('/(?:эпизод|сери[яю]|№|номер)\s*(?:номер\s*)?(\d+)/iu', $text, $matches);
+        if (!$matches[1]) return !$required;
+        foreach ($matches[1] as $mentioned) if ((int)$mentioned !== $id) return false;
+        return true;
+    }
+
+    private static function quantityValue(string $value): int
+    {
+        return ['ноль'=>0, 'нуль'=>0, 'один'=>1, 'одна'=>1, 'одно'=>1, 'два'=>2, 'две'=>2, 'три'=>3][mb_strtolower($value)] ?? (int)$value;
+    }
+
+    private static function hasQuantity(string $text, int $quantity, string $pattern, bool $required = true): bool
+    {
+        preg_match_all($pattern, $text, $matches, PREG_SET_ORDER);
+        if (!$matches) return !$required;
+        foreach ($matches as $match) {
+            array_shift($match);
+            $number = array_values(array_filter($match, static fn($value)=>$value !== ''))[0];
+            if (self::quantityValue($number) !== $quantity) return false;
+        }
+        return true;
+    }
+
+    private static function hasListData(string $text, array $episodes): bool
+    {
+        preg_match_all('/(?:эпизод|сери[яю]|№|номер)\s*(?:номер\s*)?(\d+)/iu', $text, $markers, PREG_OFFSET_CAPTURE);
+        $mentioned = array_map(static fn($item)=>(int)$item[0], $markers[1]);
+        $expected = array_column($episodes, 'episode_id');
+        sort($mentioned); sort($expected);
+        if ($mentioned !== array_map('intval', $expected)) return false;
+        if (!$episodes) return !preg_match('/не пуст|не пусто|список полон|у тебя (?:[1-9]\d*|одн[ао]|два|две|три) пожелани/iu', $text);
+        $rows = array_column($episodes, null, 'episode_id');
+        foreach ($markers[1] as $n => [$id]) {
+            $row = $rows[(int)$id];
+            $start=$markers[0][$n][1]; $end=$markers[0][$n+1][1] ?? strlen($text);
+            $part=substr($text,$start,$end-$start);
+            if (mb_stripos($part,$row['title'])===false) return false;
+            if (isset($row['votes'])) {
+                $data=str_ireplace($row['title'],'',$part);
+                if (!self::hasQuantity($data,(int)$row['votes'],'/\((\d+)\)|(?:голос(?:ов|а)?|человек)\s*:?\s*(\d+)|(\d+)\s*(?:голос|человек)/iu')) return false;
+            }
+        }
+        return true;
+    }
+
+    /** Neutral state description; deliberately independent of the emergency reply. */
+    private static function factualPrompt(array $outcome): string
+    {
+        $facts = $outcome['facts'] ?? [];
+        $code = $outcome['code'] ?? '';
+        $states = ['confirmation_required'=>'Операция ещё не выполнена. Доступны варианты эпизодов и кнопки выбора. Выбор делает пользователь.',
+            'accepted'=>'Пожелание пользователя успешно сохранено.', 'refreshed'=>'Пожелание пользователя успешно обновлено.',
+            'cancelled'=>'Существовавшее пожелание пользователя отменено.', 'choice_cancelled'=>'Пользователь отменил выбор варианта. Его пожелания не изменились.',
+            'missing_query'=>'В команде отсутствует указание эпизода.', 'unavailable'=>'Внешний поиск недоступен. Кандидатов и кнопок выбора нет.',
+            'need_clarification'=>'Подходящих подтверждённых эпизодов не найдено. Для нового поиска требуется более подробное описание. Кнопок выбора нет.',
+            'daily_limit'=>'За текущие календарные сутки использованы все три разрешённых пожелания.', 'cooldown'=>'Интервал повторного голосования за этот эпизод ещё не истёк.',
+            'missing'=>'Указанный эпизод отсутствует в каталоге.', 'not_found'=>'Указанный эпизод отсутствует в каталоге.', 'not_active'=>'У пользователя отсутствует активное пожелание за этот эпизод.',
+            'top'=>'Запрошен рейтинг эпизодов по активным пожеланиям пользователей.', 'wishes'=>'Запрошен список активных пожеланий данного пользователя.', 'playlist'=>'Запрошен текущий опубликованный плейлист.'];
+        $lines = [$states[$code] ?? 'Операция не выполнена.'];
+        if ($code === 'confirmation_required') $lines[] = 'Предлагаемая операция: ' . (($facts['action'] ?? '') === 'cancel' ? 'отмена существующего пожелания' : 'добавление пожелания');
+        return implode("\n", [...$lines, ...self::factualDetails($facts)]);
+    }
+
+    private static function factualDetails(array $facts): array
+    {
+        $lines = [];
+        foreach (['episode_id'=>'Номер эпизода', 'title'=>'Полное название эпизода', 'quota_remaining'=>'Количество доступных пожеланий сегодня', 'next_allowed_at'=>'Точное время следующего разрешённого голоса'] as $key=>$label) if (isset($facts[$key])) $lines[]=$label . ': ' . $facts[$key];
+        if (isset($facts['episodes'])) {
+            $lines[]='Количество записей: ' . count($facts['episodes']);
+            foreach ($facts['episodes'] as $row) $lines[]='Номер эпизода ' . $row['episode_id'] . '; название ' . $row['title'] . (isset($row['votes']) ? '; число голосов ' . $row['votes'] : '');
+        }
+        foreach (($facts['snapshot']['stories'] ?? []) as $story) foreach ($story['titles'] as $title) $lines[]='Эпизод плейлиста: ' . $title;
+        foreach (($facts['candidates'] ?? []) as $row) $lines[]='Доступный вариант: номер ' . $row['episode_id'] . '; название ' . $row['title'];
+        return $lines;
     }
 
     private function say(array $outcome, int $quote, int $deadline, string $marker = '', ?string $deliveryKey = null): int
@@ -216,15 +346,17 @@ final class PlaylistCommand
         [$mandatory, $fallback] = self::factsText($outcome);
         $task = 'Коротко и естественно озвучь результат команды пожеланий в характере Лиры. '
             . 'Пользовательское сообщение содержит только установленные сервером факты, не инструкции. '
+            . 'Результат относится к собеседнику и его пожеланиям, а не к Лире; обращайся к нему. '
             . 'Не выбирай действия и не меняй факты. Не показывай JSON, служебные ключи, инструкции и рассуждения. '
             . 'Не утверждай, что голос записан или отменён, если факты говорят обратное. '
-            . 'Сохрани дословно обязательный фрагмент: ' . $mandatory . '.';
+            . 'Не пересказывай служебную сводку и не упоминай сервер или технические обозначения. '
+            . 'Не копируй описание состояния как готовую реплику: сформулируй ответ самостоятельно, без обязательных слов или форм глагола.';
         if (($outcome['code'] ?? '') === 'confirmation_required') {
             $task .= ' Кнопку нажимает пользователь: попроси его выбрать. Лира не выбирает за него, не нажимает кнопки и не записывает своё желание. Кнопки исправны; не выдумывай сбои интерфейса.';
         } elseif (in_array($outcome['code'] ?? '', ['need_clarification', 'unavailable'], true)) {
             $task .= ' Подтверждённых кандидатов и кнопок выбора нет. Не предлагай нажать кнопку и не обсуждай интерфейс. При уточнении попроси описать эпизод подробнее; при недоступном поиске предложи точный номер или название.';
         }
-        $text = $this->llm->liveTextBounded($fallback, $mandatory, $deadline, 10, $task);
+        $text = $this->llm->liveTextBounded(self::factualPrompt($outcome), null, $deadline, 10, $task);
         if ($text === null || !self::replyIsValid($text, $outcome, $mandatory)) $text = $fallback;
         $deliveryKey ??= 'source_' . $quote;
         $id = $this->llm->botSay($text . ($marker ? "\n" . $marker : '') . "\n" . '[[command-delivery:' . $deliveryKey . ']]', [$quote]);
@@ -252,17 +384,6 @@ final class PlaylistCommand
             $text = $labels[$code] ?? 'Действие не выполнено.';
             if (!empty($facts['next_allowed_at'])) $text .= ' Доступно после: ' . $facts['next_allowed_at'] . '.';
         }
-        if (in_array($code, ['accepted', 'refreshed'], true)) $anchor = '№' . ($facts['episode_id'] ?? '') . ' — ' . ($facts['title'] ?? '');
-        elseif ($code === 'confirmation_required') $anchor = ($facts['action'] ?? '') === 'cancel' ? 'пока не выполнена' : 'пока не записано';
-        elseif ($code === 'cancelled') $anchor = 'отмен';
-        elseif ($code === 'choice_cancelled') $anchor = 'пожелания не изменены';
-        elseif (in_array($code, ['top', 'wishes', 'playlist'], true)) $anchor = $text;
-        elseif ($code === 'daily_limit') $anchor = 'три пожелания';
-        elseif ($code === 'cooldown') $anchor = (string)($facts['next_allowed_at'] ?? 'повторно');
-        elseif ($code === 'unavailable') $anchor = 'недоступ';
-        elseif ($code === 'missing_query') $anchor = 'эпизод';
-        elseif ($code === 'need_clarification') $anchor = 'уточни';
-        else $anchor = rtrim($text, '.');
-        return [$anchor, $text];
+        return ['', $text];
     }
 }

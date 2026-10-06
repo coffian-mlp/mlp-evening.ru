@@ -163,3 +163,32 @@ test('MLP-362 first episode actual command proposes clean buttons before vote', 
   await page.reload({waitUntil:'domcontentloaded'});await reveal(widget(page,f));
   await expect(widget(page,f)).toContainText('Выбор завершён');
 });
+
+test('MLP-363 actual live proposal preserves natural wording and one confirmed wish', async ({page,browserName}) => {
+  test.skip(!BASE,'MLP_BASE_URL required');
+  const key=`${browserName}_live363`;
+  cli('live',key);
+  const f=JSON.parse(fs.readFileSync(path.join(repo,'docs/private/mlp361-interactions-local.json'),'utf8')).cases[key];
+  expect(f.liveCalls).toBe(1);
+  expect(f.liveUser).toContain('Выбор делает пользователь');
+  expect(f.liveUser).not.toContain('Выбери эпизод кнопкой');
+  expect(JSON.parse(cli('wish-count',key)).count).toBe(0);
+  await login(page,f); await page.goto(BASE+'/',{waitUntil:'domcontentloaded'});
+  const choice=widget(page,f);await reveal(choice);
+  const message=page.locator(`.chat-message[data-id="${f.messageId}"]`);
+  await expect(message).toContainText('Жми на кнопочку под ответом — этот выбор за тобой!');
+  await expect(message).not.toContainText('желание пока не записано');
+  await expect(choice.getByRole('button').first()).toBeVisible();
+  fs.mkdirSync(path.join(repo,'docs/tests/MLP-363/screenshots'),{recursive:true});
+  await page.screenshot({path:path.join(repo,`docs/tests/MLP-363/screenshots/${browserName}-live.png`)});
+  await choice.getByRole('button').first().click();
+  await expect(choice).toContainText('Выбор завершён');
+  expect(JSON.parse(cli('wish-count',key)).count).toBe(1);
+  const csrf=await page.locator('meta[name="csrf-token"]').getAttribute('content');
+  const repeat=await post(page,{action:'act_command_interaction',interaction_id:String(f.interactionId),option_key:'cancel'},csrf);
+  expect(repeat.success).toBeTruthy(); expect(repeat.data.outcome.status).toBe('accepted');
+  expect(JSON.parse(cli('wish-count',key)).count).toBe(1);
+  await page.reload({waitUntil:'domcontentloaded'}); await reveal(widget(page,f));
+  await expect(widget(page,f)).toContainText('Выбор завершён');
+  expect(JSON.parse(cli('wish-count',key)).count).toBe(1);
+});
