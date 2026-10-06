@@ -17,7 +17,7 @@ class PlaylistCommandFixtureLlm extends LLMManager {
     public $onSearch=null;
     public int $searchCalls=0;
     public function __construct(private int $fixtureBot) {}
-    public function liveTextBounded(string $instruction,?string $mustContain,int $deadlineSec,int $timeoutSec=10,?string $trustedTask=null):?string{$this->live[]=$instruction;if($this->natural) {
+    public function liveTextBounded(string $instruction,?string $mustContain,int $deadlineSec,int $timeoutSec=10,?string $trustedTask=null,?array $actionContext=null):?string{$this->live[]=$instruction;if($this->natural) {
         if(preg_match('/Номер эпизода: (\d+)\nПолное название эпизода: (.+)\nКоличество доступных пожеланий сегодня: (\d+)/u',$instruction,$m)) return 'С радостью помогу! №'.$m[1].' — '.$m[2].'. Осталось '.$m[3].'.';
         return 'С радостью помогу! '.$instruction;
     }return $this->reply;}

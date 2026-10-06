@@ -101,4 +101,12 @@ expect(!PlaylistCommand::replyIsValid('Если кто-либо вспомнит
 expect(PlaylistCommand::replyIsValid('Хорошо, этот вариант не подошёл. Процитируй моё сообщение и опиши серию подробнее.',['status'=>'rejected','code'=>'choice_clarifying','facts'=>[]],''),'natural owner citation instruction is accepted without formal quote noun');
 expect(!PlaylistCommand::replyIsValid('Ответь с цитатой на своё сообщение и уточни детали.',['status'=>'rejected','code'=>'search_empty','facts'=>[]],''),'clarification refuses own message as the quote target');
 expect(!PlaylistCommand::replyIsValid('Процитируй свой ответ и уточни детали.',['status'=>'rejected','code'=>'search_empty','facts'=>[]],''),'clarification refuses own reply as the quote target');
-echo $fail ? "FAILURES: $fail\n" : "ALL PASS\n"; exit($fail ? 1 : 0);
+expect(PlaylistCommand::replyIsValid('Вариант не подошёл? Процитируй моё сообщение и поясни, какую сцену ты ищешь.', ['status'=>'rejected','code'=>'choice_clarifying','facts'=>[]], ''), 'natural refinement question remains free phrasing');
+expect(PlaylistCommand::replyIsValid('Ничего подтверждённого не нашлось. Ответь с цитатой на моё сообщение.', ['status'=>'rejected','code'=>'search_empty','facts'=>[]], ''), 'actual empty search may explain missing verified results');
+expect(!PlaylistCommand::replyIsValid('Про моё первое появление я ничего подтверждённого не нашла. Ответь с цитатой на моё сообщение.', ['status'=>'rejected','code'=>'search_failed','facts'=>[]], ''), 'failed search cannot become completed empty search');
+expect(PlaylistCommand::replyIsValid('Не нашла подходящую серию, потому что поиск недоступен. Ответь с цитатой на моё сообщение.', ['status'=>'rejected','code'=>'search_failed','facts'=>[]], ''), 'failed search accepts negative finding with explicit service failure');
+expect(PlaylistCommand::replyIsValid('Поиск заупрямился и оборвался. Процитируй моё сообщение и опиши сцену подробнее.', ['status'=>'rejected','code'=>'search_failed','facts'=>[]], ''), 'failed search retains free natural failure wording');
+expect(!PlaylistCommand::replyIsValid('Про моё первое появление ничего подтверждённого не нашлось. Ответь с цитатой на моё сообщение.', ['status'=>'rejected','code'=>'choice_clarifying','facts'=>[]], ''), 'refinement request is not a completed empty search');
+expect(PlaylistCommand::replyIsValid('Поиск споткнулся и ничего не выдал, но это точно не значит, что серий обо мне нет! Процитируй моё сообщение и уточни описание.', ['status'=>'rejected','code'=>'search_failed','facts'=>[]], ''), 'actual natural service failure is not a completed empty-search claim');
+echo $fail ? "FAILURES: $fail\n" : "ALL PASS\n";
+exit($fail ? 1 : 0);

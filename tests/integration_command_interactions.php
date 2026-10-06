@@ -52,6 +52,7 @@ try {
         return [$id, $source, $bot];
     };
     [$id, $source, $bot] = $make();
+    check(!array_key_exists('handler_context',$manager->getResult($id,$ids['owner'])) && $manager->getResult($id,$ids['owner'],true)['handler_context']===[], 'legacy NULL context optional metadata stays empty and default shape unchanged');
     $published = array_values(array_filter($transport->published, static fn($item) => (int)($item['data']['id'] ?? 0) === $bot));
     $history = array_values(array_filter($chat->getMessages(20), static fn($item) => (int)$item['id'] === $bot));
     check(count($published) === 1 && $published[0]['channel'] === 'public:chat' && count($history) === 1

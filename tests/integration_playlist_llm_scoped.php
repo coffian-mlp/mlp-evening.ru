@@ -31,6 +31,8 @@ namespace {
     $GLOBALS['playlist_scoped_annotations'] = [['url_citation' => [
         'url' => 'https://example.org/episode', 'title' => 'Fixture source',
     ]]];
+    $newMemoryIds = [];
+    $oldPinnedIds = array_column($db->query("SELECT id FROM chat_messages WHERE is_pinned=1")->fetch_all(MYSQLI_ASSOC),"id");
     $originalOptions = $db->query('SELECT key_name,value FROM site_options')->fetch_all(MYSQLI_ASSOC);
     $originalCommands = $db->query('SELECT id,is_active FROM bot_commands')->fetch_all(MYSQLI_ASSOC);
     $originalJobs = $db->query('SELECT id,run_after FROM llm_jobs')->fetch_all(MYSQLI_ASSOC);
@@ -39,7 +41,7 @@ namespace {
     $beforeJobs = (int)$db->query('SELECT COALESCE(MAX(id),0) AS n FROM llm_jobs')->fetch_assoc()['n'];
     try {
         // Publication owns its transaction and sends realtime after commit; the fixture restores explicitly.
-        $runFixture = static function () {
+        $runFixture = static function () use (&$newMemoryIds) {
             $config = Infra\ConfigManager::getInstance();
             foreach (['ai_enabled' => '1', 'ai_live_confirm' => '1', 'ai_bot_user_id' => '1',
                 'ai_primary_provider' => 'routerai', 'ai_routerai_key' => 'fixture-key',
@@ -94,6 +96,67 @@ namespace {
             $bot=(new Domain\UserManager())->createUser('it_mlp362_bot_'.bin2hex(random_bytes(6)),bin2hex(random_bytes(24)),'user');
             $config->setOption('ai_bot_user_id',(string)$bot);
             $manager=new LLM\LLMManager();
+            $config->setOption('ai_memory_enabled','1'); $config->setOption('ai_memory_block_limit','8000');
+            $memory = new Domain\BotMemoryManager();
+            $newMemoryIds[] = $memory->add('dossier',$actor,'OWN_ACTION_CANARY');
+            $foreign=(new Domain\UserManager())->createUser('it_mlp362_foreign_'.bin2hex(random_bytes(6)),bin2hex(random_bytes(24)),'user','Online Foreign');
+            (new Domain\OnlineManager())->beat('it_followup_'.bin2hex(random_bytes(8)),$foreign);
+            $newMemoryIds[] = $memory->add('dossier',$foreign,'FOREIGN_ACTION_CANARY');
+            $newMemoryIds[] = $memory->add('meme',null,'SHARED_ACTION_CANARY');
+            $recent = (new Domain\ChatManager())->addMessage($bot,'fixture bot','UNRELATED_HISTORY_CANARY');
+            $db=Infra\Database::getInstance()->getConnection();
+            $pinned=(new Domain\ChatManager())->addMessage($bot,'fixture bot','PIN_ACTION_CANARY '.str_repeat('п',2400));
+            $db->query('UPDATE chat_messages SET is_pinned=0 WHERE is_pinned=1');
+            $db->query('UPDATE chat_messages SET is_pinned=1 WHERE id='.(int)$pinned);
+            $config->setOption('ai_online_in_context','1');
+            $GLOBALS['playlist_scoped_text']='Результат готов.';
+            $manager->liveTextBounded('Server action result',null,time()+12,10,'Reply to actual owner',['actor_id'=>$actor,'data'=>['original_query'=>'first appearance']]);
+            $actionPayload=json_decode($GLOBALS['playlist_scoped_options'][CURLOPT_POSTFIELDS],true)['messages'];
+            check(str_contains(json_encode($actionPayload),'it_mlp362_') && str_contains(json_encode($actionPayload),'first appearance'),'bounded action carries trusted recipient and action data without chat');
+            $actionJson=json_encode($actionPayload,JSON_UNESCAPED_UNICODE);
+            check(str_contains($actionJson,'OWN_ACTION_CANARY') && str_contains($actionJson,'SHARED_ACTION_CANARY') && !str_contains($actionJson,'FOREIGN_ACTION_CANARY') && !str_contains($actionJson,'UNRELATED_HISTORY_CANARY'),'action owns memory audience and excludes recent chat');
+            check(str_contains($actionJson,'Online Foreign') && str_contains($actionJson,'PIN_ACTION_CANARY'),'action includes permitted online metadata and pinned background without foreign dossier');
+            $pinBlock=array_values(array_filter($actionPayload,static fn($m)=>str_starts_with($m['content'],'[Закреплено')))[0]['content'];
+            check(mb_strlen(substr($pinBlock,strpos($pinBlock,': ')+2))===2000,'action pinned content truncates at 2000 Unicode characters');
+            $ordinary=(new ReflectionMethod($manager,'buildContext'))->invoke($manager,10);
+            $ordinaryJson=json_encode($ordinary,JSON_UNESCAPED_UNICODE);
+            check(str_contains($ordinaryJson,'UNRELATED_HISTORY_CANARY') && str_contains($ordinaryJson,'FOREIGN_ACTION_CANARY'),'ordinary context retains chat history and online memory audience expansion');
+            $config->setOption('ai_online_in_context','0');
+            $withoutPresence=(new ReflectionMethod($manager,'buildActionContext'))->invoke($manager,['actor_id'=>$actor,'include_pinned'=>false,'data'=>[]]);
+            check(!str_contains(json_encode($withoutPresence),'PIN_ACTION_CANARY') && !str_contains(json_encode($withoutPresence),'Online Foreign'),'action respects pinned optout and existing presence toggle');
+            $config->setOption('ai_online_in_context','1');
+            check($manager->actionRecipientPrefix(0)==='' && $manager->actionRecipientPrefix(2147483647)==='','missing actor has no invented recipient prefix');
+            $db->query("UPDATE users SET login='unsafe login',nickname='<b>@friend</b> Name' WHERE id=".(int)$foreign);
+            check($manager->addressActionReply('@friend, привет.',$foreign)===null,'unsafe login cannot authorize nickname mention');
+            check($manager->actionRecipientPrefix($foreign)==='friend Name, ','unsafe login uses plain nickname without HTML or generated mention');
+            $db->query("UPDATE users SET login='it_mlp362_foreign_restored_".(int)$foreign."' WHERE id=".(int)$foreign);
+            check($manager->liveTextBounded('Result',null,time()+12,10,null,['actor_id'=>$actor,'data'=>['oversize'=>str_repeat('a',32769)]])===null,'oversized action data fails without model call');
+            foreach (['@друг, результат готов.','@собеседник, результат готов.','@invented_actor результат готов.'] as $badAddress) {
+                $GLOBALS['playlist_scoped_text']=$badAddress;
+                check($manager->liveTextBounded('Result',null,time()+12,10,'Reply',['actor_id'=>$actor,'data'=>[]])===null,'shared action mention protocol rejects any generated token');
+            }
+            $actorLogin=(new Domain\UserManager())->getUserById($actor)['login'];
+            check(str_contains($actionJson,'allowed_mention') && str_contains($actionJson,'@'.$actorLogin),'action supplies explicit server token, not nickname-derived mention');
+            foreach (['@'.strtoupper($actorLogin).', поясни сцену.', 'Поясни сцену, @'.strtoupper($actorLogin).', пожалуйста.'] as $naturalAddress) {
+                $GLOBALS['playlist_scoped_text']=$naturalAddress;
+                $addressed=$manager->liveTextBounded('Result',null,time()+12,10,null,['actor_id'=>$actor,'data'=>[]]);
+                check(substr_count($addressed,'@'.$actorLogin)===1 && !str_contains($addressed,'@'.strtoupper($actorLogin)),'exact owner mention accepted in natural position with canonical case');
+            }
+            check($manager->addressActionReply('@'.$actorLogin.'_other, поясни сцену.',$actor)===null,'mention allowlist uses whole token, not recipient prefix substring');
+            check($manager->addressActionReply('@invented, привет.',0)===null && $manager->addressActionReply('Поясни сцену.',0)==='Поясни сцену.','missing owner cannot authorize model mention but retains unaddressed body');
+            $GLOBALS['playlist_scoped_text']='Я появляюсь с первой серии, но фоном; выбери её или уточни первую заметную роль.';
+            $command=new LLM\PlaylistCommand($manager);
+            $explained=$command->replyText(['code'=>'confirmation_required','facts'=>['candidates'=>[['episode_id'=>413,'title'=>'First episode','evidence'=>'First background appearance']], 'action'=>'wish']],time()+12,['actor_id'=>$actor,'data'=>['original_query'=>'про тебя','clarifications'=>['Скорее твоё первое появление']]]);
+            check(str_contains($explained,'Я появляюсь с первой серии') && str_starts_with($explained,$manager->actionRecipientPrefix($actor)),'first-person character explanation remains natural with code-owned recipient');
+            $explainedPayload=json_encode($GLOBALS['playlist_scoped_payloads'][array_key_last($GLOBALS['playlist_scoped_payloads'])],JSON_UNESCAPED_UNICODE);
+            check(str_contains($explainedPayload,'First background appearance') && str_contains($explainedPayload,'Скорее твоё первое появление'),'live receives verified evidence and accepted refinement data');
+            $command->replyText(['code'=>'confirmation_required','facts'=>['candidates'=>[['episode_id'=>413,'title'=>'First episode']], 'action'=>'wish']],time()+30,['actor_id'=>$actor,'data'=>[]]);
+            check($GLOBALS['playlist_scoped_options'][CURLOPT_TIMEOUT]===20,'action live requests 20 second scoped transport within absolute deadline');
+            $config->setOption('ai_memory_enabled','0');
+            $GLOBALS['playlist_scoped_text']='Готово.';
+            $manager->liveTextBounded('Result',null,time()+12,10,null,['actor_id'=>$actor,'data'=>[]]);
+            check(!str_contains(json_encode(end($GLOBALS['playlist_scoped_payloads'])),'OWN_ACTION_CANARY'),'action respects disabled memory');
+            $config->setOption('ai_memory_enabled','1');
             $db=Infra\Database::getInstance()->getConnection();
             $db->query("UPDATE bot_commands SET is_active=1 WHERE command_prefix='/хочу'");
             $chat=new Domain\ChatManager();
@@ -112,14 +175,15 @@ namespace {
             $missingButtons=$run('историю с очень многими взрывами');
             check(str_contains($missingButtons['raw_message'],'уточни описание') && !str_contains($missingButtons['raw_message'],'кноп'),'actual clarification rejects captured nonexistent button instruction');
             $clarificationSystem=json_decode($GLOBALS['playlist_scoped_options'][CURLOPT_POSTFIELDS],true)['messages'][0]['content'];
-            check(str_contains($clarificationSystem,'указанное в фактах состояние') && str_contains($clarificationSystem,'самому автору пожелания') && str_contains($clarificationSystem,'необязателен') && str_contains($clarificationSystem,'Передумал') && !str_contains($clarificationSystem,'Кнопки исправны'),'clarification trusted task describes no candidates and the real cancellation control');
+            check(str_contains($clarificationSystem,'Текущая фаза: Поиск выполнен') && str_contains($clarificationSystem,'только к автору пожелания') && str_contains($clarificationSystem,'необязателен') && str_contains($clarificationSystem,'Передумал') && !str_contains($clarificationSystem,'Кнопки исправны'),'clarification trusted task describes no candidates and the real cancellation control');
             $GLOBALS['playlist_scoped_text']='Жми на кнопочку под ответом — этот выбор за тобой!';
             $calls=$GLOBALS['playlist_scoped_calls'];
             $reply=$run('самую первую серию');
             check(str_contains($reply['raw_message'],'Жми на кнопочку') && str_contains($reply['raw_message'],'[[command:') && $GLOBALS['playlist_scoped_calls']===$calls+1,'actual semantic dispatcher creates proposal and calls live only');
             check(count((new Domain\EpisodeManager())->getUserWishes($actor))===0,'semantic dispatcher spends no vote before confirmation');
-            check($GLOBALS['playlist_scoped_options'][CURLOPT_TIMEOUT] <= 10,'actual proposal one live call retains bounded timeout');
-            $human=json_decode($GLOBALS['playlist_scoped_options'][CURLOPT_POSTFIELDS],true)['messages'][1]['content'];
+            check($GLOBALS['playlist_scoped_options'][CURLOPT_TIMEOUT] <= 20,'actual proposal one live call retains bounded timeout');
+            $humanMessages=json_decode($GLOBALS['playlist_scoped_options'][CURLOPT_POSTFIELDS],true)['messages'];
+            $human=end($humanMessages)['content'];
             check(!str_contains($human,'"status"') && !str_contains($human,'confirmation_required'),'actual command producer passes human facts only');
             check(!str_contains($human,'Выбери эпизод кнопкой') && !str_contains($human,'желание пока не записано') && str_contains($human,'Выбор делает пользователь'),'USER state is independent of emergency fallback phrasing');
             $livePayload=json_decode($GLOBALS['playlist_scoped_options'][CURLOPT_POSTFIELDS],true);
@@ -200,6 +264,10 @@ namespace {
             $initialReply=$chat->findBotReplyTo($initialId);preg_match('/\[\[command:(\d+)\]\]/',$initialReply['raw_message']??'',$initialMarker);$initialInteraction=(int)($initialMarker[1]??0);
             check($initialInteraction>0,'actual queued producer creates reusable initial proposal with queue disabled');
             $continuations=new Domain\CommandInteractionManager(LLM\PlaylistCommand::interactionRegistry());
+            check(!array_key_exists('handler_context',$continuations->getResult($initialInteraction,$refiner)),'default getResult shape excludes private handler context');
+            check($continuations->getResult($initialInteraction,$refiner,true)['handler_context']['original_query']==='самую первую серию','explicit owner metadata includes original query');
+            try {$continuations->getResult($initialInteraction,$actor,true);check(false,'foreign actor cannot read handler context');}
+            catch (Core\UserError $expected) {check(true,'foreign actor cannot read handler context');}
             $continuations->requestRefinement($initialInteraction,$refiner);
             $plain=(string)$pairIds[1];$plainId=$chat->addMessage($refiner,'refinement fixture',$plain,[(int)$initialReply['id']]);
             check(LLM\CommandInteractionContinuation::routeMessage(['message_id'=>$plainId,'user_id'=>$refiner],LLM\PlaylistCommand::interactionRegistry()),'real router accepts plain quoted clarification before question delivery');
@@ -214,6 +282,10 @@ namespace {
             check($GLOBALS['playlist_scoped_calls']===$providerCount,'worker replay performs no extra resolver or delivery');
             $continuations->consume($childId,'episode_'.$pairIds[1],$refiner);
             check(count((new Domain\EpisodeManager())->getUserWishes($refiner))===1,'only owner child confirmation records one real wish');
+            (new LLM\PlaylistCommand($manager))->handleInteractionReply(['interaction_id'=>$childId,'user_id'=>$refiner]);
+            $fastTerminal=json_encode(end($GLOBALS['playlist_scoped_payloads']),JSON_UNESCAPED_UNICODE);
+            check(str_contains($fastTerminal,'самую первую серию') && str_contains($fastTerminal,'clarifications') && str_contains($fastTerminal,(string)$pairIds[1]),'fast terminal receives same original and accepted refinement chain as recovery');
+
             $continuations->consume($childId,'cancel',$refiner);
             check(count((new Domain\EpisodeManager())->getUserWishes($refiner))===1,'cancel replay does not cancel an already recorded wish');
             $negativeActor=(new Domain\UserManager())->createUser('it_mlp364_negative_'.bin2hex(random_bytes(6)),bin2hex(random_bytes(24)),'user');
@@ -277,10 +349,13 @@ namespace {
         };
         $runFixture();
     } finally {
+        foreach ($oldPinnedIds as $pinnedId) $db->query('UPDATE chat_messages SET is_pinned=1 WHERE id='.(int)$pinnedId);
+        foreach ($newMemoryIds as $memoryId) if ($memoryId) $db->query('DELETE FROM bot_memory WHERE id='.(int)$memoryId);
         $newUsers = $db->query('SELECT id,login FROM users WHERE id>' . $beforeUsers)->fetch_all(MYSQLI_ASSOC);
         foreach ($newUsers as $user) {
             if (!preg_match('/^it_mlp(?:362|364)_/', $user['login'])) throw new RuntimeException('Scoped fixture author ownership mismatch');
             $id = (int)$user['id'];
+            $db->query('DELETE FROM online_sessions WHERE user_id=' . $id);
             foreach (['command_interactions' => 'owner_id', 'episode_wishes' => 'user_id', 'episode_wish_events' => 'user_id', 'episode_wish_locks' => 'user_id', 'chat_messages' => 'user_id'] as $table => $column) $db->query("DELETE FROM $table WHERE $column=$id");
             $db->query('DELETE FROM users WHERE id=' . $id);
         }

@@ -84,4 +84,24 @@ expect($resolver->resolve('серию где Шугар Белл победил�
 expect(json_decode($llm->calls[2][2][0]['content'],true)['original_query']==='серию где Шугар Белл победила дракона без Рэрити','specific positive and negative constraints reach authoritative verifier unchanged');
 $badCharacter=$characterCandidates[0];$badCharacter['source_url']='https://invented.example/character';$setSearch([$badCharacter]);$llm->verify='{"verified":[151]}';
 expect($resolver->resolve('серию про Шугар Белл',$characterCatalog)['status']==='need_clarification','broad interest never bypasses actual citation provenance');
+// First-appearance search uses a distributor alternate title, never a hardcoded catalogue ID.
+$appearanceCatalog=[['ID'=>413,'TITLE'=>'My Little Pony Friendship is Magic - Season 1 Episode 01 - Friendship Is Magic, Part 01']];
+$appearance=['episode_code'=>'S01E01','title'=>'Mare in the Moon','evidence'=>'Lyra first appears in this episode','source_url'=>'https://example.org/episode'];
+$setSearch([$appearance]);$llm->calls=[];$llm->verify='{"verified":[413]}';
+$appearanceResult=$resolver->resolve("серию про тебя\nУточнение: Скорее твоё первое появление",$appearanceCatalog,time()+55,false);
+expect(array_column($appearanceResult['candidates'],'episode_id')===[413],'first appearance alternate title reaches independent verifier and returns canonical ID');
+expect(array_column($llm->calls,0)===['normalize','search','verify'],'alternate title never bypasses independent verification');
+$verifyInput=json_decode($llm->calls[2][2][0]['content'],true);
+expect($verifyInput['candidates'][0]['reported_title']==='Mare in the Moon' && str_contains($verifyInput['candidates'][0]['canonical_title'],'Part 01'),'verifier sees reported alternate and canonical catalogue identity');
+$llm->verify='{"verified":[]}';expect($resolver->resolve('твоё первое появление',$appearanceCatalog,time()+55,false)['status']==='need_clarification','alternate candidate still rejected by independent verifier');
+foreach ([['title'=>'Invented Moon'],['episode_code'=>'S01E07'],['episode_code'=>'413'],['episode_code'=>'Friendship Is Magic, Part 01'],['episode_id'=>999],['source_url'=>'https://invented.example/source']] as $bad) {
+ $setSearch([array_merge($appearance,$bad)]);$llm->calls=[];$llm->verify='{"verified":[413]}';
+ expect($resolver->resolve('твоё первое появление',$appearanceCatalog,time()+55,false)['status']==='need_clarification' && count($llm->calls)===2,'alternate code/title/ID/citation disagreement fails before verifier');
+}
+$setSearch([$appearance]);$badCanonical=$appearanceCatalog;$badCanonical[0]['TITLE']='My Little Pony Friendship is Magic - Season 1 Episode 01 - Other Story';
+expect($resolver->resolve('твоё первое появление',$badCanonical,time()+55,false)['status']==='need_clarification','finite alias requires matching canonical metadata, not arbitrary valid code');
+$setSearch([array_merge($appearance,['title'=>'The Mare in the Moon'])]);$llm->verify='{"verified":[413]}';
+expect($resolver->resolve('твоё первое появление',$appearanceCatalog,time()+55,false)['status']==='found','known title with definite article admits exact canonical identity');
+$ambiguous=[...$appearanceCatalog,['ID'=>414,'TITLE'=>$appearanceCatalog[0]['TITLE']]];
+expect($resolver->resolve('твоё первое появление',$ambiguous,time()+55,false)['status']==='need_clarification','ambiguous code has no alternate admission');
 echo $fail?"FAILURES: $fail\n":"ALL PASS\n";exit($fail?1:0);

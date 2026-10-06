@@ -148,10 +148,15 @@ final class CommandInteractionContinuation
         }
     }
 
+    private static function actionContext(array $snapshot): array
+    {
+        return ['actor_id' => (int)$snapshot['owner_id'], 'data' => $snapshot['context']['handler_context']];
+    }
+
     private static function renderTerminalWork(CommandInteractionManager $manager, array $snapshot, array $handler): bool
     {
-        $deadline = min(time() + 10, (int)$snapshot['work']['delivery_expires_at']);
-        $text = ($handler['format'])('terminal', ['outcome' => $snapshot['outcome'], '_deadline' => $deadline]);
+        $deadline = min(time() + 20, (int)$snapshot['work']['delivery_expires_at']);
+        $text = ($handler['format'])('terminal', ['outcome' => $snapshot['outcome'], '_deadline' => $deadline, '_action_context' => self::actionContext($snapshot)]);
         if (!is_string($text) || trim($text) === '') throw new \RuntimeException('Empty terminal reply');
         return $manager->publishTerminalWork($snapshot['interaction_id'], $snapshot['revision'], $snapshot['operation_key'], $snapshot['lease_token'], $text) !== null;
     }
@@ -172,7 +177,8 @@ final class CommandInteractionContinuation
         $child = ($result['status'] ?? '') === 'candidates';
         $childId = $child ? $manager->stageChild($id, $revision, $key, $token) : null;
         if ($child && !$childId) return false;
-        $result['_deadline'] = min($deadline, time() + 10);
+        $result['_deadline'] = min($deadline, time() + 20);
+        $result['_action_context'] = self::actionContext($snapshot);
         $text = ($handler['format'])($child ? 'candidates' : 'clarifying', $result);
         if (!is_string($text) || trim($text) === '') throw new \RuntimeException('Empty continuation reply');
         if ($child) $text .= "\n[[command:" . $childId . ']]';
@@ -195,7 +201,7 @@ final class CommandInteractionContinuation
         if ($chat->findBotReplyTo($sourceId, $marker)) return true;
         $handler = (new CommandInteractionManager($registry))->continuationHandler($payload['notice']['type']);
         if (($handler['permission'])($actor, []) === false) return false;
-        $text = ($handler['format'])('clarifying', ['code' => $payload['notice']['code'], '_deadline' => time() + 10]);
+        $text = ($handler['format'])('clarifying', ['code' => $payload['notice']['code'], '_deadline' => time() + 20, '_action_context' => ['actor_id' => $actor, 'data' => []]]);
         return self::publishNotice($payload, $handler, $text, $marker);
     }
 

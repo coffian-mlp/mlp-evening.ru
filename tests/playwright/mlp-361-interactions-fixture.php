@@ -20,7 +20,7 @@ if ($mode === 'setup') {
     if (is_file($path)) throw new RuntimeException('Cleanup existing fixture first');
     $fixture = ['saved' => ['ai_enabled' => $config->getOption('ai_enabled', null), 'ai_bot_user_id' => $config->getOption('ai_bot_user_id', null),
         'ai_use_queue' => $config->getOption('ai_use_queue', null), 'ai_worker_mode' => $config->getOption('ai_worker_mode', null),
-        'chat_rate_limit' => $config->getOption('chat_rate_limit', null)],
+        'chat_rate_limit' => $config->getOption('chat_rate_limit', null), 'ai_delay_min' => $config->getOption('ai_delay_min', null), 'ai_delay_max' => $config->getOption('ai_delay_max', null)],
         'users' => [], 'messages' => [], 'interactions' => [], 'cases' => []];
     $bot = $users->createUser('it_user_mlp361_ui_bot_' . bin2hex(random_bytes(6)), bin2hex(random_bytes(24)), 'user');
     $fixture['users'][] = $bot; $fixture['botId'] = $bot;
@@ -29,6 +29,7 @@ if ($mode === 'setup') {
     $config->setOption('ai_worker_mode', 'cron');
     $config->setOption('ai_bot_user_id', (string)$bot);
     $config->setOption('chat_rate_limit', '0');
+    $config->setOption('ai_delay_min', '0'); $config->setOption('ai_delay_max', '0');
     $save($fixture);
     echo "Fixture ready\n";
 } elseif ($mode === 'continuation-user') {
@@ -43,6 +44,13 @@ if ($mode === 'setup') {
     $target = (int)$db->insert_id; $fixture['episodes'][] = $target;
     $fixture['cases'][$key] = ['login' => $login, 'password' => $password, 'userId' => $owner, 'targetId' => $target];
     $save($fixture); echo "Continuation user ready\n";
+ } elseif ($mode === 'continuation-firstappearance') {
+    $fixture=json_decode(file_get_contents($path),true,512,JSON_THROW_ON_ERROR);
+    $key=$argv[2] ?? ''; if (!isset($fixture['cases'][$key])) throw new RuntimeException('Missing owned case');
+    $match=Domain\EpisodeCatalog::resolveExact('S01E01',(new Domain\EpisodeManager())->getAllEpisodes());
+    if ($match['status']!=='found' || count($match['episodes'])!==1) throw new RuntimeException('Unique actual first episode required');
+    $fixture['cases'][$key]['targetId']=(int)$match['episodes'][0]['ID']; $save($fixture);
+    echo json_encode(['targetId'=>$fixture['cases'][$key]['targetId']]);
 } elseif ($mode === 'continuation-inspect') {
     $fixture = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
     $case = $fixture['cases'][$argv[2] ?? ''] ?? null;
@@ -55,6 +63,7 @@ if ($mode === 'setup') {
         $rows[] = ['id' => (int)$row['id'], 'state' => $row['state'], 'sourceId' => (int)$row['source_message_id'], 'messageId' => (int)$row['bot_message_id'],
             'resultMessageId' => (int)$row['result_message_id'], 'expiresAt' => $row['expires_at'], 'revision' => $context['revision'] ?? null,
             'childId' => $context['child_id'] ?? null, 'questionBindings' => $context['question_bindings'] ?? [],
+            'handlerContext' => $context['handler_context'] ?? null,
             'work' => $context['pending_work'] ?? null, 'options' => array_map(static fn($o) => ['key' => $o['key'], 'label' => $o['label']], json_decode($row['options_json'], true))];
     }
     $stmt = $db->prepare('SELECT COUNT(*) AS n FROM episode_wish_events WHERE user_id=?'); $stmt->bind_param('i', $case['userId']); $stmt->execute();
@@ -168,7 +177,7 @@ if ($mode === 'setup') {
     $fixture['cases'][$key]=['login'=>$login,'password'=>$password,'userId'=>$owner,'sourceId'=>$source,'messageId'=>(int)$reply['id'],'interactionId'=>(int)$match[1]];
     if ($mode === 'live') {
         $fixture['cases'][$key]['liveCalls']=$GLOBALS['mlp363_calls'] ?? 0;
-        $fixture['cases'][$key]['liveUser']=$GLOBALS['mlp363_payload']['messages'][1]['content'] ?? '';
+        $fixture['cases'][$key]['liveUser']=$GLOBALS['mlp363_payload']['messages'][array_key_last($GLOBALS['mlp363_payload']['messages'])]['content'] ?? '';
     }
     $save($fixture);echo "Semantic fixture ready\n";
 } elseif ($mode === 'wish-count') {

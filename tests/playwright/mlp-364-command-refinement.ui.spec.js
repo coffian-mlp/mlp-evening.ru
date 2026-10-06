@@ -261,3 +261,32 @@ test('MLP-364 пустой поиск не публикует crowdsourcing от
   await expect(body).not.toContainText('Уточнение:');
   await expect(choice(page, parent).getByRole('button', { name: 'Передумал', exact: true })).toBeEnabled();
 });
+
+test('MLP-364 first appearance: plain quoted refinement reaches verified alternate title and actual owner reply', async ({ page, browserName }) => {
+  const f=await actor(page, `${browserName}_firstappearance`);
+  f.targetId=JSON.parse(cli('continuation-firstappearance', f.key)).targetId;
+  await send(page,'!хочу серию про тебя'); runWorker(f,'noresults');
+  const parent=inspect(f).interactions.findLast(r=>r.state==='clarifying');
+  expect(parent).toBeTruthy(); await expect(choice(page,parent)).toBeVisible({timeout:15000});
+  await sendQuotedUI(page,'Скорее твоё первое появление',parent.messageId);
+  expect(inspect(f).wishes).toBe(0); runWorker(f,'firstappearance');
+  const state=inspect(f);const child=state.interactions.findLast(r=>r.state==='pending');
+  expect(child).toBeTruthy();expect(child.handlerContext.clarifications).toEqual(['Скорее твоё первое появление']);
+  expect(state.wishes).toBe(0);expect(state.events).toBe(0);
+  const verifier=state.trace.findLast(r=>r.stage==='verify');
+  const verifiedInput=JSON.parse(verifier.user);
+  expect(verifiedInput.original_query).toContain('Скорее твоё первое появление');
+  expect(verifiedInput.candidates[0].reported_title).toBe('Mare in the Moon');
+  expect(verifiedInput.candidates[0].canonical_title).toContain('Friendship Is Magic');
+  const live=state.trace.findLast(r=>r.stage==='live'); const actionData=live.messages.find(m=>m.content.startsWith('[Контекст действия'));
+  expect(actionData.content).toContain(f.login);expect(actionData.content).toContain('Lyra first appears');
+  const bubble=page.locator(`.chat-message[data-id="${child.messageId}"]`);
+  await expect(bubble).toContainText('@'+f.login);await expect(bubble).toContainText('Я появляюсь уже в первой серии, но фоном.');
+  await expect(bubble).not.toContainText('@собеседник');await expect(bubble).not.toContainText('@друг');
+  await refresh(page,child); await expect(choice(page,child).locator('[data-option-key^="episode_"]')).toHaveCount(1);
+  fs.mkdirSync(path.join(repo,'docs/tests/MLP-364-followup/screenshots'),{recursive:true});
+  await page.screenshot({path:path.join(repo,`docs/tests/MLP-364-followup/screenshots/${browserName}-firstappearance.png`)});
+  await choice(page,child).locator(`[data-option-key="episode_${f.targetId}"]`).click();
+  expect(inspect(f).wishes).toBe(1);expect(inspect(f).events).toBe(1);
+  runWorker(f,'firstappearance');expect(inspect(f).wishes).toBe(1);expect(inspect(f).events).toBe(1);
+});

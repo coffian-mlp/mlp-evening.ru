@@ -154,14 +154,16 @@ final class CommandInteractionManager
         });
     }
 
-    public function getResult(int $id, int $actorId): array
+    public function getResult(int $id, int $actorId, bool $includeHandlerContext = false): array
     {
         $row = $this->row($id);
         if ((int)$row['owner_id'] !== $actorId) throw new UserError('Этот выбор принадлежит другому пользователю.');
-        return ['outcome' => $row['outcome_json'] === null ? null : json_decode($row['outcome_json'], true, 512, JSON_THROW_ON_ERROR),
+        $result = ['outcome' => $row['outcome_json'] === null ? null : json_decode($row['outcome_json'], true, 512, JSON_THROW_ON_ERROR),
             'reply_message_id' => $row['result_message_id'] === null ? null : (int)$row['result_message_id'],
             'bot_message_id' => $row['bot_message_id'] === null ? null : (int)$row['bot_message_id'],
             'source_message_id' => (int)$row['source_message_id']];
+        if ($includeHandlerContext) $result['handler_context'] = ($row['context_json'] ?? null) === null ? [] : $this->requireContext($row)['handler_context'];
+        return $result;
     }
 
     public function bindResultMessage(int $id, int $messageId): void

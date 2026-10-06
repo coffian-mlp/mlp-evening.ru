@@ -9,14 +9,14 @@ namespace LLM {
         if (!empty($GLOBALS['mlp364_transport'])) {
             $payload = $GLOBALS['mlp363_payload'];
             $system = $payload['messages'][0]['content'] ?? '';
-            $user = $payload['messages'][1]['content'] ?? '';
+            $user = $payload['messages'][array_key_last($payload['messages'])]['content'] ?? '';
             $stage = isset($payload['plugins']) ? 'search' : (str_contains($system, 'Независимо проверь') ? 'verify' : (str_contains($system, 'Convert the supplied original_query') ? 'normalize' : 'live'));
-            $GLOBALS['mlp364_trace'][] = ['stage' => $stage, 'user' => $user, 'timeout' => $GLOBALS['mlp363_options'][CURLOPT_TIMEOUT] ?? null];
+            $GLOBALS['mlp364_trace'][] = ['stage' => $stage, 'user' => $user, 'messages' => $payload['messages'], 'timeout' => $GLOBALS['mlp363_options'][CURLOPT_TIMEOUT] ?? null];
             if (isset($GLOBALS['mlp364_on_transport'])) ($GLOBALS['mlp364_on_transport'])($stage);
             if ($stage === 'search' && ($GLOBALS['mlp364_scenario'] ?? '') === 'error') return false;
             $id = (int)($GLOBALS['mlp364_target'] ?? 0);
             $text = match ($stage) {
-                'normalize' => 'Rarity scene dragon smoke',
+                'normalize' => ($GLOBALS['mlp364_scenario'] ?? '') === 'firstappearance' ? 'Lyra Heartstrings first appearance' : 'Rarity scene dragon smoke',
                 'search' => json_encode(['candidates' => in_array($GLOBALS['mlp364_scenario'] ?? '', ['noresults','quoted-noresults','bad-noresults'], true) ? [] : [['episode_id' => $id, 'evidence' => 'Fixture plot evidence', 'source_url' => 'https://example.org/fixture']]]),
                 'verify' => json_encode(['verified' => [$id]]),
                 default => 'Уточни описание и ответь с цитатой на моё сообщение.',
@@ -28,6 +28,10 @@ namespace LLM {
             if ($stage === 'live' && ($GLOBALS['mlp364_scenario'] ?? '') === 'quoted-noresults') $text = 'Не удалось подтвердить подходящий эпизод. Ответь с цитатой на моё сообщение: "вспомни сцену" & опиши детали. Можно нажать "Передумал".';
             if ($stage === 'live' && ($GLOBALS['mlp364_scenario'] ?? '') === 'bad-noresults') $text = 'Пока никто не отозвался. Если кто-то вспомнит момент, пусть ответит с цитатой в формате "Уточнение: …". Можно нажать "Передумал".';
             if ($stage === 'live' && ($GLOBALS['mlp364_scenario'] ?? '') === 'quoted-found' && str_contains($user, 'Доступный вариант:')) $text = 'Выбери вариант №' . $id . ' кнопкой "подтвердить" — решение за тобой & пожелание пока не записано.';
+            if (($GLOBALS['mlp364_scenario'] ?? '') === 'firstappearance') {
+                if ($stage === 'search') $text=json_encode(['candidates'=>[['episode_code'=>'S01E01','title'=>'Mare in the Moon','evidence'=>'Lyra first appears in the background of the first episode','source_url'=>'https://example.org/fixture']]]);
+                if ($stage === 'live' && str_contains($user,'Доступный вариант:')) $text='Я появляюсь уже в первой серии, но фоном. Выбери её кнопкой, или уточни, если интересует первое заметное участие — решение за тобой.';
+            }
             $message = ['content' => $text];
             if ($stage === 'search') $message['annotations'] = [['url_citation' => ['url' => 'https://example.org/fixture', 'title' => 'Fixture evidence']]];
             return json_encode(['choices' => [['finish_reason' => 'stop', 'message' => $message]]]);
