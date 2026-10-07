@@ -54,7 +54,8 @@ test.beforeEach(() => { test.skip(!BASE, 'MLP_BASE_URL required'); });
 test('MLP-365 рейтинг: initial best → обычная цитата worst с сохранением персонажа → once effect', async ({page,browserName}) => {
  const f=await actor(page,`${browserName}_rating_override`);const low=JSON.parse(cli('rating-targets',f.key));
  await send(page,'!хочу лучший эпизод где Лира');const first=runWorker(f,'rating-best');
- expect(first.calls.filter(c=>c.stage==='search')).toHaveLength(2);
+ expect(first.calls.filter(c=>c.stage==='search')).toHaveLength(1);
+ expect(first.calls.filter(c=>c.stage==='verify')).toHaveLength(1);
  let state=inspect(f);const parent=state.interactions.findLast(r=>r.state==='pending');expect(parent).toBeTruthy();
  expect(parent.handlerContext.resolution_snapshot.intent.direction).toBe('best');expect(state.wishes).toBe(0);
  await expect(choice(page,parent)).toBeVisible({timeout:15000});await refresh(page,parent);
@@ -63,10 +64,12 @@ test('MLP-365 рейтинг: initial best → обычная цитата worst
  await choice(page,parent).getByRole('button',{name:'Не то, уточнить',exact:true}).click();
  await sendQuotedUI(page,'Скорее самый плохой, но Лиру сохрани',parent.messageId);
  expect(inspect(f).interactions.find(r=>r.id===parent.id).state).toBe('resolving');
- const second=runWorker(f,'rating-worst');expect(second.calls.filter(c=>c.stage==='search')).toHaveLength(2);
+ const second=runWorker(f,'rating-worst');expect(second.calls.filter(c=>c.stage==='search')).toHaveLength(1);
+ expect(second.calls.filter(c=>c.stage==='verify')).toHaveLength(1);
  state=inspect(f);const child=state.interactions.findLast(r=>r.state==='pending');expect(child.id).not.toBe(parent.id);
  expect(child.expiresAt).toBe(parent.expiresAt);expect(child.options.filter(o=>o.key.startsWith('episode_')).map(o=>o.key)).toEqual([`episode_${low.lowTargetId}`]);
  const persisted=state.interactions.find(r=>r.id===parent.id).resolverResult.resolution_snapshot;
+ expect(persisted.candidates[0].rating.scope.kind).toBe('verified_subset');
  expect(persisted.intent.direction).toBe('worst');expect(persisted.intent.scope_constraints).toEqual(['Lyra appears']);expect(state.wishes).toBe(0);
  await expect(choice(page,child)).toBeVisible({timeout:15000});await refresh(page,child);
  await expect(page.locator(`.chat-message[data-id="${child.messageId}"]`)).toContainText('IMDb');
@@ -77,11 +80,13 @@ test('MLP-365 рейтинг: initial best → обычная цитата worst
  fs.mkdirSync(path.join(repo,'docs/tests/MLP-365-rating-search/screenshots'),{recursive:true});
  await page.screenshot({path:path.join(repo,`docs/tests/MLP-365-rating-search/screenshots/${browserName}-rating-confirmed.png`)});
 });
-test('MLP-365 неподтверждённый рейтинг → цитата вопроса → проверенный вариант',async({page,browserName})=>{
+test('MLP-365 отсутствующий локальный snapshot → цитата вопроса → проверенный вариант',async({page,browserName})=>{
  const f=await actor(page,`${browserName}_rating_empty`);cli('rating-targets',f.key);
- await send(page,'!хочу самый засранный эпизод');runWorker(f,'rating-empty');
+ await send(page,'!хочу самый засранный эпизод');const missing=runWorker(f,'rating-empty');
+ expect(missing.calls.filter(c=>c.stage==='search')).toHaveLength(0);
  let state=inspect(f);const waiting=state.interactions.findLast(r=>r.state==='clarifying');expect(waiting).toBeTruthy();
  expect(waiting.options.filter(o=>o.key.startsWith('episode_'))).toHaveLength(0);expect(state.wishes).toBe(0);
+ expect(waiting.handlerContext.resolution_snapshot.reason).toBe('missing_snapshot');
  await expect(choice(page,waiting)).toBeVisible({timeout:15000});await refresh(page,waiting);
  await expect(page.locator(`.chat-message[data-id="${waiting.messageId}"]`)).toContainText('IMDb');
  await sendQuotedUI(page,'Повтори поиск самых плохих по средней оценке',waiting.messageId);runWorker(f,'rating-worst');
@@ -109,10 +114,11 @@ test('MLP-365 спорный: распределение голосов обяз
  const f=await actor(page,`${browserName}_rating_polar`);
  await send(page,'!хочу спорную серию');runWorker(f,'rating-polar-missing');let state=inspect(f);
  const waiting=state.interactions.findLast(r=>r.state==='clarifying');expect(waiting).toBeTruthy();expect(state.wishes).toBe(0);
- expect(waiting.handlerContext.resolution_snapshot.reason).toBe('missing_distribution');
+ expect(waiting.handlerContext.resolution_snapshot.reason).toBe('incomplete_metric_scope');
+ expect(waiting.handlerContext.resolution_snapshot.intent.metric).toBe('standard_deviation');
  await expect(choice(page,waiting)).toBeVisible({timeout:15000});await sendQuotedUI(page,'Спорную, с высокими и низкими оценками',waiting.messageId);
- runWorker(f,'rating-polar');state=inspect(f);const parent=state.interactions.find(r=>r.id===waiting.id);const child=state.interactions.findLast(r=>r.state==='pending');
+ const local=runWorker(f,'rating-polar');expect(local.calls.filter(c=>c.stage==='search')).toHaveLength(0);state=inspect(f);const parent=state.interactions.find(r=>r.id===waiting.id);const child=state.interactions.findLast(r=>r.state==='pending');
  expect(parent.resolverResult.resolution_snapshot.candidates[0].rating.value).toBe(0.4);
  await expect(choice(page,child)).toBeVisible({timeout:15000});await refresh(page,child);
- await expect(page.locator(`.chat-message[data-id="${child.messageId}"]`)).toContainText('высокие и низкие');expect(state.events).toBe(0);
+ await expect(page.locator(`.chat-message[data-id="${child.messageId}"]`)).toContainText('высоких и низких');expect(state.events).toBe(0);
 });

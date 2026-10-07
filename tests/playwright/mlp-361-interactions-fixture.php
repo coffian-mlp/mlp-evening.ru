@@ -10,6 +10,16 @@ $users = new Domain\UserManager();
 $chat = new Domain\ChatManager();
 $path = dirname(__DIR__, 2) . '/docs/private/mlp361-interactions-local.json';
 $mode = $argv[1] ?? '';
+/** Rating-only adapter to the real SQL fixture; common interaction scenarios remain unchanged. */
+function mlp365LocalFixture(array $args): void {
+    $pipes = [];
+    $process = proc_open([PHP_BINARY, __DIR__ . '/mlp-366-ratings-fixture.php', ...$args], [0 => ['pipe','r'], 1 => ['pipe','w'], 2 => ['pipe','w']], $pipes);
+    if (!is_resource($process)) throw new RuntimeException('Local rating fixture did not start');
+    fclose($pipes[0]); $output = stream_get_contents($pipes[1]); $error = stream_get_contents($pipes[2]);
+    fclose($pipes[1]); fclose($pipes[2]);
+    if (proc_close($process) !== 0) throw new RuntimeException('Local rating fixture failed: ' . $error . $output);
+}
+
 $save = function (array $fixture) use ($path) {
     if (!is_dir(dirname($path))) mkdir(dirname($path), 0700, true);
     $mask = umask(0077);
@@ -97,6 +107,7 @@ if ($mode === 'setup') {
     $GLOBALS['mlp364_transport'] = true; $GLOBALS['mlp364_trace'] = [];
     $GLOBALS['mlp364_target'] = (int)$case['targetId']; $GLOBALS['mlp364_scenario'] = $argv[3] ?? 'found';
     if (str_starts_with($GLOBALS['mlp364_scenario'],'rating-')) {
+        mlp365LocalFixture(['legacy-ratings', $key, $GLOBALS['mlp364_scenario']]);
         $GLOBALS['mlp365_rating_rows']=[];
         foreach (['targetId','lowTargetId'] as $field) {
             $id=(int)($case[$field] ?? $case['targetId']);
@@ -255,6 +266,7 @@ if ($mode === 'setup') {
     else $chat->editMessage($case['sourceId'], $case['userId'], 'Edited fixture command');
     echo "Fixture state changed\n";
 } elseif ($mode === 'cleanup') {
+    if (is_file(dirname(__DIR__, 2) . '/docs/private/mlp366-ratings-local.json')) mlp365LocalFixture(['legacy-cleanup']);
     $fixture = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
     foreach ($fixture['users'] as $id) {
         $user = $users->getUserById($id);

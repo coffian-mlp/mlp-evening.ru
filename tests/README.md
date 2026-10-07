@@ -300,6 +300,8 @@ Implementation final result: 95 PHP and 40 affected + 24 legacy Playwright PASS.
 
 ## MLP-365: рейтинговые пожелания
 
+Этот раздел описывает прежний WEB-механизм и исторические результаты. Новые рейтинговые запросы с MLP-366 используют локальный SQL; сохранённые v1-доказательства остаются совместимыми. Текущий порядок проверок приведён ниже.
+
 Используется тот же изолированный Compose-проект `mlp359` с `DB_HOST=db`, HTTP-сервером на 24 workers и последовательным выполнением PHP/browser suites. Новые `test_rating_search_proof.php` и `test_rating_episode_search.php` входят в `run_all.php`: проверяют независимость двух WEB-поисков, сравнение средних оценок, вычисление рангов/равенства, распределения низких и высоких голосов, цитированные источники, ограничения и размеры доказательств. Дополненные интеграционные тесты проверяют частный сохранённый результат, повтор без нового поиска, полный envelope/fallback, metadata дочернего выбора и адресность ответа.
 
 ```bash
@@ -319,3 +321,25 @@ mlp_test_compose exec -T php php tests/playwright/mlp-361-interactions-fixture.p
 Независимый QA: 97/97 PHP PASS (SKIP0/FAIL0, 11,0 с), новые 8/8 Playwright PASS (40,1 с), прежние 64/64 PASS (4,1 мин). Diagnostic 7/8 с отсутствующей цитатой в Firefox сохранён; после исправления helper полный новый набор прошёл. Покрытие изменённых исполняемых PHP-строк PCOV: 401/405 = 99,01%, проверено на том же runtime; это не branch/JS coverage и не точность внешней модели. Локальные отчёты: `docs/tests/MLP-365-rating-search.tests.md`, `docs/qa/MLP-365-rating-search.qa.md`.
 
 Native provider-проверки подтвердили шесть вариантов нормализации, но snippets не доказали сравнительного лидера best/worst. Такие ответы должны оставаться уточнением; deterministic fixtures не считаются доказательством успешного live-рейтинга. Остаточный риск модельного извлечения и доступность данных источника сохраняются.
+
+## MLP-366: локальные рейтинги эпизодов
+
+Используется существующий изолированный Compose-проект `mlp359`, `DB_HOST=db`, HTTP на localhost:8091 с 24 workers. При уже созданной тестовой БД применить и зарегистрировать только новую `2026_10_07_episode_ratings.sql`; свежий `database.sample.sql` содержит расширение. Не переигрывать всю историю миграций поверх sample. PHP suite и браузерные fixtures выполняются последовательно; интеграционные проверки записи запрещены при `db.host !== db`.
+
+```bash
+mlp_test_compose exec -T php php tests/run_all.php
+mlp_test_compose exec -T php php tests/playwright/mlp-361-interactions-fixture.php setup
+MLP_BASE_URL=http://127.0.0.1:8091 npx playwright test \
+  -c tests/playwright/playwright.config.js \
+  tests/playwright/mlp-366-local-episode-ratings.ui.spec.js \
+  --project=chromium-ui --project=firefox-ui
+mlp_test_compose exec -T php php tests/playwright/mlp-361-interactions-fixture.php cleanup
+```
+
+Новый специальный `mlp-366-ratings-fixture.php` использует общего помощника, сохраняет исходные rating-колонки/header и загружает изолированный снимок через настоящий owner. Cleanup обязателен после каждого набора, включая ошибочный прогон. Затем отдельными setup/run/cleanup выполнить текущий `mlp-365-rating-search.ui.spec.js`, `mlp-364-command-refinement.ui.spec.js` и `mlp-361-command-interactions.ui.spec.js`; четыре набора дают 80 сценариев в Chromium/Firefox. Останавливается только свой HTTP-сервер; общий Docker сохраняется.
+
+`test_episode_rating_snapshot.php` проверяет строгую независимую идентичность, опубликованную оценку отдельно от histogram mean, десять bins/число голосов, population SD, даты и границы. `integration_episode_ratings.php` проверяет dry-run без записи, CLI, CAS, атомарный rollback/повтор/восстановление архивного снимка, полноту метрик, ранжирование до display cap, равенства и все критерии. Двухпроцессные проверки воспроизводят импорт во время чтения при READ-COMMITTED; собственный RR-снимок и передача transient SQL error защищают от смешения наблюдений. Старый код чтения и чистого генератора проверен на расширенной схеме без удаления колонок.
+
+Адаптация MLP-365 ограничена rating-specific transport/fixture: fresh v2 нормализуется в локальный поиск; новый v1 ответ отвергается. Сохранённые v1 snapshots проверяются отдельно. Сюжетный поиск и независимая проверка принадлежности остаются внешними, рейтинговый WEB не вызывается. Actual HTTP→queue→worker→SQL→widget проверяет best/worst, SD и отдельный love/hate, цитированные уточнения, отмену, владельца, source edit, устаревшие данные и один эффект после кнопки. Подменяется только внешний provider transport.
+
+Независимый QA: 99/99 PHP PASS, без SKIP; 80/80 Playwright PASS. Текущее покрытие изменённых исполняемых PHP-строк PCOV — 401/418 = 95,93%; это не branch/JS coverage и не доказательство точности внешней модели. Реальный источник подтверждается отдельно: 224 записей, полные распределения и same-observation N, строгий валидатор и production dry-run. Исходные данные не являются синтетическим UI fixture. Локальные отчёты: `docs/tests/MLP-366-local-episode-ratings.tests.md`, `docs/qa/MLP-366-local-episode-ratings.qa.md`.

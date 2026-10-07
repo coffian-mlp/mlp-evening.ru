@@ -331,28 +331,27 @@ namespace {
                 check((int)($continuations->getResult($terminalId,$terminalActor)['reply_message_id']??0)===$terminalReplyId,'terminal worker replay never binds second reply');
                 check(count((new Domain\EpisodeManager())->getUserWishes($terminalActor))===0 && (int)$db->query('SELECT COUNT(*) AS n FROM episode_wish_events WHERE user_id='.(int)$terminalActor)->fetch_assoc()['n']===0,'terminal recovery leaves real wishes and quota events unchanged');
             }
-            $ratingUrl='https://www.imdb.com/title/tt1751105/episodes/?topRated=DESC';
-            $ratingIntent=['version'=>1,'intent'=>'rating','direction'=>'best','selection'=>'extreme','metric'=>'mean_score','requested_source'=>null,'scope_constraints'=>[],'search_query'=>'highest rated episodes IMDb'];
-            $ratingProof=['platform'=>'imdb','metric'=>'mean_score','direction'=>'best','selection'=>'extreme','scale'=>['min'=>1,'max'=>10],'source_asof'=>null,
-                'universe'=>['series'=>'My Little Pony: Friendship Is Magic','constraints'=>[],'coverage'=>'source_ranked_boundary'],
-                'comparison'=>['rows'=>[['episode_code'=>'S01E07','title'=>'Dragonshy','value'=>9.5,'rank'=>1,'source_url'=>$ratingUrl]],'boundary'=>['position'=>'top','rank'=>1,'tied_count'=>1]],
-                'evidence'=>[['source_url'=>$ratingUrl,'excerpt'=>'Episode average rating leaderboard, top boundary9.5.']]];
-            $oldAnnotations=$GLOBALS['playlist_scoped_annotations'];
-            $GLOBALS['playlist_scoped_annotations']=[['url_citation'=>['url'=>$ratingUrl,'title'=>'IMDb episode leaderboard']]];
-            $GLOBALS['playlist_scoped_responses']=[json_encode($ratingIntent),"```json\n".json_encode($ratingProof)."\n```\nComparison basis follows.",json_encode($ratingProof)];
+            $ratingId=$pairIds[0];$ratingImdb='tt1999366';
+            $ratingCatalog=$db->query('SELECT ID,TITLE,TWOPART_ID,LENGTH FROM episode_list ORDER BY ID')->fetch_all(MYSQLI_ASSOC);
+            $ratingFingerprint=Domain\EpisodeRatingSnapshot::catalogFingerprint($ratingCatalog);
+            $ratingMapping=['schema_version'=>1,'source'=>'imdb','parent_series'=>'tt1751105','catalog_fingerprint'=>$ratingFingerprint,'records'=>[['episode_id'=>$ratingId,'imdb_id'=>$ratingImdb,'kind'=>'episode','season'=>91,'episode'=>25,'identity_url'=>'https://www.imdb.com/title/'.$ratingImdb.'/']]];
+            $ratingImport=['schema_version'=>1,'source'=>'imdb','parent_series'=>'tt1751105','catalog_fingerprint'=>$ratingFingerprint,'scope'=>['kind'=>'explicit_ids','ids'=>[$ratingId],'coverage'=>'complete'],'records'=>[['episode_id'=>$ratingId,'imdb_id'=>$ratingImdb,'rating'=>9.5,'votes'=>100,'histogram'=>[0,0,0,0,0,0,0,0,50,50],'retrieved_at'=>gmdate('Y-m-d\TH:i:s\Z'),'source_asof'=>null,'source_url'=>'https://www.imdb.com/title/'.$ratingImdb.'/ratings/','vote_scope'=>'all_countries','provenance'=>['channel'=>'ordinary_browser_dom']]]];
+            $ratingOwner=new Domain\EpisodeRatingManager();
+            $previousRatingHeader=$config->getOptionDetails(Domain\EpisodeRatingManager::HEADER_KEY);
+            $previousRatingHash=$previousRatingHeader?json_decode($previousRatingHeader['value'],true)['batch_hash']:null;
+            $ratingOwner->apply($ratingImport,$ratingMapping,$previousRatingHash);
+            $ratingIntent=['version'=>2,'intent'=>'rating','direction'=>'best','selection'=>'extreme','metric'=>'mean_score','requested_source'=>null,'scope_constraints'=>[],'scope_filter'=>['kind'=>'explicit_codes','codes'=>['S91E25'],'seasons'=>[]],'search_query'=>'highest rated episodes IMDb'];
+            $GLOBALS['playlist_scoped_responses']=[json_encode($ratingIntent)];
             $beforeRating=count($GLOBALS['playlist_scoped_payloads']);
-            $rated=(new LLM\EpisodeResolver($manager))->resolve('самый лучший по рейтингу',[['ID'=>413,'TITLE'=>'My Little Pony Friendship is Magic - Season 1 Episode 7 - Dragonshy']],time()+55,false);
+            $rated=(new LLM\EpisodeResolver($manager))->resolve('самый лучший по рейтингу из S91E25',$ratingCatalog,time()+55,false);
             $ratingCalls=array_slice($GLOBALS['playlist_scoped_payloads'],$beforeRating);
-            check($rated['status']==='found'&&$rated['candidates'][0]['rating']['value']===9.5,'actual scoped providers normalize and independently verify captured fenced comparison');
-            check(count($ratingCalls)===3&&!isset($ratingCalls[0]['plugins'])&&isset($ratingCalls[1]['plugins'])&&isset($ratingCalls[2]['plugins']),'actual rating protocol uses fast normalizer and precisely two fresh WEB transports');
-            $firstWeb=$ratingCalls[1]['messages'];$secondWeb=$ratingCalls[2]['messages'];
-            check($firstWeb[count($firstWeb)-1]['content']===$secondWeb[count($secondWeb)-1]['content']&&!str_contains(json_encode($secondWeb),'Episode average rating leaderboard, top boundary9.5'),'second real transport carries original query but no first evidence');
-            $GLOBALS['playlist_scoped_text']='IMDb: средняя оценка 9.5. Dragonshy находится наверху сравнения; выбери вариант кнопкой.';
+            check($rated['status']==='found'&&$rated['candidates'][0]['rating']['value']===9.5&&$rated['candidates'][0]['episode_id']===$ratingId,'actual scoped normalizer and local owner select validated snapshot score');
+            check(count($ratingCalls)===1&&!isset($ratingCalls[0]['plugins']),'fresh local rating uses fast normalizer and zero WEB transports');
+            $GLOBALS['playlist_scoped_text']='IMDb: средняя оценка 9.5. Выбери вариант кнопкой.';
             $ratingReply=$command->replyText(['status'=>'rejected','code'=>'confirmation_required','facts'=>['candidates'=>$rated['candidates'],'rating_intent'=>$ratingIntent,'action'=>'wish']],time()+20,['actor_id'=>$actor,'data'=>['original_query'=>'самый лучший']]);
-            check(str_contains($ratingReply,'средняя оценка 9.5')&&str_starts_with($ratingReply,$manager->actionRecipientPrefix($actor)),'actual live formatter retains rating value and trusted recipient');
+            check(str_contains($ratingReply,'средняя оценка 9.5')&&str_starts_with($ratingReply,$manager->actionRecipientPrefix($actor)),'actual live formatter retains local rating value and trusted recipient');
             $ratingPayload=end($GLOBALS['playlist_scoped_payloads']);
-            check(!isset($ratingPayload['plugins'])&&str_contains(json_encode($ratingPayload),'OWN_ACTION_CANARY')&&!str_contains(json_encode($ratingPayload),'FOREIGN_ACTION_CANARY'),'rating live context uses owner memory but does not rerun WEB or import foreign dossiers');
-            $GLOBALS['playlist_scoped_annotations']=$oldAnnotations;
+            check(!isset($ratingPayload['plugins'])&&str_contains(json_encode($ratingPayload),'OWN_ACTION_CANARY')&&!str_contains(json_encode($ratingPayload),'FOREIGN_ACTION_CANARY'),'rating live context uses owner memory without foreign dossiers or WEB');
             $config->setOption('ai_live_confirm', '0');
             $calls = $GLOBALS['playlist_scoped_calls'];
             check($manager->liveTextBounded('Confirm', null, time() + 12) === null && $GLOBALS['playlist_scoped_calls'] === $calls, 'disabled live makes no HTTP call');

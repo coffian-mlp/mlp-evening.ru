@@ -35,28 +35,19 @@ namespace LLM {
             $ratingMode=$GLOBALS['mlp364_scenario'] ?? '';
             $ratingUrl='https://www.imdb.com/title/tt1751105/episodes/?topRated=DESC';
             if (str_starts_with($ratingMode,'rating-')) {
-                $worst=$ratingMode==='rating-worst';$direction=$worst?'worst':'best';
-                $intent=['version'=>1,'intent'=>'rating','direction'=>$direction,'selection'=>'extreme','metric'=>'mean_score','requested_source'=>$ratingMode==='rating-source'?'Rotten Tomatoes':null,'scope_constraints'=>str_contains($user,'Лир')?['Lyra appears']:[],'search_query'=>$worst?'lowest rated Lyra episodes':'highest rated episodes'];
-                if (in_array($ratingMode,['rating-polar','rating-polar-missing'],true)) {$intent['direction']='polarized';$intent['metric']='polarization';$intent['selection']='qualifying';}
-                if ($stage==='normalize') $text=json_encode($intent);
-                if ($stage==='search') {
-                    $middle=$payload['messages'][count($payload['messages'])-2]['content'];
-                    $scope=json_decode($middle,true);$intent=$scope['intent'];
-                    $row=$GLOBALS['mlp365_rating_rows'][$worst?1:0];
-                    $proof=['platform'=>'imdb','metric'=>'mean_score','direction'=>$direction,'selection'=>'extreme','scale'=>['min'=>1,'max'=>10],'source_asof'=>null,
-                        'universe'=>['series'=>'My Little Pony: Friendship Is Magic','constraints'=>$intent['scope_constraints'],'coverage'=>'source_ranked_boundary'],
-                        'comparison'=>['rows'=>$ratingMode==='rating-empty'?[]:[['title'=>$row['title'],'value'=>$worst?3.2:9.5,'rank'=>1,'source_url'=>$ratingUrl]],'boundary'=>['position'=>$worst?'bottom':'top','rank'=>1,'tied_count'=>1]],
-                        'evidence'=>[['source_url'=>$ratingUrl,'excerpt'=>'Independent episode average leaderboard boundary.']]];
-                    if ($ratingMode==='rating-polar' || $ratingMode==='rating-polar-missing') {
-                        $proof['metric']='polarization';$proof['direction']='polarized';$proof['selection']='qualifying';$proof['universe']['coverage']='distribution_only';
-                        unset($proof['comparison']['boundary'],$proof['comparison']['rows'][0]['value']);
-                        if ($ratingMode==='rating-polar') $proof['distribution']=[['title'=>$row['title'],'total'=>100,'source_url'=>$ratingUrl,'bins'=>[['min'=>1,'max'=>3,'count'=>20],['min'=>4,'max'=>7,'count'=>60],['min'=>8,'max'=>10,'count'=>20]]]];
-                    }
-                    $text="```json\n".json_encode($proof)."\n```\nComparison explanation.";
-                }
-                if ($stage==='live'&&str_contains($user,'Источник оценок:')) {
-                    $text=str_contains($user,'Доступный вариант:')?'IMDb: средняя оценка '.($worst?'3.2':'9.5').'. Выбери проверенный вариант кнопкой — решение за тобой.':'Сравнение оценок по '.($ratingMode==='rating-source'?'Rotten Tomatoes':'IMDb').' пока не подтверждено. Процитируй моё сообщение, чтобы повторить поиск или уточнить источник.';
-                    if ($ratingMode==='rating-polar'&&str_contains($user,'Доступный вариант:')) $text='IMDb: у этого варианта массовые высокие и низкие оценки. Выбери его кнопкой, если хочешь посмотреть спорный эпизод.';
+                $worst = $ratingMode === 'rating-worst'; $direction = $worst ? 'worst' : 'best';
+                $intent = ['version'=>2, 'intent'=>'rating', 'direction'=>$direction, 'selection'=>'extreme', 'metric'=>'mean_score',
+                    'requested_source'=>$ratingMode==='rating-source' ? 'Rotten Tomatoes' : null,
+                    'scope_constraints'=>str_contains($user,'Лир') ? ['Lyra appears'] : [], 'search_query'=>$worst ? 'lowest rated Lyra episodes' : 'highest rated episodes'];
+                if ($ratingMode === 'rating-polar-missing') { $intent['direction']='polarized'; $intent['metric']='standard_deviation'; $intent['selection']='qualifying'; }
+                if ($ratingMode === 'rating-polar') { $intent['direction']='polarized'; $intent['metric']='polarization'; $intent['selection']='qualifying'; }
+                if ($stage === 'normalize') $text = json_encode($intent);
+                // WEB verifies plot membership only. IMDb score/order always comes from the real local importer/SQL.
+                if ($stage === 'search') $text = json_encode(['candidates'=>array_map(static fn($r)=>[
+                    'episode_id'=>$r['id'], 'evidence'=>'Lyra appears in this fixture scene', 'source_url'=>$ratingUrl], $GLOBALS['mlp365_rating_rows'])]);
+                if ($stage === 'verify') $text = json_encode(['verified'=>array_column($GLOBALS['mlp365_rating_rows'],'id')]);
+                if ($stage === 'live' && str_contains($user,'Источник оценок:')) {
+                    $text = ''; // Deterministic provider decline exercises the existing factual fallback.
                 }
             }
             $message = ['content' => $text];
