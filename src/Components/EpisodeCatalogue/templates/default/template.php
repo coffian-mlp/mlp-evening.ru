@@ -3,6 +3,19 @@ $esc = static fn($v) => htmlspecialchars((string)$v, ENT_QUOTES | ENT_SUBSTITUTE
 $value = static fn($v) => $v === null ? '—' : (string)$v;
 $data = $arResult['catalogue'];
 $admin = $arResult['admin'];
+$quota = $data['viewer']['quota'] ?? null;
+$quotaValid = is_array($quota) && ($quota['limit'] ?? null) === 3 && is_int($quota['used'] ?? null) && $quota['used'] >= 0 && ($quota['remaining'] ?? null) === max(0, 3 - $quota['used']) && ($quota['timezone'] ?? '') === 'Europe/Kaliningrad'
+    && is_string($quota['day'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/D', $quota['day'])
+    && is_string($quota['observed_at'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/D', $quota['observed_at'])
+    && is_string($quota['resets_at'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/D', $quota['resets_at']);
+if ($quotaValid) {
+    $observed = \DateTimeImmutable::createFromFormat('!Y-m-d\TH:i:s\Z', $quota['observed_at'] ?? '', new \DateTimeZone('UTC'));
+    $reset = \DateTimeImmutable::createFromFormat('!Y-m-d\TH:i:s\Z', $quota['resets_at'] ?? '', new \DateTimeZone('UTC'));
+    $local = $observed ? $observed->setTimezone(new \DateTimeZone('Europe/Kaliningrad')) : null;
+    $quotaValid = $observed && $reset && $observed->format('Y-m-d\TH:i:s\Z') === $quota['observed_at'] && $reset->format('Y-m-d\TH:i:s\Z') === $quota['resets_at'] && $local->format('Y-m-d') === ($quota['day'] ?? '') && $local->modify('tomorrow')->setTime(0, 0)->getTimestamp() === $reset->getTimestamp() && $reset->getTimestamp() > time();
+}
+$exhausted = $quotaValid && $quota['remaining'] === 0;
+
 $states = ['stale' => 'устарело', 'low_votes' => 'мало оценок', 'unknown' => 'данные отсутствуют'];
 ?>
 <section class="episode-catalogue" aria-label="Каталог эпизодов">
@@ -25,6 +38,7 @@ $states = ['stale' => 'устарело', 'low_votes' => 'мало оценок'
     <p class="episode-catalogue-note">До <?= (int)$data['limits']['daily'] ?> разных пожеланий в день; повторное желание той же серии — через 7 дней. Отмена не возвращает лимит.</p>
     <details class="episode-catalogue-about"><summary>О пожеланиях и оценках</summary><p class="episode-catalogue-note">Желания: действующие пожелания участников и прежние голоса. IMDb — опубликованная оценка; σ — стандартное отклонение голосов, не оценка качества.</p>
     <p class="episode-catalogue-observation">Данные IMDb собраны (UTC): <?= $esc($data['ratings']['observation_min'] ?? 'дата неизвестна') ?><?= !empty($data['ratings']['observation_max']) && $data['ratings']['observation_max'] !== $data['ratings']['observation_min'] ? ' — ' . $esc($data['ratings']['observation_max']) : '' ?>. Устаревшие значения не являются актуальным рейтингом.</p></details>
+    <p data-catalogue-quota role="status"><?= $data['viewer']['authenticated'] ? ($exhausted ? 'Дневной лимит исчерпан; отмена доступна.' : ($quotaValid ? 'Осталось сегодня: ' . (int)$quota['remaining'] . ' из 3.' : 'Остаток дневного лимита неизвестен; действие проверит сервер.')) : '' ?></p>
     <p data-catalogue-count>Показано <?= count($data['rows']) ?> эпизодов</p>
     <p class="episode-catalogue-feedback" role="status" aria-live="polite" data-catalogue-feedback tabindex="-1"></p>
     <div class="episode-catalogue-scroll" tabindex="0" aria-label="Таблица эпизодов, доступна горизонтальная прокрутка">
@@ -45,7 +59,7 @@ $states = ['stale' => 'устарело', 'low_votes' => 'мало оценок'
             </div></details></td>
             <td><?= (int)$row['views'] ?></td><td><?= (int)$row['wishes'] ?></td>
             <td><?= $esc($value($rating['score'])) ?><?php if (isset($states[$rating['status']])): ?><small><?= $states[$rating['status']] ?></small><?php endif; ?></td><td><?= $esc($rating['sd'] === null ? '—' : round($rating['sd'], 3)) ?></td>
-            <td><?php if (!$data['viewer']['authenticated']): ?><a href="/login.php?redirect=%2Fepisodes.php" data-catalogue-login>Войти, чтобы пожелать</a><?php else: ?><button type="button" data-catalogue-action="<?= (int)$row['id'] ?>"><?= $row['own_active'] ? 'Отменить желание' : 'Хочу посмотреть' ?></button><?php endif; ?></td>
+            <td><?php if (!$data['viewer']['authenticated']): ?><a href="/login.php?redirect=%2Fepisodes.php" data-catalogue-login>Войти, чтобы пожелать</a><?php else: ?><button type="button" data-catalogue-action="<?= (int)$row['id'] ?>"<?= $exhausted && !$row['own_active'] ? ' disabled title="Дневной лимит исчерпан. Отмена своего желания доступна." data-quota-disabled="true"' : '' ?>><?= $row['own_active'] ? 'Отменить желание' : ($exhausted ? 'Лимит на сегодня' : 'Хочу посмотреть') ?></button><?php endif; ?></td>
             <?php if ($admin): ?><td><?= (int)$row['id'] ?></td><td><?= $esc($value($row['admin']['two_part_id'])) ?></td><td><?= (int)$row['admin']['length'] ?></td><?php endif; ?>
         </tr>
     <?php endforeach; ?>

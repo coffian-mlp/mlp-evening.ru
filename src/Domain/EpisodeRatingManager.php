@@ -112,7 +112,8 @@ class EpisodeRatingManager
     {
         $now??=time();
         return $this->consistentRead(function()use($actorId,$includeAdmin,$now){
-            $catalog=(new EpisodeManager())->getCatalogueRows($actorId);
+            $episodes=new EpisodeManager();
+            $catalog=$episodes->getCatalogueRows($actorId);
             $header=$this->catalogueHeader($catalog);
             $observations=$this->catalogueObservations();
             $observations=array_column($observations,null,'ID');
@@ -127,7 +128,7 @@ class EpisodeRatingManager
                 $rows[]=$row;
             }
             usort($rows,static fn($a,$b)=>[$a['season']===null,$a['season'],$a['episode'],$a['id']]<=>[$b['season']===null,$b['season'],$b['episode'],$b['id']]);
-            return ['rows'=>$rows,'ratings'=>$this->catalogueSummary($rows),'viewer'=>['authenticated'=>$actorId!==null&&$actorId>0],
+            return ['rows'=>$rows,'ratings'=>$this->catalogueSummary($rows),'viewer'=>['authenticated'=>$actorId!==null&&$actorId>0,'quota'=>$actorId!==null&&$actorId>0?$episodes->getWishQuota($actorId,$now):null],
                 'limits'=>['daily'=>3,'cooldown_seconds'=>604800]];
         });
     }

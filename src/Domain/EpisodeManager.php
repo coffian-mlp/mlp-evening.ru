@@ -185,11 +185,7 @@ class EpisodeManager {
                 $out['facts']['next_allowed_at'] = gmdate('Y-m-d H:i:s', strtotime($last[0]['created_at'].' UTC') + self::COOLDOWN_SECONDS);
                 return $this->event($userId, $episodeId, $operationKey, 'wish', $out, $now);
             }
-            $local = (new \DateTimeImmutable('@'.$now))->setTimezone(new \DateTimeZone('Europe/Kaliningrad'));
-            $start = $local->setTime(0, 0);
-            $end = $start->modify('+1 day');
-            $accepted = $this->rows('SELECT episode_id FROM episode_wish_events WHERE user_id=? AND kind="wish" AND status="accepted" AND created_at>=? AND created_at<? FOR UPDATE', [$userId, $start->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'), $end->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s')]);
-            $n = count(array_unique(array_column($accepted, 'episode_id')));
+            $n = $this->acceptedWishCount($userId, $this->wishDayBounds($now), true);
             if ($n >= self::DAILY_LIMIT) {
                 $out['code'] = 'daily_limit';
                 $out['facts']['quota_remaining'] = 0;
@@ -212,6 +208,31 @@ class EpisodeManager {
             $ok = $updated->affected_rows > 0;
             return $this->event($userId, $episodeId, $operationKey, 'cancel', ['status' => $ok?'cancelled':'rejected', 'code' => $ok?'cancelled':'not_active', 'facts' => ['episode_id' => $episodeId]], $now);
         });
+    }
+
+    /** Snapshot read only: accepted history remains used after cancellation or fulfillment. */
+    public function getWishQuota(int $userId, ?int $now = null): array {
+        if ($userId <= 0) throw new \Core\UserError('Участник не найден.');
+        $now ??= time();
+        $bounds = $this->wishDayBounds($now);
+        $used = $this->acceptedWishCount($userId, $bounds);
+        return ['limit' => self::DAILY_LIMIT, 'used' => $used, 'remaining' => max(0, self::DAILY_LIMIT - $used),
+            'day' => $bounds['day'], 'timezone' => 'Europe/Kaliningrad', 'observed_at' => gmdate('Y-m-d\TH:i:s\Z', $now),
+            'resets_at' => gmdate('Y-m-d\TH:i:s\Z', strtotime($bounds['end'] . ' UTC'))];
+    }
+
+    private function wishDayBounds(int $now): array {
+        $local = (new \DateTimeImmutable('@' . $now))->setTimezone(new \DateTimeZone('Europe/Kaliningrad'));
+        $start = $local->setTime(0, 0);
+        $end = $start->modify('+1 day');
+        $utc = new \DateTimeZone('UTC');
+        return ['day' => $local->format('Y-m-d'), 'start' => $start->setTimezone($utc)->format('Y-m-d H:i:s'),
+            'end' => $end->setTimezone($utc)->format('Y-m-d H:i:s')];
+    }
+
+    private function acceptedWishCount(int $userId, array $bounds, bool $current = false): int {
+        $accepted = $this->rows('SELECT episode_id FROM episode_wish_events WHERE user_id=? AND kind="wish" AND status="accepted" AND created_at>=? AND created_at<?' . ($current ? ' FOR UPDATE' : ''), [$userId, $bounds['start'], $bounds['end']]);
+        return count(array_unique(array_column($accepted, 'episode_id')));
     }
 
     public function getUserWishes(int $userId): array {

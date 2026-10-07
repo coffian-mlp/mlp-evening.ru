@@ -8,6 +8,8 @@ if(($argv[1]??'')==='writer'){
  if(!is_file($marker))exit(2);
  $id=(int)$argv[3];$db->begin_transaction();
  $db->query('UPDATE episode_list SET IMDB_RATING=9.7,legacy_wanna_watch=8 WHERE ID='.$id);
+ $actor=(int)$argv[4];$target=(int)$argv[5];$stamp=gmdate('Y-m-d H:i:s',(int)$argv[6]);$key='projection:'.$actor;
+ $q=$db->prepare('INSERT INTO episode_wish_events(operation_key,user_id,episode_id,kind,status,created_at,outcome_json) VALUES(?,?,?,"wish","accepted",?,"{}")');$q->bind_param('siis',$key,$actor,$target,$stamp);$q->execute();
  $db->commit();file_put_contents($marker.'_done','committed');exit;
 }
 if(($argv[1]??'')==='nested'){
@@ -69,6 +71,8 @@ try{
  $out=$m->wish($users[0],$ids[0],'it367:legacy:'.$users[0],$now);$m->wish($users[1],$ids[0],'it367:other:'.$users[1],$now);
  $projection=$ratings->getCatalogueProjection($users[0],false,$now);
  $rows=array_column($projection['rows'],null,'id');$a=$rows[$ids[0]];
+ check($projection['viewer']['quota']['used']===1&&$projection['viewer']['quota']['remaining']===2,'same actor quota in shared projection');
+ check($ratings->getCatalogueProjection()['viewer']['quota']===null,'guest quota null');
  check($a['wishes']===4&&$a['views']===10&&$a['own_active'],'aggregate includes legacy + both active; own state');
  check($a['rating']['score']===8.2&&$a['rating']['sd']===0.0,'weighted score distinct from raw histogram mean; zero SD');
  check(count($a['rating']['histogram'])===10&&$a['related']['id']===$ids[1],'histogram and canonical partner');
@@ -80,6 +84,7 @@ try{
  $m->cancelWish($users[0],$ids[0],'it367:cancel:'.$users[0],$now);
  check($m->wish($users[0],$ids[0],'it367:legacy:'.$users[0],$now)==$out,'correct legacy replay immutable');
  $fresh=array_column($ratings->getCatalogueProjection($users[0],false,$now)['rows'],null,'id')[$ids[0]];
+ check($m->getWishQuota($users[0],$now)['used']===1,'cancel never refunds read quota');
  check(!$fresh['own_active']&&$fresh['wishes']===3,'fresh row after accepted replay retains cancellation');
  catalogueThrows(fn()=>$m->wish($users[1],$ids[0],'it367:legacy:'.$users[0]),'foreign key blocked');
  catalogueThrows(fn()=>$m->wish($users[0],$ids[1],'it367:legacy:'.$users[0]),'target key blocked');
@@ -124,7 +129,7 @@ try{
  $reply=json_decode(catalogueFinish(catalogueChild(['controller',(string)$users[1],'wish',(string)$ids[1],$uuid])),true);
  check($reply['success']&&$reply['data']['row']['own_active']&&!isset($reply['data']['row']['admin']),'controller trusted actor no submitted admin/actor');
  $cancel=json_decode(catalogueFinish(catalogueChild(['controller',(string)$users[1],'cancelWish',(string)$ids[1],$uuid])),true);
- check(!$cancel['data']['row']['own_active'],'controller cancellation current state');
+ check(!$cancel['data']['row']['own_active']&&$cancel['data']['quota']['used']===2,'controller cancellation current state and unrefunded quota');
  $replay=json_decode(catalogueFinish(catalogueChild(['controller',(string)$users[1],'wish',(string)$ids[1],$uuid])),true);
  check($replay['data']['outcome']['code']==='accepted'&&!$replay['data']['row']['own_active'],'controller saved acceptance plus current inactive row');
  $missing=json_decode(catalogueFinish(catalogueChild(['controller',(string)$users[1],'wish','2147483646',$uuid])),true);
@@ -135,11 +140,15 @@ try{
  $db->query('SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED');
  $GLOBALS['catalogue_marker']=sys_get_temp_dir().'/mlp367_'.bin2hex(random_bytes(6));
  try{
-  $child=catalogueChild(['writer',$GLOBALS['catalogue_marker'],(string)$ids[1]]);
-  $before=array_column((new PausedCatalogueRatingManager())->getCatalogueProjection(null,false,$now)['rows'],null,'id')[$ids[1]];
+  $child=catalogueChild(['writer',$GLOBALS['catalogue_marker'],(string)$ids[1],(string)$users[1],(string)$ids[2],(string)$now]);
+  $beforeProjection=(new PausedCatalogueRatingManager())->getCatalogueProjection($users[1],false,$now);
+  $before=array_column($beforeProjection['rows'],null,'id')[$ids[1]];
   catalogueFinish($child);
-  $after=array_column($ratings->getCatalogueProjection(null,false,$now)['rows'],null,'id')[$ids[1]];
+  $afterProjection=$ratings->getCatalogueProjection($users[1],false,$now);
+  $after=array_column($afterProjection['rows'],null,'id')[$ids[1]];
   check($before['wishes']===2&&$before['rating']['score']===8.2,'owned RR catalogue counts + observation coherent during concurrent commit');
+  check($beforeProjection['viewer']['quota']['used']===2&&$afterProjection['viewer']['quota']['used']===3,'quota shares RR catalogue read point during concurrent acceptance');
+  $q=$db->prepare('DELETE FROM episode_wish_events WHERE operation_key=?');$projectionKey='projection:'.$users[1];$q->bind_param('s',$projectionKey);$q->execute();
   check($after['wishes']===8&&$after['rating']['score']===9.7,'new read observes committed values');
   check($db->query('SELECT @@transaction_isolation v')->fetch_assoc()['v']==='READ-COMMITTED','read leaves session isolation unchanged');
  }finally{$db->query('SET SESSION TRANSACTION ISOLATION LEVEL '.str_replace('-',' ',$isolation));@unlink($GLOBALS['catalogue_marker']);@unlink($GLOBALS['catalogue_marker'].'_done');}
@@ -153,6 +162,13 @@ try{
   file_put_contents($marker.'_done','continue');$nested=json_decode(catalogueFinish($child),true);
   check($nested['code']==='daily_limit','nested stale read view cannot bypass current daily quota');
  }finally{@unlink($marker);@unlink($marker.'_done');}
+ $historical=json_decode(catalogueFinish(catalogueChild(['controller',(string)$users[1],'wish',(string)$ids[1],$uuid])),true);
+ check($historical['data']['outcome']['facts']['quota_remaining']===1&&$historical['data']['quota']['remaining']===0,'response current exhausted quota never immutable old remaining');
+ check(!$historical['data']['row']['own_active'],'historical accepted replay retains currently cancelled row');
+ $exhausted=json_decode(catalogueFinish(catalogueChild(['controller',(string)$users[1],'wish',(string)$fourth,$uuid])),true);
+ check($exhausted['data']['outcome']['code']==='daily_limit'&&$exhausted['data']['quota']['remaining']===0,'rejected domain result still includes fresh exhausted quota');
+ $tomorrow=$now+86400;$nextProjection=$ratings->getCatalogueProjection($users[1],false,$tomorrow);
+ check($nextProjection['viewer']['quota']['remaining']===3,'new day projection current quota independent of old event facts');
  foreach(['replay','cooldown'] as $phase){
   $marker=sys_get_temp_dir().'/mlp367_event_'.bin2hex(random_bytes(6));
   $at=$phase==='cooldown'?$now+604801:$now;$target=$phase==='cooldown'?$ids[1]:$fourth;
@@ -184,6 +200,31 @@ try{
  $ghost=2147483646;
  catalogueThrows(fn()=>$m->wish($ghost,$ids[2],'it367:ghost'),'missing actor rejected before lock','');
  check((int)$db->query('SELECT COUNT(*) n FROM episode_wish_locks WHERE user_id='.$ghost)->fetch_assoc()['n']===0,'missing actor creates no lock');
+ $quotaActor=(new Domain\UserManager())->createUser('it367_'.bin2hex(random_bytes(6)),'Test368!Password','user');$users[]=$quotaActor;
+ $at=strtotime('2026-10-10T08:00:00Z');$start=strtotime('2026-10-09T22:00:00Z');$end=strtotime('2026-10-10T22:00:00Z');
+ $records=[[$ids[0],'wish','accepted',$start-1],[$ids[0],'wish','accepted',$start],[$ids[0],'wish','accepted',$at],[$ids[1],'wish','accepted',$at],[$ids[2],'wish','accepted',$at],[$fourth,'wish','accepted',$at],[$fourth,'wish','rejected',$at],[$fourth,'cancel','cancelled',$at],[$fourth,'legacy','accepted',$at],[$ids[2],'wish','accepted',$end]];
+ foreach($records as $i=>[$target,$kind,$status,$stamp]){
+  $token='quota:'.$quotaActor.':'.$i;$date=gmdate('Y-m-d H:i:s',$stamp);
+  $q=$db->prepare('INSERT INTO episode_wish_events(operation_key,user_id,episode_id,kind,status,created_at,outcome_json) VALUES(?,?,?,?,?,?,"{}")');$q->bind_param('siisss',$token,$quotaActor,$target,$kind,$status,$date);$q->execute();
+ }
+ foreach([[$ids[1],'cancelled'],[$ids[2],'fulfilled']] as [$target,$state]){
+  $date=gmdate('Y-m-d H:i:s',$at);$q=$db->prepare('INSERT INTO episode_wishes(user_id,episode_id,status,accepted_at,updated_at) VALUES(?,?,?,?,?)');$q->bind_param('iisss',$quotaActor,$target,$state,$date,$date);$q->execute();
+ }
+ check($m->getUserWishes($quotaActor)===[]&&$m->getWishQuota($quotaActor,$at)['used']===4,'cancelled and fulfilled accepted wishes remain daily history');
+ $beforeWrites=$db->query('SELECT COUNT(*) n FROM episode_wish_events WHERE user_id='.$quotaActor)->fetch_assoc()['n'];
+ $quota=$m->getWishQuota($quotaActor,$at);
+ check($quota===['limit'=>3,'used'=>4,'remaining'=>0,'day'=>'2026-10-10','timezone'=>'Europe/Kaliningrad','observed_at'=>'2026-10-10T08:00:00Z','resets_at'=>'2026-10-10T22:00:00Z'],'distinct accepted history uncapped used4, ignored rejected/cancel/legacy, exact UTC DTO');
+ check($m->getWishQuota($quotaActor,$start-1)['used']===1&&$m->getWishQuota($quotaActor,$start)['used']===4,'midnight inclusive start and exclusive prior day');
+ check($m->getWishQuota($quotaActor,$end)['used']===1,'end boundary moves accepted event to next day');
+ check($db->query('SELECT COUNT(*) n FROM episode_wish_events WHERE user_id='.$quotaActor)->fetch_assoc()['n']===$beforeWrites&&(int)$db->query('SELECT COUNT(*) n FROM episode_wish_locks WHERE user_id='.$quotaActor)->fetch_assoc()['n']===0,'quota read writes no event or lock');
+ catalogueThrows(fn()=>$m->getWishQuota(0,$at),'invalid quota actor rejected','');
+ $db->query('DELETE FROM episode_wish_events WHERE user_id='.$quotaActor);
+ $replayUUID='abcdef12-abcd-0123-4567-123456789abc';$savedKey=Api\EpisodeCatalogueController::operationKey($quotaActor,'wish',$fourth,$replayUUID);
+ $yesterday=$m->wish($quotaActor,$fourth,$savedKey,$now-86400);
+ $m->cancelWish($quotaActor,$fourth,'quota-yesterday-cancel:'.$quotaActor,$now);
+ $nextDay=json_decode(catalogueFinish(catalogueChild(['controller',(string)$quotaActor,'wish',(string)$fourth,$replayUUID])),true);
+ check($yesterday['facts']['quota_remaining']===2&&$nextDay['data']['outcome']['facts']['quota_remaining']===2&&$nextDay['data']['quota']['remaining']===3&&!$nextDay['data']['row']['own_active'],'actual accepted old-day replay returns current next-day quota and inactive row');
+
  $db->begin_transaction();try{catalogueThrows(fn()=>$ratings->getCatalogueProjection(), 'nested read refuses','rating_selection_nested_transaction');}finally{$db->rollback();}
 }finally{
  foreach($users as $u){$db->query('DELETE FROM episode_wish_events WHERE user_id='.$u);$db->query('DELETE FROM episode_wishes WHERE user_id='.$u);$db->query('DELETE FROM episode_wish_locks WHERE user_id='.$u);$db->query('DELETE FROM users WHERE id='.$u);}

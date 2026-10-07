@@ -67,6 +67,15 @@ if ($mode==='setup') {
     (new \Domain\MenuManager())->flushCache();catalogueSave($path,$fixture);echo "Fixture ready\n";
 } elseif ($mode==='user') {
     $fixture=json_decode(file_get_contents($path),true,512,JSON_THROW_ON_ERROR);catalogueUser($argv[2]??'',$argv[3]??'user',$fixture);catalogueSave($path,$fixture);echo "Actor ready\n";
+} elseif ($mode==='render-ssr') {
+    $fixture=json_decode(file_get_contents($path),true,512,JSON_THROW_ON_ERROR);$actor=(int)$fixture['cases'][$argv[2]]['userId'];
+    $projection=(new \Domain\EpisodeRatingManager())->getCatalogueProjection($actor);
+    $variant=$argv[3]??'';
+    $patches=['array'=>['observed_at'=>[]],'null-byte'=>['resets_at'=>"bad\0"],'bad-day'=>['day'=>'2026-02-30'],'bad-count'=>['used'=>3,'remaining'=>3]];
+    if($variant==='missing')unset($projection['viewer']['quota']);
+    elseif(isset($patches[$variant]))$projection['viewer']['quota']=array_replace($projection['viewer']['quota'],$patches[$variant]);
+    else throw new \RuntimeException('Invalid SSR boundary variant');
+    $arResult=['catalogue'=>$projection,'admin'=>false];require dirname(__DIR__,2).'/src/Components/EpisodeCatalogue/templates/default/template.php';
 } elseif ($mode==='state') {
     $fixture=json_decode(file_get_contents($path),true,512,JSON_THROW_ON_ERROR);$case=$fixture['cases'][$argv[2]??'']??null;
     $result=catalogueState($db);

@@ -66,10 +66,10 @@ test('MLP-367 details preserve weighted score, histogram, related part and safe 
 });
 test('MLP-367 authenticated wish/cancel refresh preserves filters and other wishes',async ({page,browserName})=>{
   const f=await actor(page,browserName+'_wish');const ids=fixture().ids;await page.locator('[data-catalogue-season]').selectOption('97');await page.locator('[data-catalogue-search]').fill('Alpha');
-  await expect(row(page,ids.alpha).locator('td').nth(3)).toHaveText('3');await clickAction(page,ids.alpha,'Хочу посмотреть');
+  const before=Number(await row(page,ids.alpha).locator('td').nth(3).textContent());expect(before).toBeGreaterThanOrEqual(3);await clickAction(page,ids.alpha,'Хочу посмотреть');
   await expect(row(page,ids.alpha).getByRole('button',{name:'Отменить желание'})).toBeVisible();await expect(page.locator('[data-catalogue-search]')).toHaveValue('Alpha');
-  await expect(row(page,ids.alpha).locator('td').nth(3)).toHaveText('4');expect(state(f.key).accepted).toBe(1);
-  await page.reload();await clickAction(page,ids.alpha,'Отменить желание');await expect(row(page,ids.alpha).locator('td').nth(3)).toHaveText('3');expect(state(f.key).active).toHaveLength(0);
+  await expect(row(page,ids.alpha).locator('td').nth(3)).toHaveText(String(before+1));expect(state(f.key).accepted).toBe(1);
+  await page.reload();await clickAction(page,ids.alpha,'Отменить желание');await expect(row(page,ids.alpha).locator('td').nth(3)).toHaveText(String(before));expect(state(f.key).active).toHaveLength(0);
   await expect(row(page,ids.alpha).getByRole('button')).toBeFocused();expect(state('other').active.some(r=>Number(r.episode_id)===ids.alpha)).toBe(true);
 });
 test.describe('transport loss with observable browser routing',()=>{
@@ -86,9 +86,10 @@ test.describe('transport loss with observable browser routing',()=>{
 });
 test('MLP-367 shared domain quota and cooldown survive cancellation',async ({page,browserName})=>{
   const f=await actor(page,browserName+'_quota');cli('seed-wishes',f.key,'alpha,beta');await page.reload();const ids=fixture().ids;
-  await clickAction(page,ids.gamma,'Хочу посмотреть');expect(state(f.key).accepted).toBe(3);await clickAction(page,ids.delta,'Хочу посмотреть');await expect(page.locator('[data-catalogue-feedback]')).toContainText('Дневной лимит исчерпан');
-  await clickAction(page,ids.alpha,'Отменить желание');await clickAction(page,ids.delta,'Хочу посмотреть');await expect(page.locator('[data-catalogue-feedback]')).toContainText('Дневной лимит исчерпан');
-  await clickAction(page,ids.alpha,'Хочу посмотреть');await expect(page.locator('[data-catalogue-feedback]')).toContainText('(UTC)');expect(state(f.key).accepted).toBe(3);expect(state(f.key).active).toHaveLength(2);
+  await clickAction(page,ids.gamma,'Хочу посмотреть');expect(state(f.key).accepted).toBe(3);await expect(row(page,ids.delta).getByRole('button',{name:'Лимит на сегодня'})).toBeDisabled();
+  const rejected=await post(page,{action:'catalogue_wish',episode_id:ids.delta,operation_token:randomUUID()});expect(rejected.data.outcome.code).toBe('daily_limit');expect(rejected.data.quota.remaining).toBe(0);
+  await clickAction(page,ids.alpha,'Отменить желание');await expect(row(page,ids.delta).getByRole('button')).toBeDisabled();
+  const cooldown=await post(page,{action:'catalogue_wish',episode_id:ids.alpha,operation_token:randomUUID()});expect(cooldown.data.outcome.code).toBe('cooldown');expect(state(f.key).accepted).toBe(3);expect(state(f.key).active).toHaveLength(2);
 });
 test('MLP-367 HTTP CSRF, server actor, current grants and missing target fail honestly',async ({page,browserName})=>{
   const f=await actor(page,browserName+'_guards');const id=fixture().ids.low;const token=randomUUID();const before=state(f.key);

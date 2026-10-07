@@ -31,7 +31,7 @@ final class EpisodeCatalogueController
             $out=$kind==='wish'?$manager->wish($actor,(int)$id,$key):$manager->cancelWish($actor,(int)$id,$key);
             $projection=(new EpisodeRatingManager())->getCatalogueProjection($actor);
             $rows=array_column($projection['rows'],null,'id');
-            Response::ok(self::outcomeMessage($out),['outcome'=>$out,'row'=>$rows[(int)$id]??null]);
+            Response::ok(self::outcomeMessage($out),['outcome'=>$out,'row'=>$rows[(int)$id]??null,'quota'=>$projection['viewer']['quota']]);
         } catch (\Throwable $error) { Response::caught($error); }
     }
 
