@@ -27,6 +27,8 @@ $routes = require __DIR__ . '/../src/Api/routes.php';
 
 // Сверочная таблица «action → роль» (гейт ДО переноса = роль ПОСЛЕ).
 $expected = [
+    'catalogue_wish' => 'user',
+    'catalogue_cancel_wish' => 'user',
     // MLP-229/238/242/245 (были в роутере до MLP-255)
     'get_public_events'   => 'public',
     'save_event'          => 'admin',

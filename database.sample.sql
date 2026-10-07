@@ -183,6 +183,11 @@ SELECT * FROM (
 ) seed
 WHERE NOT EXISTS (SELECT 1 FROM `menu_items`);
 
+-- MLP-367: add navigation without overwriting a custom same-URL item.
+INSERT INTO `menu_items` (`title`,`url`,`sort_order`,`visibility`,`show_in_header`,`show_in_burger`)
+SELECT 'Эпизоды','/episodes.php',25,'all',1,1
+WHERE NOT EXISTS (SELECT 1 FROM `menu_items` WHERE `url`='/episodes.php');
+
 CREATE TABLE IF NOT EXISTS `chat_stickers` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `pack_id` int(11) DEFAULT NULL,

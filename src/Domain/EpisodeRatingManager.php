@@ -107,6 +107,116 @@ class EpisodeRatingManager
         return ['status'=>$status,'batch_hash'=>$slice['batch_hash'],'catalog_fingerprint'=>$slice['catalog_fingerprint'],'coverage'=>$slice['coverage'],'changed'=>$changed];
     }
 
+    /** Public allowlisted observations, independent of ranking eligibility. */
+    public function getCatalogueProjection(?int $actorId=null, bool $includeAdmin=false, ?int $now=null): array
+    {
+        $now??=time();
+        return $this->consistentRead(function()use($actorId,$includeAdmin,$now){
+            $catalog=(new EpisodeManager())->getCatalogueRows($actorId);
+            $header=$this->catalogueHeader($catalog);
+            $observations=$this->catalogueObservations();
+            $observations=array_column($observations,null,'ID');
+            $map=array_column($catalog,null,'ID');$rows=[];
+            foreach($catalog as $episode){
+                $id=(int)$episode['ID'];$meta=EpisodeCatalog::metadata($episode['TITLE']);
+                $row=['id'=>$id,'code'=>$meta?sprintf('S%02dE%02d',$meta['season'],$meta['episode']):null,
+                    'title'=>$meta['name']??$episode['TITLE'],'season'=>$meta['season']??null,'episode'=>$meta['episode']??null,
+                    'views'=>(int)$episode['TIMES_WATCHED'],'wishes'=>(int)$episode['WANNA_WATCH'],'own_active'=>(bool)$episode['own_active'],
+                    'related'=>$this->cataloguePartner($episode,$map),'rating'=>$this->catalogueRating($observations[$id],$header,$now)];
+                if($includeAdmin)$row['admin']=['two_part_id'=>$episode['TWOPART_ID']===null?null:(int)$episode['TWOPART_ID'],'length'=>(int)$episode['LENGTH']];
+                $rows[]=$row;
+            }
+            usort($rows,static fn($a,$b)=>[$a['season']===null,$a['season'],$a['episode'],$a['id']]<=>[$b['season']===null,$b['season'],$b['episode'],$b['id']]);
+            return ['rows'=>$rows,'ratings'=>$this->catalogueSummary($rows),'viewer'=>['authenticated'=>$actorId!==null&&$actorId>0],
+                'limits'=>['daily'=>3,'cooldown_seconds'=>604800]];
+        });
+    }
+
+    protected function catalogueObservations(): array
+    {
+        return $this->sql('SELECT ID,IMDB_ID,IMDB_RATING,IMDB_VOTES,IMDB_HISTOGRAM,IMDB_SD,IMDB_RETRIEVED_AT,IMDB_SOURCE_ASOF,IMDB_PROVENANCE FROM episode_list ORDER BY ID')->get_result()->fetch_all(MYSQLI_ASSOC);
+    }
+
+    private function catalogueHeader(array $catalog): ?array
+    {
+        try{$header=$this->header();}catch(UserError $error){return null;}
+        if(($header['source']??null)!=='imdb'||($header['catalog_fingerprint']??null)!==EpisodeRatingSnapshot::catalogFingerprint($catalog))return null;
+        if(!is_string($header['batch_hash']??null)||!preg_match('/^[a-f0-9]{64}$/D',$header['batch_hash']))return null;
+        return $header;
+    }
+
+    private function cataloguePartner(array $row,array $map): ?array
+    {
+        $id=(int)($row['TWOPART_ID']??0);$other=$map[$id]??null;
+        if(!$other||$id===(int)$row['ID']||(int)$other['TWOPART_ID']!==(int)$row['ID'])return null;
+        $a=EpisodeCatalog::metadata($row['TITLE']);$b=EpisodeCatalog::metadata($other['TITLE']);
+        if(!$a||!$b||$a['season']!==$b['season']||$a['episode']===$b['episode']||(int)$row['LENGTH']<=0||(int)$other['LENGTH']<=0)return null;
+        return ['id'=>$id,'code'=>sprintf('S%02dE%02d',$b['season'],$b['episode']),'title'=>$b['name']];
+    }
+
+    private function unknownCatalogueRating(): array
+    {
+        return ['score'=>null,'sd'=>null,'votes'=>null,'observed_at'=>null,'status'=>'unknown','histogram'=>null,'imdb_url'=>null];
+    }
+
+    private function catalogueRating(array $row,?array $header,int $now): array
+    {
+        $unknown=$this->unknownCatalogueRating();
+        $p=json_decode($row['IMDB_PROVENANCE']??'',true);
+        $p=is_array($p)?$p:null;
+        if(!$header||!$this->validCatalogueIdentity($row,$p,$header))return $unknown;
+        $score=$row['IMDB_RATING'];$votes=$row['IMDB_VOTES'];
+        if(!$this->validCatalogueNumbers($score,$votes))return $unknown;
+        $time=$this->catalogueDate($row['IMDB_RETRIEVED_AT'],$now);
+        if($time===null)return $unknown;
+        $asof=$row['IMDB_SOURCE_ASOF']===null?null:$this->catalogueDate($row['IMDB_SOURCE_ASOF'],$now);
+        if($row['IMDB_SOURCE_ASOF']!==null&&$asof===null)return $unknown;
+        [$hist,$sd]=$this->catalogueDistribution($row,(int)$votes);
+        $stale=$time<$now-EpisodeRatingSnapshot::FRESH_SECONDS||($asof!==null&&$asof<$now-EpisodeRatingSnapshot::FRESH_SECONDS);
+        return ['score'=>(float)$score,'sd'=>$sd,'votes'=>(int)$votes,'observed_at'=>$row['IMDB_RETRIEVED_AT'],
+            'status'=>$stale?'stale':((int)$votes<EpisodeRatingSnapshot::MIN_VOTES?'low_votes':'available'),
+            'histogram'=>$hist,'imdb_url'=>'https://www.imdb.com/title/'.$row['IMDB_ID'].'/ratings/'];
+    }
+
+    private function validCatalogueNumbers(mixed $score,mixed $votes): bool
+    {
+        if(!is_numeric($score)||(float)$score<1||(float)$score>10||round((float)$score,1)!==(float)$score)return false;
+        return ctype_digit((string)$votes)&&(int)$votes>=1&&(int)$votes<=2147483647;
+    }
+
+    private function validCatalogueIdentity(array $row,?array $provenance,array $header): bool
+    {
+        if(!preg_match('/^tt[0-9]{7,10}$/D',$row['IMDB_ID']??''))return false;
+        if(($provenance['batch_hash']??null)!==$header['batch_hash']||($provenance['vote_scope']??null)!=='all_countries')return false;
+        return ($provenance['source_url']??null)==='https://www.imdb.com/title/'.$row['IMDB_ID'].'/ratings/';
+    }
+
+    private function catalogueDate(?string $date,int $now): ?int
+    {
+        if($date===null)return null;
+        $value=\DateTimeImmutable::createFromFormat('!Y-m-d H:i:s',$date,new \DateTimeZone('UTC'));
+        if(!$value||$value->format('Y-m-d H:i:s')!==$date||$value->getTimestamp()>$now+300)return null;
+        return $value->getTimestamp();
+    }
+
+    private function catalogueDistribution(array $row,int $votes): array
+    {
+        $bins=json_decode($row['IMDB_HISTOGRAM']??'',true);
+        if(!is_array($bins)||!array_is_list($bins)||count($bins)!==10)return [null,null];
+        foreach($bins as $count)if(!is_int($count)||$count<0||$count>2147483647)return [null,null];
+        if(array_sum($bins)!==$votes)return [null,null];
+        $sd=EpisodeRatingSnapshot::statistics($bins)['sd'];
+        $stored=$row['IMDB_SD'];
+        return [$bins,is_numeric($stored)&&abs((float)$stored-$sd)<0.0000000005?(float)$stored:null];
+    }
+
+    private function catalogueSummary(array $rows): array
+    {
+        $dates=array_values(array_filter(array_column(array_column($rows,'rating'),'observed_at'),static fn($date)=>$date!==null));
+        return ['source'=>'IMDb','observation_min'=>$dates?min($dates):null,'observation_max'=>$dates?max($dates):null,
+            'status'=>!$dates?'unavailable':(count($dates)===count($rows)?'available':'partial')];
+    }
+
     public function select(array $intent,array $scope,?int $now=null): array
     {
         $now??=time(); $metric=$intent['metric']??'';

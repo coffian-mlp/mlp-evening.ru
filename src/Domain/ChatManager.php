@@ -57,10 +57,11 @@ class ChatManager {
     }
 
     /** Проверить санкции перед отправкой; не записывает данные. */
-    public function assertCanSend(int $userId): void {
+    public function assertCanSend(int $userId, bool $current = false): void {
         // --- Moderation Check ---
         $userManager = new UserManager();
-        $status = $userManager->getBanStatus($userId);
+        $status = $userManager->getBanStatus($userId, $current);
+        if ($current && !$status) throw new \Core\UserError('Участник не найден.');
         
         if ($status) {
             // MLP-352: UserError — текст уходит пользователю как есть. Обычное Exception граница API

@@ -45,6 +45,11 @@ class EpisodeManager {
         return $this->rows('SELECT e.*, e.legacy_wanna_watch+(SELECT COUNT(*) FROM episode_wishes w WHERE w.episode_id=e.ID AND w.status="active") AS WANNA_WATCH FROM episode_list e ORDER BY e.ID');
     }
 
+    /** Nontransactional summary read; rating owner provides the shared read view. */
+    public function getCatalogueRows(?int $actorId = null): array {
+        return $this->rows('SELECT e.ID,e.TITLE,e.TWOPART_ID,e.LENGTH,e.TIMES_WATCHED,e.legacy_wanna_watch+COALESCE(w.active_count,0) AS WANNA_WATCH,COALESCE(own.status="active",0) AS own_active FROM episode_list e LEFT JOIN (SELECT episode_id,COUNT(*) active_count FROM episode_wishes WHERE status="active" GROUP BY episode_id) w ON w.episode_id=e.ID LEFT JOIN episode_wishes own ON own.episode_id=e.ID AND own.user_id=? ORDER BY e.ID', [$actorId ?? 0]);
+    }
+
     private function generateWeightedPlaylist($limit) {
         return PlaylistSelector::select(EpisodeCatalog::normalize($this->getAllEpisodes()), (int)$limit);
     }
@@ -141,14 +146,21 @@ class EpisodeManager {
         return $this->getSavedPlaylist();
     }
 
-    private function replay(string $key): ?array {
-        $r = $this->rows('SELECT outcome_json FROM episode_wish_events WHERE operation_key=?', [$key]);
-        return isset($r[0])?json_decode($r[0]['outcome_json'], true):null;
+    private function replay(string $key, int $userId, int $episodeId, string $kind): ?array {
+        $r = $this->rows('SELECT user_id,episode_id,kind,outcome_json FROM episode_wish_events WHERE operation_key=? FOR UPDATE', [$key]);
+        if (!isset($r[0])) return null;
+        if ((int)$r[0]['user_id'] !== $userId || (int)$r[0]['episode_id'] !== $episodeId || $r[0]['kind'] !== $kind) throw new \Core\UserError('operation_conflict');
+        return json_decode($r[0]['outcome_json'], true);
     }
 
     private function event(int $userId, int $episodeId, string $key, string $kind, array $out, int $now): array {
         $this->sql('INSERT INTO episode_wish_events(operation_key,user_id,episode_id,kind,status,created_at,outcome_json) VALUES(?,?,?,?,?,?,?)', [$key, $userId, $episodeId, $kind, $out['status'], gmdate('Y-m-d H:i:s', $now), json_encode($out, JSON_THROW_ON_ERROR)]);
         return $out;
+    }
+
+    private function assertWishActor(int $userId): void {
+        if ($userId <= 0 || !(new UserManager())->getUserById($userId)) throw new \Core\UserError('Участник не найден.');
+        (new ChatManager())->assertCanSend($userId);
     }
 
     private function quotaLock(int $userId): void {
@@ -158,16 +170,16 @@ class EpisodeManager {
 
     public function wish(int $userId, int $episodeId, string $operationKey, ?int $now = null): array {
         $now??=time();
+        $this->assertWishActor($userId);
         return $this->tx(function () use ($userId, $episodeId, $operationKey, $now) {
             $this->quotaLock($userId);
-            if ($r = $this->replay($operationKey))return $r;
-            if ($userId <= 0  ||  !(new UserManager())->getUserById($userId)) throw new \InvalidArgumentException('Missing user');
-            (new ChatManager())->assertCanSend($userId);
+            (new ChatManager())->assertCanSend($userId, true);
+            if ($r = $this->replay($operationKey, $userId, $episodeId, 'wish'))return $r;
             $ep = $this->rows('SELECT ID,TITLE FROM episode_list WHERE ID=?', [$episodeId])[0] ?? null;
             $facts = ['episode_id' => $episodeId, 'title' => $ep['TITLE'] ?? ''];
             $out = ['status' => 'rejected', 'code' => 'missing', 'facts' => $facts];
             if (!$ep)return $this->event($userId, $episodeId, $operationKey, 'wish', $out, $now);
-            $last = $this->rows('SELECT created_at FROM episode_wish_events WHERE user_id=? AND episode_id=? AND kind="wish" AND status="accepted" ORDER BY id DESC LIMIT 1', [$userId, $episodeId]);
+            $last = $this->rows('SELECT created_at FROM episode_wish_events WHERE user_id=? AND episode_id=? AND kind="wish" AND status="accepted" ORDER BY id DESC LIMIT 1 FOR UPDATE', [$userId, $episodeId]);
             if ($last  &&  $now < strtotime($last[0]['created_at'].' UTC') + self::COOLDOWN_SECONDS) {
                 $out['code'] = 'cooldown';
                 $out['facts']['next_allowed_at'] = gmdate('Y-m-d H:i:s', strtotime($last[0]['created_at'].' UTC') + self::COOLDOWN_SECONDS);
@@ -176,7 +188,8 @@ class EpisodeManager {
             $local = (new \DateTimeImmutable('@'.$now))->setTimezone(new \DateTimeZone('Europe/Kaliningrad'));
             $start = $local->setTime(0, 0);
             $end = $start->modify('+1 day');
-            $n = (int)$this->rows('SELECT COUNT(DISTINCT episode_id) AS n FROM episode_wish_events WHERE user_id=? AND kind="wish" AND status="accepted" AND created_at>=? AND created_at<?', [$userId, $start->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'), $end->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s')])[0]['n'];
+            $accepted = $this->rows('SELECT episode_id FROM episode_wish_events WHERE user_id=? AND kind="wish" AND status="accepted" AND created_at>=? AND created_at<? FOR UPDATE', [$userId, $start->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'), $end->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s')]);
+            $n = count(array_unique(array_column($accepted, 'episode_id')));
             if ($n >= self::DAILY_LIMIT) {
                 $out['code'] = 'daily_limit';
                 $out['facts']['quota_remaining'] = 0;
@@ -190,11 +203,11 @@ class EpisodeManager {
 
     public function cancelWish(int $userId, int $episodeId, string $operationKey, ?int $now = null): array {
         $now??=time();
+        $this->assertWishActor($userId);
         return $this->tx(function () use ($userId, $episodeId, $operationKey, $now) {
             $this->quotaLock($userId);
-            if ($r = $this->replay($operationKey))return $r;
-            if ($userId <= 0  ||  !(new UserManager())->getUserById($userId)) throw new \InvalidArgumentException('Missing user');
-            (new ChatManager())->assertCanSend($userId);
+            (new ChatManager())->assertCanSend($userId, true);
+            if ($r = $this->replay($operationKey, $userId, $episodeId, 'cancel'))return $r;
             $updated = $this->sql('UPDATE episode_wishes SET status="cancelled",updated_at=? WHERE user_id=? AND episode_id=? AND status="active"', [gmdate('Y-m-d H:i:s', $now), $userId, $episodeId]);
             $ok = $updated->affected_rows > 0;
             return $this->event($userId, $episodeId, $operationKey, 'cancel', ['status' => $ok?'cancelled':'rejected', 'code' => $ok?'cancelled':'not_active', 'facts' => ['episode_id' => $episodeId]], $now);

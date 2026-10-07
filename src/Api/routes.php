@@ -8,6 +8,8 @@
  */
 
 return [
+    'catalogue_wish' => ['role' => 'user', 'handler' => [\Api\EpisodeCatalogueController::class, 'wish']],
+    'catalogue_cancel_wish' => ['role' => 'user', 'handler' => [\Api\EpisodeCatalogueController::class, 'cancelWish']],
     'get_command_interaction' => ['role' => 'public', 'handler' => [\Api\CommandInteractionController::class, 'get']],
     'act_command_interaction' => ['role' => 'user', 'handler' => [\Api\CommandInteractionController::class, 'act']],
     'correct_playlist_completion' => ['role' => 'admin', 'handler' => [\Api\PlaylistController::class, 'correct']],

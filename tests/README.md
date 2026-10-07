@@ -343,3 +343,24 @@ mlp_test_compose exec -T php php tests/playwright/mlp-361-interactions-fixture.p
 Адаптация MLP-365 ограничена rating-specific transport/fixture: fresh v2 нормализуется в локальный поиск; новый v1 ответ отвергается. Сохранённые v1 snapshots проверяются отдельно. Сюжетный поиск и независимая проверка принадлежности остаются внешними, рейтинговый WEB не вызывается. Actual HTTP→queue→worker→SQL→widget проверяет best/worst, SD и отдельный love/hate, цитированные уточнения, отмену, владельца, source edit, устаревшие данные и один эффект после кнопки. Подменяется только внешний provider transport.
 
 Независимый QA: 99/99 PHP PASS, без SKIP; 80/80 Playwright PASS. После уточнения инструкции для стандартного отклонения повторно прошли 99/99 PHP и 8/8 затронутых Playwright-сценариев; прежние 80/80 сохранены как проверка остальных неизменённых сценариев. Текущее покрытие изменённых исполняемых PHP-строк PCOV — 403/420 = 95,95% относительно исходной версии до MLP-366; это не branch/JS coverage и не доказательство точности внешней модели. Реальный источник подтверждается отдельно: 224 записей, полные распределения и same-observation N, строгий валидатор и production dry-run. Исходные данные не являются синтетическим UI fixture. Локальные отчёты: `docs/tests/MLP-366-local-episode-ratings.tests.md`, `docs/qa/MLP-366-local-episode-ratings.qa.md`.
+
+
+## MLP-367: публичный каталог и общий административный список
+
+Изолированный Compose-проект и последовательность PHP/HTTP/fixtures сохраняются. Новый fixture `mlp-367-catalogue-fixture.php` допускается только при `db.host=db`: сохраняет настройки, рейтинги и меню, создаёт собственных пользователей и эпизоды, а затем восстанавливает исходное состояние. Setup, тесты и cleanup выполняются последовательно, cleanup обязателен также при ошибке. HTTP-сервер с 24 workers запускается отдельно; останавливаются только собственные процессы, общий Docker сохраняется.
+
+```bash
+mlp_test_compose exec -T php php tests/run_all.php
+mlp_test_compose exec -T php php tests/playwright/mlp-367-catalogue-fixture.php setup
+MLP_BASE_URL=http://127.0.0.1:8091 npx playwright test \
+  -c tests/playwright/playwright.config.js \
+  tests/playwright/mlp-367-episode-catalogue.ui.spec.js \
+  --project=chromium-ui --project=firefox-ui
+mlp_test_compose exec -T php php tests/playwright/mlp-367-catalogue-fixture.php cleanup
+```
+
+Новые PHP-проверки: `integration_episode_catalogue.php`, `integration_episode_catalogue_menu.php`, `test_episode_catalogue_api.php`. Они проверяют согласованный RR-снимок проекции при конкурентном обновлении, DTO и неизвестные/устаревшие значения, гистограммы и парные эпизоды, общий wish/cancel и привязку повторов, сохранение пользовательского меню. Реальные двухпроцессные сценарии проверяют оставшуюся одну дневную квоту, replay, cooldown и ban/mute/deleted после ожидания блокировки, включая внешнюю RR-транзакцию с уже созданным снимком.
+
+Новый Playwright-набор: 8 сценариев в двух движках, всего 16. Проверяются guest/public/admin, поиск и числовая сортировка, histogram/details, authenticated wish/cancel, CSRF и серверный actor, санкции, пропавший эпизод, квота, потерянный ответ и повтор того же UUID. Только сценарий потерянного ответа блокирует service worker для наблюдаемого перехвата сети; остальные используют обычную загрузку. Сохранённые наборы 361/364/365/366 выполняются отдельно с их setup/cleanup и дают ещё 80 проверок интерактивных команд, уточнений и рейтингового поиска.
+
+Независимый QA: **102/102 PHP PASS, SKIP0/FAIL0; 96/96 Playwright PASS = 16 новых + 80 сохранённых**, Chromium/Firefox. Просмотрены реальные desktop/360px изображения публичного и административного компонента. Настройки, включая timestamps, рейтинги и меню восстановлены точно; собственные fixtures и credentials удалены, только собственный HTTP остановлен. Покрытие изменённых исполняемых PHP-строк PCOV относительно `5e7921a`: **160/166 = 96,39%**, включая страницу и общий компонент. Это line coverage PHP, не branch/JS coverage и не проверка точности внешней модели. Отчёты хранятся локально в `docs/tests/MLP-367-episode-catalogue.tests.md` и `docs/qa/MLP-367-episode-catalogue.qa.md`.

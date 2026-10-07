@@ -462,8 +462,8 @@ class UserManager {
 
     // --- Moderation Methods ---
 
-    public function getBanStatus($userId) {
-        $stmt = $this->db->prepare("SELECT (is_banned = 1 AND (ban_until IS NULL OR ban_until > UTC_TIMESTAMP())) AS is_banned, ban_until, muted_until, ban_reason FROM users WHERE id = ?"); // MLP-352
+    public function getBanStatus($userId, bool $current = false) {
+        $stmt = $this->db->prepare("SELECT (is_banned = 1 AND (ban_until IS NULL OR ban_until > UTC_TIMESTAMP())) AS is_banned, ban_until, muted_until, ban_reason FROM users WHERE id = ?" . ($current ? " FOR SHARE" : "")); // MLP-352
         $stmt->bind_param("i", $userId);
         $stmt->execute();
         $res = $stmt->get_result();

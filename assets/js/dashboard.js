@@ -74,7 +74,7 @@ $(document).ready(function() {
 
     // --- Логика сортировки таблицы (клиентская, для полных списков) ---
     // MLP-257: таблицы панели БД исключены — у них честная серверная сортировка.
-    $('th').not('.db-admin-container th').click(function(){
+    $('th').not('.db-admin-container th, .episode-catalogue th').click(function(){
         var table = $(this).parents('table').eq(0);
         var rows = table.find('tr:gt(0)').toArray().sort(comparer($(this).index()));
         this.asc = !this.asc;
