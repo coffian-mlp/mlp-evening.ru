@@ -80,4 +80,11 @@ expect(count($llm->calls)===1&&$nonfinite['resolution_snapshot']['reason']==='in
 $llm->calls=[];$llm->live='По IMDb можно уточнить критерий; процитируй моё сообщение.';
 $command->continuationReplyText('clarifying',['code'=>'choice_clarifying','_deadline'=>time()+20,'_action_context'=>['data'=>['resolution_snapshot'=>['intent'=>array_replace($base,['direction'=>'worst'])]]]]);
 expect($llm->calls===[]&&str_contains($llm->liveRequest[0],'Источник оценок: IMDb')&&str_contains($llm->liveRequest[0],'средняя оценка'),'subsequent child refinement formats current rating metadata with zero WEB');
+$knownWorst=$empty;$knownWorst['facts']['rating_intent']=array_replace($base,['direction'=>'worst']);
+expect(!LLM\PlaylistCommand::replyIsValid('По IMDb недостаточно подтверждений. Если уточнишь, про какой сериал или хотя бы сезон речь, ответь с цитатой на моё сообщение.',$empty,''),'captured missing comparison cannot ask which already fixed series');
+expect(!LLM\PlaylistCommand::replyIsValid('По средней оценке на IMDb данные не сошлись. Может, уточнишь, что имел в виду: самый низкий рейтинг или просто всеми ругаемый? Ответь мне цитатой.',$knownWorst,''),'captured worst mean cannot reinterpret established criterion as unknown');
+expect(LLM\PlaylistCommand::replyIsValid('По IMDb сравнение средней оценки пока не подтверждено. Можем повторить поиск или по твоему желанию ограничить его сезоном. Процитируй моё сообщение.',$knownWorst,''),'known rating allows optional narrowing without claiming ambiguous intent');
+$llm->live='По IMDb сравнение пока не подтверждено. Если уточнишь, про какой сериал речь, ответь с цитатой на моё сообщение.';
+$corrected=$command->continuationReplyText('clarifying',['code'=>'search_empty','facts'=>$ratingFacts,'_deadline'=>time()+20]);
+expect($corrected!==$llm->live&&str_contains($llm->liveRequest[0],'My Little Pony: Friendship is Magic')&&str_contains($llm->liveRequest[4],'не спрашивай, какой сериал'),'actual formatter supplies authoritative series and rejects captured redundant question');
 echo $fail?"FAILURES: $fail\n":"ALL PASS\n";exit($fail?1:0);

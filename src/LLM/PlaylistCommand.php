@@ -210,9 +210,15 @@ final class PlaylistCommand
         if (!isset($facts['rating_intent'])) return true;
         $source = self::ratingSourceLabel($facts['rating_intent']);
         if (mb_stripos($text, $source) === false) return false;
-        if (!$facts['candidates']) return !self::claims($text, '/(?:сам(?:ая|ый|ое) (?:лучш|худш|спорн)|перв(?:ое|ом) мест|рейтинг.{0,10}\d)/iu');
+        if (!$facts['candidates']) return !self::ratingKnownIntentQuestion($text, $outcome) && !self::claims($text, '/(?:сам(?:ая|ый|ое) (?:лучш|худш|спорн)|перв(?:ое|ом) мест|рейтинг.{0,10}\d)/iu');
         if (preg_match('/Rotten\s*Tomatoes|Metacritic|Кинопоиск/iu', $text)) return false;
         return self::ratingCandidateClaims($text, $facts['candidates']);
+    }
+
+    private static function ratingKnownIntentQuestion(string $text, array $outcome): bool
+    {
+        if (!in_array($outcome['code'] ?? '', ['search_empty', 'search_failed'], true)) return false;
+        return preg_match('/уточни\p{L}*.{0,35}про какой сериал|какой сериал.{0,25}речь|что (?:ты )?имел(?:а|и)? в виду.{0,100}(?:рейтинг|оценк|руга)/iu', $text) === 1;
     }
 
     private static function ratingCandidateClaims(string $text, array $candidates): bool
@@ -409,8 +415,8 @@ final class PlaylistCommand
         $source = self::ratingSourceLabel($intent);
         $metrics = ['mean_score'=>'средняя оценка пользователей', 'negative_share'=>'доля низких пользовательских оценок', 'polarization'=>'массовые высокие и низкие оценки одного эпизода'];
         $directions = ['best'=>'наибольшее значение', 'worst'=>'наименьшее значение', 'negative_reception'=>'наибольшая доля низких оценок', 'polarized'=>'противоположные оценки'];
-        $lines = ['Источник оценок: ' . $source . '; метрика: ' . $metrics[$intent['metric']] . '; направление: ' . $directions[$intent['direction']]];
-        if (empty($facts['candidates'])) $lines[] = 'Рейтинговое условие не подтверждено; это не доказывает отсутствие самого эпизода. Причина: ' . self::ratingReason($facts['rating_reason'] ?? '');
+        $lines = ['Сериал уже установлен: My Little Pony: Friendship is Magic. Рейтинговый критерий ниже уже принят, он не является неясным запросом.', 'Источник оценок: ' . $source . '; метрика: ' . $metrics[$intent['metric']] . '; направление: ' . $directions[$intent['direction']]];
+        if (empty($facts['candidates'])) $lines[] = 'Доказательство рейтингового сравнения не подтверждено; сериал и критерий запроса уже известны. Это не доказывает отсутствие самого эпизода. Причина: ' . self::ratingReason($facts['rating_reason'] ?? '');
         foreach ($facts['candidates'] ?? [] as $row) {
             $r = $row['rating'];
             $lines[] = 'Проверенное значение: ' . $r['value'] . '; место: ' . ($r['rank'] ?? 'сравнение по полной области') . '; равных вариантов: ' . $r['tie_count'] . '; источник: ' . $row['source_url'];
@@ -469,7 +475,7 @@ final class PlaylistCommand
         $phase = ['choice_clarifying'=>'Пользователь попросил изменить предложенный вариант; новый поиск ещё не выполнялся. Спроси, какой рейтинговый критерий изменить.',
             'search_failed'=>'Поиск рейтингов не завершился.', 'search_empty'=>'Поиск не дал достаточного подтверждения рейтингового сравнения/распределения.'][$code];
         return ' Текущая рейтинговая фаза: ' . $phase . ' Пользователь указал понятный критерий оценки; не называй его запрос расплывчатым и не требуй вспомнить сцену вместо рейтинга. '
-            . 'Объясни ограничение данных источника/области или распределения, предложи повторить поиск либо уточнить критерий. Сейчас поддерживается только IMDb; не предлагай произвольный другой источник как доступный. Это не поиск сюжетной сцены и не отсутствие эпизодов. '
+            . 'Объясни ограничение данных источника/области или распределения, предложи повторить поиск либо по желанию пользователя сузить область или изменить критерий. Сериал My Little Pony: Friendship is Magic и текущее направление/метрика уже установлены: не спрашивай, какой сериал имеется в виду, и не проси заново объяснить принятый критерий. Нехватка сравнения не означает неясный запрос. Сейчас поддерживается только IMDb; не предлагай произвольный другой источник как доступный. Это не поиск сюжетной сцены и не отсутствие эпизодов. '
             . 'Не используй память как источник рейтинга. Попроси ответить с цитатой на сообщение Лиры обычными словами; Передумал доступна, голос не записан.';
     }
 
