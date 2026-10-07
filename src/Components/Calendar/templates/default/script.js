@@ -1,392 +1,196 @@
-let currentDate = getMSKTime();
-let selectedDate = getMSKTime();
-let allEvents = [];
-let currentPlaylist = [];
-let timerInterval = null;
-let currentEventData = null; // Store for ICS generation
-
-document.addEventListener('DOMContentLoaded', () => {
-    fetchEvents();
-});
-
-function fetchEvents() {
-    const formData = new FormData();
-    formData.append('action', 'get_public_events');
-    
-    fetch('/api.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(res => {
-        // Handle empty or error response gracefully
-        if (!res.ok) throw new Error('Network response was not ok');
-        const contentType = res.headers.get("content-type");
-        if (contentType && contentType.indexOf("application/json") !== -1) {
-            return res.json();
-        } else {
-            return res.text().then(text => {
-                console.error('Non-JSON response from API:', text);
-                throw new Error('Non-JSON response');
-            });
-        }
-    })
-    .then(data => {
-        if (data && data.success) {
-            allEvents = data.data.events;
-            currentPlaylist = data.data.playlist || [];
-            
-            // Expand recurring events for the next 12 months
-            allEvents = expandRecurringEvents(allEvents);
-            
-            // Use MSK time for initial render
-            const mskNow = getMSKTime();
-            renderCalendar(mskNow);
-            startNextEventTimer();
-            // Automatically select today by default
-            selectDate(mskNow);
-        } else if (data) {
-            console.error('Failed to load events:', data.message);
-        }
-    })
-    .catch(err => console.error('Fetch events error:', err));
-}
-
-function getMSKTime(date = new Date()) {
-    // Получаем текущее абсолютное время в миллисекундах и добавляем смещение MSK (UTC+3)
-    const utcTime = date.getTime();
-    return new Date(utcTime + (3 * 3600000));
-}
-
-function expandRecurringEvents(events) {
-    let expanded = [];
-    const now = getMSKTime();
-    const horizon = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
-    
-    events.forEach(evt => {
-        // Parse "YYYY-MM-DD HH:mm:ss" UTC string manually to avoid timezone bugs
-        const [datePart, timePart] = evt.start_time.split(' ');
-        const [y, m, d] = datePart.split('-');
-        const [h, min, s] = (timePart || '00:00:00').split(':');
-        
-        // В БД лежит UTC время. Мы сдвигаем его в MSK для отображения
-        // (с точки зрения JS мы просто создаем локальную дату, которая "выглядит" как MSK)
-        const utcStart = new Date(Date.UTC(parseInt(y), parseInt(m) - 1, parseInt(d), parseInt(h), parseInt(min), parseInt(s || 0)));
-        const mskStart = new Date(utcStart.getTime() + (3 * 3600000));
-        
-        expanded.push({ ...evt, parsed_start: mskStart });
-        
-        if (evt.is_recurring == 1) {
-            let nextDate = new Date(mskStart.getTime());
-            
-            while (nextDate < horizon) {
-                if (evt.recurrence_rule === 'daily') {
-                    nextDate.setDate(nextDate.getDate() + 1);
-                } else if (evt.recurrence_rule === 'weekly') {
-                    nextDate.setDate(nextDate.getDate() + 7);
-                } else {
-                    break; // Unknown rule
-                }
-                
-                if (nextDate < horizon) {
-                    expanded.push({ 
-                        ...evt, 
-                        id: evt.id + '_recur_' + nextDate.getTime(), // fake id for rendering
-                        parsed_start: new Date(nextDate.getTime()) 
-                    });
-                }
-            }
-        }
-    });
-    
-    return expanded.sort((a, b) => a.parsed_start - b.parsed_start);
-}
-
-function renderCalendar(date) {
-    currentDate = date;
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    
-    const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-    document.getElementById('current-month-label').textContent = `${monthNames[month]} ${year}`;
-    
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    
-    let startDayOfWeek = firstDay.getDay() - 1;
-    if (startDayOfWeek === -1) startDayOfWeek = 6; // Mon=0, Sun=6
-    
-    const daysGrid = document.getElementById('calendar-days');
-    daysGrid.innerHTML = '';
-    
-    // Previous month days
-    const prevMonthLastDay = new Date(year, month, 0).getDate();
-    for (let i = startDayOfWeek - 1; i >= 0; i--) {
-        const d = prevMonthLastDay - i;
-        daysGrid.appendChild(createDayCell(new Date(year, month - 1, d), true));
-    }
-    
-    // Current month days
-    for (let i = 1; i <= lastDay.getDate(); i++) {
-        daysGrid.appendChild(createDayCell(new Date(year, month, i), false));
-    }
-    
-    // Next month days to complete grid (42 cells max)
-    const totalCellsFilled = startDayOfWeek + lastDay.getDate();
-    const cellsRemaining = (totalCellsFilled <= 35 ? 35 : 42) - totalCellsFilled;
-    for (let i = 1; i <= cellsRemaining; i++) {
-        daysGrid.appendChild(createDayCell(new Date(year, month + 1, i), true));
-    }
-}
-
-function createDayCell(date, isOtherMonth) {
-    const cell = document.createElement('div');
-    cell.className = 'calendar-day';
-    if (isOtherMonth) cell.classList.add('other-month');
-    
-    const today = new Date();
-    if (date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear()) {
-        cell.classList.add('today');
-    }
-    
-    if (date.getDate() === selectedDate.getDate() && date.getMonth() === selectedDate.getMonth() && date.getFullYear() === selectedDate.getFullYear()) {
-        cell.classList.add('selected');
-    }
-    
-    cell.onclick = () => selectDate(date);
-    
-    const numSpan = document.createElement('span');
-    numSpan.className = 'day-number';
-    numSpan.textContent = date.getDate();
-    cell.appendChild(numSpan);
-    
-    // Find events for this day
-    const dayEvents = allEvents.filter(e => {
-        const ed = e.parsed_start;
-        return ed.getDate() === date.getDate() && ed.getMonth() === date.getMonth() && ed.getFullYear() === date.getFullYear();
-    });
-    
-    dayEvents.forEach(evt => {
-        const badge = document.createElement('div');
-        badge.className = 'event-badge';
-        badge.style.backgroundColor = evt.color || '#6d2f8e';
-        const timeStr = evt.parsed_start.getUTCHours().toString().padStart(2, '0') + ':' + evt.parsed_start.getUTCMinutes().toString().padStart(2, '0');
-        badge.textContent = `${timeStr} ${evt.title}`;
-        badge.onclick = (e) => {
-            e.stopPropagation();
-            selectDate(date);
-            showEventDetails(evt);
-        };
-        cell.appendChild(badge);
-    });
-    
-    return cell;
-}
-
-function selectDate(date) {
-    selectedDate = date;
-    
-    // Re-render to update selected classes
-    renderCalendar(currentDate);
-    updateSidebar();
-}
-
-function updateSidebar() {
-    const label = document.getElementById('selected-date-label');
-    const container = document.getElementById('selected-date-events');
-    if (!label || !container) return;
-    
-    const today = new Date();
-    if (selectedDate.getDate() === today.getDate() && selectedDate.getMonth() === today.getMonth() && selectedDate.getFullYear() === today.getFullYear()) {
-        label.textContent = "События на сегодня";
-    } else {
-        label.textContent = "События " + selectedDate.toLocaleDateString([], {day: 'numeric', month: 'long'});
-    }
-    
-    const dayEvents = allEvents.filter(e => {
-        const ed = e.parsed_start;
-        return ed.getDate() === selectedDate.getDate() && ed.getMonth() === selectedDate.getMonth() && ed.getFullYear() === selectedDate.getFullYear();
-    });
-    
-    container.innerHTML = '';
-    
-    if (dayEvents.length === 0) {
-        container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px 0;">На эту дату ничего не запланировано.</div>';
-        return;
-    }
-    
-    dayEvents.forEach(evt => {
-        const card = document.createElement('div');
-        card.className = 'selected-event-card';
-        card.style.borderLeft = `4px solid ${evt.color || '#6d2f8e'}`;
-        card.onclick = () => showEventDetails(evt);
-        
-        const timeStr = evt.parsed_start.getUTCHours().toString().padStart(2, '0') + ':' + evt.parsed_start.getUTCMinutes().toString().padStart(2, '0');
-        const descHtml = (evt.description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-        
-        let durationText = '';
-        const dHours = Math.floor(evt.duration_minutes / 60);
-        const dMins = evt.duration_minutes % 60;
-        if (dHours > 0) durationText += `${dHours} ч `;
-        if (dMins > 0) durationText += `${dMins} мин`;
-        if (durationText === '') durationText = '0 мин';
-        
-        card.innerHTML = `
-            <div class="selected-event-time">🕒 ${timeStr} МСК (⏳ ${durationText.trim()})</div>
-            <h4 class="selected-event-title">${evt.title}</h4>
-            <div class="selected-event-desc">${descHtml}</div>
-            ${evt.use_playlist == 1 ? '<div style="margin-top:10px; font-size: 0.8em; color: var(--accent-color);">📺 Есть плейлист</div>' : ''}
-        `;
-        
-        container.appendChild(card);
-    });
-}
-
-function changeMonth(delta) {
-    const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + delta, 1);
-    renderCalendar(newDate);
-}
-
-function showEventDetails(evt) {
-    currentEventData = evt;
-    document.getElementById('modal-event-title').textContent = evt.title;
-    
-    // Меняем цвет карточки в стиле события
-    const color = evt.color || '#6d2f8e';
-    document.getElementById('modal-content-card').style.borderTopColor = color;
-    document.getElementById('modal-event-title').style.color = color;
-    
-    document.getElementById('modal-event-time').textContent = evt.parsed_start.getUTCHours().toString().padStart(2, '0') + ':' + evt.parsed_start.getUTCMinutes().toString().padStart(2, '0');
-    
-    let durationText = '';
-    const dHours = Math.floor(evt.duration_minutes / 60);
-    const dMins = evt.duration_minutes % 60;
-    if (dHours > 0) durationText += `${dHours} ч `;
-    if (dMins > 0) durationText += `${dMins} мин`;
-    if (durationText === '') durationText = '0 мин';
-    
-    document.getElementById('modal-event-duration').textContent = durationText.trim();
-    
-    const descEl = document.getElementById('modal-event-desc');
-    // Simple HTML escape and newlines for description (Markdown could be parsed here if library included, for now just text)
-    descEl.innerHTML = (evt.description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-    
-    const plContainer = document.getElementById('modal-playlist-container');
-    const plContent = document.getElementById('modal-playlist-content');
-    
-    if (evt.use_playlist == 1 && currentPlaylist) {
-        // currentPlaylist may be an object containing stories (due to _meta key)
-        const stories = Object.values(currentPlaylist).filter(item => item && Array.isArray(item.titles));
-        
-        if (stories.length > 0) {
-            plContainer.style.display = 'block';
-            let html = '<ul style="margin:0; padding-left:20px;">';
-            stories.forEach(story => {
-                story.titles.forEach(title => {
-                    html += `<li><b>${title}</b></li>`;
-                });
-            });
-            html += '</ul>';
-            plContent.innerHTML = html;
-        } else {
-            plContainer.style.display = 'none';
-            plContent.innerHTML = '';
-        }
-    } else {
-        plContainer.style.display = 'none';
-        plContent.innerHTML = '';
-    }
-    
-    document.getElementById('public-event-modal').style.display = 'flex';
-}
-
-function closePublicEventModal() {
-    document.getElementById('public-event-modal').style.display = 'none';
-    currentEventData = null;
-}
-
-function startNextEventTimer() {
-    if (timerInterval) clearInterval(timerInterval);
-    
-    const timerContainer = document.getElementById('next-event-timer');
-    const timerSpan = document.getElementById('timer-countdown');
-    
-    timerInterval = setInterval(() => {
-        // Мы перестаем зависеть от now.getTime() (локального времени компа, которое может быть сбито).
-        // Так как у нас нет возможности запросить текущее серверное время без AJAX каждую секунду,
-        // мы используем Date.now(), но эта проблема с VPN - это то, что VPN сместил _часовой пояс_ локального времени,
-        // а не само абсолютное время. Date.now() всегда возвращает абсолютное время UTC.
-        // wait, let's fix how we use MSK!
-        
-        const nowMs = Date.now(); // Это всегда абсолютные миллисекунды от 1970 UTC! Неважно какой пояс.
-        
-        // В allEvents.forEach мы сохранили mskStart: 
-        // const utcStart = new Date(Date.UTC(...)); // абсолютное время в миллисекундах
-        // const mskStart = new Date(utcStart.getTime() + (3 * 3600000));
-        // Но для таймера нам нужны АБСОЛЮТНЫЕ значения.
-        // mskStart.getTime() - это utcStart + 3 часа.
-        // Если мы сравниваем его с Date.now(), то мы сравниваем сдвинутое время с несдвинутым! Вот откуда смещение в таймере!
-        
-        // Значит, нам нужно перевести Date.now() в "псевдо-MSK", добавив те же 3 часа:
-        const nowMSK = nowMs + (3 * 3600000);
-        
-        const futureEvents = allEvents.filter(e => e.parsed_start.getTime() > nowMSK);
-        
-        if (futureEvents.length > 0) {
-            timerContainer.style.display = 'block';
-            const nextEvent = futureEvents[0];
-            
-            const diff = nextEvent.parsed_start.getTime() - nowMSK;
-            
-            if (diff > 0) {
-                const hours = Math.floor(diff / (1000 * 60 * 60));
-                const mins = Math.floor((diff / (1000 * 60)) % 60);
-                const secs = Math.floor((diff / 1000) % 60);
-                
-                // If hours > 99, we don't pad to just 2, but padStart won't truncate it. 
-                // Let's just calculate days and hours if it's very far.
-                const days = Math.floor(hours / 24);
-                const displayHours = hours % 24;
-                
-                if (days > 0) {
-                    timerSpan.textContent = `${days}д ${displayHours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-                } else {
-                    timerSpan.textContent = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-                }
-            } else {
-                timerSpan.textContent = "00:00:00";
-            }
-        } else {
-            timerContainer.style.display = 'none';
-        }
-    }, 1000);
-}
-
-function generateICS() {
-    if (!currentEventData) return;
-    const evt = currentEventData;
-    
-    const start = evt.parsed_start;
-    const end = new Date(start.getTime() + evt.duration_minutes * 60000);
-    
-    const formatICSDate = (date) => {
-        return date.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+(() => {
+    const root = document.querySelector('.calendar-wrapper');
+    if (!root) return;
+    const modal = document.getElementById('public-event-modal');
+    const dialog = document.getElementById('modal-content-card');
+    const list = document.getElementById('schedule-events');
+    const status = document.getElementById('schedule-status');
+    const next = document.getElementById('next-event');
+    const initialMono = performance.now();
+    const initialTime = Number.isFinite(Number(window.serverTime)) && Number(window.serverTime) > 0 ? Number(window.serverTime) * 1000 : Date.now();
+    const now = () => initialTime + performance.now() - initialMono;
+    const msk = date => new Date(date.getTime() + 3 * 3600000);
+    const dateKey = date => msk(date).toISOString().slice(0, 10);
+    const format = (date, options) => new Intl.DateTimeFormat('ru-RU', {timeZone: 'Europe/Moscow', ...options}).format(date);
+    const duration = value => {
+        const minutes = Math.max(0, Number(value) || 0);
+        return [Math.floor(minutes / 60) ? `${Math.floor(minutes / 60)} ч` : '', minutes % 60 ? `${minutes % 60} мин` : ''].filter(Boolean).join(' ') || '0 мин';
     };
-    
-    let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//MLP Evening//Calendar//RU\n";
-    icsContent += "BEGIN:VEVENT\n";
-    icsContent += `UID:${evt.id}-${start.getTime()}@mlpevening\n`;
-    icsContent += `DTSTAMP:${formatICSDate(new Date())}\n`;
-    icsContent += `DTSTART:${formatICSDate(start)}\n`;
-    icsContent += `DTEND:${formatICSDate(end)}\n`;
-    icsContent += `SUMMARY:${evt.title}\n`;
-    icsContent += `DESCRIPTION:${(evt.description || '').replace(/\n/g, '\\n')}\n`;
-    icsContent += "END:VEVENT\nEND:VCALENDAR";
-    
-    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `event_${evt.id}.ics`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
+    const el = (tag, className, text) => {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    };
+    const currentMonth = () => {const d = msk(new Date(now())); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));};
+    let month = currentMonth();
+    let events = [];
+    let playlist = [];
+    let currentEvent = null;
+    let opener = null;
+    let previousOverflow = '';
+    let nextKey = null;
+    let timer = null;
+    let loaded = false;
+    let loading = false;
+
+    function expand(source) {
+        const result = [];
+        const horizon = new Date(now());
+        horizon.setUTCFullYear(horizon.getUTCFullYear() + 1);
+        source.forEach(event => {
+            const match = String(event.start_time).match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+            if (!match) return;
+            const start = new Date(Date.UTC(...match.slice(1).map((v, i) => Number(v) - (i === 1 ? 1 : 0))));
+            if (!Number.isFinite(start.getTime())) return;
+            const step = event.is_recurring == 1 ? ({daily: 1, weekly: 7}[event.recurrence_rule] || 0) : 0;
+            let date = start;
+            do {
+                result.push({...event, start: new Date(date), key: `${event.id}:${date.getTime()}`});
+                if (!step) break;
+                date = new Date(date.getTime() + step * 86400000);
+            } while (date < horizon);
+        });
+        return result.sort((a, b) => a.start - b.start || String(a.id).localeCompare(String(b.id)));
+    }
+
+    async function fetchEvents() {
+        if (loading) return;
+        loading = true;
+        status.textContent = 'Загружаем расписание…';
+        list.setAttribute('aria-busy', 'true');
+        try {
+            const body = new FormData(); body.append('action', 'get_public_events');
+            const response = await fetch('/api.php', {method: 'POST', body});
+            if (!response.ok) throw new Error('HTTP');
+            const data = await response.json();
+            if (!data.success || !Array.isArray(data.data?.events)) throw new Error('Payload');
+            events = expand(data.data.events);
+            playlist = data.data.playlist || [];
+            loaded = true;
+            renderMonth();
+            updateNext();
+            if (timer) clearInterval(timer);
+            timer = setInterval(updateNext, 1000);
+        } catch (error) {
+            status.replaceChildren(el('span', '', 'Не удалось загрузить расписание.'));
+            const retry = el('button', '', 'Повторить'); retry.type = 'button'; retry.onclick = fetchEvents;
+            status.append(retry);
+        } finally {
+            loading = false;
+            list.setAttribute('aria-busy', 'false');
+        }
+    }
+
+    function eventButton(event) {
+        const button = el('button', 'schedule-event-card'); button.type = 'button';
+        button.style.setProperty('--event-color', /^#[0-9a-f]{6}$/i.test(event.color || '') ? event.color : '#bd8dd6');
+        const time = el('span', 'schedule-event-time', format(event.start, {hour: '2-digit', minute: '2-digit'}));
+        time.append(el('span', 'schedule-event-duration', duration(event.duration_minutes)));
+        const body = el('span', 'schedule-event-body');
+        body.append(el('span', 'schedule-event-title', event.title));
+        if (event.description) body.append(el('span', 'schedule-event-desc', event.description));
+        const badges = el('span', 'schedule-event-badges');
+        if (event.is_recurring == 1) badges.append(el('span', '', event.recurrence_rule === 'daily' ? 'Каждый день' : 'Каждую неделю'));
+        if (event.use_playlist == 1) badges.append(el('span', '', 'С плейлистом'));
+        if (event.start.getTime() + Number(event.duration_minutes) * 60000 <= now()) badges.append(el('span', '', 'Завершено'));
+        if (badges.childNodes.length) body.append(badges);
+        const arrow = el('span', 'schedule-event-arrow', '›'); arrow.setAttribute('aria-hidden', 'true');
+        button.append(time, body, arrow);
+        button.onclick = () => openDetails(event, button);
+        return button;
+    }
+
+    function renderMonth() {
+        const label = new Intl.DateTimeFormat('ru-RU', {month: 'long', year: 'numeric', timeZone: 'UTC'}).format(month);
+        document.getElementById('current-month-label').textContent = label.charAt(0).toUpperCase() + label.slice(1);
+        if (!loaded) return;
+        const key = month.toISOString().slice(0, 7);
+        const visible = events.filter(event => dateKey(event.start).startsWith(key));
+        status.textContent = visible.length ? `Событий в этом месяце: ${visible.length}. Время указано в МСК.` : 'Время указано в МСК.';
+        list.replaceChildren();
+        if (!visible.length) {
+            list.append(el('p', 'schedule-empty', 'На этот месяц пока ничего не запланировано. Попробуй соседний месяц.'));
+            return;
+        }
+        let groupKey = null;
+        let cards;
+        visible.forEach(event => {
+            if (dateKey(event.start) !== groupKey) {
+                groupKey = dateKey(event.start);
+                const group = el('section', 'schedule-day-group');
+                const date = el('h3', 'schedule-date');
+                date.append(el('strong', '', format(event.start, {day: 'numeric'})), el('span', '', format(event.start, {month: 'long'})), el('span', '', format(event.start, {weekday: 'long'})));
+                cards = el('div', 'schedule-day-cards'); group.append(date, cards); list.append(group);
+            }
+            cards.append(eventButton(event));
+        });
+    }
+
+    function updateNext() {
+        const event = events.find(e => e.start.getTime() + Number(e.duration_minutes) * 60000 > now());
+        if (!event) {next.hidden = true; nextKey = null; return;}
+        const live = event.start.getTime() <= now();
+        const key = `${event.key}:${live}`;
+        if (key !== nextKey) {
+            nextKey = key;
+            const meta = el('div', 'schedule-next-meta');
+            meta.append(el('span', '', format(event.start, {weekday: 'long', day: 'numeric', month: 'long'})), el('span', '', `${format(event.start, {hour: '2-digit', minute: '2-digit'})} МСК`), el('span', '', duration(event.duration_minutes)));
+            const bottom = el('div', 'schedule-next-bottom');
+            const countdown = el('span', 'schedule-countdown'); countdown.id = 'timer-countdown';
+            const button = el('button', '', 'Подробнее о событии'); button.type = 'button'; button.onclick = () => openDetails(event, button);
+            bottom.append(countdown, button);
+            next.replaceChildren(el('p', 'schedule-eyebrow', live ? 'Идёт сейчас' : 'Ближайшая встреча'), el('h2', '', event.title), meta, bottom);
+        }
+        next.hidden = false;
+        const seconds = Math.max(0, Math.floor((event.start - now()) / 1000));
+        const days = Math.floor(seconds / 86400);
+        const hours = Math.floor(seconds % 86400 / 3600);
+        const mins = Math.floor(seconds % 3600 / 60);
+        document.getElementById('timer-countdown').textContent = live ? 'Событие уже началось' : `До начала: ${days ? `${days} д ` : ''}${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+    }
+
+    function openDetails(event, source) {
+        currentEvent = event; opener = source;
+        document.getElementById('modal-event-date').textContent = format(event.start, {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
+        document.getElementById('modal-event-title').textContent = event.title;
+        document.getElementById('modal-event-time').textContent = format(event.start, {hour: '2-digit', minute: '2-digit'});
+        document.getElementById('modal-event-duration').textContent = duration(event.duration_minutes);
+        document.getElementById('modal-event-desc').textContent = event.description || 'Описание события пока не добавлено.';
+        const items = document.getElementById('modal-playlist-content'); items.replaceChildren();
+        if (event.use_playlist == 1) Object.values(playlist).filter(story => story && Array.isArray(story.titles)).forEach(story => story.titles.forEach(title => items.append(el('li', '', title))));
+        document.getElementById('modal-playlist-container').hidden = !items.childNodes.length;
+        if (modal.hidden) {previousOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden';}
+        modal.hidden = false;
+        dialog.querySelector('button').focus();
+    }
+    function closeDetails() {
+        if (modal.hidden) return;
+        modal.hidden = true; currentEvent = null; document.body.style.overflow = previousOverflow;
+        (opener?.isConnected ? opener : document.getElementById('schedule-today')).focus({preventScroll: true});
+    }
+
+    function generateICS() {
+        if (!currentEvent) return;
+        const event = currentEvent;
+        const stamp = date => date.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+        const escape = text => String(text || '').replace(/\\/g, '\\\\').replace(/\r?\n|\r/g, '\\n').replace(/;/g, '\\;').replace(/,/g, '\\,');
+        const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//MLP Evening//Schedule//RU', 'BEGIN:VEVENT', `UID:${event.key.replace(':', '-')}@mlpevening`, `DTSTAMP:${stamp(new Date(now()))}`, `DTSTART:${stamp(event.start)}`, `DTEND:${stamp(new Date(event.start.getTime() + Number(event.duration_minutes) * 60000))}`, `SUMMARY:${escape(event.title)}`, `DESCRIPTION:${escape(event.description)}`, 'END:VEVENT', 'END:VCALENDAR'];
+        const fold = line => {let output = '', bytes = 0; for (const c of line) {const size = new TextEncoder().encode(c).length; if (bytes + size > 75) {output += '\r\n '; bytes = 1;} output += c; bytes += size;} return output;};
+        const url = URL.createObjectURL(new Blob([lines.map(fold).join('\r\n') + '\r\n'], {type: 'text/calendar;charset=utf-8'}));
+        const link = el('a'); link.href = url; link.download = `event_${event.id}.ics`; document.body.append(link); link.click(); link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 15000);
+    }
+
+    root.querySelectorAll('[data-month-step]').forEach(button => button.onclick = () => {month = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + Number(button.dataset.monthStep), 1)); renderMonth();});
+    document.getElementById('schedule-today').onclick = () => {month = currentMonth(); renderMonth();};
+    document.getElementById('schedule-export').onclick = generateICS;
+    modal.querySelector('.schedule-modal-close').onclick = closeDetails;
+    modal.onclick = event => {if (event.target === modal) closeDetails();};
+    modal.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {event.preventDefault(); closeDetails();}
+        if (event.key === 'Tab') {const buttons = [...dialog.querySelectorAll('button')]; const first = buttons[0], last = buttons[buttons.length - 1]; if (event.shiftKey && document.activeElement === first) {event.preventDefault(); last.focus();} else if (!event.shiftKey && document.activeElement === last) {event.preventDefault(); first.focus();}}
+    });
+    renderMonth();
+    fetchEvents();
+})();

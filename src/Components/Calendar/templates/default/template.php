@@ -1,66 +1,30 @@
-<?php
-/** 
- * @var array $arResult 
- */
-?>
-<div class="calendar-wrapper">
-    <div class="calendar-header">
-        <h2 style="color: var(--accent-color); margin-top: 0;">📅 Календарь Эквестрии</h2>
-        
-        <div id="next-event-timer" class="next-event-timer" style="display:none;">
-            Следующее событие через: <span id="timer-countdown">--:--:--</span>
-        </div>
-        
+<section class="calendar-wrapper" aria-labelledby="schedule-title">
+    <header class="schedule-heading">
+        <div><p class="schedule-eyebrow">MLP Evening</p><h1 id="schedule-title">Расписание</h1><p class="schedule-intro">Встречаемся, смотрим, обсуждаем. Все события — по московскому времени.</p></div>
+        <span class="schedule-timezone">МСК · UTC+3</span>
+    </header>
+    <div id="next-event" class="schedule-next" hidden></div>
+    <section class="schedule-month" aria-labelledby="current-month-label">
         <div class="calendar-controls">
-            <button class="btn-primary btn-sm" onclick="changeMonth(-1)">&#9664;</button>
-            <h3 id="current-month-label" style="margin: 0 15px; min-width: 150px; text-align: center;"></h3>
-            <button class="btn-primary btn-sm" onclick="changeMonth(1)">&#9654;</button>
-            <button class="btn-primary btn-sm" style="margin-left: 15px;" onclick="renderCalendar(getMSKTime()); selectDate(getMSKTime());">Сегодня</button>
-        </div>
-    </div>
-    
-    <div class="calendar-layout-split">
-        <div class="calendar-main">
-            <div class="calendar-grid">
-                <div class="calendar-days-header">
-                    <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div class="weekend">Сб</div><div class="weekend">Вс</div>
-                </div>
-                <div id="calendar-days" class="calendar-days">
-                    <!-- Days will be rendered here via JS -->
-                </div>
+            <div class="schedule-month-nav">
+                <button type="button" class="schedule-icon-button" data-month-step="-1" aria-label="Предыдущий месяц">‹</button>
+                <h2 id="current-month-label"></h2>
+                <button type="button" class="schedule-icon-button" data-month-step="1" aria-label="Следующий месяц">›</button>
             </div>
+            <button type="button" class="schedule-today" id="schedule-today">Текущий месяц</button>
         </div>
-        
-        <div class="calendar-sidebar">
-            <h3 id="selected-date-label" style="color: var(--accent-color); margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">События на сегодня</h3>
-            <div id="selected-date-events" class="selected-events-list">
-                <!-- Events will be rendered here -->
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Modal for Public Event Details -->
-<div id="public-event-modal" class="modal-overlay" style="display: none;">
-    <div class="modal-content" id="modal-content-card" style="max-width: 600px; text-align: left; border-top: 4px solid var(--accent-color);">
-        <span class="close-modal" onclick="closePublicEventModal()">&times;</span>
-        <h2 id="modal-event-title" class="modal-title" style="margin-top:0; text-align: center; font-size: 1.8em;"></h2>
-        
-        <div class="event-meta mb-3" style="color: var(--text-muted); font-size: 0.95em; display: flex; justify-content: center; gap: 20px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin-bottom: 20px;">
-            <div>🕒 <strong id="modal-event-time" style="color: #fff;"></strong> (МСК)</div>
-            <div>⏳ <strong id="modal-event-duration" style="color: #fff;"></strong></div>
-        </div>
-        
-        <div id="modal-event-desc" class="event-desc mb-3" style="line-height: 1.6; font-size: 1.05em; margin-bottom: 20px;"></div>
-        
-        <div id="modal-playlist-container" style="display:none; margin-bottom: 20px;">
-            <h4 class="modal-subtitle" style="color:var(--accent-color); margin-bottom:10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">📺 Плейлист на вечер</h4>
-            <div id="modal-playlist-content" style="background:rgba(0,0,0,0.3); padding:15px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); max-height:200px; overflow-y:auto; font-size: 0.95em;">
-            </div>
-        </div>
-        
-        <div class="form-actions mt-3" style="text-align: center;">
-            <button class="btn-primary" onclick="generateICS()" style="width: 100%; padding: 12px; font-size: 1.1em; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">🗓️ Добавить в календарь (.ics)</button>
-        </div>
-    </div>
+        <p id="schedule-status" class="schedule-status" role="status">Загружаем расписание…</p>
+        <div id="schedule-events" class="schedule-events" aria-busy="true"></div>
+    </section>
+</section>
+<div id="public-event-modal" class="schedule-modal" hidden>
+    <section class="schedule-dialog" id="modal-content-card" role="dialog" aria-modal="true" aria-labelledby="modal-event-title" tabindex="-1">
+        <button type="button" class="schedule-modal-close" aria-label="Закрыть подробности">×</button>
+        <p id="modal-event-date" class="schedule-eyebrow"></p>
+        <h2 id="modal-event-title"></h2>
+        <div class="schedule-modal-meta"><span>Начало: <strong id="modal-event-time"></strong> МСК</span><span>Длительность: <strong id="modal-event-duration"></strong></span></div>
+        <p id="modal-event-desc" class="schedule-description"></p>
+        <section id="modal-playlist-container" hidden><h3>Текущий плейлист</h3><p class="schedule-playlist-note">К началу события подборка может измениться.</p><ul id="modal-playlist-content"></ul></section>
+        <button type="button" class="schedule-ics" id="schedule-export">Добавить в календарь (.ics)</button>
+    </section>
 </div>
