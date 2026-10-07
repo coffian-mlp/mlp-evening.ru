@@ -120,4 +120,12 @@ expect(strlen(json_encode($compactOverflow))<=2048&&$compactOverflow['handler_co
 $oversizedInvalid=$localIntent;$oversizedInvalid['metric']='invented';$oversizedInvalid['scope_constraints']=array_fill(0,8,str_repeat('界',600));$llm->normalized=json_encode($oversizedInvalid);$llm->calls=[];
 $invalidLocal=$localResolver->resolve('рейтинговый запрос',$catalog,time()+55,false);
 expect(empty($invalidLocal['resolution_snapshot']['intent'])&&count($llm->calls)===1,'oversized malformed v2 intent cannot inject arbitrary formatter metric');
+$nativeSd=$localCandidate;$nativeSd['title']="A Hearth's Warming Tail";$nativeSd['rating']['value']=3.497331324;$nativeSd['rating']['published_rating']=8.2;$nativeSd['rating']['votes']=752;
+$nativeSdOutcome=['status'=>'rejected','code'=>'confirmation_required','facts'=>['rating_intent'=>$localIntent,'candidates'=>[$nativeSd],'action'=>'wish']];
+$capturedSd="@sol_daybreaker, нашла по твоему запросу: самый спорный эпизод по разбросу оценок — это \"A Hearth's Warming Tail\" (6 сезон, 8 эпизод). По проверенному локальному снимку IMDb у него стандартное отклонение 3.497 — первое место по поляризации, при 752 голосах и опубликованной оценке 8.2. То есть мнения зрителей прямо-таки разошлись как сани на Хартсварминг! Хочешь добавить его в пожелания — жми кнопку выбора, я за тебя решать не буду :)";
+expect(!LLM\PlaylistCommand::replyIsValid($capturedSd,$nativeSdOutcome,''),'captured native SD reply cannot call dispersion rank polarization');
+$naturalSd="По IMDb у \"A Hearth's Warming Tail\" самый большой разброс оценок: стандартное отклонение 3.497, средняя оценка 8.2. Выбери кнопкой, если подходит.";
+$llm->live=$naturalSd;$nativeReply=$command->replyText($nativeSdOutcome,time()+20);
+expect($nativeReply===$naturalSd,'native SD explanation and independently published8.2 remain freely worded');
+expect(str_contains($llm->liveRequest[4],'по разбросу всех оценок 1–10')&&str_contains($llm->liveRequest[4],'не является индексом поляризации')&&str_contains($llm->liveRequest[4],'только по разбросу'),'actual SD formatter trusted task distinguishes selected dispersion from tail metric despite polarized enum');
 echo $fail?"FAILURES: $fail\n":"ALL PASS\n";exit($fail?1:0);

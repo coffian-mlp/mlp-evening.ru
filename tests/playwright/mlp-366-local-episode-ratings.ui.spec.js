@@ -25,10 +25,11 @@ async function send(page, text) {
   expect(result.success, JSON.stringify(result)).toBeTruthy();
 }
 async function quoted(page, text, messageId) {
-  // Refine may already select the proposal; clear via UI before adding the exact target.
+  // Wait for the actual refine response/renderer before preparing the quoted input.
+  await expect(page.locator(`.chat-message[data-id="${messageId}"] .command-interaction`)).toContainText('Ответь Лире с цитатой и уточни описание');
   while (await page.locator('.quote-preview-remove').count()) await page.locator('.quote-preview-remove').first().click();
   await page.evaluate(() => window.getSelection()?.removeAllRanges());
-  await page.locator(`.chat-message[data-id="${messageId}"] .quote-btn`).click({ force: true });
+  await page.locator(`.chat-message[data-id="${messageId}"] .quote-btn`).click();
   await expect(page.locator(`.quote-preview-remove[data-id="${messageId}"]`)).toBeVisible();
   await page.locator('#chat-input').fill(text);
   const pending = page.waitForResponse(r => r.url().endsWith('/api.php') && r.request().postData()?.includes('action=send_message'));
