@@ -168,6 +168,7 @@ final class CommandInteractionContinuation
             $result = ($handler['resolve'])($snapshot['context']['handler_context'], $deadline);
             if (!$manager->saveVerifiedResult($snapshot['interaction_id'], $snapshot['revision'], $snapshot['operation_key'], $snapshot['lease_token'], $result)) return null;
         }
+        if ($snapshot['work']['kind'] === 'resolve') return $manager->getVerifiedWorkResult($snapshot['interaction_id'], $snapshot['revision'], $snapshot['operation_key'], $snapshot['lease_token']);
         return $result ?? ['status' => 'empty', 'code' => 'choice_clarifying'];
     }
 

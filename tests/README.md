@@ -297,3 +297,25 @@ Focused PHP assertions in `integration_playlist_llm_scoped.php`, `test_episode_r
 The existing `mlp-364-command-refinement.ui.spec.js` additionally exercises actual HTTP→plain quoted first-appearance refinement→queue/worker→verified alternate title→canonical button→one wish after click. Only external provider transport is replaced. Use the existing MLP-364 commands above with a dedicated 24-worker PHP HTTP server for concurrent SSE requests. Fixture setup temporarily pins queue delays to zero and cleanup restores settings and removes only owned fixture data; shared Docker remains running.
 
 Implementation final result: 95 PHP and 40 affected + 24 legacy Playwright PASS. Independent QA: 95 PHP PASS, 39 affected cases PASS plus unchanged exact-case repeat PASS after an afterEach screenshot timeout, 24 legacy PASS. The capture diagnostic remains recorded; no product assertion or timeout was changed. Same-source PCOV changed executable PHP lines 88/91 = 96.70%, not branch/JS coverage. Local reports: `docs/tests/MLP-364-followup.tests.md` and `docs/qa/MLP-364-followup.qa.md`; production read-only/provider probes do not substitute for Docker full-flow checks.
+
+## MLP-365: рейтинговые пожелания
+
+Используется тот же изолированный Compose-проект `mlp359` с `DB_HOST=db`, HTTP-сервером на 24 workers и последовательным выполнением PHP/browser suites. Новые `test_rating_search_proof.php` и `test_rating_episode_search.php` входят в `run_all.php`: проверяют независимость двух WEB-поисков, сравнение средних оценок, вычисление рангов/равенства, распределения низких и высоких голосов, цитированные источники, ограничения и размеры доказательств. Дополненные интеграционные тесты проверяют частный сохранённый результат, повтор без нового поиска, полный envelope/fallback, metadata дочернего выбора и адресность ответа.
+
+```bash
+mlp_test_compose exec -T php php tests/run_all.php
+mlp_test_compose exec -T php php tests/playwright/mlp-361-interactions-fixture.php setup
+MLP_BASE_URL=http://127.0.0.1:8091 npx playwright test \
+  -c tests/playwright/playwright.config.js \
+  tests/playwright/mlp-365-rating-search.ui.spec.js \
+  --project=chromium-ui --project=firefox-ui
+mlp_test_compose exec -T php php tests/playwright/mlp-361-interactions-fixture.php cleanup
+```
+
+После cleanup новые и прежние browser suites запускаются отдельно с новым fixture setup: `mlp-364-command-refinement.ui.spec.js` и `mlp-361-command-interactions.ui.spec.js` дают 64 прежних сценария в двух движках. Общий PHP suite не запускать при активной browser fixture. Cleanup восстанавливает восемь сохранённых настроек, включая heartbeat, и удаляет только собственные данные/credentials. Завершить только свой HTTP-сервер; shared Docker сохраняется.
+
+Восемь новых actual HTTP→queue→worker сценариев покрывают best→обычную цитату worst с сохранением персонажа, повторное уточнение дочернего выбора без нового WEB до ввода, неполное сравнение, неподдерживаемый источник, обязательное распределение для спорного варианта, неизменный TTL и один эффект после кнопки. Helper проверяет preview и фактический ID цитаты в POST. Подменяется только внешний provider transport; источники и числовые assertions не ослабляются.
+
+Независимый QA: 97/97 PHP PASS (SKIP0/FAIL0, 11,0 с), новые 8/8 Playwright PASS (40,1 с), прежние 64/64 PASS (4,1 мин). Diagnostic 7/8 с отсутствующей цитатой в Firefox сохранён; после исправления helper полный новый набор прошёл. Покрытие изменённых исполняемых PHP-строк PCOV: 401/405 = 99,01%, проверено на том же runtime; это не branch/JS coverage и не точность внешней модели. Локальные отчёты: `docs/tests/MLP-365-rating-search.tests.md`, `docs/qa/MLP-365-rating-search.qa.md`.
+
+Native provider-проверки подтвердили шесть вариантов нормализации, но snippets не доказали сравнительного лидера best/worst. Такие ответы должны оставаться уточнением; deterministic fixtures не считаются доказательством успешного live-рейтинга. Остаточный риск модельного извлечения и доступность данных источника сохраняются.

@@ -83,7 +83,7 @@ namespace {
             check(str_contains($actual[0]['content'],'Озвучь только результат') && !str_contains($actual[1]['content'],'Озвучь только результат'),'trusted task only in system; safe facts only in user');
             check(!str_contains($actual[1]['content'],'"status"') && !str_contains($actual[1]['content'],'Детерминированный исход'),'live human facts contain no raw outcome JSON');
             $GLOBALS['playlist_scoped_annotations']=[['url_citation'=>['url'=>'https://example.org/episode','title'=>'Fixture source']]];
-            $GLOBALS['playlist_scoped_responses']=['episodes with explosions','{"candidates":[{"episode_code":"S01E07","title":"Dragonshy","evidence":"Dragon smoke","source_url":"https://example.org/episode"}]}','{"verified":[7]}'];
+            $GLOBALS['playlist_scoped_responses']=['{"version":1,"intent":"plot","search_query":"episodes with explosions"}','{"candidates":[{"episode_code":"S01E07","title":"Dragonshy","evidence":"Dragon smoke","source_url":"https://example.org/episode"}]}','{"verified":[7]}'];
             $offset=count($GLOBALS['playlist_scoped_payloads']);
             $found=(new LLM\EpisodeResolver($manager))->resolve('где много взрывов',[['ID'=>7,'TITLE'=>'My Little Pony Friendship is Magic - Season 1 Episode 7 - Dragonshy']]);
             check($found['status']==='found','actual resolver calls manager and actual providers through transport seam');
@@ -168,10 +168,10 @@ namespace {
                 return $chat->findBotReplyTo($mid);
             };
             $GLOBALS['playlist_scoped_text']='Уточни. Детерминированный исход: {"status":"rejected"}';
-            $GLOBALS['playlist_scoped_responses']=['episodes with explosions','{"candidates":[]}', $GLOBALS['playlist_scoped_text']];
+            $GLOBALS['playlist_scoped_responses']=['{"version":1,"intent":"plot","search_query":"episodes with explosions"}','{"candidates":[]}', $GLOBALS['playlist_scoped_text']];
             $reply=$run('где много взрывов');
             check(str_contains($reply['raw_message'],'уточни описание') && !str_contains($reply['raw_message'],'Детерминированный'),'actual dispatcher rejects meta leak and publishes clean fallback');
-            $GLOBALS['playlist_scoped_responses']=['episodes with explosions','{"candidates":[]}','Хм... Уточни описание, а кнопку выбора нажми сам, я пока подожду.'];
+            $GLOBALS['playlist_scoped_responses']=['{"version":1,"intent":"plot","search_query":"episodes with explosions"}','{"candidates":[]}','Хм... Уточни описание, а кнопку выбора нажми сам, я пока подожду.'];
             $missingButtons=$run('историю с очень многими взрывами');
             check(str_contains($missingButtons['raw_message'],'уточни описание') && !str_contains($missingButtons['raw_message'],'кноп'),'actual clarification rejects captured nonexistent button instruction');
             $clarificationSystem=json_decode($GLOBALS['playlist_scoped_options'][CURLOPT_POSTFIELDS],true)['messages'][0]['content'];
@@ -225,7 +225,7 @@ namespace {
             }
             $db->query('UPDATE episode_list SET TWOPART_ID='.$pairIds[1].' WHERE ID='.$pairIds[0]);
             $db->query('UPDATE episode_list SET TWOPART_ID='.$pairIds[0].' WHERE ID='.$pairIds[1]);
-            $GLOBALS['playlist_scoped_responses']=['episode two-part story',json_encode(['candidates'=>[['episode_code'=>'S91E25-S91E26','title'=>'Fixture Two Story','evidence'=>'Two-part story','source_url'=>'https://example.org/episode']]]),json_encode(['verified'=>$pairIds]),'Выбери эпизод кнопкой — желание пока не записано.'];
+            $GLOBALS['playlist_scoped_responses']=['{"version":1,"intent":"plot","search_query":"episode two-part story"}',json_encode(['candidates'=>[['episode_code'=>'S91E25-S91E26','title'=>'Fixture Two Story','evidence'=>'Two-part story','source_url'=>'https://example.org/episode']]]),json_encode(['verified'=>$pairIds]),'Выбери эпизод кнопкой — желание пока не записано.'];
             $pairReply=$run('историю с двумя частями');
             preg_match('/\[\[command:(\d+)\]\]/',$pairReply['raw_message'],$pairMarker);
             $pairInteraction=(int)($pairMarker[1]??0);
@@ -295,7 +295,7 @@ namespace {
             $negativeReply=$chat->findBotReplyTo($negativeSource);preg_match('/\[\[command:(\d+)\]\]/',$negativeReply['raw_message'],$negativeMarker);$negativeInteraction=(int)$negativeMarker[1];
             $negText='нет, не эта — там была Рэрити';$negId=$chat->addMessage($negativeActor,'negative fixture',$negText,[(int)$negativeReply['id']]);
             check(LLM\CommandInteractionContinuation::routeMessage(['message_id'=>$negId,'user_id'=>$negativeActor],LLM\PlaylistCommand::interactionRegistry()),'negative and plot details accepted together by actual router');
-            $GLOBALS['playlist_scoped_responses']=['Rarity scene dragon smoke','{"candidates":[]}','Уточни описание и ответь с цитатой на моё сообщение.'];
+            $GLOBALS['playlist_scoped_responses']=['{"version":1,"intent":"plot","search_query":"Rarity scene dragon smoke"}','{"candidates":[]}','Уточни описание и ответь с цитатой на моё сообщение.'];
             (new ReflectionMethod($scopedWorker,'reactive'))->invoke($scopedWorker);
             $negativeRow=$db->query('SELECT * FROM command_interactions WHERE id='.$negativeInteraction)->fetch_assoc();$negativeContext=json_decode($negativeRow['context_json'],true);
             check($negativeRow['state']==='clarifying' && count($negativeContext['question_bindings'])===1,'empty verified search persists quoteable question and cancel state');
@@ -303,7 +303,7 @@ namespace {
             check(!str_contains($chat->getMessageById($questionId)['raw_message'],'[[command:'),'question is quoteable text without second unavailable command widget');
             $retryId=$chat->addMessage($negativeActor,'negative fixture','повтори поиск',[$questionId]);
             check(LLM\CommandInteractionContinuation::routeMessage(['message_id'=>$retryId,'user_id'=>$negativeActor],LLM\PlaylistCommand::interactionRegistry()),'actual question binding supports explicit retry');
-            $GLOBALS['playlist_scoped_responses']=['Rarity scene dragon smoke',json_encode(['candidates'=>[['episode_id'=>$pairIds[1],'evidence'=>'Rarity fixture plot','source_url'=>'https://example.org/episode']]]),json_encode(['verified'=>[$pairIds[1]]]),'Выбирай подходящий вариант кнопкой — этот выбор за тобой!'];
+            $GLOBALS['playlist_scoped_responses']=['{"version":1,"intent":"plot","search_query":"Rarity scene dragon smoke"}',json_encode(['candidates'=>[['episode_id'=>$pairIds[1],'evidence'=>'Rarity fixture plot','source_url'=>'https://example.org/episode']]]),json_encode(['verified'=>[$pairIds[1]]]),'Выбирай подходящий вариант кнопкой — этот выбор за тобой!'];
             $traceOffset=count($GLOBALS['playlist_scoped_payloads']);(new ReflectionMethod($scopedWorker,'reactive'))->invoke($scopedWorker);
             $verifyPayload=$GLOBALS['playlist_scoped_payloads'][$traceOffset+2]['messages'][1]['content'];$verifiedInput=json_decode($verifyPayload,true);
             check(str_contains($verifiedInput['original_query'],'самую первую серию') && str_contains($verifiedInput['original_query'],'Рэрити'),'actual verifier preserves original and new facts after retry');
@@ -331,6 +331,28 @@ namespace {
                 check((int)($continuations->getResult($terminalId,$terminalActor)['reply_message_id']??0)===$terminalReplyId,'terminal worker replay never binds second reply');
                 check(count((new Domain\EpisodeManager())->getUserWishes($terminalActor))===0 && (int)$db->query('SELECT COUNT(*) AS n FROM episode_wish_events WHERE user_id='.(int)$terminalActor)->fetch_assoc()['n']===0,'terminal recovery leaves real wishes and quota events unchanged');
             }
+            $ratingUrl='https://www.imdb.com/title/tt1751105/episodes/?topRated=DESC';
+            $ratingIntent=['version'=>1,'intent'=>'rating','direction'=>'best','selection'=>'extreme','metric'=>'mean_score','requested_source'=>null,'scope_constraints'=>[],'search_query'=>'highest rated episodes IMDb'];
+            $ratingProof=['platform'=>'imdb','metric'=>'mean_score','direction'=>'best','selection'=>'extreme','scale'=>['min'=>1,'max'=>10],'source_asof'=>null,
+                'universe'=>['series'=>'My Little Pony: Friendship Is Magic','constraints'=>[],'coverage'=>'source_ranked_boundary'],
+                'comparison'=>['rows'=>[['episode_code'=>'S01E07','title'=>'Dragonshy','value'=>9.5,'rank'=>1,'source_url'=>$ratingUrl]],'boundary'=>['position'=>'top','rank'=>1,'tied_count'=>1]],
+                'evidence'=>[['source_url'=>$ratingUrl,'excerpt'=>'Episode average rating leaderboard, top boundary9.5.']]];
+            $oldAnnotations=$GLOBALS['playlist_scoped_annotations'];
+            $GLOBALS['playlist_scoped_annotations']=[['url_citation'=>['url'=>$ratingUrl,'title'=>'IMDb episode leaderboard']]];
+            $GLOBALS['playlist_scoped_responses']=[json_encode($ratingIntent),"```json\n".json_encode($ratingProof)."\n```\nComparison basis follows.",json_encode($ratingProof)];
+            $beforeRating=count($GLOBALS['playlist_scoped_payloads']);
+            $rated=(new LLM\EpisodeResolver($manager))->resolve('самый лучший по рейтингу',[['ID'=>413,'TITLE'=>'My Little Pony Friendship is Magic - Season 1 Episode 7 - Dragonshy']],time()+55,false);
+            $ratingCalls=array_slice($GLOBALS['playlist_scoped_payloads'],$beforeRating);
+            check($rated['status']==='found'&&$rated['candidates'][0]['rating']['value']===9.5,'actual scoped providers normalize and independently verify captured fenced comparison');
+            check(count($ratingCalls)===3&&!isset($ratingCalls[0]['plugins'])&&isset($ratingCalls[1]['plugins'])&&isset($ratingCalls[2]['plugins']),'actual rating protocol uses fast normalizer and precisely two fresh WEB transports');
+            $firstWeb=$ratingCalls[1]['messages'];$secondWeb=$ratingCalls[2]['messages'];
+            check($firstWeb[count($firstWeb)-1]['content']===$secondWeb[count($secondWeb)-1]['content']&&!str_contains(json_encode($secondWeb),'Episode average rating leaderboard, top boundary9.5'),'second real transport carries original query but no first evidence');
+            $GLOBALS['playlist_scoped_text']='IMDb: средняя оценка 9.5. Dragonshy находится наверху сравнения; выбери вариант кнопкой.';
+            $ratingReply=$command->replyText(['status'=>'rejected','code'=>'confirmation_required','facts'=>['candidates'=>$rated['candidates'],'rating_intent'=>$ratingIntent,'action'=>'wish']],time()+20,['actor_id'=>$actor,'data'=>['original_query'=>'самый лучший']]);
+            check(str_contains($ratingReply,'средняя оценка 9.5')&&str_starts_with($ratingReply,$manager->actionRecipientPrefix($actor)),'actual live formatter retains rating value and trusted recipient');
+            $ratingPayload=end($GLOBALS['playlist_scoped_payloads']);
+            check(!isset($ratingPayload['plugins'])&&str_contains(json_encode($ratingPayload),'OWN_ACTION_CANARY')&&!str_contains(json_encode($ratingPayload),'FOREIGN_ACTION_CANARY'),'rating live context uses owner memory but does not rerun WEB or import foreign dossiers');
+            $GLOBALS['playlist_scoped_annotations']=$oldAnnotations;
             $config->setOption('ai_live_confirm', '0');
             $calls = $GLOBALS['playlist_scoped_calls'];
             check($manager->liveTextBounded('Confirm', null, time() + 12) === null && $GLOBALS['playlist_scoped_calls'] === $calls, 'disabled live makes no HTTP call');

@@ -22,7 +22,7 @@ class PlaylistCommandFixtureLlm extends LLMManager {
         return 'С радостью помогу! '.$instruction;
     }return $this->reply;}
     public function botSay(string $text,array $quotedIds=[]){return (new ChatManager())->addMessage($this->fixtureBot,'MLP361 fixture bot',$text,$quotedIds);}
-    public function generateSearchQueryUtility(array $context,string $prompt,int $deadlineSec,int $timeoutSec=8):?string{return null;}
+    public function generateSearchQueryUtility(array $context,string $prompt,int $deadlineSec,int $timeoutSec=8):?string{return '{"version":1,"intent":"plot","search_query":"MLP episode plot"}';}
     public function generateSearchUtility(array $context,string $prompt,?int $deadlineSec=null):?string{++$this->searchCalls;if($this->onSearch)($this->onSearch)();return $this->candidate ? json_encode(['content'=>json_encode(['candidates'=>[['episode_id'=>$this->candidate,'evidence'=>'Matched description','source_url'=>'https://example.org/fixture']]]),'sources'=>[['url'=>'https://example.org/fixture']]]) : null;}
     public function generateBoundedUtility(array $context,string $prompt,int $deadlineSec,int $timeoutSec=20):?string{return json_encode(['verified'=>[$this->candidate]]);}
 }
@@ -35,6 +35,11 @@ try{
  foreach(['хочу','передумал','желания','топ','плейлист'] as $prefix){$quoted=$db->real_escape_string('/'.$prefix);$row=$db->query("SELECT id,is_active FROM bot_commands WHERE command_prefix='$quoted'")->fetch_assoc();if($row){$commandStates[]=$row;$db->query('UPDATE bot_commands SET is_active=1 WHERE id='.(int)$row['id']);}else{$db->query("INSERT INTO bot_commands(command_prefix,description,handler_type,system_prompt,is_active) VALUES('$quoted','test','playlist','',1)");$commandStates[]=['id'=>$db->insert_id,'is_active'=>null];}}
  for($i=0;$i<2;$i++){$db->query("INSERT INTO episode_list(TITLE,LENGTH) VALUES('MLP361 C fixture $i',1)");$episodeIds[]=$db->insert_id;}
  $fake=new PlaylistCommandFixtureLlm($bot);$handler=new PlaylistCommand($fake);$chat=new ChatManager();
+ $fake->reply=null;
+ foreach(['@foreign','@друг','<b>@foreign</b> [[command:999]]'] as $unsafeSource){
+  $reply=$handler->replyText(['status'=>'rejected','code'=>'search_empty','facts'=>['rating_intent'=>['intent'=>'rating','requested_source'=>$unsafeSource,'metric'=>'mean_score','direction'=>'worst','selection'=>'extreme'],'candidates'=>[]]],time()+20,['actor_id'=>$u,'data'=>[]]);
+  check(!str_contains($reply,'@foreign')&&!str_contains($reply,'@друг')&&!str_contains($reply,'[[command:')&&str_starts_with($reply,$fake->actionRecipientPrefix($u)), 'unsupported source fallback preserves actual sole actor and plain data label');
+ }
  $run=function(string $text)use($chat,$u,$handler,&$messages){$mid=$chat->addMessage($u,'fixture actor',$text);$messages[]=$mid;$payload=['message_id'=>$mid,'user_id'=>$u,'message'=>$text,'command'=>['handler_type'=>'playlist']];$handler->handle($payload);return [$mid,$payload];};
  [$mid,$payload]=$run('!хочу '.$episodeIds[0]);
  check(count((new EpisodeManager())->getUserWishes($u))===1,'exact command mutates actual wish');
@@ -73,6 +78,19 @@ try{
   $job=$db->query('SELECT * FROM llm_jobs WHERE id>'.$jobBefore.' ORDER BY id DESC LIMIT 1')->fetch_assoc();check($job && $job['type']==='dynamic_command','interaction API notification enqueue only even AI0+inline+stale worker');
   if($job)$db->query('DELETE FROM llm_jobs WHERE id='.(int)$job['id']);
  }finally{$config->setOption('ai_enabled',$oldAI);$config->setOption('ai_worker_mode',$oldMode);$config->setOption('ai_use_queue',$oldQueue);$config->setOption('bot_worker_heartbeat',$oldHeartbeat);}
+ $db->query("UPDATE bot_commands SET is_active=1 WHERE command_prefix='/хочу'");$fake->onSearch=null;
+ $cacheText='/хочу сохранённый результат поиска';$cacheSource=$chat->addMessage($u,'cache actor',$cacheText);$messages[]=$cacheSource;
+ $cacheVersion=ChatManager::interactionSourceVersion($chat->getMessageById($cacheSource));
+ $im->acceptNewCommand('episode_wish',$u,$cacheSource,static fn()=>['kind'=>'search','query'=>'сохранённый результат поиска'],$cacheVersion);
+ $cacheSnapshot=['version'=>1,'status'=>'found','candidates'=>[['episode_id'=>$episodeIds[1],'title'=>'MLP361 C fixture 1','evidence'=>'persisted proof','source_url'=>'https://example.org/fixture']]];
+ $cacheId=$im->createContinuation('episode_wish',$u,$cacheSource,[['key'=>'episode_'.$episodeIds[1],'label'=>'Cached candidate','payload'=>['episode_id'=>$episodeIds[1]]]],['original_query'=>'сохранённый результат поиска','clarifications'=>[],'resolution_snapshot'=>$cacheSnapshot]);
+ $beforeSearch=$fake->searchCalls;$fake->onSearch=static function(){throw new RuntimeException('Persisted initial result must not search again');};
+ $cachePayload=['message_id'=>$cacheSource,'user_id'=>$u,'message'=>$cacheText,'command'=>['handler_type'=>'playlist']];
+ check($handler->handle($cachePayload),'actual initial job resumes publication after committed snapshot without proposal');
+ check($fake->searchCalls===$beforeSearch&&$chat->findBotReplyTo($cacheSource)!==null,'committed initial recovery performs zero new WEB searches and publishes guarded choice');
+ $handler->handle($cachePayload);check($fake->searchCalls===$beforeSearch,'actual replay reuses saved publication without resolver');
+ $chat->editMessage($cacheSource,$u,'/хочу edited cache source');$cachePayload['message']='/хочу edited cache source';
+ check($handler->handle($cachePayload)===false&&$fake->searchCalls===$beforeSearch,'edited initial job stops before external search and replay');
 }finally{
  $db->query('DELETE FROM command_interactions WHERE owner_id='.(int)$u);
  $db->query('DELETE FROM llm_jobs WHERE JSON_EXTRACT(payload,"$.user_id")='.(int)$u);

@@ -20,7 +20,7 @@ if ($mode === 'setup') {
     if (is_file($path)) throw new RuntimeException('Cleanup existing fixture first');
     $fixture = ['saved' => ['ai_enabled' => $config->getOption('ai_enabled', null), 'ai_bot_user_id' => $config->getOption('ai_bot_user_id', null),
         'ai_use_queue' => $config->getOption('ai_use_queue', null), 'ai_worker_mode' => $config->getOption('ai_worker_mode', null),
-        'chat_rate_limit' => $config->getOption('chat_rate_limit', null), 'ai_delay_min' => $config->getOption('ai_delay_min', null), 'ai_delay_max' => $config->getOption('ai_delay_max', null)],
+        'chat_rate_limit' => $config->getOption('chat_rate_limit', null), 'bot_worker_heartbeat' => $config->getOption('bot_worker_heartbeat', null), 'ai_delay_min' => $config->getOption('ai_delay_min', null), 'ai_delay_max' => $config->getOption('ai_delay_max', null)],
         'users' => [], 'messages' => [], 'interactions' => [], 'cases' => []];
     $bot = $users->createUser('it_user_mlp361_ui_bot_' . bin2hex(random_bytes(6)), bin2hex(random_bytes(24)), 'user');
     $fixture['users'][] = $bot; $fixture['botId'] = $bot;
@@ -39,12 +39,19 @@ if ($mode === 'setup') {
     $login = 'it_user_mlp361_ui_' . bin2hex(random_bytes(6)); $password = bin2hex(random_bytes(24));
     $owner = $users->createUser($login, $password, 'user', 'Refinement Fixture');
     $fixture['users'][] = $owner;
-    $title = 'MLP364 isolated dragon Rarity ' . $key;
+    $title = 'MLP364 isolated dragon Rarity ' . $key . '_' . bin2hex(random_bytes(4));
     $stmt = $db->prepare('INSERT INTO episode_list(TITLE,LENGTH) VALUES (?,1)'); $stmt->bind_param('s', $title); $stmt->execute();
     $target = (int)$db->insert_id; $fixture['episodes'][] = $target;
     $fixture['cases'][$key] = ['login' => $login, 'password' => $password, 'userId' => $owner, 'targetId' => $target];
     $save($fixture); echo "Continuation user ready\n";
- } elseif ($mode === 'continuation-firstappearance') {
+} elseif ($mode === 'rating-targets') {
+    $fixture=json_decode(file_get_contents($path),true,512,JSON_THROW_ON_ERROR);
+    $key=$argv[2] ?? ''; if (!isset($fixture['cases'][$key])) throw new RuntimeException('Missing owned case');
+    $title='MLP365 isolated low rating '.$key.'_'.bin2hex(random_bytes(4));
+    $stmt=$db->prepare('INSERT INTO episode_list(TITLE,LENGTH) VALUES (?,1)');$stmt->bind_param('s',$title);$stmt->execute();
+    $low=(int)$db->insert_id;$fixture['episodes'][]=$low;$fixture['cases'][$key]['lowTargetId']=$low;$save($fixture);
+    echo json_encode(['lowTargetId'=>$low]);
+} elseif ($mode === 'continuation-firstappearance') {
     $fixture=json_decode(file_get_contents($path),true,512,JSON_THROW_ON_ERROR);
     $key=$argv[2] ?? ''; if (!isset($fixture['cases'][$key])) throw new RuntimeException('Missing owned case');
     $match=Domain\EpisodeCatalog::resolveExact('S01E01',(new Domain\EpisodeManager())->getAllEpisodes());
@@ -63,7 +70,7 @@ if ($mode === 'setup') {
         $rows[] = ['id' => (int)$row['id'], 'state' => $row['state'], 'sourceId' => (int)$row['source_message_id'], 'messageId' => (int)$row['bot_message_id'],
             'resultMessageId' => (int)$row['result_message_id'], 'expiresAt' => $row['expires_at'], 'revision' => $context['revision'] ?? null,
             'childId' => $context['child_id'] ?? null, 'questionBindings' => $context['question_bindings'] ?? [],
-            'handlerContext' => $context['handler_context'] ?? null,
+            'handlerContext' => $context['handler_context'] ?? null, 'resolverResult' => $context['resolver_result'] ?? null,
             'work' => $context['pending_work'] ?? null, 'options' => array_map(static fn($o) => ['key' => $o['key'], 'label' => $o['label']], json_decode($row['options_json'], true))];
     }
     $stmt = $db->prepare('SELECT COUNT(*) AS n FROM episode_wish_events WHERE user_id=?'); $stmt->bind_param('i', $case['userId']); $stmt->execute();
@@ -89,6 +96,14 @@ if ($mode === 'setup') {
     if (!$case) throw new RuntimeException('Missing continuation case');
     $GLOBALS['mlp364_transport'] = true; $GLOBALS['mlp364_trace'] = [];
     $GLOBALS['mlp364_target'] = (int)$case['targetId']; $GLOBALS['mlp364_scenario'] = $argv[3] ?? 'found';
+    if (str_starts_with($GLOBALS['mlp364_scenario'],'rating-')) {
+        $GLOBALS['mlp365_rating_rows']=[];
+        foreach (['targetId','lowTargetId'] as $field) {
+            $id=(int)($case[$field] ?? $case['targetId']);
+            $title=$db->query('SELECT TITLE FROM episode_list WHERE ID='.$id)->fetch_assoc()['TITLE'];
+            $GLOBALS['mlp365_rating_rows'][]=['id'=>$id,'title'=>$title];
+        }
+    }
     if ($GLOBALS['mlp364_scenario'] === 'cancel-during-search') {
         $GLOBALS['mlp364_on_transport'] = static function (string $stage) use ($db, $case) {
             if ($stage !== 'search') return;

@@ -282,6 +282,34 @@ final class CommandInteractionManager
         });
     }
 
+    /** Private opaque initial resolution recovery; never projects handler metadata to HTTP. */
+    public function getSourceHandlerContext(string $type, int $actorId, int $sourceMessageId, string $expectedSourceVersion): ?array
+    {
+        return $this->ownerLock($type, $actorId, fn() => Transaction::run($this->db, function () use ($type, $actorId, $sourceMessageId, $expectedSourceVersion) {
+            $this->assertAllowed($actorId);
+            $this->continuationHandler($type);
+            $this->assertLatestAccepted($type, $actorId, $sourceMessageId);
+            $binding = ['id' => $sourceMessageId, 'user_id' => $actorId, 'version' => $expectedSourceVersion, 'version_encoding' => 'storage_v2'];
+            (new ChatManager())->lockInteractionMessages([$binding]);
+            $stmt = $this->db->prepare('SELECT * FROM command_interactions WHERE type=? AND owner_id=? AND source_message_id=? FOR UPDATE');
+            $stmt->bind_param('sii', $type, $actorId, $sourceMessageId); $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc();
+            if (!$row) return null;
+            $this->guard($row, $actorId, true, true, [$binding]);
+            $context = $this->context($row);
+            if (!empty($context['acceptance_only'])) return null;
+            $this->assertInitialRecovery($row, $context);
+            return ['interaction_id' => (int)$row['id'], 'handler_context' => $context['handler_context']];
+        }));
+    }
+
+    private function assertInitialRecovery(array $row, ?array $context): void
+    {
+        if (!in_array($row['state'], ['pending', 'clarifying'], true)) throw new UserError('Выбор уже закрыт.');
+        if ($context === null) throw new UserError('Исходный контекст не поддерживает восстановление.');
+        if ($context['staged'] || $context['parent_id'] !== null || $context['revision'] !== 0) throw new UserError('Исходный поиск уже изменён.');
+    }
+
     /** Quotes are authoritative; callers supply persisted quotes, never browser claimed quotes. */
     public function lookupTarget(int $actorId, array $quotedMessageIds, array $intent): array
     {
@@ -519,12 +547,47 @@ final class CommandInteractionManager
             if (!in_array($result['status'] ?? '', ['candidates', 'empty', 'error'], true)
                 || !is_array($result['options'] ?? []) || count($result['options'] ?? []) > 6) throw new RuntimeException('Invalid verified resolver result');
             if (($result['status'] ?? '') === 'candidates') $this->continuationOptions($result['options'], 'pending');
-            $result['revision'] = $revision;
-            $result['source_bindings'] = $context['source_bindings'];
-            $context['resolver_result'] = $result;
+            $context = $this->boundedVerifiedContext($context, $result, $revision);
             $this->saveContext((int)$row['id'], $context, $row['state']);
             return true;
         });
+    }
+
+    /** Durable resolver read; publication must use the persisted result after envelope preflight. */
+    public function getVerifiedWorkResult(int $id, int $revision, string $operationKey, string $token): ?array
+    {
+        return $this->mutate($id, function ($row) use ($revision, $operationKey, $token) {
+            $this->guard($row, (int)$row['owner_id']);
+            $context = $this->requireContext($row);
+            if (($context['pending_work']['kind'] ?? '') !== 'resolve' || !$this->leaseMatches($row, $context, $revision, $operationKey, $token)) return null;
+            return $context['resolver_result'];
+        });
+    }
+
+    /** Reserve 1024 bytes for lineage IDs and one bounded proposal/question binding. */
+    private function boundedVerifiedContext(array $context, array $result, int $revision): array
+    {
+        $fallback = $result['overflow_result'] ?? ['status' => 'empty', 'options' => [], 'code' => 'context_overflow', 'facts' => []];
+        $baseHandlerContext = $context['handler_context'];
+        $updates = $result['handler_context_updates'] ?? [];
+        if (!is_array($updates)) throw new RuntimeException('Invalid resolver handler context updates');
+        $context['handler_context'] = array_replace($baseHandlerContext, $updates);
+        unset($result['overflow_result'], $result['handler_context_updates']);
+        $result['revision'] = $revision;
+        $result['source_bindings'] = $context['source_bindings'];
+        $context['resolver_result'] = $result;
+        if (strlen(json_encode($context, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)) <= 31744) return $context;
+        if (!is_array($fallback) || ($fallback['status'] ?? '') !== 'empty' || ($fallback['options'] ?? null) !== []
+            || strlen(json_encode($fallback, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)) > 2048) throw new RuntimeException('Invalid resolver overflow result');
+        $fallbackUpdates = $fallback['handler_context_updates'] ?? [];
+        if (!is_array($fallbackUpdates)) throw new RuntimeException('Invalid overflow handler context updates');
+        $context['handler_context'] = array_replace($baseHandlerContext, $fallbackUpdates);
+        unset($fallback['handler_context_updates']);
+        $fallback['revision'] = $revision;
+        $fallback['source_bindings'] = $context['source_bindings'];
+        $context['resolver_result'] = $fallback;
+        if (strlen(json_encode($context, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)) > 31744) throw new UserError('Контекст выбора переполнен. Начни новую команду.');
+        return $context;
     }
 
     /** Saved verified candidates only. Staged child remains unbound and never actionable. */
