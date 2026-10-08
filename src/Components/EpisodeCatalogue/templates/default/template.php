@@ -30,12 +30,13 @@ $states = ['stale' => 'устарело', 'low_votes' => 'мало оценок'
             foreach ($seasons as $season): ?><option value="<?= (int)$season ?>">Сезон <?= (int)$season ?></option><?php endforeach; ?>
             <option value="special">Спецвыпуски</option></select></label>
         <label>Сортировка <select class="no-custom" data-catalogue-sort>
-            <option value="code">Серия</option><option value="title">Название</option><option value="views">Просмотры</option><option value="wishes">Желания</option><option value="score">IMDb</option><option value="sd">Разброс σ</option>
+            <option value="code">Серия</option><option value="title">Название</option><option value="views">Просмотры</option><option value="wishes">Желания</option><option value="score">IMDb</option><option value="sd">Разброс оценок σ</option>
         </select></label>
         <button type="button" data-catalogue-direction aria-label="Изменить направление сортировки">По возрастанию</button>
         <button type="button" data-catalogue-reset>Сбросить</button>
     </div>
     <p class="episode-catalogue-note">До <?= (int)$data['limits']['daily'] ?> разных пожеланий в день; повторное желание той же серии — через 7 дней. Отмена не возвращает лимит.</p>
+    <p class="episode-catalogue-note" data-catalogue-rating-help>Разброс оценок σ показывает, насколько различаются оценки зрителей на IMDb. Чем выше значение, тем больше разброс; это не показатель спорности эпизода в фандоме.</p>
     <details class="episode-catalogue-about"><summary>О пожеланиях и оценках</summary><p class="episode-catalogue-note">Желания: действующие пожелания участников и прежние голоса. IMDb — опубликованная оценка; σ — стандартное отклонение голосов, не оценка качества.</p>
     <p class="episode-catalogue-observation">Данные IMDb собраны (UTC): <?= $esc($data['ratings']['observation_min'] ?? 'дата неизвестна') ?><?= !empty($data['ratings']['observation_max']) && $data['ratings']['observation_max'] !== $data['ratings']['observation_min'] ? ' — ' . $esc($data['ratings']['observation_max']) : '' ?>. Устаревшие значения не являются актуальным рейтингом.</p></details>
     <p data-catalogue-quota role="status"><?= $data['viewer']['authenticated'] ? ($exhausted ? 'Дневной лимит исчерпан; отмена доступна.' : ($quotaValid ? 'Осталось сегодня: ' . (int)$quota['remaining'] . ' из 3.' : 'Остаток дневного лимита неизвестен; действие проверит сервер.')) : '' ?></p>
@@ -43,7 +44,7 @@ $states = ['stale' => 'устарело', 'low_votes' => 'мало оценок'
     <p class="episode-catalogue-feedback" role="status" aria-live="polite" data-catalogue-feedback tabindex="-1"></p>
     <div class="episode-catalogue-scroll" tabindex="0" aria-label="Таблица эпизодов, доступна горизонтальная прокрутка">
     <table><thead><tr>
-        <?php foreach (['code'=>'Серия','title'=>'Название','views'=>'Просмотры','wishes'=>'Желания','score'=>'IMDb','sd'=>'Разброс σ'] as $key=>$label): ?><th scope="col" data-catalogue-column="<?= $key ?>"><button type="button" data-catalogue-sort-key="<?= $key ?>"><?= $label ?></button></th><?php endforeach; ?>
+        <?php foreach (['code'=>'Серия','title'=>'Название','views'=>'Просмотры','wishes'=>'Желания','score'=>'IMDb','sd'=>'Разброс оценок σ'] as $key=>$label): ?><th scope="col" data-catalogue-column="<?= $key ?>"><button type="button" data-catalogue-sort-key="<?= $key ?>"><?= $label ?></button></th><?php endforeach; ?>
         <th scope="col">Моё желание</th><?php if ($admin): ?><th scope="col">ID</th><th scope="col">TWOPART_ID</th><th scope="col">LENGTH</th><?php endif; ?>
     </tr></thead><tbody>
     <?php foreach ($data['rows'] as $row): $rating=$row['rating']; ?>
