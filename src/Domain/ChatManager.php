@@ -1109,4 +1109,13 @@ class ChatManager {
         if (!$time || $time->format('Y-m-d H:i:s') !== $sql) throw new \RuntimeException('Invalid interaction edit timestamp');
         return $sql;
     }
+    /** Bounded public, nondeleted evidence for a past viewing window; never current chat. */
+    public function getAnnouncementEvidence(string $fromUtc, string $toUtc, int $limit = 180): array {
+        $limit = max(1, min(180, $limit));
+        $stmt = $this->db->prepare('SELECT cm.id,cm.user_id,COALESCE(NULLIF(u.nickname,""),u.login,cm.username) AS username,LEFT(cm.message,1200) AS message,cm.created_at FROM chat_messages cm LEFT JOIN users u ON u.id=cm.user_id WHERE cm.is_deleted=0 AND cm.created_at>=? AND cm.created_at<? ORDER BY cm.id DESC LIMIT ?');
+        $stmt->bind_param('ssi', $fromUtc, $toUtc, $limit);
+        $stmt->execute();
+        return array_reverse($stmt->get_result()->fetch_all(MYSQLI_ASSOC));
+    }
+
 }

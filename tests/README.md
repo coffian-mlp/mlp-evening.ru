@@ -384,3 +384,10 @@ MLP_BASE_URL=http://127.0.0.1:8091 npx playwright test \
 
 
 Независимый QA MLP-368: **103/103 PHP PASS, SKIP0/FAIL0; 54/54 Playwright PASS =30 каталожных +24 прежних команд**, Chromium/Firefox. Текущее независимое покрытие изменённых исполняемых PHP-строк относительно `94fbc3e`: **33/33 =100%**; это line coverage PHP, не branch/JS coverage. Старые56 семантических сценариев MLP-364/365/366 остаются историческими доказательствами неизменённых путей и не включаются в текущие54. Локальные отчёты: `docs/tests/MLP-368-catalogue-feedback.tests.md`, `docs/qa/MLP-368-catalogue-feedback.qa.md`.
+
+
+## MLP-375: Telegram announcement editor
+
+New PHP suites cover bounded previous-event evidence, Moscow scheduling, captions and Roman numbering, owner-only Telegram updates, durable approval revisions, regeneration, delivery ambiguity and a fake-transport worker flow. Run with `php tests/run_all.php` inside an isolated Docker database (`DB_HOST=db`). External Telegram/LLM requests are replaced by test seams. Integration fixtures remove only their own rows and restore options. The generation/content tests do not publish messages.
+
+Production activation also requires a dedicated bot token, independently verified owner Telegram ID, channel posting permission and a private `/start`. See `deploy/telegram-announcements.md`. Telegram mobile UI acceptance is performed in the owner's actual conversation after configuration; it cannot be verified through the site's Playwright fixtures.

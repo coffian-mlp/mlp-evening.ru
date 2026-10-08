@@ -1,0 +1,41 @@
+<?php
+require_once __DIR__.'/../autoload.php';
+use LLM\AnnouncementContent;
+function check($condition,$label) { if (!$condition) { echo "FAIL $label\n"; exit(1); } echo "OK $label\n"; }
+$o = ['id'=>20,'run_id'=>'20_1791648000','real_start_time'=>strtotime('2026-10-10 16:00:00 UTC'),'duration_minutes'=>240,'use_playlist'=>1,'is_recurring'=>1,'recurrence_rule'=>'weekly','title'=>'Watch','description'=>'Description'];
+$o['run_id'] = '20_'.$o['real_start_time'];
+$s = AnnouncementContent::schedule($o);
+check($s['prepare_at']===strtotime('2026-10-07 16:00:00 UTC'),'Wednesday 19 Moscow');
+check($s['main_at']===strtotime('2026-10-08 16:00:00 UTC'),'Thursday 19 Moscow');
+check($s['reminder_at']===strtotime('2026-10-10 13:00:00 UTC'),'three hours before');
+$friday = array_replace($o,['real_start_time'=>strtotime('2027-01-01 07:00:00 UTC')]);
+check(AnnouncementContent::schedule($friday)['main_at']===strtotime('2026-12-30 16:00:00 UTC'),'calendar dates cross year and early start');
+check(AnnouncementContent::schedule(array_replace($o,['use_playlist'=>0]))===[],'night event excluded');
+check(AnnouncementContent::schedule(array_replace($o,['recurrence_rule'=>'daily']))===[],'daily event excluded');
+check(AnnouncementContent::roman(123)==='CXXIII' && AnnouncementContent::roman(944)==='CMXLIV','Roman canonical form');
+try { AnnouncementContent::roman(0); check(false,'invalid number'); } catch (InvalidArgumentException $e) { check(true,'invalid number'); }
+check(AnnouncementContent::captionUnits('a😀б')===4,'Telegram UTF16 units count astral emoji');
+$b=['run_id'=>$o['run_id'],'event_id'=>20,'start_at'=>'2026-10-10 16:00:00','end_at'=>'2026-10-10 20:00:00','snapshot_id'=>2,'state'=>'pending'];
+$snap=['id'=>2,'stories'=>[['ids'=>[1,2],'titles'=>['Part 1','Part 2'],'length'=>2]]];
+check(AnnouncementContent::validateBinding($o,$b,$snap),'bound snapshot matches live event');
+check(!AnnouncementContent::validateBinding($o,$b,null),'no current snapshot fallback');
+check(!AnnouncementContent::validateBinding($o,$b,array_replace($snap,['id'=>3])),'snapshot mismatch rejected');
+check(!AnnouncementContent::validateBinding(array_replace($o,['duration_minutes'=>180]),$b,$snap),'changed duration rejected until binding refresh');
+check(!AnnouncementContent::validateBinding($o,array_replace($b,['state'=>'cancelled']),$snap),'cancelled event rejected');
+$f=['occurrence'=>$o,'snapshot'=>$snap,'night'=>null,'chat'=>[['id'=>1,'text'=>'past']]];
+check(AnnouncementContent::fingerprint($f)===AnnouncementContent::fingerprint(array_replace($f,['chat'=>[],'now'=>time()])),'chat and clock do not invalidate approved facts');
+$changed=$f;$changed['occurrence']['description']='Changed';
+check(AnnouncementContent::fingerprint($f)!==AnnouncementContent::fingerprint($changed),'description change invalidates');
+$changed=$f;$changed['snapshot']['stories'][0]['ids']=[3];
+check(AnnouncementContent::fingerprint($f)!==AnnouncementContent::fingerprint($changed),'playlist change invalidates');
+$changed=$f;$changed['night']=array_replace($o,['id'=>21,'description'=>'Night']);
+check(AnnouncementContent::fingerprint($f)!==AnnouncementContent::fingerprint($changed),'night schedule change invalidates');
+$body='Встречаемся 10.10.2026 19:00 МСК https://mlp-evening.ru/';
+check(str_starts_with(AnnouncementContent::caption($body,'main',123,$o['real_start_time']),"#123\n\n"),'main deterministic number');
+check(str_starts_with(AnnouncementContent::caption($body,'reminder',123,$o['real_start_time']),"Notificatio CXXIII\n\n"),'reminder shares stream number');
+check(AnnouncementContent::caption(str_replace('19:00','20:00',$body),'main',123,$o['real_start_time'])===null,'wrong model start time rejected');
+check(AnnouncementContent::caption(str_replace(' МСК','',$body),'main',123,$o['real_start_time'])===null,'timezone required');
+check(AnnouncementContent::caption(str_replace('https://mlp-evening.ru/','',$body),'main',123,$o['real_start_time'])===null,'site link required');
+check(AnnouncementContent::caption($body.str_repeat('😀',512),'main',123,$o['real_start_time'])===null,'overlong emoji caption rejected');
+check(AnnouncementContent::caption("#999\n".$body,'main',123,$o['real_start_time'])===null,'model supplied numbering rejected');
+echo "ALL PASS\n";
