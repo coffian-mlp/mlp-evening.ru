@@ -18,10 +18,10 @@ Apply `2026_10_08_telegram_announcements.sql`, then deploy the code. Check readi
 
 ```
 php telegram_announcements_setup.php --check
-php telegram_announcements_setup.php --enable EVENT_ID FIRST_NUMBER
+php telegram_announcements_setup.php --enable EVENT_ID FIRST_NUMBER FIRST_DATE
 ```
 
-The checks verify the bot identity, absence of an existing webhook, channel posting permission and the owner's private conversation. Activation is explicit and disabled by default. `--disable` stops processing without deleting state. Install the following cron entry for the site user after checks succeed:
+The checks verify the bot identity, absence of an existing webhook, channel posting permission and the owner's private conversation. Activation is explicit and disabled by default. FIRST_DATE is a Moscow calendar date (YYYY-MM-DD); earlier occurrences are excluded, allowing an already prepared manual announcement to remain untouched. `--disable` stops processing without deleting state. Install the following cron entry for the site user after checks succeed:
 
 ```
 * * * * * /usr/bin/php /var/www/fastuser/data/www/mlp-evening.ru/cron_announcements.php >/dev/null 2>&1

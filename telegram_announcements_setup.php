@@ -10,7 +10,7 @@ use Social\TelegramBotClient;
 $store = new AnnouncementStore();
 $mode = $argv[1] ?? '--check';
 if ($mode === '--disable') { $store->setOption('announcements_enabled','0'); echo "Announcements disabled.\n"; exit; }
-if (!in_array($mode,['--check','--enable'],true)) { fwrite(STDERR,"Usage: php telegram_announcements_setup.php --check|--enable EVENT_ID FIRST_NUMBER|--disable\n"); exit(1); }
+if (!in_array($mode,['--check','--enable'],true)) { fwrite(STDERR,"Usage: php telegram_announcements_setup.php --check|--enable EVENT_ID FIRST_NUMBER [FIRST_DATE]|--disable\n"); exit(1); }
 try {
     $token = (string)Env::get('TELEGRAM_ANNOUNCEMENTS_TOKEN','');
     $owner = (int)Env::get('TELEGRAM_ANNOUNCEMENTS_OWNER_ID','0');
@@ -30,6 +30,11 @@ try {
         $event = null;
         foreach ((new EventManager())->getAllRaw() as $candidate) if ((int)$candidate['id']===$eventId) $event=$candidate;
         if (!$event || empty($event['use_playlist']) || empty($event['is_recurring']) || $event['recurrence_rule']!=='weekly' || empty($event['start_time']) || $number<1 || $number>3999) throw new RuntimeException('Event or initial stream number invalid');
+        if (isset($argv[4])) {
+            $date = \DateTimeImmutable::createFromFormat('!Y-m-d',$argv[4],new \DateTimeZone('Europe/Moscow'));
+            if (!$date || $date->format('Y-m-d')!==$argv[4]) throw new RuntimeException('First date must be YYYY-MM-DD');
+            $store->setOption('announcements_not_before',(string)$date->getTimestamp());
+        }
         $store->setOption('announcements_event_id',(string)$eventId);
         $store->setOption('announcements_first_number',(string)$number);
         $store->setOption('announcements_enabled','1');

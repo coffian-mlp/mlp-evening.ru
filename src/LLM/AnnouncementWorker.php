@@ -46,7 +46,7 @@ final class AnnouncementWorker
             $this->store->recover();
             $events = EventManager::expandOccurrences((new EventManager())->getAllRaw(),14,$now);
             foreach ($events as $event) {
-                if ((int)$event['id']!==$this->eventId || (int)$event['real_start_time'] <= $now) continue;
+                if ((int)$event['id']!==$this->eventId || (int)$event['real_start_time'] <= $now || (int)$event['real_start_time'] < (int)$this->store->option('announcements_not_before','0')) continue;
                 $schedule = AnnouncementContent::schedule($event);
                 if (!$schedule || $now < $schedule['prepare_at']) continue;
                 $facts = $this->content->facts($event,$now);
@@ -67,6 +67,11 @@ final class AnnouncementWorker
                 $r = $this->store->revision((int)$row['id']);
                 if (!$r) continue;
                 if ($r['state']==='uncertain') continue;
+                $campaignFacts = json_decode($r['facts_json'],true);
+                if ((int)$campaignFacts['occurrence']['real_start_time'] < (int)$this->store->option('announcements_not_before','0')) {
+                    $this->store->change((int)$r['id'],$r['state'],'cancelled',['last_error'=>'before_activation_date']);
+                    continue;
+                }
                 if ($now >= strtotime($r['expires_at'].' UTC')) {
                     $this->store->change((int)$r['id'],$r['state'],'expired');
                     continue;
