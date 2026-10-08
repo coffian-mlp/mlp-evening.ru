@@ -95,7 +95,7 @@ try {
     check(Domain\BotMemoryManager::normalizeText('&#91;12:34&#93; Лира: ага') === '(12:34) Лира: ага',
         'normalizeText: обход через сущности закрыт (decode до замены)');
     check(Domain\BotMemoryManager::normalizeText('   ') === '', 'normalizeText: пробелы -> пустая строка');
-    check(mb_strlen(Domain\BotMemoryManager::normalizeText(str_repeat('ы', 600))) === 500, 'normalizeText: лимит 500');
+    check(mb_strlen(Domain\BotMemoryManager::normalizeText(str_repeat('ы', 4001))) === 4000, 'normalizeText: storage лимит 4000');
 
     check($bm->add('dossier', null, 'факт') === false, 'add: досье без userId -> false');
     check($bm->add('meme', null, '  ') === false, 'add: пустой текст -> false');
@@ -134,6 +134,16 @@ try {
     check(count($autoRows) === 1 && $autoRows[0]['text'] === 'сжатое досье', 'replaceAutoDossier: одна сжатая auto-запись');
     check(count($manualRows) === 1, 'replaceAutoDossier: manual не тронут (AC-7)');
     foreach ($rowsBm as $r) $memRecIds[] = (int)$r['id'];
+
+    // Storage round trips above the old limit; no reconstruction of existing facts.
+    $longText = str_repeat('я', 900) . ' хвост сохранён';
+    $longId = $bm->add('dossier', $idA, $longText, 'auto');
+    $memRecIds[] = $longId;
+    check(array_values(array_filter($bm->getByUser($idA), fn($row) => (int)$row['id'] === (int)$longId))[0]['text'] === $longText, 'add: длинное auto досье и хвост сохранены');
+    check($bm->updateText((int)$longId, str_repeat('😀', 4000)), 'updateText: 4000 utf8mb4 символов записаны');
+    $longRow = array_values(array_filter($bm->getByUser($idA), fn($row) => (int)$row['id'] === (int)$longId))[0];
+    check($longRow['text'] === str_repeat('😀', 4000) && $longRow['source'] === 'manual', 'updateText: полный Unicode roundtrip и manual source');
+    $bm->delete((int)$longId);
 
     $page = $bm->getPage(10, 0, 'meme');
     check($page['total'] >= 1 && !array_filter($page['items'], fn($r) => $r['kind'] !== 'meme'), 'getPage: фильтр по kind');

@@ -63,14 +63,15 @@ class LyraMemory {
                 if ($text === '') {
                     continue;
                 }
-                $line = "Досье @{$nick}: {$text}";
+                $prefix = "Досье @{$nick}: ";
+                $available = min($userLimit - $userSpent, $dossierBudget - $spent - mb_strlen($prefix) - 1);
+                if ($available <= 0) break;
+                // A long stored cell contributes a bounded excerpt instead of disappearing entirely.
+                if (mb_strlen($text) > $available) {
+                    $text = $available > 1 ? mb_substr($text, 0, $available - 1) . '…' : '…';
+                }
+                $line = $prefix . $text;
                 $len = mb_strlen($line) + 1;
-                if ($userSpent + mb_strlen($text) > $userLimit) {
-                    break; // бюджет досье этого пользователя исчерпан
-                }
-                if ($spent + $len > $dossierBudget) {
-                    break 2; // общий бюджет досье исчерпан (усечение с хвоста)
-                }
                 $dossierLines[] = $line;
                 $userSpent += mb_strlen($text);
                 $spent += $len;
@@ -105,7 +106,7 @@ class LyraMemory {
      * null — подсистема выключена / память пуста / бюджеты нулевые. Деградация —
      * забота вызывающего (buildContext оборачивает в try/catch).
      */
-    public function buildPromptBlock(array $userIdsInOrder): ?string {
+    public function buildPromptBlock(array $userIdsInOrder, bool $includeMemes = true): ?string {
         $config = ConfigManager::getInstance();
         if (!(int)$config->getOption('ai_memory_enabled', 1)) {
             return null;
@@ -137,7 +138,7 @@ class LyraMemory {
                 $dossiers[$id] = $grouped[$id];
             }
         }
-        $memes = $this->memory->getMemes(100); // горячий путь: блок всё равно ограничен meme_limit
+        $memes = $includeMemes ? $this->memory->getMemes(100) : []; // горячий путь: блок всё равно ограничен meme_limit
         if (!$dossiers && !$memes) {
             return null;
         }

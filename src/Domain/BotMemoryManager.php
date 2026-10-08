@@ -18,7 +18,8 @@ class BotMemoryManager {
 
     public const KINDS = ['dossier', 'meme'];
     public const SOURCES = ['manual', 'auto', 'oc']; // oc — облик, придуманный Лирой (MLP-335); автосжатие не трогает
-    public const MAX_TEXT = 500;
+    // Storage bound is independent of the smaller prompt inclusion budgets.
+    public const MAX_TEXT = 4000;
 
     private $db;
 
@@ -174,7 +175,7 @@ class BotMemoryManager {
         return $stmt->affected_rows > 0 ? $row : null;
     }
 
-    /** Суммарная длина auto-части досье пользователя (порог сжатия — ai_memory_user_limit). */
+    /** Суммарная длина auto-части досье пользователя (порог сжатия — MAX_TEXT). */
     public function autoDossierLength(int $userId): int {
         $stmt = $this->db->prepare("SELECT COALESCE(SUM(CHAR_LENGTH(text)), 0) l FROM bot_memory WHERE kind = 'dossier' AND user_id = ? AND source = 'auto'");
         $stmt->bind_param('i', $userId);

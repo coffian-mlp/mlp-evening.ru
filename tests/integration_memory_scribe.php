@@ -169,15 +169,17 @@ try {
     check($threw, 'null от LLM: исключение (fail, не complete)');
     check((int)$cfg->getOption('bot_memory_last_id', 0) === $markerBefore, 'null от LLM: маркер НЕ сдвинут (батч повторится)');
 
-    // 12) Сжатие не трогает manual (AC-7): забиваем auto-досье сверх лимита
+    // 12) Сжатие не трогает manual (AC-7): превышаем storage limit, не prompt budget
     $bm = new Domain\BotMemoryManager();
     $manualId = $bm->add('dossier', $humanId, 'ручная запись — неприкосновенна', 'manual');
     for ($i = 0; $i < 3; $i++) {
-        $bm->add('dossier', $humanId, str_repeat("факт{$i} ", 40), 'auto'); // ~240 симв. каждая
+        $bm->add('dossier', $humanId, str_repeat("факт{$i} ", 250), 'auto'); // ~1500 символов каждая, сумма >4000
     }
     // Сжатие проверяем НАПРЯМУЮ (не через runScribe: его мем-ветка при случайном
     // превышении порога сделала бы глобальный DELETE auto-мемов в общей докер-БД).
-    $fake->reply = "сжатое авто-досье {$marker}";
+    check($bm->autoDossierLength($humanId) > Domain\BotMemoryManager::MAX_TEXT, 'fixture превышает storage threshold4000');
+    $compactText = "сжатое авто-досье {$marker} " . str_repeat('я', 1200) . ' сохранённый хвост';
+    $fake->reply = $compactText;
     $compress = new ReflectionMethod(MemoryScribe::class, 'compressIfNeeded');
     $compress->setAccessible(true);
     $compress->invoke($scribe, [$humanId], time());
@@ -185,7 +187,7 @@ try {
     $manualLeft = array_values(array_filter($rows, fn($r) => (int)$r['id'] === $manualId));
     $autoLeft = array_values(array_filter($rows, fn($r) => $r['source'] === 'auto'));
     check(count($manualLeft) === 1 && $manualLeft[0]['text'] === 'ручная запись — неприкосновенна', 'AC-7: manual не тронут сжатием');
-    check(count($autoLeft) === 1 && str_contains($autoLeft[0]['text'], 'сжатое авто-досье'), 'AC-7: auto-часть заменена одной сжатой записью');
+    check(count($autoLeft) === 1 && $autoLeft[0]['text'] === $compactText, 'AC-7: auto заменено одним полным досье длиннее старых500/prompt400, хвост сохранён');
 
     // 12б) Коллизия ников: тёзка в батче -> ник исключается из карты, досье не пишется
     $twinId = $mk("{$marker}_twin", "{$marker}_Пони"); // тот же nickname, другой user_id

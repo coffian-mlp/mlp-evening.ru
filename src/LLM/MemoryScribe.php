@@ -191,7 +191,8 @@ class MemoryScribe {
         if ($remaining <= 5) {
             return; // бюджет времени вышел — сжатие подождёт следующего прогона
         }
-        $userLimit = min(2000, max(100, (int)$config->getOption('ai_memory_user_limit', 400)));
+        // Storage compression must not discard facts merely to fit one prompt.
+        $userLimit = BotMemoryManager::MAX_TEXT;
         $memeLimit = min(2000, max(100, (int)$config->getOption('ai_memory_meme_limit', 800)));
 
         foreach ($dossierUserIds as $uid) {
