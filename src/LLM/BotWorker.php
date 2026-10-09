@@ -348,6 +348,7 @@ class BotWorker {
         if ($interval <= 0) {
             return; // выключено (дефолт)
         }
+        if (DrawingSchedule::automaticBlocked()) return;
         $interval = max(900, $interval); // рисование дорогое: не чаще раза в 15 минут
         $last = (int)$this->config->getOption('bot_last_autodraw', 0);
         if (time() - $last < $interval) {

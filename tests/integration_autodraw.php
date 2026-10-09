@@ -17,6 +17,7 @@ $marker = 'itad_' . getmypid();
 $optBackup = [];
 $cleanupUserIds = [];
 $cleanupMsgIds = [];
+$cleanupJobIds = [];
 $baseJobId = (int)($conn->query("SELECT COALESCE(MAX(id), 0) m FROM llm_jobs")->fetch_assoc()['m']);
 // JSON-колонка нормализует пробелы («"auto": true») — LIKE по сырой строке мимо, только JSON_EXTRACT.
 $myJobs = fn() => (int)$conn->query("SELECT COUNT(*) c FROM llm_jobs WHERE id > $baseJobId AND type='dynamic_command' AND JSON_EXTRACT(payload, '$.auto') = true")->fetch_assoc()['c'];
@@ -34,7 +35,7 @@ try {
     [$botId, $humanId] = $cleanupUserIds;
 
     foreach (['ai_enabled' => '1', 'ai_bot_user_id' => (string)$botId, 'ai_routerai_key' => 'it-dummy',
-              'ai_image_auto_interval' => '0', 'bot_last_autodraw' => '0',
+              'ai_image_auto_interval' => '0', 'bot_last_autodraw' => '0', 'bot_last_manual_draw' => '0',
               'ai_image_daily_limit' => '0', 'ai_image_llm_caption' => '0'] as $k => $v) {
         $optBackup[$k] = $cfg->getOption($k, null);
         $cfg->setOption($k, $v);
@@ -68,6 +69,29 @@ try {
     $payload = json_decode($res['payload'], true);
     check(($payload['auto'] ?? false) === true && ($payload['command']['handler_type'] ?? '') === 'image_chat',
         'payload: auto=true, команда image_chat из БД');
+
+    // Pending delayed manual jobs and processing jobs both block automatic scheduling.
+    $queue = new LLM\JobQueue();
+    foreach (['image', 'image_chat'] as $type) {
+        $manual = $queue->enqueue('dynamic_command', ['command'=>['handler_type'=>$type], 'auto'=>false], 3600);
+        $cleanupJobIds[] = $manual;
+        foreach (['pending','processing'] as $status) {
+            $conn->query("UPDATE llm_jobs SET status='$status' WHERE id=$manual");
+            $cfg->setOption('bot_last_autodraw','0');
+            $before = $myJobs();
+            $sched->invoke($w);
+            check($queue->hasManualDrawing() && $myJobs() === $before, "$type $status blocks automatic schedule before lifelike delay expires");
+            $calls = 0;
+            (new LyraArtist(new LLM\LLMManager()))->handleDrawChat(['handler_type'=>'image_chat'], ['auto'=>true], function() use (&$calls) { $calls++; return 'scene'; }, function() use (&$calls) { $calls++; return '/upload/lyra/fixture.jpg'; });
+            check($calls === 0, 'already queued automatic drawing skips all model work');
+        }
+        foreach (['done','failed'] as $status) {
+            $conn->query("UPDATE llm_jobs SET status='$status' WHERE id=$manual");
+            check(!$queue->hasManualDrawing(), "$status manual job does not block scheduling");
+        }
+        $conn->query("DELETE FROM llm_jobs WHERE id=$manual");
+    }
+    $cfg->setOption('bot_last_autodraw',(string)time());
 
     // 3) Повторный тик сразу -> интервал не пустит
     $sched->invoke($w);
@@ -103,8 +127,50 @@ try {
     check(!str_contains($row['message'], '@'), 'auto-подпись безадресная (без @)');
     $cleanupMsgIds[] = (int)$row['id'];
 
+    // Director execution can overlap a new request from the chat producer.
+    $manualDuringDirector = 0; $generatorCalls = 0;
+    $artist->handleDrawChat($cmd, ['auto'=>true], function() use ($queue, &$manualDuringDirector) {
+        $manualDuringDirector = $queue->enqueue('dynamic_command', ['command'=>['handler_type'=>'image']], 3600);
+        return 'scene';
+    }, function() use (&$generatorCalls) { $generatorCalls++; return '/upload/lyra/fixture.jpg'; });
+    $cleanupJobIds[] = $manualDuringDirector;
+    check($generatorCalls === 0, 'manual request arriving during director blocks image generation');
+    $conn->query("DELETE FROM llm_jobs WHERE id=$manualDuringDirector");
+
+    $manualBefore = (int)$cfg->getOption('bot_last_manual_draw',0);
+    $artist->handleDrawChat($cmd, ['username'=>$marker], fn()=>null, fn()=>null);
+    check((int)$cfg->getOption('bot_last_manual_draw',0)===$manualBefore, 'empty scene does not start manual cooldown');
+    $artist->handleDrawChat($cmd, ['username'=>$marker], fn()=>'fixture scene', fn()=>null);
+    check((int)$cfg->getOption('bot_last_manual_draw',0)===$manualBefore, 'failed image does not start manual cooldown');
+    foreach (['image_chat','image'] as $type) {
+        $cfg->setOption('bot_last_manual_draw','0');
+        if ($type==='image_chat') $artist->handleDrawChat($cmd, ['username'=>$marker], fn()=>'fixture scene', fn()=>'/upload/lyra/manual.jpg');
+        else $artist->handleDraw(['handler_type'=>'image','command_prefix'=>'/нарисуй'], ['username'=>$marker,'message'=>'/нарисуй цветок'], fn()=>'/upload/lyra/manual.jpg');
+        check((int)$cfg->getOption('bot_last_manual_draw',0)>=time()-2 && (int)$cfg->getOption('bot_last_autodraw',0)>=time()-2, "$type successful publication restarts automatic clock");
+    }
+    $cfg->setOption('bot_last_manual_draw','0');
+    $unpublished = new LyraArtist(new class extends LLM\LLMManager {
+        public function botSay(string $text, array $quotedIds = []) { return false; }
+    });
+    $unpublished->handleDraw(['handler_type'=>'image','command_prefix'=>'/нарисуй'], ['username'=>$marker,'message'=>'/нарисуй цветок'], fn()=>'/upload/lyra/unpublished.jpg');
+    check((int)$cfg->getOption('bot_last_manual_draw',0)===0, 'failed chat publication does not start manual cooldown');
+    $cfg->setOption('bot_last_manual_draw',(string)time());
+    $calls=0;
+    $artist->handleDrawChat($cmd, ['auto'=>true], function() use (&$calls) { $calls++; return 'scene'; }, function() use (&$calls) { $calls++; return '/upload/lyra/fixture.jpg'; });
+    check($calls===0, 'queued automatic drawing respects successful manual cooldown');
+    $ins($humanId, "$marker new human activity");
+    $cfg->setOption('bot_last_autodraw','0');
+    $cfg->setOption('bot_last_manual_draw',(string)(time()-1799));
+    $before=$myJobs(); $sched->invoke($w);
+    check($myJobs()===$before, 'manual cooldown blocks at 29 minutes 59 seconds even with configured 15 minute interval');
+    $cfg->setOption('bot_last_manual_draw',(string)(time()-1800));
+    $sched->invoke($w);
+    check($myJobs()===$before+1, 'automatic schedule allowed at 30 minutes with live chat');
+
 } finally {
+    if ($cleanupJobIds) $conn->query("DELETE FROM llm_jobs WHERE id IN (" . implode(',', array_map('intval',$cleanupJobIds)) . ")");
     $conn->query("DELETE FROM llm_jobs WHERE id > $baseJobId AND type='dynamic_command' AND JSON_EXTRACT(payload, '$.auto') = true");
+    $conn->query("DELETE FROM chat_messages WHERE user_id IN (" . implode(',', array_map('intval',$cleanupUserIds)) . ")");
     if ($cleanupMsgIds) {
         $conn->query("DELETE FROM chat_messages WHERE id IN (" . implode(',', array_map('intval', array_unique($cleanupMsgIds))) . ")");
     }

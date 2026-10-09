@@ -265,6 +265,18 @@ class JobQueue {
         return $stmt->get_result()->num_rows > 0;
     }
 
+    /** Includes delayed jobs and the whole claimed batch, not just the current command. */
+    public function hasManualDrawing(): bool {
+        $result = $this->db->query(
+            "SELECT 1 FROM llm_jobs
+             WHERE type='dynamic_command' AND status IN ('pending','processing')
+               AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.command.handler_type')) IN ('image','image_chat')
+               AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(payload, '$.auto')), 'false') NOT IN ('true','1')
+             LIMIT 1"
+        );
+        return $result->num_rows > 0;
+    }
+
     /**
      * Реапер зависших processing (процесс умер во время выполнения): старше порога —
      * failed с attempts+1. Возвращает число реанимированных.

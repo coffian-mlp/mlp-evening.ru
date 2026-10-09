@@ -71,6 +71,8 @@ class LyraArtist {
         // MLP-316: авто-запуск по расписанию (BotWorker::autoDrawSchedule) — без адресата,
         // отказы и сбои не постятся в чат (авто-режим не должен спамить извинениями).
         $isAuto = !empty($contextData['auto']);
+        // A queued automatic job may have become obsolete before it was claimed.
+        if ($isAuto && DrawingSchedule::automaticBlocked()) return true;
 
         $director = $director ?? function (): ?string {
             // MLP-295: окно режиссёра — настройка дашборда (кламп 2..50: меньше двух
@@ -257,6 +259,8 @@ class LyraArtist {
     }
 
     private function generateAndPostDrawingInner(string $subject, string $username, array $command, ?callable $generator = null, bool $auto = false, bool $resolveMentions = false): bool {
+        // Recheck after the director request: a manual command may have arrived meanwhile.
+        if ($auto && DrawingSchedule::automaticBlocked()) return true;
         $config = ConfigManager::getInstance();
         $limit = (int)$config->getOption('ai_image_daily_limit', 20);
         if ($limit > 0 && ImageGenerator::todayCount() >= $limit) {
@@ -327,8 +331,7 @@ class LyraArtist {
         if ($config->getOption('ai_image_llm_caption', 1)) {
             $caption = $this->describeOwnDrawing($url, $subject, $auto ? null : $username);
             if ($caption !== null) {
-                $this->llm->botSay($caption . "\n![рисунок](" . $url . ")");
-                return true;
+                return $this->publishDrawing($caption . "\n![рисунок](" . $url . ")", $auto);
             }
         }
 
@@ -345,10 +348,14 @@ class LyraArtist {
                 "Настроение чата в одной картинке (рисовала копытом, простите). 🖌️\n![рисунок](%s)",
                 "Художницу видно по мольберту! Вот вам сценка. ✨\n![рисунок](%s)",
             ];
-            $this->llm->botSay(sprintf($autoCaptions[array_rand($autoCaptions)], $url));
-            return true;
+            return $this->publishDrawing(sprintf($autoCaptions[array_rand($autoCaptions)], $url), true);
         }
-        $this->llm->botSay(sprintf($captions[array_rand($captions)], $username, $url));
+        return $this->publishDrawing(sprintf($captions[array_rand($captions)], $username, $url), false);
+    }
+
+    private function publishDrawing(string $text, bool $auto): bool {
+        $posted = $this->llm->botSay($text);
+        if ($posted && !$auto) DrawingSchedule::manualPublished();
         return true;
     }
 
