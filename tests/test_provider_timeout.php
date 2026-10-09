@@ -21,7 +21,7 @@ $timeout = function (object $p): int {
     return (int)(new ReflectionProperty($p, 'timeoutSec'))->getValue($p); // с PHP 8.1 доступ к private без setAccessible
 };
 
-foreach ([RouterAIProvider::class, OpenRouterProvider::class, OpenAIProvider::class] as $class) {
+foreach ([RouterAIProvider::class, OpenRouterProvider::class, OpenAIProvider::class, LLM\YandexGPTProvider::class, LLM\GigaChatProvider::class] as $class) {
     echo "== {$class} ==\n";
     $base = new $class('key', 'model');
     $long = $base->withTimeout(120);
@@ -31,6 +31,11 @@ foreach ([RouterAIProvider::class, OpenRouterProvider::class, OpenAIProvider::cl
     ok($timeout($base) === 60, 'общий экземпляр не изменился');
     ok($timeout($base->withTimeout(1)) === 5, 'меньше 5 с не бывает');
 }
+
+$giga = new LLM\GigaChatProvider('fixture');
+$gigaCopy = $giga->withTimeout(10);
+$cache = new ReflectionProperty($giga, 'authCache');
+ok($cache->getValue($giga) === $cache->getValue($gigaCopy), 'GigaChat timeout clones retain shared OAuth cache');
 
 echo "\n== Режиссёр сцены ==\n";
 ok(LyraArtist::DIRECTOR_TIMEOUT === 120, 'режиссёру — 120 с (решение владельца 26.09)');

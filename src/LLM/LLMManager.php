@@ -614,9 +614,8 @@ class LLMManager {
         $botLogin = $botUser['login'] ?? 'Lyra';
         $botNickname = $botUser['nickname'] ?? 'Лира Хартстрингс';
 
-        // Дедлайн перебора (MLP-314): проверяется ПЕРЕД каждым провайдером — уже начатый
-        // HTTP-вызов ограничен собственными CURLOPT-таймаутами провайдера.
-        $deadlineAt = ($deadlineSec !== null) ? microtime(true) + $deadlineSec : null;
+        // One shared budget covers provider fallback, transient retry and language correction.
+        $deadlineAt = microtime(true) + ($deadlineSec ?? max(75, $timeoutSec ?? 60));
 
         // Жёсткое указание — ТОЛЬКО в системную роль, а НЕ в реплику диалога.
         // Раньше оно дописывалось к последнему сообщению контекста, из-за чего модель
@@ -641,7 +640,7 @@ class LLMManager {
             try {
                 // MLP-358: свой таймаут вызова — через копию провайдера (общий экземпляр не меняется).
                 $call = ($timeoutSec !== null && method_exists($provider, 'withTimeout')) ? $provider->withTimeout($timeoutSec) : $provider;
-                $response = $call->askChat($context, $prompt);
+                $response = RequestRetry::ask($call, $context, $prompt, $deadlineAt, $timeoutSec ?? 60);
                 LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
                     ['system' => $prompt, 'messages' => $context], (string)$response, 'ok',
                     (int)round((microtime(true) - $t0) * 1000));
@@ -659,7 +658,7 @@ class LLMManager {
                     continue;
                 }
                 if ($clean !== null && $clean !== '' && ($logKind !== 'chat' || ResponseSanitizer::isMeaningful($clean))) {
-                    return $this->latinChecked($clean, $provider, $context, $prompt, $logKind, $botNickname, $botLogin); // MLP-356
+                    return $this->latinChecked($clean, $provider, $context, $prompt, $logKind, $botNickname, $botLogin, $deadlineAt, $timeoutSec ?? 60); // MLP-356
                 }
                 if ($clean !== null && $clean !== '') {
                     error_log("askWithFallback: бессодержательный ответ отброшен: " . json_encode(mb_substr($clean, 0, 40), JSON_UNESCAPED_UNICODE));
@@ -782,12 +781,12 @@ class LLMManager {
         return $this->askWithFallback($context, $systemPrompt, 'utility', $deadlineSec, false, $timeoutSec);
     }
 
-    /** Absolute deadline, one scoped provider call; no unbounded fallback or language retry. */
+    /** Absolute deadline, bounded provider retry; no unbounded fallback or language retry. */
     public function generateBoundedUtility(array $context, string $prompt, int $deadlineSec, int $timeoutSec = 20): ?string {
         return $this->scopedCall($context, $prompt, $deadlineSec, $timeoutSec, false);
     }
 
-    /** One bounded fast call without web search or chat persona; retrieval wording only. */
+    /** Bounded fast request without web search or chat persona; retrieval wording only. */
     public function generateSearchQueryUtility(array $context, string $prompt, int $deadlineSec, int $timeoutSec = 8): ?string {
         if (!$this->isEnabled()) return null;
         $remaining = $deadlineSec - time();
@@ -799,7 +798,7 @@ class LLMManager {
             if ($remaining < 5) return null;
             $call = $provider->withTimeout(min(8, $timeoutSec, $remaining));
             if ($call instanceof RouterAIProvider) $call = $call->withReasoningEffort('low');
-            return $call->askChat($context, $prompt);
+            return RequestRetry::ask($call, $context, $prompt, (float)$deadlineSec, min(8, $timeoutSec));
         } catch (\Throwable $e) {
             error_log('Playlist query normalization unavailable: ' . get_class($e));
             return null;
@@ -809,16 +808,17 @@ class LLMManager {
     /** JSON envelope with actual provider citations, never fabricated source URLs. */
     public function generateSearchUtility(array $context, string $prompt, ?int $deadlineSec = null): ?string {
         if (!$this->isEnabled()) return null;
-        $remaining = ($deadlineSec ?? (time() + 25)) - time();
+        $deadlineSec ??= time() + 25;
+        $remaining = $deadlineSec - time();
         if ($remaining < 5) return null;
         $provider = $this->fastProviders[0] ?? null;
         if (!$provider instanceof RouterAIProvider) return null;
         try {
             if (!$this->prepareScopedProxy()) return null;
-            $remaining = ($deadlineSec ?? (time() + 25)) - time();
+            $remaining = $deadlineSec - time();
             if ($remaining < 5) return null;
             $call = $provider->withWebSearch(3)->withReasoningEffort('low')->withTimeout(min(25, $remaining));
-            $raw = $call->askChat($context, $prompt);
+            $raw = RequestRetry::ask($call, $context, $prompt, (float)$deadlineSec, 25);
             if (!$raw || !$call->getSearchEvidence()) return null;
             return json_encode(['content' => $raw, 'sources' => $call->getSearchEvidence()], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         } catch (\Throwable $e) {
@@ -850,7 +850,7 @@ class LLMManager {
             if ($remaining < 5) return null;
             $call = $provider->withTimeout(min($timeoutSec, $remaining));
             if ($call instanceof RouterAIProvider) $call = $call->withReasoningEffort('low');
-            $raw = $call->askChat($context, $prompt);
+            $raw = RequestRetry::ask($call, $context, $prompt, (float)$deadlineSec, $timeoutSec);
             $clean = ResponseSanitizer::clean($raw);
             if (!$clean || ($chat && (!ResponseSanitizer::isMeaningful($clean) || ResponseSanitizer::hasImage($clean)))) return null;
             return $clean;
@@ -1254,7 +1254,7 @@ class LLMManager {
      * Повтор не удался — отдаём первый вариант: ответ важнее тишины. Только kind=chat: служебные
      * вызовы (режиссёр сцены) пишут по-английски намеренно.
      */
-    private function latinChecked(string $clean, LLMProviderInterface $provider, array $context, string $prompt, string $logKind, string $botNickname, string $botLogin): string {
+    private function latinChecked(string $clean, LLMProviderInterface $provider, array $context, string $prompt, string $logKind, string $botNickname, string $botLogin, float $deadlineAt, int $timeoutSec): string {
         if ($logKind !== 'chat') {
             return $clean;
         }
@@ -1268,7 +1268,7 @@ class LLMManager {
         $retryPrompt = $prompt . "\n\n[Язык]: в прошлом варианте ответа были английские слова ({$list}). Напиши ответ заново, полностью по-русски.";
         $t0 = microtime(true);
         try {
-            $again = $provider->askChat($context, $retryPrompt);
+            $again = RequestRetry::ask($provider, $context, $retryPrompt, $deadlineAt, $timeoutSec);
             LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
                 ['system' => $retryPrompt, 'messages' => $context], (string)$again, 'ok',
                 (int)round((microtime(true) - $t0) * 1000));

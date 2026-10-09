@@ -165,7 +165,7 @@ class VisionDescriber {
 
         $t0 = microtime(true);
         try {
-            $out = $provider->askChat($messages, $prompt);
+            $out = RequestRetry::ask($provider, $messages, $prompt);
         } catch (\Throwable $e) {
             $cut = $e instanceof TruncatedResponseException; // MLP-348: обрыв по потолку токенов
             LlmDebugLog::log('vision', $providerKey, $modelName, ['system' => $prompt, 'messages' => $messages],

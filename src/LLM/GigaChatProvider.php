@@ -6,24 +6,33 @@ use Exception;
 
 
 class GigaChatProvider implements LLMProviderInterface {
+    private int $timeoutSec = 60;
+
+    public function withTimeout(int $seconds): self {
+        $copy = clone $this;
+        $copy->timeoutSec = max(5, $seconds);
+        return $copy;
+    }
+
     private $authKey;
-    private $accessToken = null;
-    private $tokenExpiresAt = 0;
+    // Timeout clones share the OAuth cache; retries must not discard a valid token.
+    private object $authCache;
 
     public function __construct($authKey) {
         $this->authKey = $authKey;
+        $this->authCache = (object)['accessToken' => null, 'expiresAt' => 0];
     }
 
     private function getAccessToken() {
-        if ($this->accessToken && time() < $this->tokenExpiresAt) {
-            return $this->accessToken;
+        if ($this->authCache->accessToken && time() < $this->authCache->expiresAt) {
+            return $this->authCache->accessToken;
         }
 
         $ch = curl_init('https://ngw.devices.sberbank.ru:9443/api/v2/oauth');
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         // MLP-314: таймауты внешних вызовов — зависший провайдер не держит воркер/веб-запрос.
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeoutSec);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, 'scope=GIGACHAT_API_PERS');
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
@@ -36,7 +45,9 @@ class GigaChatProvider implements LLMProviderInterface {
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
         curl_close($ch);
+        if ($error) throw new Exception("GigaChat cURL Error: " . $error);
 
         if ($httpCode >= 400) {
             throw new Exception("GigaChat Auth Error $httpCode: " . $response);
@@ -44,9 +55,9 @@ class GigaChatProvider implements LLMProviderInterface {
 
         $decoded = json_decode($response, true);
         if (isset($decoded['access_token'])) {
-            $this->accessToken = $decoded['access_token'];
-            $this->tokenExpiresAt = ($decoded['expires_at'] / 1000) - 60; // Convert to seconds, minus 1 min buffer
-            return $this->accessToken;
+            $this->authCache->accessToken = $decoded['access_token'];
+            $this->authCache->expiresAt = ($decoded['expires_at'] / 1000) - 60; // Convert to seconds, minus 1 min buffer
+            return $this->authCache->accessToken;
         }
 
         throw new Exception("GigaChat Auth Invalid Response: " . $response);
@@ -57,7 +68,10 @@ class GigaChatProvider implements LLMProviderInterface {
             throw new Exception("GigaChat Auth Key is missing");
         }
 
+        $deadlineAt = microtime(true) + $this->timeoutSec;
         $token = $this->getAccessToken();
+        $remaining = (int)floor($deadlineAt - microtime(true));
+        if ($remaining < 1) throw new Exception("GigaChat cURL Error: Operation timed out");
         $url = 'https://gigachat.devices.sberbank.ru/api/v1/chat/completions';
 
         $messages = [
@@ -77,7 +91,7 @@ class GigaChatProvider implements LLMProviderInterface {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         // MLP-314: таймауты внешних вызовов — зависший провайдер не держит воркер/веб-запрос.
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $remaining);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         curl_setopt($ch, CURLOPT_HTTPHEADER, [

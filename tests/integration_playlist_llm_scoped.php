@@ -17,7 +17,7 @@ namespace LLM {
         ]]]]);
     }
     function curl_getinfo($handle, $option) { return 200; }
-    function curl_error($handle) { return ''; }
+    function curl_error($handle) { return array_shift($GLOBALS['playlist_scoped_errors']) ?? ''; }
     function curl_close($handle) {}
 }
 namespace {
@@ -51,6 +51,15 @@ namespace {
                 $config->setOption($key, $value);
             }
             $manager = new LLM\LLMManager();
+            $GLOBALS['playlist_scoped_errors'] = ['Operation timed out after 100 milliseconds', ''];
+            $beforeRetry = $GLOBALS['playlist_scoped_calls'];
+            $retriedSearch = json_decode($manager->generateSearchUtility([], 'Retry fixture', time() + 12), true);
+            check($GLOBALS['playlist_scoped_calls'] === $beforeRetry + 2 && $retriedSearch['sources'][0]['url'] === 'https://example.org/episode', 'transient search failure retries once and preserves actual citations');
+            $last = array_slice($GLOBALS['playlist_scoped_payloads'], -2);
+            check($last[0] === $last[1], 'retry preserves full request and scoped prompt');
+            $GLOBALS['playlist_scoped_errors'] = ['Operation timed out after 100 milliseconds', ''];
+            $beforeRetry = $GLOBALS['playlist_scoped_calls'];
+            check($manager->generateUtility([], 'Utility retry fixture', 12) === '{"candidates":[]}' && $GLOBALS['playlist_scoped_calls'] === $beforeRetry + 2, 'shared command utility recovers from transient failure');
             $search = json_decode($manager->generateSearchUtility([], 'Fixture query', time() + 12), true);
             check($search['sources'][0]['url'] === 'https://example.org/episode', 'manager returns actual transport citations');
             $payload = json_decode($GLOBALS['playlist_scoped_options'][CURLOPT_POSTFIELDS], true);
@@ -177,9 +186,10 @@ namespace {
             $clarificationSystem=json_decode($GLOBALS['playlist_scoped_options'][CURLOPT_POSTFIELDS],true)['messages'][0]['content'];
             check(str_contains($clarificationSystem,'Текущая фаза: Поиск выполнен') && str_contains($clarificationSystem,'только к автору пожелания') && str_contains($clarificationSystem,'необязателен') && str_contains($clarificationSystem,'Передумал') && !str_contains($clarificationSystem,'Кнопки исправны'),'clarification trusted task describes no candidates and the real cancellation control');
             $GLOBALS['playlist_scoped_text']='Жми на кнопочку под ответом — этот выбор за тобой!';
+            $GLOBALS['playlist_scoped_errors'] = ['Operation timed out after 100 milliseconds', ''];
             $calls=$GLOBALS['playlist_scoped_calls'];
             $reply=$run('самую первую серию');
-            check(str_contains($reply['raw_message'],'Жми на кнопочку') && str_contains($reply['raw_message'],'[[command:') && $GLOBALS['playlist_scoped_calls']===$calls+1,'actual semantic dispatcher creates proposal and calls live only');
+            check(str_contains($reply['raw_message'],'Жми на кнопочку') && str_contains($reply['raw_message'],'[[command:') && $GLOBALS['playlist_scoped_calls']===$calls+2,'actual semantic dispatcher creates proposal and calls live only');
             check(count((new Domain\EpisodeManager())->getUserWishes($actor))===0,'semantic dispatcher spends no vote before confirmation');
             check($GLOBALS['playlist_scoped_options'][CURLOPT_TIMEOUT] <= 20,'actual proposal one live call retains bounded timeout');
             $humanMessages=json_decode($GLOBALS['playlist_scoped_options'][CURLOPT_POSTFIELDS],true)['messages'];

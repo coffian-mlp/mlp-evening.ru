@@ -6,6 +6,14 @@ use Exception;
 
 
 class YandexGPTProvider implements LLMProviderInterface {
+    private int $timeoutSec = 60;
+
+    public function withTimeout(int $seconds): self {
+        $copy = clone $this;
+        $copy->timeoutSec = max(5, $seconds);
+        return $copy;
+    }
+
     private $apiKey;
     private $folderId;
 
@@ -106,7 +114,7 @@ class YandexGPTProvider implements LLMProviderInterface {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         // MLP-314: таймауты внешних вызовов — зависший провайдер не держит воркер/веб-запрос.
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeoutSec);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
