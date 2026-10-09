@@ -59,3 +59,7 @@ docker compose -p mlp359 -f docker-compose.yml -f docs/tests/MLP-359/compose.ove
 ```
 
 HTTP localhost :8091 должен быть готов до запуска. На машине с встроенным PHP server требуется несколько HTTP workers для SSE и actions; тесты Playwright сохраняют workers=1, не выполняя shared fixture cases параллельно. Actual reports и screenshots находятся в `docs/tests/MLP-364/`; отсутствие runtime либо SKIP не является PASS.
+
+### MLP-376 announcement dashboard
+
+`mlp-376-announcement-settings.ui.spec.js` uses the local ignored Daybreaker credential file. Run the non-admin scenario with the ordinary role; run the administrator scenario with MLP_ADMIN=1 only after temporarily assigning the test account the administrator role. Restore the original role externally even if the runner fails. The administrator scenario requires announcements disabled, saves/restores the initial stream number and never publishes Telegram posts. It verifies masked secret preservation, invalid-setting rejection, unreachable-proxy activation rejection and mobile form bounds. Use MLP_BASE_URL for the authorized target environment.
