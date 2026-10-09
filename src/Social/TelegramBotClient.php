@@ -8,13 +8,15 @@ class TelegramBotClient
     private const METHODS = ['getMe', 'getChat', 'getChatMember', 'getWebhookInfo', 'getUpdates', 'sendPhoto', 'sendMessage', 'answerCallbackQuery'];
     private const MUTATING = ['sendPhoto', 'sendMessage', 'answerCallbackQuery'];
     private $fakeTransport;
+    private AnnouncementProxy $proxy;
 
-    public function __construct(private string $token, ?callable $fakeTransport = null)
+    public function __construct(private string $token, ?callable $fakeTransport = null, string $proxyUrl = '')
     {
         if (!preg_match('/\A[0-9]{5,20}:[A-Za-z0-9_-]{20,100}\z/D', $token)) {
             throw new TelegramBotException('Telegram bot credential is invalid.');
         }
         $this->fakeTransport = $fakeTransport;
+        $this->proxy = new AnnouncementProxy($proxyUrl);
     }
 
     /** Fake transport receives (method, params) and returns status/body/errno. */
@@ -105,9 +107,13 @@ class TelegramBotClient
 
     private function transport(string $method, array $params, ?string $photoPath): array
     {
+        $proxy = $this->proxy->resolve();
         $curl = curl_init('https://api.telegram.org/bot' . $this->token . '/' . $method);
         $options = [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_TIMEOUT => 15, CURLOPT_FOLLOWLOCATION => false, CURLOPT_PROTOCOLS => CURLPROTO_HTTPS];
+        // Empty string disables inherited process proxies; this transport has its own configuration.
+        $options[CURLOPT_PROXY] = $proxy;
+        $options[CURLOPT_NOPROXY] = '';
         if ($photoPath !== null) {
             $params['photo'] = new \CURLFile($photoPath, 'image/jpeg', basename($photoPath));
             foreach ($params as $key => $value) {

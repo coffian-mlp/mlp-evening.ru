@@ -65,6 +65,7 @@ require_once __DIR__ . '/../src/templates/header.php';
     <!-- Вкладка 2: Бот (ИИ-настройки + команды) -->
     <div id="tab-bot" class="tab-content">
         <?php $app->includeComponent('AdminSettings', 'ai'); ?>
+        <?php $app->includeComponent('AdminSettings', 'announcements'); ?>
         <?php $app->includeComponent('AdminBotCommands'); ?>
     </div>
 

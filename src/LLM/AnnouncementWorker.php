@@ -13,7 +13,7 @@ final class AnnouncementWorker
     private ?int $explicitNow = null;
     public function __construct(private AnnouncementStore $store, private TelegramBotClient $telegram,
         private AnnouncementContent $content, private int $owner, private string $channel,
-        private int $eventId, private int $initialNumber) {}
+        private int $eventId, private int $initialNumber, private ?string $configurationFingerprint = null) {}
 
     public static function ownerUpdate(array $update, int $owner): bool
     {
@@ -43,6 +43,11 @@ final class AnnouncementWorker
         $db = Database::getInstance()->getConnection();
         if (!(int)$db->query("SELECT GET_LOCK('telegram_announcements',0) AS n")->fetch_assoc()['n']) return;
         try {
+            if ($this->configurationFingerprint !== null) {
+                \Infra\ConfigManager::getInstance()->flushCache();
+                $settings = \Domain\AnnouncementSettings::values();
+                if ($settings['announcements_enabled'] !== '1' || !hash_equals($this->configurationFingerprint, \Domain\AnnouncementSettings::fingerprint($settings))) return;
+            }
             $this->store->recover();
             $events = EventManager::expandOccurrences((new EventManager())->getAllRaw(),14,$now);
             foreach ($events as $event) {

@@ -152,4 +152,17 @@ class SettingsController {
 
         Response::json(true, "✅ Настройки обновлены!");
     }
+
+    public static function updateAnnouncements(): void {
+        try {
+            \Domain\AnnouncementSettings::save($_POST);
+        } catch (\Social\TelegramBotException $e) {
+            Response::json(false, 'Не удалось проверить подключение к Telegram. Проверь прокси, токен и доступ бота к каналу. Настройки не изменены.', 'error');
+        } catch (\mysqli_sql_exception $e) {
+            Response::json(false, 'Не удалось сохранить настройки анонсов. Попробуй ещё раз.', 'error');
+        } catch (\InvalidArgumentException|\RuntimeException $e) {
+            Response::json(false, $e->getMessage(), 'error');
+        }
+        Response::json(true, 'Настройки Telegram-анонсов сохранены.');
+    }
 }

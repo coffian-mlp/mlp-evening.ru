@@ -4,7 +4,7 @@ MLP-375 uses a dedicated polling bot and an isolated minute worker. It does not 
 
 ## Configuration
 
-Create the bot through BotFather. Add it to the announcement channel as administrator with permission to post messages. The owner must start a private conversation with the bot. Store these values only in the production `.env`:
+Create the bot through BotFather. Add it to the announcement channel as administrator with permission to post messages. The owner must start a private conversation with the bot. Initial values may remain in the production `.env`; the administrator can override them in Dashboard → Bot → Telegram announcements:
 
 ```
 TELEGRAM_ANNOUNCEMENTS_TOKEN=<dedicated bot credential>
@@ -45,3 +45,9 @@ Commands:
 Outbound sends checkpoint their state before HTTP. A network-ambiguous result or process interruption enters `uncertain` and is never automatically resent. Inspect the channel/private chat before reconciliation. Known rejections retry with a five-minute delay, at most three times. Generation retries after ten minutes, at most three times. No approval means no channel publication.
 
 `site_options.announcements_heartbeat` records a completed worker iteration. Existing chat heartbeat remains independent. The existing image generation quota is advisory across processes; generated output uses the configured Lyra illustration style and provider.
+
+## Dashboard settings
+
+The dedicated administrator-only form writes announcement settings atomically. Empty token/proxy fields preserve stored credentials; the explicit proxy-clear checkbox selects direct connection. Token and proxy values are never rendered into the form. Existing environment credentials remain fallback values until an option is stored. Enabling performs Telegram readiness checks before saving. Changing bot, owner, channel or event is blocked while unfinished posts exist. Configuration changes share the worker publication lock.
+
+The Telegram proxy is independent of ai_proxy_url. HTTP, HTTPS and SOCKS5 are supported; SOCKS DNS resolution is remote. VLESS uses src/LLM/bin/xray with a separate temporary configuration (mode600), random loopback SOCKS port and short-lived child process. It does not reuse or replace the LLM tunnel. Install the official Xray-core Linux binary at that path (mode755, owned by root); no automatic binary downloads occur in web requests. Temporary configuration/process are removed when the request/worker exits normally. Telegram TLS certificate validation remains enabled.

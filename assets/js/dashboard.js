@@ -137,10 +137,21 @@ $(document).ready(function() {
                     var action = $form.find("input[name='action']").val();
                     
                     // Не очищаем поля для форм с настройками
-                    if (action !== 'update_settings') {
+                    if (action !== 'update_settings' && action !== 'update_announcements') {
                         $form.find("input[type='text'], input[type='number'], input[type='password'], input[type='url'], input[type='file'], textarea").val("");
                         // Reset selects if any
                         $form.find("select").prop('selectedIndex', 0);
+                    }
+                    if (action === 'update_announcements') {
+                        var $token = $form.find('[name="announcements_token"]');
+                        var $proxy = $form.find('[name="announcements_proxy_url"]');
+                        if ($token.val()) $token.attr('placeholder', 'Токен сохранён');
+                        if ($proxy.val()) $proxy.attr('placeholder', 'Прокси сохранён');
+                        if ($form.find('[name="announcements_clear_proxy"]').prop('checked')) {
+                            $proxy.attr('placeholder', 'socks5h://… или vless://…');
+                        }
+                        $token.val(''); $proxy.val('');
+                        $form.find('[name="announcements_clear_proxy"]').prop('checked', false);
                     }
                     
                     if (action === 'clear_watching_log') {

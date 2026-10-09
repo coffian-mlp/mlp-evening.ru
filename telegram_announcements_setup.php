@@ -12,11 +12,12 @@ $mode = $argv[1] ?? '--check';
 if ($mode === '--disable') { $store->setOption('announcements_enabled','0'); echo "Announcements disabled.\n"; exit; }
 if (!in_array($mode,['--check','--enable'],true)) { fwrite(STDERR,"Usage: php telegram_announcements_setup.php --check|--enable EVENT_ID FIRST_NUMBER [FIRST_DATE]|--disable\n"); exit(1); }
 try {
-    $token = (string)Env::get('TELEGRAM_ANNOUNCEMENTS_TOKEN','');
-    $owner = (int)Env::get('TELEGRAM_ANNOUNCEMENTS_OWNER_ID','0');
-    $channel = (string)Env::get('TELEGRAM_ANNOUNCEMENTS_CHANNEL','@mlp_evening');
+    $settings = \Domain\AnnouncementSettings::values();
+    $token = $settings['announcements_token'];
+    $owner = (int)$settings['announcements_owner_id'];
+    $channel = $settings['announcements_channel'];
     if ($owner<=0 || !preg_match('/^(?:@[A-Za-z0-9_]{5,32}|-100\d+)$/D',$channel)) throw new RuntimeException('Owner/channel configuration incomplete');
-    $client = new TelegramBotClient($token);
+    $client = \Domain\AnnouncementSettings::client($settings);
     $me = $client->request('getMe');
     if (empty($me['is_bot']) || empty($me['id'])) throw new RuntimeException('Expected a Telegram bot');
     $webhook = $client->request('getWebhookInfo');
