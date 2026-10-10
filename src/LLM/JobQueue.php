@@ -33,6 +33,21 @@ class JobQueue {
         return (int)$this->db->insert_id;
     }
 
+    /** Caller holds bot_worker lock; recover enqueue/marker interruption without another job. */
+    public function enqueueAnnouncement(array $payload): int {
+        $run = (string)$payload['event_run_id'];
+        $kind = (string)$payload['schedule_announcement'];
+        $stmt = $this->db->prepare(
+            "SELECT id FROM llm_jobs WHERE type='dynamic_command'
+             AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.event_run_id'))=?
+             AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.schedule_announcement'))=? LIMIT 1"
+        );
+        $stmt->bind_param('ss', $run, $kind);
+        $stmt->execute();
+        $existing = $stmt->get_result()->fetch_assoc();
+        return $existing ? (int)$existing['id'] : $this->enqueue('dynamic_command', $payload, 0);
+    }
+
     /**
      * Типы, которые claimDue забирает поштучно (MLP-314: единый источник истины).
      * mention сюда НЕ входит — он клеймится дебаунс-пачкой claimMentionBurst().
@@ -361,6 +376,20 @@ class JobQueue {
         $stmt->bind_param(str_repeat('s', count($types)) . 'i', ...$params);
         $stmt->execute();
         return $stmt->get_result()->num_rows > 0;
+    }
+
+    /** Recover interrupted schedule deliveries before the ordinary stale-job reaper. */
+    public function recoverStaleAnnouncements(int $olderSec = 600): int {
+        $seconds = max(60, $olderSec);
+        $stmt = $this->db->prepare(
+            "UPDATE llm_jobs SET status='pending', run_after=DATE_ADD(NOW(), INTERVAL 60 SECOND), attempts=attempts+1
+             WHERE type='dynamic_command' AND status='processing'
+               AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.schedule_announcement')) IN ('finished','playlist_finished')
+               AND claimed_at < DATE_SUB(NOW(), INTERVAL ? SECOND)"
+        );
+        $stmt->bind_param('i', $seconds);
+        $stmt->execute();
+        return $stmt->affected_rows;
     }
 
     /**

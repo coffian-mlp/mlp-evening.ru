@@ -296,6 +296,9 @@ class LLMManager {
                 return true;
             }
         } elseif ($triggerType === 'dynamic_command') {
+            if (($contextData['schedule_announcement'] ?? '') === 'playlist_finished') {
+                return ScheduleAnnouncement::deliver($this, $contextData);
+            }
             $command = $contextData['command'] ?? ['handler_type' => 'text', 'system_prompt' => ''];
 
             // MLP-326: повтор той же команды в окне дедупа — короткая живая реплика вместо повторной генерации.
@@ -403,8 +406,7 @@ class LLMManager {
             $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
             
             if ($response && !$isSilence) {
-                $this->botSay($response);
-                return true;
+                return (bool)$this->botSay($response);
             }
         }
 

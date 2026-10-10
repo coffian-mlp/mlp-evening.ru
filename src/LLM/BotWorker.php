@@ -92,6 +92,10 @@ class BotWorker {
         // Индивидуальные задачи: приветствия и команды (переиспользуем существующие триггеры).
         foreach ($this->queue->claimDue(50) as $job) {
             $id = (int)$job['id'];
+            if (in_array($job['data']['schedule_announcement'] ?? '', ['finished', 'playlist_finished'], true)) {
+                ScheduleAnnouncement::processJob($this->llm, $this->queue, $job, $enabled);
+                continue;
+            }
             $playlistJob = $job['type'] === 'dynamic_command' && in_array($job['data']['command']['handler_type'] ?? '', ['playlist', 'command_interaction_reply'], true);
             if ($enabled || $playlistJob) {
                 if ($job['type'] === 'greeting') {
@@ -259,17 +263,17 @@ class BotWorker {
             $minsSinceEnd = ($now - $end) / 60;
 
             if ($minsToStart > 0 && $minsToStart <= 60 && empty($announced[$runId]['60m'])) {
-                $this->announce("Напиши анонс, что через час начнётся событие '{$evt['title']}'.", $scheduleCmd, $runId);
+                $this->announce("Напиши анонс, что через час начнётся событие '{$evt['title']}'.", $scheduleCmd, $runId, '60m');
                 $announced[$runId]['60m'] = true; $sent = true;
             }
             if ($minsToStart > 0 && $minsToStart <= 15 && empty($announced[$runId]['15m'])) {
                 // Анти-копипаста (полевое наблюдение 22.08: GLM продублировала 60м-анонс
                 // почти дословно): второй анонс обязан звучать иначе — первый есть в окне контекста.
                 $this->announce("Напиши срочный анонс, что событие '{$evt['title']}' начнётся уже через 15 минут! "
-                    . "Часовой анонс уже прозвучал и виден в чате — НЕ повторяй его формулировки: скажи заметно иначе, короче и с другим настроением.", $scheduleCmd, $runId);
+                    . "Часовой анонс уже прозвучал и виден в чате — НЕ повторяй его формулировки: скажи заметно иначе, короче и с другим настроением.", $scheduleCmd, $runId, '15m');
                 $announced[$runId]['15m'] = true; $sent = true;
             }
-            if ($minsSinceEnd >= 0 && $minsSinceEnd <= 10 && empty($announced[$runId]['finished'])) {
+            if ($minsSinceEnd >= 0 && ($minsSinceEnd <= 10 || (!empty($evt['generate_new_playlist']) && $minsSinceEnd <= 10080)) && empty($announced[$runId]['finished'])) {
                 // MLP-322: если следом (в пределах часа) идёт другое событие — это не конец
                 // вечера, а стык частей (05.09: StarGate 19:00–23:00 → Феникс Райт в 00:00).
                 $follow = ScheduleData::following($expanded, $runId, $now);
@@ -283,12 +287,15 @@ class BotWorker {
                     && ($outcome['state'] ?? '') === 'completed'
                     && (int)($outcome['generated_snapshot_id'] ?? 0) > 0
                     && $episodeManager->getSnapshot((int)$outcome['generated_snapshot_id']) !== null;
+                // Completed playlist transitions may become available after a temporary failure.
+                if (!empty($evt['generate_new_playlist']) && !$playlistPrepared) continue;
+                if ($minsSinceEnd > 10 && !$playlistPrepared) continue;
                 if ($playlistPrepared) {
                     $msg .= " А вот и расписание на следующий раз! Напиши об этом в чат в своём стиле.";
                 } else {
                     $msg .= " Напиши об этом в чат тепло и дружелюбно. Подготовка новой подборки для этого события не подтверждена; не утверждай, что она готова.";
                 }
-                $this->announce($msg, $scheduleCmd, $runId);
+                $this->announce($msg, $scheduleCmd, $runId, ($playlistPrepared && !empty($outcome['view_accounted'])) ? 'playlist_finished' : 'finished');
                 $announced[$runId]['finished'] = true; $sent = true;
             }
         }
@@ -300,15 +307,16 @@ class BotWorker {
         return $sent;
     }
 
-    private function announce(string $message, array $scheduleCmd, ?string $runId = null): void {
+    private function announce(string $message, array $scheduleCmd, ?string $runId = null, string $kind = 'upcoming'): void {
         // MLP-279: анонсы — через очередь (единый путь с реактивом, журнал в llm_jobs).
         // MLP-322: run_id анонсируемого события — хендлер schedule строит данные под него,
         // а не под «первое незакончившееся» (иначе анонс Феникса уезжал с данными StarGate).
-        $this->queue->enqueue('dynamic_command', [
+        $this->queue->enqueueAnnouncement([
             'message'      => $message,
             'command'      => $scheduleCmd,
             'event_run_id' => $runId,
-        ], 0);
+            'schedule_announcement' => $kind,
+        ]);
     }
 
     // ---------------- Опросы (бот голосует) ----------------
@@ -499,6 +507,7 @@ class BotWorker {
             return;
         }
         $this->lastReapAt = time();
+        $this->queue->recoverStaleAnnouncements(600);
         $n = $this->queue->failStaleAny(JobQueue::REACTIVE_TYPES, 600);
         if ($n > 0) {
             error_log("BotWorker: реапер закрыл зависших задач: {$n}");
