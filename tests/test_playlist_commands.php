@@ -14,6 +14,9 @@ $naturalOutcome = ['status'=>'accepted','code'=>'accepted','facts'=>['episode_id
 expect(PlaylistCommand::replyIsValid('Записала «Secrets and Pies»! Ещё одно пожелание сегодня — выбирай с умом.',$naturalOutcome,''),'short canonical episode title and natural quota accepted');
 expect(!PlaylistCommand::replyIsValid('Записала «Perfect Pear»! Ещё одно пожелание сегодня.',$naturalOutcome,''),'wrong short title rejected');
 expect(!PlaylistCommand::replyIsValid('Записала «Secrets and Pies»! Ещё два пожелания сегодня.',$naturalOutcome,''),'wrong quota rejected');
+expect(PlaylistCommand::replyIsValid('Записала Secrets and Pies! Можешь добавить ещё одну серию.',$naturalOutcome,''),'inflected quota word accepted');
+expect(PlaylistCommand::replyIsValid('Записала Secrets and Pies! Осталось на сегодня одно пожелание.',$naturalOutcome,''),'natural daily quota phrase accepted');
+expect(!PlaylistCommand::replyIsValid('Записала Secrets and Pies! Ещё одновременно подумаем.',$naturalOutcome,''),'numeric word prefix inside another word is not quota');
 $formatterClass = new class extends \LLM\LLMManager {
     public int $calls = 0;
     public function __construct() {}

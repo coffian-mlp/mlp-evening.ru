@@ -321,7 +321,7 @@ final class PlaylistCommand
         if (in_array($outcome['code'] ?? '', ['choice_clarifying', 'search_empty', 'search_failed', 'ambiguous_choice'], true) && !preg_match('/цит(?:ат|ир)/iu', $text)) return false;
         if (isset($facts['candidates']) && !self::hasCandidateIds($text, $facts['candidates'])) return false;
         if ($expected && !self::hasEpisodeData($text, $expected, (string)($facts['title'] ?? ''), $require)) return false;
-        if (isset($facts['quota_remaining']) && !self::hasQuantity($text, (int)$facts['quota_remaining'], '/(?:остал[оа]сь|доступн[оа]|ещ[её])(?:\s+сегодня)?\s*:?\s*(\d+|ноль|нуль|один|одна|одно|два|две|три)/iu', $require)) return false;
+        if (isset($facts['quota_remaining']) && !self::hasQuantity($text, (int)$facts['quota_remaining'], '/(?:остал[оа]сь|доступн[оа]|ещ[её])(?:\s+(?:сегодня|на сегодня|у тебя|тебе))*\s*:?\s*(\d+|ноль|нуль|один|одна|одно|одну|одного|одной|два|две|двух|три|трёх|трех)(?!\p{L})/iu', $require)) return false;
         if (!empty($facts['next_allowed_at']) && !str_contains($text, (string)$facts['next_allowed_at'])) return false;
         if (in_array($outcome['code'] ?? '', ['top', 'wishes'], true)) return self::hasListData($text, $facts['episodes'] ?? []);
         if (($outcome['code'] ?? '') === 'playlist') return self::hasPlaylistData($text, $facts['snapshot']['stories'] ?? []);
@@ -361,7 +361,7 @@ final class PlaylistCommand
 
     private static function quantityValue(string $value): int
     {
-        return ['ноль'=>0, 'нуль'=>0, 'один'=>1, 'одна'=>1, 'одно'=>1, 'два'=>2, 'две'=>2, 'три'=>3][mb_strtolower($value)] ?? (int)$value;
+        return ['ноль'=>0, 'нуль'=>0, 'один'=>1, 'одна'=>1, 'одно'=>1, 'одну'=>1, 'одного'=>1, 'одной'=>1, 'два'=>2, 'две'=>2, 'двух'=>2, 'три'=>3, 'трёх'=>3, 'трех'=>3][mb_strtolower($value)] ?? (int)$value;
     }
 
     private static function hasQuantity(string $text, int $quantity, string $pattern, bool $required = true): bool
@@ -426,6 +426,10 @@ final class PlaylistCommand
     {
         $lines = [];
         foreach (['episode_id'=>'Номер эпизода', 'title'=>'Полное название эпизода', 'quota_remaining'=>'Количество доступных пожеланий сегодня', 'next_allowed_at'=>'Точное время следующего разрешённого голоса'] as $key=>$label) if (isset($facts[$key])) $lines[]=$label . ': ' . $facts[$key];
+        if (isset($facts['title'])) {
+            $short = \Domain\EpisodeCatalog::metadata((string)$facts['title'])['name'] ?? null;
+            if ($short !== null) $lines[] = 'Короткое название эпизода: ' . $short;
+        }
         if (isset($facts['episodes'])) {
             $lines[]='Количество записей: ' . count($facts['episodes']);
             foreach ($facts['episodes'] as $row) $lines[]='Номер эпизода ' . $row['episode_id'] . '; название ' . $row['title'] . (isset($row['votes']) ? '; число голосов ' . $row['votes'] : '');
@@ -475,7 +479,7 @@ final class PlaylistCommand
             . 'Не пересказывай служебную сводку и не упоминай сервер или технические обозначения. '
             . 'Не копируй описание состояния как готовую реплику: сформулируй ответ самостоятельно, без обязательных слов или форм глагола.';
         if (in_array($outcome['code'] ?? '', ['accepted', 'refreshed'], true)) {
-            $task .= ' Обязательно подтверди сохранение пожелания, назови эпизод его коротким названием и скажи, сколько пожеланий осталось сегодня. Полный технический префикс названия из каталога не нужен. Количество можно назвать словами, например «ещё одно пожелание».';
+            $task .= ' Обязательно подтверди сохранение пожелания, назови эпизод его коротким названием и скажи, сколько пожеланий осталось сегодня. Полный технический префикс названия из каталога не нужен. Количество можно назвать словами, например «ещё одно пожелание». Название сохрани как дано в фактах. Подтверждение не дополняй новыми подробностями или пересказом сюжета эпизода: сообщи результат и остаток пожеланий в своём характере.';
         }
         if (($outcome['code'] ?? '') === 'confirmation_required') {
             $task .= ' Кнопку нажимает пользователь: попроси его выбрать. Лира не выбирает за него, не нажимает кнопки и не записывает своё желание. Кнопки исправны; не выдумывай сбои интерфейса.';
