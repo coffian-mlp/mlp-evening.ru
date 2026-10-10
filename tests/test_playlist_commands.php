@@ -27,6 +27,29 @@ $formatterClass = new class extends \LLM\LLMManager {
 };
 $retried=(new PlaylistCommand($formatterClass))->replyText($naturalOutcome,time()+20);
 expect($formatterClass->calls===2 && str_contains($retried,'Ещё одно'),'invalid facts trigger one bounded formatter retry without executing command');
+$repairFormatter = new class extends \LLM\LLMManager {
+    public array $instructions = [];
+    public array $outputs = [];
+    public function __construct() {}
+    public function liveTextBounded(string $instruction, ?string $mustContain, int $deadlineSec, int $timeoutSec=10, ?string $trustedTask=null, ?array $actionContext=null): ?string {
+        $this->instructions[] = $instruction;
+        return array_shift($this->outputs);
+    }
+};
+$repairFormatter->outputs = ['Записала Secrets and Pies! Ещё два пожелания.','Записала Perfect Pear! Ещё одно пожелание.','Записала Secrets and Pies! Ещё одно пожелание.'];
+$result=(new PlaylistCommand($repairFormatter))->replyText($naturalOutcome,time()+30);
+expect(count($repairFormatter->instructions)===3 && str_contains($result,'Secrets and Pies'),'two repairs permitted after initial response');
+expect(str_contains($repairFormatter->instructions[1],'Верное число: 1') && str_contains($repairFormatter->instructions[1],'Ещё два пожелания'),'first repair contains actual wrong reply and concrete quota error');
+expect(str_contains($repairFormatter->instructions[2],'Перепутано') || str_contains($repairFormatter->instructions[2],'перепутано'),'second repair describes current episode error');
+expect(str_contains($repairFormatter->instructions[2],'Perfect Pear') && !str_contains($repairFormatter->instructions[2],'Ещё два пожелания'),'second repair uses latest failed draft');
+$repairFormatter->instructions=[];$repairFormatter->outputs=array_fill(0,4,'Записала Perfect Pear! Ещё два пожелания.');
+$result=(new PlaylistCommand($repairFormatter))->replyText($naturalOutcome,time()+30);
+expect(count($repairFormatter->instructions)===3 && str_contains($result,'Желание записано:'),'two unsuccessful repairs exhaust cap and use factual fallback');
+$repairFormatter->instructions=[];$repairFormatter->outputs=['Записала Perfect Pear! Ещё два пожелания.'];
+(new PlaylistCommand($repairFormatter))->replyText($naturalOutcome,time()+4);
+expect(count($repairFormatter->instructions)===1,'insufficient remaining deadline prevents repair calls');
+expect(array_keys(PlaylistCommand::replyValidationErrors('Записала Secrets and Pies! Ещё два пожелания.',$naturalOutcome,''))===['quota'],'validation exposes precise quota reason');
+expect(isset(PlaylistCommand::replyValidationErrors('Я записала голос!', $reject ?? ['status'=>'rejected','code'=>'daily_limit','facts'=>[]], '')['outcome']),'validation explains false success after rejection');
 $reject = ['status' => 'rejected', 'code' => 'daily_limit', 'facts' => ['quota_remaining' => 0]];
 expect(!PlaylistCommand::replyIsValid('Сегодня уже использованы три пожелания. Я записала голос!', $reject, 'Сегодня уже использованы три пожелания.'), 'false success rejected');
 expect(PlaylistCommand::replyIsValid('Сегодня уже использованы три пожелания. Не записала новый голос.', $reject, 'Сегодня уже использованы три пожелания.'), 'truthful rejection');

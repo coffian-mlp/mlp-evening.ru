@@ -827,7 +827,12 @@ class LLMManager {
         }
     }
 
+    private ?array $lastLiveIssue = null;
+
+    public function lastLiveReplyIssue(): ?array { return $this->lastLiveIssue; }
+
     public function liveTextBounded(string $instruction, ?string $mustContain, int $deadlineSec, int $timeoutSec = 10, ?string $trustedTask = null, ?array $actionContext = null): ?string {
+        $this->lastLiveIssue = null;
         if (!(int)ConfigManager::getInstance()->getOption('ai_live_confirm', 1)) return null;
         $context = $actionContext === null ? [] : $this->buildActionContext($actionContext);
         if ($context === null) return null;
@@ -847,7 +852,10 @@ class LLMManager {
                 }
             }
         }
-        return $actionContext === null ? $text : $this->addressActionReply($text, (int)($actionContext['actor_id'] ?? 0));
+        if ($actionContext === null) return $text;
+        $addressed = $this->addressActionReply($text, (int)($actionContext['actor_id'] ?? 0));
+        if ($addressed === null) $this->lastLiveIssue = ['text'=>$text,'errors'=>['address'=>'В ответе недопустимое @упоминание. Обращайся только к серверному адресату; остальных называй без @. Не выдумывай адресатов.']];
+        return $addressed;
     }
 
     private function scopedCall(array $context, string $prompt, int $deadlineSec, int $timeoutSec, bool $chat): ?string {

@@ -166,6 +166,17 @@ namespace {
             check(str_contains($explainedPayload,'First background appearance') && str_contains($explainedPayload,'Скорее твоё первое появление'),'live receives verified evidence and accepted refinement data');
             $command->replyText(['code'=>'confirmation_required','facts'=>['candidates'=>[['episode_id'=>413,'title'=>'First episode']], 'action'=>'wish']],time()+30,['actor_id'=>$actor,'data'=>[]]);
             check($GLOBALS['playlist_scoped_options'][CURLOPT_TIMEOUT]===20,'action live requests 20 second scoped transport within absolute deadline');
+            $repairStart=count($GLOBALS['playlist_scoped_payloads']);
+            $GLOBALS['playlist_scoped_responses']=['@собеседник, записала Checked episode! Ещё два пожелания.','Записала Checked episode! Ещё три пожелания.','Записала Checked episode! Ещё два пожелания.'];
+            $repairOutcome=['status'=>'accepted','code'=>'accepted','facts'=>['episode_id'=>7,'title'=>'Checked episode','quota_remaining'=>2]];
+            $fixed=$command->replyText($repairOutcome,time()+30,['actor_id'=>$actor,'data'=>[]]);
+            $repairPayloads=array_slice($GLOBALS['playlist_scoped_payloads'],$repairStart);
+            check(count($repairPayloads)===3 && str_contains($fixed,'Ещё два'),'actual manager repairs invalid address and then incorrect quota within two repairs');
+            $second=json_encode($repairPayloads[1]['messages'],JSON_UNESCAPED_UNICODE);$third=json_encode($repairPayloads[2]['messages'],JSON_UNESCAPED_UNICODE);
+            check(str_contains($second,'previous_reply') && str_contains($second,'@собеседник') && str_contains($second,'недопустимое @упоминание'),'address rejection retains draft and specific repair diagnostic');
+            check(str_contains($third,'Верное число: 2') && str_contains($third,'Ещё три'),'next repair gets latest draft and precise quota diagnostic');
+            foreach($repairPayloads as $payload) check(str_contains(json_encode($payload,JSON_UNESCAPED_UNICODE),'OWN_ACTION_CANARY'),'each formatter attempt preserves actor memory');
+            check(!str_contains($repairPayloads[1]['messages'][0]['content'],'@собеседник') && $repairPayloads[1]['messages'][0]['content']===$repairPayloads[2]['messages'][0]['content'],'model draft stays untrusted user data; system task stable across repairs');
             $config->setOption('ai_memory_enabled','0');
             $GLOBALS['playlist_scoped_text']='Готово.';
             $manager->liveTextBounded('Result',null,time()+12,10,null,['actor_id'=>$actor,'data'=>[]]);
