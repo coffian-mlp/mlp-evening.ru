@@ -144,6 +144,11 @@ namespace {
                 $GLOBALS['playlist_scoped_text']=$badAddress;
                 check($manager->liveTextBounded('Result',null,time()+12,10,'Reply',['actor_id'=>$actor,'data'=>[]])===null,'shared action mention protocol rejects any generated token');
             }
+            $subjectLogin=(new Domain\UserManager())->getUserById($foreign)['login'];
+            $GLOBALS['playlist_scoped_text']='@'.$subjectLogin.' оценит эту серию.';
+            $subjectReply=$manager->liveTextBounded('Result',null,time()+12,10,'Reply',['actor_id'=>$actor,'data'=>['original_query'=>'серию для @'.$subjectLogin]]);
+            check($subjectReply!==null && str_contains($subjectReply,$subjectLogin) && !str_contains($subjectReply,'@'.$subjectLogin),'explicit known subject retained as plain text instead of discarding live reply');
+            check($manager->liveTextBounded('Result',null,time()+12,10,'Reply',['actor_id'=>$actor,'data'=>[]])===null,'unrequested foreign mention remains rejected');
             $actorLogin=(new Domain\UserManager())->getUserById($actor)['login'];
             check(str_contains($actionJson,'allowed_mention') && str_contains($actionJson,'@'.$actorLogin),'action supplies explicit server token, not nickname-derived mention');
             foreach (['@'.strtoupper($actorLogin).', поясни сцену.', 'Поясни сцену, @'.strtoupper($actorLogin).', пожалуйста.'] as $naturalAddress) {

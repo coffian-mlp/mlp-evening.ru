@@ -836,6 +836,17 @@ class LLMManager {
             $this->personaPrompt() . ($trustedTask !== null ? "\n\n[Текущая служебная задача, обязательна]:\n" . $trustedTask : ''), $deadlineSec, $timeoutSec, true);
         $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
         if ($text === '' || ($mustContain !== null && mb_stripos($text, $mustContain) === false)) return null;
+        if ($actionContext !== null) {
+            // Explicit subjects may be discussed, but only the actor is addressed with @.
+            $query = (string)($actionContext['data']['original_query'] ?? '');
+            foreach ($actionContext['data']['clarifications'] ?? [] as $part) $query .= "\n" . $part;
+            $subjects = array_column(\Domain\UserMention::matches($query, \Domain\UserMention::directory()), 'user');
+            foreach (array_reverse(\Domain\UserMention::matches($text, $subjects)) as $mention) {
+                if ((int)$mention['user']['id'] !== (int)($actionContext['actor_id'] ?? 0)) {
+                    $text = substr_replace($text, $mention['name'], $mention['offset'], strlen($mention['raw']));
+                }
+            }
+        }
         return $actionContext === null ? $text : $this->addressActionReply($text, (int)($actionContext['actor_id'] ?? 0));
     }
 

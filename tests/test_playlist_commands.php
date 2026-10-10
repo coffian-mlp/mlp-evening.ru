@@ -10,6 +10,20 @@ $active = [['command_prefix' => '/хочу', 'handler_type' => 'playlist']];
 expect(PlaylistCommand::matchActive($active, '!хочу 7') !== null, 'active scoped bang');
 expect(PlaylistCommand::matchActive([], '!хочу 7') === null, 'disabled does not run');
 expect(BotCommandManager::matchCommand([['command_prefix' => '/штош', 'handler_type' => 'recap']], '!штош') === null, 'old command slash only');
+$naturalOutcome = ['status'=>'accepted','code'=>'accepted','facts'=>['episode_id'=>166,'title'=>'My Little Pony Friendship is Magic - Season 7 Episode 23 - Secrets and Pies','quota_remaining'=>1]];
+expect(PlaylistCommand::replyIsValid('Записала «Secrets and Pies»! Ещё одно пожелание сегодня — выбирай с умом.',$naturalOutcome,''),'short canonical episode title and natural quota accepted');
+expect(!PlaylistCommand::replyIsValid('Записала «Perfect Pear»! Ещё одно пожелание сегодня.',$naturalOutcome,''),'wrong short title rejected');
+expect(!PlaylistCommand::replyIsValid('Записала «Secrets and Pies»! Ещё два пожелания сегодня.',$naturalOutcome,''),'wrong quota rejected');
+$formatterClass = new class extends \LLM\LLMManager {
+    public int $calls = 0;
+    public function __construct() {}
+    public function liveTextBounded(string $instruction, ?string $mustContain, int $deadlineSec, int $timeoutSec=10, ?string $trustedTask=null, ?array $actionContext=null): ?string {
+        $this->calls++;
+        return $this->calls===1 ? 'Записала «Secrets and Pies»! Ещё два пожелания.' : 'Записала «Secrets and Pies»! Ещё одно пожелание сегодня.';
+    }
+};
+$retried=(new PlaylistCommand($formatterClass))->replyText($naturalOutcome,time()+20);
+expect($formatterClass->calls===2 && str_contains($retried,'Ещё одно'),'invalid facts trigger one bounded formatter retry without executing command');
 $reject = ['status' => 'rejected', 'code' => 'daily_limit', 'facts' => ['quota_remaining' => 0]];
 expect(!PlaylistCommand::replyIsValid('Сегодня уже использованы три пожелания. Я записала голос!', $reject, 'Сегодня уже использованы три пожелания.'), 'false success rejected');
 expect(PlaylistCommand::replyIsValid('Сегодня уже использованы три пожелания. Не записала новый голос.', $reject, 'Сегодня уже использованы три пожелания.'), 'truthful rejection');
