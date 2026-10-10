@@ -446,14 +446,12 @@ $(document).ready(function() {
         const myNick = window.currentUserNickname || window.currentUsername;
         let isMentioned = false;
         
-        if (myNick) {
-            const mentionRegex = new RegExp(`@${escapeRegExp(myNick)}\\b`, 'i');
-            if (mentionRegex.test(data.message)) {
-                isMentioned = true;
-                div.classList.add('message-mentioned');
-            }
-        }
-        
+        const mentionContent = document.createElement('template');
+        mentionContent.innerHTML = data.message || '';
+        isMentioned = Array.from(mentionContent.content.querySelectorAll('.md-mention[data-mention-user-id]'))
+            .some(node => String(node.dataset.mentionUserId) === String(window.currentUserId));
+        if (isMentioned) div.classList.add('message-mentioned');
+
         // Check for Quote Mention (Soft Highlight)
         // If NOT directly mentioned, but one of the quotes is mine
         if (!isMentioned && data.quotes && data.quotes.length > 0 && window.currentUserId) {

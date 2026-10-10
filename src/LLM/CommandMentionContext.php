@@ -15,13 +15,15 @@ final class CommandMentionContext
         return array_values(array_unique(array_map('mb_strtolower', $matches[1])));
     }
 
-    public static function resolve(string $text, callable $lookup): array
+    public static function resolve(string $text, callable $lookup, ?array $directory = null): array
     {
         $users = [];
-        foreach (array_slice(self::names($text), 0, self::MAX_USERS) as $name) {
-            $user = $lookup($name);
+        $subjects = $directory === null ? array_map($lookup, array_slice(self::names($text), 0, self::MAX_USERS))
+            : array_column(\Domain\UserMention::matches(html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8'), $directory), 'user');
+        foreach ($subjects as $user) {
             if (!$user || (int)($user['id'] ?? 0) <= 0) continue;
             $id = (int)$user['id'];
+            if (!isset($users[$id]) && count($users) >= self::MAX_USERS) break;
             $users[$id] = ['id' => $id,
                 'login' => mb_substr(BotMemoryManager::normalizeText((string)$user['login']), 0, 80),
                 'nickname' => mb_substr(BotMemoryManager::normalizeText((string)($user['nickname'] ?? $user['login'])), 0, 100)];
@@ -31,8 +33,8 @@ final class CommandMentionContext
 
     public static function build(LLMManager $llm, string $text): array
     {
-        if (!self::names($text)) return ['users' => [], 'memory' => null];
-        $users = self::resolve($text, (new UserManager())->findByLoginOrNickname(...));
+        if (!str_contains($text, '@')) return ['users' => [], 'memory' => null];
+        $users = self::resolve($text, (new UserManager())->findByLoginOrNickname(...), \Domain\UserMention::directory());
         $memory = null;
         if ($users) {
             try { $memory = (new LyraMemory($llm))->buildPromptBlock(array_column($users, 'id'), false); }

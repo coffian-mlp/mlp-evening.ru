@@ -89,7 +89,7 @@ class LyraMemory {
             $line = "Мем чата: {$text}";
             $len = mb_strlen($line) + 1;
             if ($memeSpent + $len > $memeBudget) {
-                break;
+                continue;
             }
             $memeLines[] = $line;
             $memeSpent += $len;
@@ -106,7 +106,7 @@ class LyraMemory {
      * null — подсистема выключена / память пуста / бюджеты нулевые. Деградация —
      * забота вызывающего (buildContext оборачивает в try/catch).
      */
-    public function buildPromptBlock(array $userIdsInOrder, bool $includeMemes = true): ?string {
+    public function buildPromptBlock(array $userIdsInOrder, bool $includeMemes = true, string $query = ''): ?string {
         $config = ConfigManager::getInstance();
         if (!(int)$config->getOption('ai_memory_enabled', 1)) {
             return null;
@@ -138,7 +138,7 @@ class LyraMemory {
                 $dossiers[$id] = $grouped[$id];
             }
         }
-        $memes = $includeMemes ? $this->memory->getMemes(100) : []; // горячий путь: блок всё равно ограничен meme_limit
+        $memes = $includeMemes ? MemoryRelevance::rank($this->memory->getMemes(), $query) : []; // Relevance changes selection, not the prompt budget.
         if (!$dossiers && !$memes) {
             return null;
         }

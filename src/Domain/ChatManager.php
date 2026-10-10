@@ -492,9 +492,7 @@ class ChatManager {
         // 5. Monospace/Code: `text` => <code>text</code>
         $text = preg_replace('/`(.*?)`/s', '<code class="md-code">$1</code>', $text);
 
-        // 6. User Mentions: @Username
-        // Pattern: @ followed by word characters (letters, numbers, underscores)
-        $text = preg_replace('/@([\wа-яА-ЯёЁ0-9_]+)/u', '<span class="md-mention">@$1</span>', $text);
+        // Mentions are rendered after links so attributes and code are protected.
 
         // 7. Auto-Embeds (Raw URLs)
         
@@ -529,7 +527,7 @@ class ChatManager {
         // Use a negative lookbehind to ensure we aren't in a tag attribute like src="..." or href="..."
         $text = preg_replace('/(?<!href="|src=")(?<!>)(https?:\/\/[^\s<]+)(?![^<]*>)/', '<a href="$1" target="_blank" rel="noopener noreferrer" class="chat-link">$1</a>', $text);
 
-        return $text;
+        return str_contains($text, '@') ? UserMention::render($text, UserMention::directory()) : $text;
     }
 
     public function toggleReaction($messageId, $userId, $reactionType) {
@@ -604,6 +602,7 @@ class ChatManager {
 
     private function processMessages($messages) {
         if (empty($messages)) return [];
+        UserMention::invalidateDirectory();
 
         // Collect all quoted message IDs & Current IDs
         $allQuotedIds = [];

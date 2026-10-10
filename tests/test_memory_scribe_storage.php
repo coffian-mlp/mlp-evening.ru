@@ -27,13 +27,19 @@ $memory = new class {
         return [['source' => 'auto', 'text' => str_repeat('я', 2000)], ['source' => 'manual', 'text' => 'manual fact excluded']];
     }
     public function replaceAutoDossier(int $id, string $text): void { $this->replacement = $text; }
-    public function autoMemesLength(): int { return 0; }
+    public int $memesLength = 0;
+    public array $memeReplacements = [];
+    public function autoMemesLength(): int { return $this->memesLength; }
+    public function getMemes(): array { return [['source'=>'auto','text'=>'stored legend']]; }
+    public function replaceAutoMemes(array $rows): void { $this->memeReplacements[] = $rows; }
 };
 $provider = new class {
     public array $calls = [];
-    public function generateUtility(array $context, string $prompt, int $timeout): string {
+    public ?string $output = null;
+    public bool $failed = false;
+    public function generateUtility(array $context, string $prompt, int $timeout): ?string {
         $this->calls[] = $context;
-        return str_repeat('я', 3993) . ' конец!';
+        return $this->failed ? $this->output : str_repeat('я', 3993) . ' конец!';
     }
 };
 $scribeClass = new ReflectionClass(MemoryScribe::class);
@@ -54,6 +60,16 @@ try {
     checkStorage(str_contains($provider->calls[0][0]['content'], '4000') && !str_contains($provider->calls[0][0]['content'], 'manual fact'), 'provider receives storage target and only auto facts');
     $compress->invoke($scribe, [1], time() - MemoryScribe::JOB_DEADLINE_SEC);
     checkStorage(count($provider->calls) === 1, 'expired job budget cannot start another provider call');
+    $provider->failed = true;
+    foreach ([null, '', " \n\t "] as $output) {
+        $provider->output = $output;
+        $before = $memory->replacement;
+        $compress->invoke($scribe, [1], time());
+        checkStorage($memory->replacement === $before, 'null/empty dossier compression preserves stored facts');
+        $memory->memesLength = 2001;
+        $compress->invoke($scribe, [], time());
+        checkStorage($memory->memeReplacements === [], 'null/empty meme compression preserves stored legends');
+    }
 } finally {
     $instance->setValue(null, $original);
 }

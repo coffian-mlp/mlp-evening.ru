@@ -33,6 +33,7 @@ class UserManager {
 
     private function clearAllUsersCache() {
         $this->clearCache('all_users');
+        UserMention::invalidateDirectory();
     }
 
     private function clearUserCache($userId) {

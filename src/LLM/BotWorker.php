@@ -172,7 +172,7 @@ class BotWorker {
         // и порождала дубли (кейс ГТА 22.08); прицел на цитируемое сообщение теперь
         // даёт инструкция ПОСЛЕДНЕЙ РЕПЛИКОЙ, не system (уроки MLP-293/308).
         $ctxLimit = max(4, min(100, (int)$this->config->getOption('ai_context_messages', 24)));
-        $context = $this->llm->buildReplyContext($ctxLimit);
+        $context = $this->llm->buildReplyContext($ctxLimit, null, null, true, null, $decision['quote_text'] ?? implode(' ', array_column($mentions, 'message')));
         $instr = ReplyPolicy::instruction($decision);
         if ($instr !== '') {
             $context[] = ['role' => 'user', 'content' => $instr];
