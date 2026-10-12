@@ -10,6 +10,8 @@ Create the bot through BotFather. Add it to the announcement channel as administ
 TELEGRAM_ANNOUNCEMENTS_TOKEN=<dedicated bot credential>
 TELEGRAM_ANNOUNCEMENTS_OWNER_ID=<trusted numeric Telegram user ID>
 TELEGRAM_ANNOUNCEMENTS_CHANNEL=@mlp_evening
+# Optional: force IPv6 for direct requests, without affecting configured proxies.
+TELEGRAM_ANNOUNCEMENTS_IPV6_ONLY=0
 ```
 
 The owner ID must be independently verified, for example against the owner's existing Telegram login binding. Never select the first sender of `/start` as administrator. Secrets must not be included in Git or shell history.

@@ -114,6 +114,9 @@ class TelegramBotClient
         // Empty string disables inherited process proxies; this transport has its own configuration.
         $options[CURLOPT_PROXY] = $proxy;
         $options[CURLOPT_NOPROXY] = '';
+        if ($proxy === '' && \Infra\Env::get('TELEGRAM_ANNOUNCEMENTS_IPV6_ONLY', '0') === '1') {
+            $options[CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V6;
+        }
         if ($photoPath !== null) {
             $params['photo'] = new \CURLFile($photoPath, 'image/jpeg', basename($photoPath));
             foreach ($params as $key => $value) {
