@@ -30,6 +30,8 @@ $expectError = static function (callable $action, bool $uncertain, string $label
     }
 };
 foreach ([
+    [['status' => 0, 'body' => '', 'errno' => 28, 'request_started' => false], false, 'connection timeout before HTTP request'],
+    [['status' => 0, 'body' => '', 'errno' => 28, 'request_started' => true], true, 'timeout after HTTP request'],
     [['status' => 200, 'body' => '', 'errno' => 28], true, 'timeout'],
     [['status' => 503, 'body' => 'unavailable'], true, 'server error'],
     [['status' => 200, 'body' => 'broken'], true, 'invalid JSON'],

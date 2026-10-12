@@ -49,7 +49,7 @@ class TelegramBotClient
             throw new TelegramBotException('Telegram transport failed.', $mutating);
         }
         if (!is_array($response) || (int)($response['errno'] ?? 0) !== 0) {
-            throw new TelegramBotException('Telegram network request failed.', $mutating);
+            throw new TelegramBotException('Telegram network request failed.', $mutating && ($response['request_started'] ?? null) !== false);
         }
         $status = (int)($response['status'] ?? 0);
         $body = json_decode(is_string($response['body'] ?? null) ? $response['body'] : '', true);
@@ -116,6 +116,7 @@ class TelegramBotClient
         $options[CURLOPT_NOPROXY] = '';
         if ($proxy === '' && \Infra\Env::get('TELEGRAM_ANNOUNCEMENTS_IPV6_ONLY', '0') === '1') {
             $options[CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V6;
+            $options[CURLOPT_CONNECTTIMEOUT] = 10;
         }
         if ($photoPath !== null) {
             $params['photo'] = new \CURLFile($photoPath, 'image/jpeg', basename($photoPath));
@@ -132,7 +133,8 @@ class TelegramBotClient
         try {
             curl_setopt_array($curl, $options);
             $body = curl_exec($curl);
-            return ['status' => curl_getinfo($curl, CURLINFO_HTTP_CODE), 'body' => $body, 'errno' => curl_errno($curl)];
+            return ['status' => curl_getinfo($curl, CURLINFO_HTTP_CODE), 'body' => $body, 'errno' => curl_errno($curl),
+                'request_started' => curl_getinfo($curl, CURLINFO_REQUEST_SIZE) > 0 || curl_getinfo($curl, CURLINFO_SIZE_UPLOAD) > 0];
         } finally {
             curl_close($curl);
         }
