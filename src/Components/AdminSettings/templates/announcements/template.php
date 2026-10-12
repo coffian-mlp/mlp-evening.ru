@@ -1,15 +1,13 @@
 <?php
 $settings = \Domain\AnnouncementSettings::values();
 $escape = static fn($value) => htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
-$firstDate = (int)$settings['announcements_not_before'] > 0
-    ? (new \DateTimeImmutable('@'.$settings['announcements_not_before']))->setTimezone(new \DateTimeZone('Europe/Moscow'))->format('Y-m-d') : '';
 $events = array_filter((new \Domain\EventManager())->getAllRaw(), static fn($event) => !empty($event['use_playlist']) && !empty($event['is_recurring']) && ($event['recurrence_rule'] ?? '') === 'weekly');
 $lastRun = $arResult['config']->getOption('announcements_heartbeat', '');
 ?>
 <div class="card" id="telegram-announcements-settings">
-    <h3 class="dashboard-title">Telegram-анонсы</h3>
+    <h3 class="dashboard-title">Настройки анонсов</h3>
     <p>Лира готовит два поста с картинками. Каждый пост публикуется только после твоего одобрения в личке бота.</p>
-    <p>Черновики — в среду в 19:00 МСК. Основной анонс — в четверг в 19:00 МСК. Напоминание — за 3 часа до вечерка.</p>
+    <p>Одна еженедельная серия связана с событием календаря. Сроки рассчитываются заново для каждого показа.</p>
     <form method="post" action="/api.php" id="announcement-settings-form" autocomplete="off">
         <input type="hidden" name="action" value="update_announcements">
         <div class="form-group">
@@ -46,17 +44,31 @@ $lastRun = $arResult['config']->getOption('announcements_heartbeat', '');
             </select>
         </div>
         <div class="form-group">
-            <label class="form-label" for="announcements_first_number">Стартовый номер вечерка</label>
-            <input id="announcements_first_number" type="number" name="announcements_first_number" min="1" max="3999" class="form-input" value="<?= (int)$settings['announcements_first_number'] ?>" required>
-            <p>Для первого автоматического анонса. После подготовки первого вечерка нумерация продолжается автоматически; изменение этого поля её не сбрасывает.</p>
+            <label class="form-label" for="announcements_next_number">Номер следующего вечерка</label>
+            <input id="announcements_next_number" type="number" name="announcements_next_number" min="1" max="3999" class="form-input" value="<?= (int)$settings['announcements_next_number'] ?>" required>
+            <p>Общий номер для основного поста и напоминания. После создания следующего вечерка увеличивается автоматически. Номера уже созданных постов не меняются.</p>
         </div>
-        <div class="form-group">
-            <label class="form-label" for="announcements_first_date">Первый вечерок с автоматическим анонсом</label>
-            <input id="announcements_first_date" type="date" name="announcements_first_date" class="form-input" value="<?= $escape($firstDate) ?>" required>
-            <p>Более ранние вечерки пропускаются. Дата по Москве.</p>
-        </div>
-        <details id="announcement-generation-settings">
-            <summary class="form-label">Генерация текстов и изображений</summary>
+        <details class="announcement-details" open>
+            <summary>Расписание подготовки и публикации <span aria-hidden="true">▾</span></summary>
+            <div class="form-group">
+                <label class="form-label" for="announcements_timezone">Часовой пояс расписания анонсов</label>
+                <select id="announcements_timezone" name="announcements_timezone" class="form-input">
+                    <?php foreach (\DateTimeZone::listIdentifiers() as $zone): ?><option value="<?= $escape($zone) ?>" <?= $zone===$settings['announcements_timezone']?'selected':'' ?>><?= $escape($zone) ?></option><?php endforeach; ?>
+                </select>
+                <p>Календарь хранит конкретное время показа. Этот пояс определяет время подготовки и публикации; в тексте поста время показа указывается по Москве.</p>
+            </div>
+            <?php foreach (['prepare'=>'Черновики в дашборде и личке бота','main'=>'Основной пост в канале'] as $kind=>$label): ?>
+                <fieldset class="announcement-schedule-row">
+                    <legend><?= $label ?></legend>
+                    <label class="form-label">За сколько дней до события<input type="number" class="form-input" min="0" max="6" required name="announcements_<?= $kind ?>_days" value="<?= $escape($settings['announcements_'.$kind.'_days']) ?>"></label>
+                    <label class="form-label">Время<input type="time" class="form-input" required name="announcements_<?= $kind ?>_time" value="<?= $escape($settings['announcements_'.$kind.'_time']) ?>"></label>
+                </fieldset>
+            <?php endforeach; ?>
+            <label class="form-label">Напоминание: за сколько минут до начала события<input type="number" class="form-input" required min="1" max="10080" name="announcements_reminder_minutes" value="<?= $escape($settings['announcements_reminder_minutes']) ?>"></label>
+            <p>Для одной еженедельной серии выбирай сроки в пределах недели (0–6 дней). Черновики должны быть раньше основного поста, затем — напоминание, затем — событие. Изменение сроков сохраняет тексты и картинки в новой версии и снимает прежнее одобрение. Старые кнопки согласования перестают действовать.</p>
+        </details>
+        <details id="announcement-generation-settings" class="announcement-details">
+            <summary>Промпты и контекст генерации — раскрыть настройки <span aria-hidden="true">▾</span></summary>
             <p>Сначала модель получает нейтральные резюме серий, затем Лира пишет пост со своим характером и памятью. Правки применятся при следующей генерации; готовые черновики сохраняются до переделки в боте.</p>
             <?php foreach (['main'=>'Основной анонс','reminder'=>'Напоминание'] as $kind=>$label): ?>
                 <div class="form-group">
@@ -65,9 +77,16 @@ $lastRun = $arResult['config']->getOption('announcements_heartbeat', '');
                 </div>
             <?php endforeach; ?>
             <p>Целевая длина задаёт ориентир модели. Подпись вместе с номером всегда проверяется на лимит Telegram.</p>
-            <?php foreach (['synopsis'=>'Резюме серий: нейтральный первый этап','common'=>'Общие инструкции для текстов Лиры','main'=>'Основной анонс','reminder'=>'Напоминание','debut'=>'Первый выход Лиры в Telegram','image'=>'Изображения для анонсов'] as $key=>$label): ?>
+            <?php foreach (['synopsis'=>'Резюме серий: нейтральный первый этап','common'=>'Общие инструкции для текстов Лиры','main'=>'Основной анонс','reminder'=>'Напоминание','image'=>'Изображения для анонсов'] as $key=>$label): ?>
                 <div class="form-group">
                     <label class="form-label" for="announcements_prompt_<?= $key ?>"><?= $label ?></label>
+                    <p><?php $help=[
+                        'synopsis'=>'Этап 1, нейтральный. Получает названия и ID серий, проверенные синопсисы или источники поиска и эту инструкцию. Общий системный промпт Лиры, её память и чат сюда не передаются. Результат — проверенные резюме для следующего этапа.',
+                        'common'=>'Этап 2, общий для обоих постов. Дополняет основной системный промпт Лиры. Получает резюме, дату и время события, ночной показ, сообщения чата прошлого вечерка и общую память сообщества. Можно описать дебют по признаку is_first_publication; отдельного промпта первого поста нет.',
+                        'main'=>'Этап 2, только основной пост. Используется вместе с общими инструкциями выше и характером Лиры. Задаёт структуру и подробность основного анонса.',
+                        'reminder'=>'Этап 2, только напоминание. Тот же контекст, дополнительно reminder_minutes — срок до начала из настроек. Не фиксируй в промпте конкретные часы и даты.',
+                        'image'=>'Изображения. Получает названия эпизодов, описание события и замечания владельца. Применяется общий художественный стиль Лиры. Системный промпт общения, память и чат сюда не передаются.'
+                    ]; echo $escape($help[$key]); ?></p>
                     <textarea class="form-input" style="width:100%;box-sizing:border-box;resize:vertical" rows="5" maxlength="6000" required id="announcements_prompt_<?= $key ?>" name="announcements_prompt_<?= $key ?>"><?= $escape($settings['announcements_prompt_'.$key]) ?></textarea>
                 </div>
             <?php endforeach; ?>

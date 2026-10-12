@@ -15,6 +15,7 @@ if ($db->query('SELECT id FROM telegram_announcement_revisions WHERE state IN ("
 }
 $store = new Domain\AnnouncementStore($db);
 $offset = $db->query('SELECT value FROM site_options WHERE key_name="announcements_update_offset"')->fetch_assoc();
+$nextNumber=$db->query('SELECT value FROM site_options WHERE key_name="announcements_next_number"')->fetch_assoc();
 $counter = $db->query('SELECT value FROM site_options WHERE key_name="announcements_counter"')->fetch_assoc();
 $campaigns = [];
 $updates = [];
@@ -114,7 +115,12 @@ try {
     $store->change((int)$sending['id'], 'uncertain', 'published', ['channel_message_id' => 777]);
     check((int)$store->revision((int)$sending['id'])['channel_message_id'] === 777, 'manual reconciliation records published message');
     check($store->action((int)$sending['id'], $sending['nonce'], 'both', '', $now) === 'unavailable', 'published revision cannot be regenerated');
-    $freshRows = $posts($id);
+    check($store->revision((int)$posts($id)[0]['current_revision'])['state']==='cancelled','source change never revives a deliberately cancelled post');
+    $cancelled=$store->revision((int)$posts($id)[0]['current_revision']);
+    check($store->action((int)$cancelled['id'],$cancelled['nonce'],'both','',null,true)==='regenerating','administrator can explicitly restore a cancelled draft before expiry');
+    $freshFacts=$facts;$freshFacts['occurrence']['run_id']=$marker.':recovery';
+    $recoveryId=$store->ensure($freshFacts,hash('sha256','recovery'),$schedule,1);$campaigns[]=$recoveryId;
+    $freshRows = $posts($recoveryId);
     $previewInterrupted = (int)$freshRows[0]['current_revision'];
     $imageInterrupted = (int)$freshRows[1]['current_revision'];
     $store->change($previewInterrupted, 'text_pending', 'preview_sending');
@@ -132,6 +138,8 @@ try {
     foreach ($updates as $update) $db->query('DELETE FROM telegram_announcement_updates WHERE update_id=' . $update);
     if ($offset) $store->setOption('announcements_update_offset', $offset['value']);
     else $db->query('DELETE FROM site_options WHERE key_name="announcements_update_offset"');
+    if ($nextNumber) $store->setOption('announcements_next_number',$nextNumber['value']);
+    else $db->query('DELETE FROM site_options WHERE key_name="announcements_next_number"');
     if ($counter) $store->setOption('announcements_counter', $counter['value']);
     else $db->query('DELETE FROM site_options WHERE key_name="announcements_counter"');
     $db->close();

@@ -46,6 +46,7 @@ $expected = [
     'leave'               => 'public',
     // MLP-255: настройки и плейлист (было: Auth::requireApiAdmin в ветках)
     'update_settings'     => 'admin',
+    'announcement_post_action'=> 'admin', // MLP-388: shared dashboard post controls
     'update_announcements'=> 'admin', // MLP-376: separate Telegram announcement settings
     'regenerate_playlist' => 'admin',
     'vote'                => 'admin',

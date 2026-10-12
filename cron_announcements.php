@@ -16,7 +16,7 @@ $token = $settings['announcements_token'];
 $owner = (int)$settings['announcements_owner_id'];
 $channel = $settings['announcements_channel'];
 $event = (int)$store->option('announcements_event_id','0');
-$number = (int)$store->option('announcements_first_number','0');
+$number = (int)$settings['announcements_next_number'];
 if (!$token || $owner<=0 || $event<=0 || $number<1 || $number>3999 || !preg_match('/^(?:@[A-Za-z0-9_]{5,32}|-100\d+)$/D',$channel)) {
     error_log('Telegram announcements configuration incomplete');
     exit(1);

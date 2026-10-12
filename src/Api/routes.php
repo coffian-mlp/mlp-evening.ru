@@ -67,6 +67,7 @@ return [
     'leave'             => ['role' => 'public', 'handler' => [\Api\OnlineController::class, 'leave']],
     // Настройки и плейлист (MLP-255): админский пласт переезжает из switch.
     'update_settings'    => ['role' => 'admin', 'handler' => [\Api\SettingsController::class, 'update']],
+    'announcement_post_action' => ['role' => 'admin', 'handler' => [\Api\AnnouncementController::class, 'action']],
     'update_announcements' => ['role' => 'admin', 'handler' => [\Api\SettingsController::class, 'updateAnnouncements']],
     'regenerate_playlist'=> ['role' => 'admin', 'handler' => [\Api\PlaylistController::class, 'regenerate']],
     'vote'               => ['role' => 'admin', 'handler' => [\Api\PlaylistController::class, 'vote']],

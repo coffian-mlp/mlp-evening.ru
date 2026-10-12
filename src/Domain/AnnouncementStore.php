@@ -37,6 +37,66 @@ final class AnnouncementStore
         $this->sql('INSERT INTO site_options(key_name,value) VALUES(?,?) ON DUPLICATE KEY UPDATE value=VALUES(value)', [$name,$value]);
     }
 
+    public function numberFloor(): int
+    {
+        return max(1,1+(int)($this->rows('SELECT MAX(stream_number) n FROM telegram_announcement_campaigns')[0]['n']??0),1+(int)$this->option('announcements_counter','0'));
+    }
+
+    public function nextNumber(): int
+    {
+        return max($this->numberFloor(),(int)$this->option('announcements_next_number',$this->option('announcements_first_number','1')));
+    }
+
+    /** Latest revision per post; history remains stored and immutable. */
+    public function listing(): array
+    {
+        return $this->rows('SELECT r.*,p.kind,p.current_revision,p.due_at,p.expires_at,c.run_id,c.stream_number,c.start_at,c.fingerprint,c.facts_json FROM telegram_announcement_posts p JOIN telegram_announcement_revisions r ON r.id=p.current_revision JOIN telegram_announcement_campaigns c ON c.id=p.campaign_id ORDER BY c.start_at DESC,p.due_at DESC LIMIT 60');
+    }
+
+    /** Called under the shared worker lock and settings transaction. */
+    public function reschedule(array $settings): void
+    {
+        foreach ($this->rows('SELECT * FROM telegram_announcement_campaigns WHERE start_at>UTC_TIMESTAMP()') as $campaign) {
+            $facts=json_decode($campaign['facts_json'],true,512,JSON_THROW_ON_ERROR);
+            $schedule=AnnouncementSchedule::calculate($facts['occurrence'],$settings);
+            if ($schedule) $this->updateTimes((int)$campaign['id'],$schedule,(int)$facts['occurrence']['real_start_time']);
+        }
+    }
+
+    private function updateTimes(int $campaignId, array $schedule, int $start): void
+    {
+        foreach ($this->rows('SELECT p.*,r.state,r.caption,r.image_path,r.preview_photo_id,r.preview_controls_id FROM telegram_announcement_posts p JOIN telegram_announcement_revisions r ON r.id=p.current_revision WHERE p.campaign_id=?',[$campaignId]) as $post) {
+            $due=gmdate('Y-m-d H:i:s',$schedule[$post['kind'].'_at']);
+            $expires=gmdate('Y-m-d H:i:s',$post['kind']==='main'?$schedule['reminder_at']:$start);
+            if ($post['due_at']===$due && $post['expires_at']===$expires) continue;
+            if (in_array($post['state'],['uncertain','sending','preview_sending','controls_sending'],true)) throw new \RuntimeException('Сначала проверь неопределённую доставку в Telegram; сроки такого поста пока менять нельзя.');
+            if (in_array($post['state'],['published','expired','cancelled'],true)) continue;
+            $this->sql('UPDATE telegram_announcement_posts SET due_at=?,expires_at=? WHERE id=?',[$due,$expires,$post['id']]);
+            if ($post['caption'] || $post['image_path'] || $post['preview_photo_id'] || $post['preview_controls_id']) $this->newRevision((int)$post['id'],'Сроки публикации изменились. Требуется повторное согласование.',$post['caption'],$post['image_path']);
+        }
+    }
+
+    /** Human caption edits produce a revision, invalidating prior approval and buttons. */
+    public function edit(int $id,string $nonce,string $caption,?int $now=null): string
+    {
+        $now??=time();
+        return Transaction::run($this->db,function () use ($id,$nonce,$caption,$now) {
+            $this->sql('SELECT id FROM telegram_announcement_revisions WHERE id=? FOR UPDATE',[$id]);
+            $r=$this->revision($id);
+            if (!$r || (int)$r['current_revision']!==$id || !hash_equals($r['nonce'],$nonce)) return 'stale';
+            if ($now>=strtotime($r['expires_at'].' UTC')) return 'expired';
+            if (!in_array($r['state'],['pending','approved','preview_pending','failed','feedback_text','feedback_image','feedback_both'],true)) return 'unavailable';
+            $prefix=$r['kind']==='main'?'#'.$r['stream_number']:'Notificatio '.\LLM\AnnouncementContent::roman((int)$r['stream_number']);
+            $body=trim(str_replace(["\r\n","\r"],"\n",$caption));
+            if (str_starts_with($body,$prefix."\n")) $body=trim(substr($body,strlen($prefix)));
+            $facts=json_decode($r['facts_json'],true,512,JSON_THROW_ON_ERROR);
+            $valid=\LLM\AnnouncementContent::caption($body,$r['kind'],(int)$r['stream_number'],(int)$facts['occurrence']['real_start_time']);
+            if ($valid===null) throw new \InvalidArgumentException('Сохрани дату и время события по Москве, ссылку на сайт и лимит подписи Telegram. Номер добавляется автоматически.');
+            $this->newRevision((int)$r['post_id'],'Текст отредактирован в дашборде.',$valid,$r['image_path']);
+            return 'edited';
+        });
+    }
+
     /** Exactly one durable action per Telegram update, including its offset. */
     public function consume(int $id, callable $action): bool
     {
@@ -59,21 +119,20 @@ final class AnnouncementStore
                 if (!hash_equals($old['fingerprint'],$fingerprint)) {
                     $this->sql('UPDATE telegram_announcement_campaigns SET fingerprint=?,facts_json=?,start_at=? WHERE id=?', [$fingerprint,json_encode($facts,JSON_THROW_ON_ERROR),gmdate('Y-m-d H:i:s',(int)$facts['occurrence']['real_start_time']),$old['id']]);
                     foreach ($this->rows('SELECT p.*,r.* FROM telegram_announcement_posts p JOIN telegram_announcement_revisions r ON r.id=p.current_revision WHERE p.campaign_id=?', [$old['id']]) as $row) {
-                        $due = $schedule[$row['kind'].'_at'];
-                        $expires = $row['kind']==='main' ? $schedule['reminder_at'] : (int)$facts['occurrence']['real_start_time'];
-                        $this->sql('UPDATE telegram_announcement_posts SET due_at=?,expires_at=? WHERE id=?', [gmdate('Y-m-d H:i:s',$due),gmdate('Y-m-d H:i:s',$expires),$row['post_id']]);
-                        if (in_array($row['state'],['published','uncertain','sending'],true)) continue;
+                        if (in_array($row['state'],['published','uncertain','sending','cancelled','expired'],true)) continue;
                         $this->newRevision((int)$row['post_id'],'Расписание или плейлист изменились. Требуется новый черновик и повторное согласование.',null,null);
                     }
                 }
+                $this->updateTimes((int)$old['id'],$schedule,(int)$facts['occurrence']['real_start_time']);
                 return (int)$old['id'];
             }
             $last = (int)($this->rows('SELECT MAX(stream_number) AS n FROM telegram_announcement_campaigns')[0]['n'] ?? 0);
-            $number = max($initialNumber,$last+1,$counter+1);
+            $number = max($initialNumber,$last+1,$counter+1,(int)$this->option('announcements_next_number','0'));
             if ($number < 1 || $number > 3999) throw new \RuntimeException('Stream number outside supported range');
             $this->sql('INSERT INTO telegram_announcement_campaigns(run_id,stream_number,start_at,fingerprint,facts_json) VALUES(?,?,?,?,?)', [$run,$number,gmdate('Y-m-d H:i:s',(int)$facts['occurrence']['real_start_time']),$fingerprint,json_encode($facts,JSON_THROW_ON_ERROR)]);
             $id = (int)$this->db->insert_id;
             $this->setOption('announcements_counter',(string)$number);
+            $this->setOption('announcements_next_number',(string)($number+1));
             foreach (['main','reminder'] as $kind) {
                 $expires = $kind==='main' ? $schedule['reminder_at'] : (int)$facts['occurrence']['real_start_time'];
                 $this->sql('INSERT INTO telegram_announcement_posts(campaign_id,kind,due_at,expires_at) VALUES(?,?,?,?)', [$id,$kind,gmdate('Y-m-d H:i:s',$schedule[$kind.'_at']),gmdate('Y-m-d H:i:s',$expires)]);
@@ -107,18 +166,24 @@ final class AnnouncementStore
     }
 
     /** Approval and regeneration reject old, forged and already delivered revisions. */
-    public function action(int $id, string $nonce, string $action, string $feedback = '', ?int $now = null): string
+    public function action(int $id, string $nonce, string $action, string $feedback = '', ?int $now = null, bool $dashboard = false): string
     {
         $now ??= time();
-        return Transaction::run($this->db, function () use ($id,$nonce,$action,$feedback,$now) {
+        return Transaction::run($this->db, function () use ($id,$nonce,$action,$feedback,$now,$dashboard) {
             $this->sql('SELECT id FROM telegram_announcement_revisions WHERE id=? FOR UPDATE',[$id]);
             $r = $this->revision($id);
             if (!$r || (int)$r['current_revision']!==$id || !hash_equals($r['nonce'],$nonce)) return 'stale';
             if ($now >= strtotime($r['expires_at'].' UTC')) return 'expired';
-            if (!in_array($r['state'],['pending','approved','failed','feedback_text','feedback_image','feedback_both'],true)) return 'unavailable';
+            $states=['pending','approved','failed','feedback_text','feedback_image','feedback_both'];
+            if ($dashboard) {
+                $states[]='preview_pending';
+                if ($action==='cancel') $states=array_merge($states,['text_pending','image_pending','controls_pending']);
+                if (in_array($action,['text','image','both'],true)) $states[]='cancelled';
+            }
+            if (!in_array($r['state'],$states,true)) return 'unavailable';
             if ($action==='approve') {
                 if ($r['state']==='approved') return 'approved';
-                if ($r['state']!=='pending' || !$r['caption'] || !$r['image_path'] || !$r['preview_photo_id']) return 'unavailable';
+                if (!in_array($r['state'],$dashboard?['pending','preview_pending','failed']:['pending'],true) || !$r['caption'] || !$r['image_path'] || (!$dashboard && !$r['preview_photo_id'])) return 'unavailable';
                 $this->sql('UPDATE telegram_announcement_revisions SET state="approved",approved_at=? WHERE id=?',[gmdate('Y-m-d H:i:s',$now),$id]);
                 return 'approved';
             }

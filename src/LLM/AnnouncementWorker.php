@@ -11,6 +11,7 @@ use Social\TelegramBotException;
 final class AnnouncementWorker
 {
     private ?int $explicitNow = null;
+    private array $scheduleSettings = [];
     public function __construct(private AnnouncementStore $store, private TelegramBotClient $telegram,
         private AnnouncementContent $content, private int $owner, private string $channel,
         private int $eventId, private int $initialNumber, private ?string $configurationFingerprint = null) {}
@@ -48,11 +49,12 @@ final class AnnouncementWorker
                 $settings = \Domain\AnnouncementSettings::values();
                 if ($settings['announcements_enabled'] !== '1' || !hash_equals($this->configurationFingerprint, \Domain\AnnouncementSettings::fingerprint($settings))) return;
             }
+            $this->scheduleSettings=\Domain\AnnouncementSettings::values();
             $this->store->recover();
             $events = EventManager::expandOccurrences((new EventManager())->getAllRaw(),14,$now);
             foreach ($events as $event) {
-                if ((int)$event['id']!==$this->eventId || (int)$event['real_start_time'] <= $now || (int)$event['real_start_time'] < (int)$this->store->option('announcements_not_before','0')) continue;
-                $schedule = AnnouncementContent::schedule($event);
+                if ((int)$event['id']!==$this->eventId || (int)$event['real_start_time'] <= $now) continue;
+                $schedule = AnnouncementContent::schedule($event,$this->scheduleSettings);
                 if (!$schedule || $now < $schedule['prepare_at']) continue;
                 $facts = $this->content->facts($event,$now);
                 if ($facts) $this->store->ensure($facts,AnnouncementContent::fingerprint($facts),$schedule,$this->initialNumber);
@@ -72,11 +74,6 @@ final class AnnouncementWorker
                 $r = $this->store->revision((int)$row['id']);
                 if (!$r) continue;
                 if ($r['state']==='uncertain') continue;
-                $campaignFacts = json_decode($r['facts_json'],true);
-                if ((int)$campaignFacts['occurrence']['real_start_time'] < (int)$this->store->option('announcements_not_before','0')) {
-                    $this->store->change((int)$r['id'],$r['state'],'cancelled',['last_error'=>'before_activation_date']);
-                    continue;
-                }
                 if ($now >= strtotime($r['expires_at'].' UTC')) {
                     $this->store->change((int)$r['id'],$r['state'],'expired');
                     continue;
@@ -183,8 +180,11 @@ final class AnnouncementWorker
             return null;
         }
         $fingerprint = AnnouncementContent::fingerprint($fresh);
-        if (!hash_equals($r['fingerprint'],$fingerprint)) {
-            $this->store->ensure($fresh,$fingerprint,AnnouncementContent::schedule($fresh['occurrence']),$this->initialNumber);
+        $schedule=AnnouncementContent::schedule($fresh['occurrence'],$this->scheduleSettings);
+        $due=gmdate('Y-m-d H:i:s',$schedule[$r['kind'].'_at']);
+        $expires=gmdate('Y-m-d H:i:s',$r['kind']==='main'?$schedule['reminder_at']:(int)$fresh['occurrence']['real_start_time']);
+        if (!hash_equals($r['fingerprint'],$fingerprint) || $r['due_at']!==$due || $r['expires_at']!==$expires) {
+            $this->store->ensure($fresh,$fingerprint,$schedule,$this->initialNumber);
             return null;
         }
         return $fresh;
@@ -213,7 +213,7 @@ final class AnnouncementWorker
                 $result = $this->telegram->sendPhoto($this->owner,$r['caption'],$r['image_path'],self::keyboard($r));
                 $this->store->change($id,'preview_sending','pending',['preview_photo_id'=>$result['message_id']]);
                 $due = (new \DateTimeImmutable($r['due_at'],new \DateTimeZone('UTC')))->setTimezone(new \DateTimeZone('Europe/Moscow'))->format('d.m.Y H:i');
-                $reason = str_starts_with($r['feedback'],'Расписание или плейлист изменились') ? ' Расписание или плейлист изменились; прежнее одобрение снято.' : '';
+                $reason = (str_starts_with($r['feedback'],'Расписание или плейлист изменились') || str_starts_with($r['feedback'],'Сроки публикации изменились')) ? ' Расписание или плейлист изменились; прежнее одобрение снято.' : '';
                 $this->notify('Черновик #'.$r['stream_number'].' ('.$r['kind'].'), версия '.$r['version'].'. Публикация: '.$due.' МСК.' . $reason . ' Для правок ответь на картинку.');
             } catch (TelegramBotException $e) { $this->deliveryFailure($r,'preview_sending','preview_pending',$e); }
         } elseif ($r['state']==='controls_pending') {

@@ -1,5 +1,9 @@
 $(document).ready(function() {
     
+    if (sessionStorage.getItem('announcementSettingsSaved')) {
+        sessionStorage.removeItem('announcementSettingsSaved');
+        window.showFlashMessage('Настройки анонсов сохранены. Расписание обновлено.','success');
+    }
     // --- Логика переключения вкладок ---
     $(".nav-tile").click(function() {
         $(".nav-tile").removeClass("active");
@@ -91,13 +95,36 @@ $(document).ready(function() {
 
     function getCellValue(row, index){ return $(row).children('td').eq(index).text() }
 
+    $('.announcement-refresh').on('click',function(){location.reload();});
+    $('.announcement-go-settings').on('click',function(){document.getElementById('announcement-settings-form').scrollIntoView({behavior:'smooth'});});
+    $('.announcement-action-form').on('submit', function(e) {
+        e.preventDefault();
+        var form = this;
+        var button = e.originalEvent && e.originalEvent.submitter;
+        if (!button) return;
+        var operation = button.value;
+        if (operation === 'approve' && !window.confirm('Одобрить публикацию по указанному расписанию? Если время уже наступило, пост будет опубликован при ближайшей проверке.')) return;
+        if (operation === 'cancel' && !window.confirm('Отменить этот пост?')) return;
+        var data = new FormData(form);
+        data.set('operation', operation);
+        var buttons = $(form).find('button');
+        buttons.prop('disabled', true);
+        $.ajax({url:'/api.php',type:'POST',data:data,processData:false,contentType:false,dataType:'json'})
+            .done(function(response) {
+                window.showFlashMessage(response.message,response.type);
+                if (response.success) location.reload();
+            })
+            .fail(function(){window.showFlashMessage('Не удалось выполнить действие. Обнови страницу и проверь статус поста перед повтором.','error');})
+            .always(function(){buttons.prop('disabled', false);});
+    });
+
     // --- AJAX обработка форм (Dashboard + User Modal + Mod Modals) ---
     // Исключаем специальные формы, у которых есть свои обработчики
     // MLP-255: #bot-command-form теперь тоже ходит в /api.php через этот обработчик.
     // Исключены формы DbAdmin: у #db-edit-form свой fetch (раньше двойной сабмит),
     // .db-filter-form — обычная GET-навигация (перехват ломал фильтр ошибкой JSON),
     // #db-export-form — скачивание CSV (не JSON).
-    $("form").not('#profile-form, #add-sticker-form, #create-pack-form, #zip-import-form, #edit-pack-form, .bot-command-delete-form, #db-edit-form, #db-export-form, .db-filter-form').on("submit", function(e) {
+    $("form").not('#profile-form, #add-sticker-form, #create-pack-form, #zip-import-form, #edit-pack-form, .bot-command-delete-form, #db-edit-form, #db-export-form, .db-filter-form, .announcement-action-form').on("submit", function(e) {
         e.preventDefault(); 
         
         var $form = $(this);
@@ -143,15 +170,9 @@ $(document).ready(function() {
                         $form.find("select").prop('selectedIndex', 0);
                     }
                     if (action === 'update_announcements') {
-                        var $token = $form.find('[name="announcements_token"]');
-                        var $proxy = $form.find('[name="announcements_proxy_url"]');
-                        if ($token.val()) $token.attr('placeholder', 'Токен сохранён');
-                        if ($proxy.val()) $proxy.attr('placeholder', 'Прокси сохранён');
-                        if ($form.find('[name="announcements_clear_proxy"]').prop('checked')) {
-                            $proxy.attr('placeholder', 'socks5h://… или vless://…');
-                        }
-                        $token.val(''); $proxy.val('');
-                        $form.find('[name="announcements_clear_proxy"]').prop('checked', false);
+                        sessionStorage.setItem('announcementSettingsSaved','1');
+                        location.reload();
+                        return;
                     }
                     
                     if (action === 'clear_watching_log') {

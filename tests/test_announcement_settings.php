@@ -4,12 +4,12 @@ use Domain\AnnouncementSettings;
 use Social\AnnouncementProxy;
 $fail=0;
 $check=static function($yes,$label) use (&$fail) { echo ($yes?'PASS ':'FAIL ').$label."\n"; if(!$yes)$fail++; };
-$old=['announcements_enabled'=>'0','announcements_token'=>'123456:'.str_repeat('a',35),'announcements_owner_id'=>'42','announcements_channel'=>'@mlp_evening','announcements_proxy_url'=>'socks5h://user:secret@localhost:1080','announcements_event_id'=>'20','announcements_first_number'=>'179','announcements_not_before'=>'0'];
-$v=AnnouncementSettings::normalize(['announcements_token'=>'','announcements_proxy_url'=>'','announcements_first_date'=>'2026-10-17'],$old);
+$old=['announcements_enabled'=>'0','announcements_token'=>'123456:'.str_repeat('a',35),'announcements_owner_id'=>'42','announcements_channel'=>'@mlp_evening','announcements_proxy_url'=>'socks5h://user:secret@localhost:1080','announcements_event_id'=>'20','announcements_next_number'=>'179'];
+$v=AnnouncementSettings::normalize(['announcements_token'=>'','announcements_proxy_url'=>'','announcements_prepare_days'=>'4'],$old);
 $check($v['announcements_token']===$old['announcements_token'] && $v['announcements_proxy_url']===$old['announcements_proxy_url'],'blank secrets preserve existing settings');
-$check($v['announcements_not_before']===(string)(new DateTimeImmutable('2026-10-17',new DateTimeZone('Europe/Moscow')))->getTimestamp(),'first date interpreted in Moscow');
+$check($v['announcements_prepare_days']==='4','relative preparation deadline editable');
 $check(AnnouncementSettings::normalize(['announcements_clear_proxy'=>'1'],$old)['announcements_proxy_url']==='','explicit direct connection clears proxy');
-foreach ([['announcements_token'=>'secret'],['announcements_owner_id'=>'-1'],['announcements_enabled'=>'2'],['announcements_channel'=>'https://t.me/mlp_evening'],['announcements_first_number'=>'4000'],['announcements_first_date'=>'2026-02-30'],['announcements_proxy_url'=>'file:///etc/passwd'],['announcements_proxy_url'=>['secret']]] as $bad) {
+foreach ([['announcements_token'=>'secret'],['announcements_owner_id'=>'-1'],['announcements_enabled'=>'2'],['announcements_channel'=>'https://t.me/mlp_evening'],['announcements_next_number'=>'4000'],['announcements_prepare_time'=>'26:30'],['announcements_timezone'=>'invalid'],['announcements_prepare_days'=>'15'],['announcements_proxy_url'=>'file:///etc/passwd'],['announcements_proxy_url'=>['secret']]] as $bad) {
  try { AnnouncementSettings::normalize($bad,$old); $check(false,'invalid input rejected'); }
  catch(InvalidArgumentException $e) { $check(!str_contains($e->getMessage(),'secret'),'invalid input rejected without credential echo'); }
 }

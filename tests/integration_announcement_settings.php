@@ -4,16 +4,16 @@ if ((it_config()['db']['host'] ?? '') !== 'db') it_skip('requires isolated Docke
 it_require_db()->close();
 $db=Infra\Database::getInstance()->getConnection();
 $c=Infra\ConfigManager::getInstance();
-$keys=['announcements_enabled','announcements_token','announcements_owner_id','announcements_channel','announcements_proxy_url','announcements_event_id','announcements_first_number','announcements_not_before','ai_proxy_url'];
+$keys=['announcements_enabled','announcements_token','announcements_owner_id','announcements_channel','announcements_proxy_url','announcements_event_id','announcements_first_number','announcements_not_before','announcements_next_number','ai_proxy_url',...array_keys(Domain\AnnouncementPrompts::defaults()+Domain\AnnouncementSchedule::defaults())];
 $original=[];
 foreach($keys as $key) {$q=$db->prepare('SELECT value FROM site_options WHERE key_name=?');$q->bind_param('s',$key);$q->execute();$original[$key]=$q->get_result()->fetch_assoc();}
 try {
  $c->setOption('announcements_enabled','0');$c->setOption('announcements_token','123456:'.str_repeat('a',35));$c->setOption('announcements_owner_id','42');$c->setOption('announcements_event_id','0');$c->setOption('announcements_first_number','179');$c->setOption('announcements_channel','@mlp_evening');$c->setOption('announcements_proxy_url','socks5h://telegram.example:1080');$c->setOption('ai_proxy_url','socks5h://llm.example:1080');
- Domain\AnnouncementSettings::save(['announcements_enabled'=>'0','announcements_token'=>'','announcements_proxy_url'=>'','announcements_first_number'=>'180','announcements_first_date'=>'2026-10-17']);
+ Domain\AnnouncementSettings::save(['announcements_enabled'=>'0','announcements_token'=>'','announcements_proxy_url'=>'','announcements_next_number'=>'180']);
  $v=Domain\AnnouncementSettings::values();
- check($v['announcements_first_number']==='180' && $v['announcements_token']==='123456:'.str_repeat('a',35),'save writes fields and preserves blank token');
+ check($v['announcements_next_number']==='180' && $v['announcements_token']==='123456:'.str_repeat('a',35),'save writes fields and preserves blank token');
  check($v['announcements_proxy_url']==='socks5h://telegram.example:1080' && $c->getOption('ai_proxy_url')==='socks5h://llm.example:1080','Telegram proxy independent from LLM proxy');
- try {Domain\AnnouncementSettings::save(['announcements_first_number'=>'181','announcements_first_date'=>'2026-02-30']);check(false,'invalid date rejected');}catch(InvalidArgumentException $e){check(Domain\AnnouncementSettings::values()['announcements_first_number']==='180','invalid input leaves all settings unchanged');}
+ try {Domain\AnnouncementSettings::save(['announcements_next_number'=>'181','announcements_prepare_time'=>'26:30']);check(false,'invalid time rejected');}catch(InvalidArgumentException $e){check(Domain\AnnouncementSettings::values()['announcements_next_number']==='180','invalid input leaves all settings unchanged');}
  Domain\AnnouncementSettings::save(['announcements_clear_proxy'=>'1']);check(Domain\AnnouncementSettings::values()['announcements_proxy_url']==='','direct connection stored explicitly');
  try{Domain\AnnouncementSettings::save(['announcements_enabled'=>'1','announcements_owner_id'=>'0']);check(false,'incomplete activation rejected');}catch(InvalidArgumentException $e){check(Domain\AnnouncementSettings::values()['announcements_enabled']==='0' && Domain\AnnouncementSettings::values()['announcements_owner_id']==='42','failed activation leaves all settings unchanged');}
  $c->setOption('announcements_enabled','1');$snapshot=Domain\AnnouncementSettings::values();$calls=0;

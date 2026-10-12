@@ -16,7 +16,7 @@ class Content386 extends AnnouncementContent {
  public bool $debut=true;
  public int $summaryCalls=0;
  protected function communityMemory():string{return 'COMMUNITY_CANARY';}
- protected function telegramDebut():bool{return $this->debut;}
+ protected function firstPublication():bool{return $this->debut;}
  protected function episodeSummaries(array $stories):?array{$this->summaryCalls++;return [['episode_id'=>1,'title'=>'Stare Master','summary'=>'Флаттершай присматривает за Меткоискателями.','source'=>'https://example.org/stare']];}
 }
 $start=strtotime('2026-10-17 16:00:00 UTC');
@@ -34,7 +34,7 @@ check386(str_contains($w->calls[1][0],'validation_errors') && str_contains($w->c
 check386(str_contains($w->calls[0][0],'COMMUNITY_CANARY') && str_contains($w->calls[0][0],'PUBLIC_CHAT_CANARY'),'persona writer retains memory and actual chat evidence');
 check386(str_contains($w->calls[0][0],'перед сюжетами явно поясни') && str_contains($w->calls[0][0],'первого лица'),'writer instructed to connect invitation and viewing programme');
 $w->drafts=[$body];$c->debut=false;$c->generateText($f,'reminder',179);
-check386(str_contains(end($w->calls)[0],'не объявляй снова') && str_contains(end($w->calls)[0],'до просмотра три часа'),'later reminder does not repeat Telegram debut');
+check386(str_contains(end($w->calls)[0],'"is_first_publication":false') && str_contains(end($w->calls)[0],'reminder_minutes'),'later reminder does not repeat Telegram debut');
 $w->calls=[];$w->drafts=array_fill(0,4,'Общий анонс без даты.');check386($c->generateText($f,'main',179)===null && count($w->calls)===3,'writer stops after two repairs without canned public text');
 $config=Infra\ConfigManager::getInstance();$config->getOption('announcements_prompt_main');
 $cache=new ReflectionProperty(Infra\ConfigManager::class,'cache');$initial=$cache->getValue($config);$edited=$initial;

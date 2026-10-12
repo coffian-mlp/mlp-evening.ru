@@ -1,6 +1,9 @@
 const {test,expect}=require('@playwright/test');
 const fs=require('fs'),path=require('path');
 const BASE=process.env.MLP_BASE_URL;
+const received=new WeakMap();
+test.beforeEach(async({page})=>{received.set(page,[]);await page.route('**/api.php',async route=>{const response=await route.fetch();const data=await response.json();received.get(page).push(data);await route.fulfill({response});});});
+
 const ADMIN=process.env.MLP_ADMIN==='1';
 const credentials=()=>JSON.parse(fs.readFileSync(path.resolve(__dirname,'../../docs/private/daybreaker-test-account.json'),'utf8'));
 test.use({serviceWorkers:'block',viewport:{width:1280,height:900}});
@@ -12,12 +15,12 @@ test('MLP-376 non-admin cannot update announcement settings',async({page})=>{
  const r=await page.request.post(BASE+'/api.php',{form:{action:'update_announcements',csrf_token:csrf,announcements_enabled:'0'}});const body=await r.json();expect(body.success).toBe(false);expect(body.message).toBe("Access Denied");
 });
 test('MLP-376 admin saves settings, preserves masked secrets and sees validation errors',async({page,browserName})=>{
- test.skip(!ADMIN,'run with temporary administrator test-account role');await login(page);await page.goto(BASE+'/dashboard/#tab-bot',{waitUntil:'domcontentloaded'});
+ test.skip(!ADMIN,'run with temporary administrator test-account role');await login(page);await page.goto(BASE+'/dashboard/#tab-announcements',{waitUntil:'domcontentloaded'});
  const form=page.locator('#announcement-settings-form');await expect(form).toBeVisible();await expect(form.locator('[name="announcements_enabled"][type="checkbox"]')).not.toBeChecked();
- const number=form.locator('[name="announcements_first_number"]');const old=await number.inputValue();
+ const number=form.locator('[name="announcements_next_number"]');const old=await number.inputValue();
  const token=form.locator('[name="announcements_token"]'),proxy=form.locator('[name="announcements_proxy_url"]');await expect(token).toHaveValue('');await expect(proxy).toHaveValue('');await expect(token).toHaveAttribute('type','password');await expect(proxy).toHaveAttribute('type','password');
- const date=form.locator('[name="announcements_first_date"]');const oldDate=await date.inputValue();
- const submit=async()=>{const response=page.waitForResponse(r=>r.url().endsWith('/api.php')&&r.request().method()==='POST'&&r.request().postData().includes('update_announcements'));await form.locator('button[type="submit"]').click();return(await response).json();};
+ const date=form.locator('[name="announcements_prepare_time"]');const oldDate=await date.inputValue();
+ const submit=async()=>{const before=received.get(page).length;await form.locator('button[type="submit"]').click();await expect.poll(()=>received.get(page).length).toBeGreaterThan(before);return received.get(page).at(-1);};
  try{
   await number.fill(String(Number(old)+1));expect((await submit()).success).toBe(true);await expect(number).toHaveValue(String(Number(old)+1));await expect(date).toHaveValue(oldDate);
   await page.reload({waitUntil:'domcontentloaded'});await expect(number).toHaveValue(String(Number(old)+1));await expect(token).toHaveValue('');await expect(token).toHaveAttribute('placeholder','Токен сохранён');await expect(proxy).toHaveValue('');

@@ -21,16 +21,18 @@ final class AnnouncementSettings
             'announcements_channel'=>(string)$c->getOption('announcements_channel',Env::get('TELEGRAM_ANNOUNCEMENTS_CHANNEL','@mlp_evening')),
             'announcements_proxy_url'=>(string)$c->getOption('announcements_proxy_url',''),
             'announcements_event_id'=>(string)$c->getOption('announcements_event_id','0'),
-            'announcements_first_number'=>(string)$c->getOption('announcements_first_number','1'),
-            'announcements_not_before'=>(string)$c->getOption('announcements_not_before','0'),
+            'announcements_next_number'=>(string)(new AnnouncementStore())->nextNumber(),
         ];
-        foreach (AnnouncementPrompts::defaults() as $key=>$default) $v[$key]=(string)$c->getOption($key,$default);
+        foreach (AnnouncementPrompts::defaults()+AnnouncementSchedule::defaults() as $key=>$default) $v[$key]=(string)$c->getOption($key,$default);
+        if ($v['announcements_prompt_reminder']==='Напиши короткую напоминалку: до просмотра три часа. Программу назови очень кратко, без подробного пересказа всех серий.') $v['announcements_prompt_reminder']=AnnouncementPrompts::defaults()['announcements_prompt_reminder'];
         return $v;
     }
 
     public static function normalize(array $post, array $old): array
     {
-        $v = $old + AnnouncementPrompts::defaults();
+        $v = $old + AnnouncementPrompts::defaults() + AnnouncementSchedule::defaults();
+        $v['announcements_next_number'] ??= $old['announcements_first_number'] ?? '1';
+        unset($v['announcements_prompt_debut'],$v['announcements_first_number'],$v['announcements_not_before']);
         foreach (AnnouncementPrompts::defaults() as $key=>$default) {
             if (!isset($post[$key])) continue;
             if (!is_string($post[$key])) throw new \InvalidArgumentException('Некорректный формат настройки генерации.');
@@ -42,7 +44,7 @@ final class AnnouncementSettings
             }
             $v[$key]=$value;
         }
-        foreach (['announcements_enabled','announcements_token','announcements_owner_id','announcements_channel','announcements_proxy_url','announcements_event_id','announcements_first_number','announcements_first_date','announcements_clear_proxy'] as $key) {
+        foreach (['announcements_enabled','announcements_token','announcements_owner_id','announcements_channel','announcements_proxy_url','announcements_event_id','announcements_next_number','announcements_timezone','announcements_prepare_days','announcements_prepare_time','announcements_main_days','announcements_main_time','announcements_reminder_minutes','announcements_clear_proxy'] as $key) {
             if (!isset($post[$key])) continue;
             if (!is_string($post[$key])) throw new \InvalidArgumentException('Некорректный формат настройки.');
             $raw = trim($post[$key]);
@@ -52,19 +54,19 @@ final class AnnouncementSettings
         if (($post['announcements_clear_proxy'] ?? '')==='1') $v['announcements_proxy_url']='';
         unset($v['announcements_clear_proxy']);
         if (!in_array($v['announcements_enabled'], ['0','1'], true)) throw new \InvalidArgumentException('Некорректное состояние анонсов.');
-        foreach (['announcements_owner_id','announcements_event_id','announcements_first_number'] as $key) {
+        foreach (['announcements_owner_id','announcements_event_id','announcements_next_number'] as $key) {
             if (!preg_match('/\A\d{1,18}\z/D',$v[$key])) throw new \InvalidArgumentException('ID и номер вечерка должны быть целыми положительными числами.');
         }
-        if ((int)$v['announcements_first_number']<1 || (int)$v['announcements_first_number']>3999) throw new \InvalidArgumentException('Номер вечерка должен быть от 1 до 3999.');
+        if ((int)$v['announcements_next_number']<1 || (int)$v['announcements_next_number']>3999) throw new \InvalidArgumentException('Номер вечерка должен быть от 1 до 3999.');
         if ($v['announcements_token']!=='' && !preg_match('/\A[0-9]{5,20}:[A-Za-z0-9_-]{20,100}\z/D',$v['announcements_token'])) throw new \InvalidArgumentException('Некорректный формат токена Telegram.');
         if (!preg_match('/\A(?:@[A-Za-z0-9_]{5,32}|-100\d+)\z/D',$v['announcements_channel'])) throw new \InvalidArgumentException('Канал должен быть указан как @username или числовой ID -100….');
         AnnouncementProxy::validate($v['announcements_proxy_url']);
-        if (isset($v['announcements_first_date'])) {
-            $raw=$v['announcements_first_date']; unset($v['announcements_first_date']);
-            $date=\DateTimeImmutable::createFromFormat('!Y-m-d',$raw,new \DateTimeZone('Europe/Moscow'));
-            if (!$date || $date->format('Y-m-d')!==$raw) throw new \InvalidArgumentException('Укажи дату первого вечерка.');
-            $v['announcements_not_before']=(string)$date->getTimestamp();
+        if (!in_array($v['announcements_timezone'],\DateTimeZone::listIdentifiers(),true)) throw new \InvalidArgumentException('Выбери корректный часовой пояс.');
+        foreach (['prepare','main'] as $kind) {
+            if (!preg_match('/\A(?:0|[1-9][0-9]?)\z/D',$v['announcements_'.$kind.'_days']) || (int)$v['announcements_'.$kind.'_days']>6) throw new \InvalidArgumentException('Для еженедельной серии срок до события должен быть от 0 до 6 дней.');
+            if (!preg_match('/\A(?:[01][0-9]|2[0-3]):[0-5][0-9]\z/D',$v['announcements_'.$kind.'_time'])) throw new \InvalidArgumentException('Укажи время в формате ЧЧ:ММ.');
         }
+        if (!preg_match('/\A[0-9]{1,4}\z/D',$v['announcements_reminder_minutes']) || (int)$v['announcements_reminder_minutes']<1 || (int)$v['announcements_reminder_minutes']>10080) throw new \InvalidArgumentException('Напоминание: от 1 до 10080 минут до события.');
         return $v;
     }
 
@@ -104,8 +106,16 @@ final class AnnouncementSettings
             $bindingChanged=false;
             foreach (['announcements_token','announcements_owner_id','announcements_channel','announcements_event_id'] as $key) if ($v[$key]!==$old[$key]) $bindingChanged=true;
             if ($bindingChanged && $db->query("SELECT r.id FROM telegram_announcement_revisions r JOIN telegram_announcement_posts p ON p.current_revision=r.id WHERE r.state NOT IN ('published','cancelled','expired') LIMIT 1")->num_rows) throw new \RuntimeException('Сначала заверши или отмени текущие анонсы в Telegram. Затем можно менять бота, владельца, канал или событие.');
-            if ($v['announcements_enabled']==='1') self::ready($v);
-            Transaction::run($db,static function () use ($c,$v) { foreach ($v as $key=>$value) $c->setOption($key,$value); });
+            $store=new AnnouncementStore($db);
+            if ((int)$v['announcements_next_number'] < $store->numberFloor()) throw new \InvalidArgumentException('Следующий номер должен быть больше уже созданных вечерков. Обнови страницу и проверь номер.');
+            $event=null;
+            foreach (EventManager::expandOccurrences((new EventManager())->getAllRaw(),21,time()) as $candidate) {
+                if ((int)$candidate['id']===(int)$v['announcements_event_id'] && (int)$candidate['real_start_time']>time()) { $event=$candidate; break; }
+            }
+            if (!$event && $v['announcements_enabled']==='1') throw new \InvalidArgumentException('Выбери активное еженедельное событие с ближайшим показом.');
+            if ($event && !AnnouncementSchedule::calculate($event,$v)) throw new \InvalidArgumentException('Выбери еженедельное событие с плейлистом.');
+            if ($v['announcements_enabled']==='1' && ($old['announcements_enabled']!=='1' || $bindingChanged || $v['announcements_proxy_url']!==$old['announcements_proxy_url'])) self::ready($v);
+            Transaction::run($db,static function () use ($c,$v) { foreach ($v as $key=>$value) $c->setOption($key,$value); (new AnnouncementStore())->reschedule($v); });
         } finally { $c->flushCache(); $db->query("SELECT RELEASE_LOCK('telegram_announcements')"); }
     }
 }

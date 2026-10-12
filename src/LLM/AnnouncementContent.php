@@ -12,13 +12,8 @@ class AnnouncementContent {
 
     public function __construct(?LLMManager $llm = null) { $this->llm = $llm; }
 
-    public static function schedule(array $occurrence): array {
-        if (empty($occurrence['use_playlist']) || empty($occurrence['is_recurring']) || ($occurrence['recurrence_rule'] ?? '') !== 'weekly') return [];
-        $start = (int)($occurrence['real_start_time'] ?? 0);
-        if ($start <= 0) return [];
-        $local = (new \DateTimeImmutable('@'.$start))->setTimezone(new \DateTimeZone('Europe/Moscow'));
-        $main = $local->modify('-2 days')->setTime(19, 0);
-        return ['prepare_at' => $main->modify('-1 day')->getTimestamp(), 'main_at' => $main->getTimestamp(), 'reminder_at' => $start - 10800];
+    public static function schedule(array $occurrence, array $settings = []): array {
+        return \Domain\AnnouncementSchedule::calculate($occurrence,$settings);
     }
 
     public static function roman(int $number): string {
@@ -141,9 +136,8 @@ class AnnouncementContent {
         return (new LyraMemory($this->llm))->buildPromptBlock([]) ?? '';
     }
 
-    protected function telegramDebut(): bool {
-        return !(int)\Infra\Database::getInstance()->getConnection()
-            ->query('SELECT COUNT(*) AS n FROM telegram_announcement_revisions WHERE state="published"')->fetch_assoc()['n'];
+    protected function firstPublication(): bool {
+        return !(int)\Infra\Database::getInstance()->getConnection()->query('SELECT COUNT(*) AS n FROM telegram_announcement_revisions WHERE state="published"')->fetch_assoc()['n'];
     }
 
     protected function episodeSummaries(array $stories): ?array {
@@ -173,13 +167,13 @@ class AnnouncementContent {
         if (!$summaries) return null;
         $start=(int)$facts['occurrence']['real_start_time'];
         $local=(new \DateTimeImmutable('@'.$start))->setTimezone(new \DateTimeZone('Europe/Moscow'))->format('d.m.Y H:i');
-        $debut=$this->telegramDebut();
         $data=['start_moscow'=>$local,'episode_summaries'=>$summaries,'night'=>self::eventFacts($facts['night']??null),
             'previous_chat'=>$facts['chat']??[],'feedback'=>mb_substr($feedback,0,2000),'previous_caption'=>$previous,
-            'community_memory'=>$this->communityMemory()];
+            'community_memory'=>$this->communityMemory(),'event'=>self::eventFacts($facts['occurrence']),
+            'is_first_publication'=>$this->firstPublication(),
+            'reminder_minutes'=>(int)\Domain\AnnouncementSettings::values()['announcements_reminder_minutes']];
         $settings=\Domain\AnnouncementSettings::values();
         $task=$settings['announcements_prompt_common'].' '.$settings['announcements_prompt_'.$kind].' '.
-            ($debut?$settings['announcements_prompt_debut']:'Дебют в Telegram уже состоялся: не объявляй снова, что впервые научилась писать здесь. Используй текущий повод или проверенный контекст прошлого вечерка. ').
             'Пиши обычный текст без Markdown/HTML и номера, до '.$settings['announcements_'.$kind.'_chars'].' символов. '.
             'Обязательно пиши от первого лица Лиры. Не объясняй выбор плейлиста. Дата и время: '.$local.' МСК, ссылка https://mlp-evening.ru/. '.
             'Сюжетные факты только из резюме. Не переноси ссылки источников в пост и не обещай порядок показа. '.

@@ -28,6 +28,7 @@ $updates = []; $calls = []; $updateIds = [];
 $nextUpdate = random_int(1000000000, 1900000000); $nextMessage = 500;
 $channelMode = 'ok';
 $offset = $db->query('SELECT value FROM site_options WHERE key_name="announcements_update_offset"')->fetch_assoc();
+$nextNumber=$db->query('SELECT value FROM site_options WHERE key_name="announcements_next_number"')->fetch_assoc();
 $counter = $db->query('SELECT value FROM site_options WHERE key_name="announcements_counter"')->fetch_assoc();
 $notBefore = $db->query('SELECT value FROM site_options WHERE key_name="announcements_not_before"')->fetch_assoc();
 $heartbeat = $db->query('SELECT value FROM site_options WHERE key_name="announcements_heartbeat"')->fetch_assoc();
@@ -64,8 +65,8 @@ try {
     $title='Announcement worker fixture '.bin2hex(random_bytes(8)); $date=gmdate('Y-m-d H:i:s',$start);$stmt->bind_param('ss',$title,$date);$stmt->execute();$eventId=(int)$db->insert_id;
     $worker = new LLM\AnnouncementWorker($store,$telegram,$content,$owner,$channel,$eventId,123);
     $store->setOption('announcements_not_before',(string)($start+7*86400));
-    $worker->tick($wed);
-    check(count($rows())===0,'activation date excludes this week manual announcement');
+    $worker->tick($wed-60);
+    check(count($rows())===0,'relative preparation deadline postpones draft creation');
     $store->setOption('announcements_not_before','0');
     for ($i=0;$i<6;$i++) $worker->tick($wed);
     $r=$rows();
@@ -138,7 +139,7 @@ try {
         $db->query('DELETE FROM events WHERE id='.$eventId);
     }
     foreach($updateIds as $updateId)$db->query('DELETE FROM telegram_announcement_updates WHERE update_id='.$updateId);
-    foreach(['announcements_update_offset'=>$offset,'announcements_counter'=>$counter,'announcements_heartbeat'=>$heartbeat,'announcements_not_before'=>$notBefore] as $key=>$old) {
+    foreach(['announcements_update_offset'=>$offset,'announcements_counter'=>$counter,'announcements_next_number'=>$nextNumber,'announcements_heartbeat'=>$heartbeat,'announcements_not_before'=>$notBefore] as $key=>$old) {
         if($old)$store->setOption($key,$old['value']);else $db->query('DELETE FROM site_options WHERE key_name="'.$key.'"');
     }
     unlink($file);if($madeDirectory)rmdir($directory);
