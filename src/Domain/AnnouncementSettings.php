@@ -14,7 +14,7 @@ final class AnnouncementSettings
     public static function values(): array
     {
         $c = ConfigManager::getInstance();
-        return [
+        $v = [
             'announcements_enabled'=>(string)$c->getOption('announcements_enabled','0'),
             'announcements_token'=>(string)$c->getOption('announcements_token',Env::get('TELEGRAM_ANNOUNCEMENTS_TOKEN','')),
             'announcements_owner_id'=>(string)$c->getOption('announcements_owner_id',Env::get('TELEGRAM_ANNOUNCEMENTS_OWNER_ID','0')),
@@ -24,11 +24,24 @@ final class AnnouncementSettings
             'announcements_first_number'=>(string)$c->getOption('announcements_first_number','1'),
             'announcements_not_before'=>(string)$c->getOption('announcements_not_before','0'),
         ];
+        foreach (AnnouncementPrompts::defaults() as $key=>$default) $v[$key]=(string)$c->getOption($key,$default);
+        return $v;
     }
 
     public static function normalize(array $post, array $old): array
     {
-        $v = $old;
+        $v = $old + AnnouncementPrompts::defaults();
+        foreach (AnnouncementPrompts::defaults() as $key=>$default) {
+            if (!isset($post[$key])) continue;
+            if (!is_string($post[$key])) throw new \InvalidArgumentException('Некорректный формат настройки генерации.');
+            $value=trim($post[$key]);
+            if (str_contains($key,'_prompt_')) {
+                if ($value==='' || mb_strlen($value)>6000) throw new \InvalidArgumentException('Промпт должен содержать от 1 до 6000 символов.');
+            } elseif (!preg_match('/\A[0-9]{3}\z/D',$value) || (int)$value<200 || (int)$value>900) {
+                throw new \InvalidArgumentException('Длина текста должна быть от 200 до 900 символов.');
+            }
+            $v[$key]=$value;
+        }
         foreach (['announcements_enabled','announcements_token','announcements_owner_id','announcements_channel','announcements_proxy_url','announcements_event_id','announcements_first_number','announcements_first_date','announcements_clear_proxy'] as $key) {
             if (!isset($post[$key])) continue;
             if (!is_string($post[$key])) throw new \InvalidArgumentException('Некорректный формат настройки.');

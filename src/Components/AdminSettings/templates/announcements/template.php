@@ -55,6 +55,24 @@ $lastRun = $arResult['config']->getOption('announcements_heartbeat', '');
             <input id="announcements_first_date" type="date" name="announcements_first_date" class="form-input" value="<?= $escape($firstDate) ?>" required>
             <p>Более ранние вечерки пропускаются. Дата по Москве.</p>
         </div>
+        <details id="announcement-generation-settings">
+            <summary class="form-label">Генерация текстов и изображений</summary>
+            <p>Сначала модель получает нейтральные резюме серий, затем Лира пишет пост со своим характером и памятью. Правки применятся при следующей генерации; готовые черновики сохраняются до переделки в боте.</p>
+            <?php foreach (['main'=>'Основной анонс','reminder'=>'Напоминание'] as $kind=>$label): ?>
+                <div class="form-group">
+                    <label class="form-label" for="announcements_<?= $kind ?>_chars"><?= $label ?>: целевая длина текста</label>
+                    <input class="form-input" id="announcements_<?= $kind ?>_chars" name="announcements_<?= $kind ?>_chars" type="number" min="200" max="900" required value="<?= $escape($settings['announcements_'.$kind.'_chars']) ?>">
+                </div>
+            <?php endforeach; ?>
+            <p>Целевая длина задаёт ориентир модели. Подпись вместе с номером всегда проверяется на лимит Telegram.</p>
+            <?php foreach (['synopsis'=>'Резюме серий: нейтральный первый этап','common'=>'Общие инструкции для текстов Лиры','main'=>'Основной анонс','reminder'=>'Напоминание','debut'=>'Первый выход Лиры в Telegram','image'=>'Изображения для анонсов'] as $key=>$label): ?>
+                <div class="form-group">
+                    <label class="form-label" for="announcements_prompt_<?= $key ?>"><?= $label ?></label>
+                    <textarea class="form-input" style="width:100%;box-sizing:border-box;resize:vertical" rows="5" maxlength="6000" required id="announcements_prompt_<?= $key ?>" name="announcements_prompt_<?= $key ?>"><?= $escape($settings['announcements_prompt_'.$key]) ?></textarea>
+                </div>
+            <?php endforeach; ?>
+            <p>Дата, ссылка, номер, проверка источников и согласование определяются кодом. Для рисунков дополнительно применяется общий художественный стиль Лиры из настроек рисования.</p>
+        </details>
         <button type="submit" class="btn btn-primary">Сохранить настройки анонсов</button>
     </form>
     <p><?= $lastRun!=='' ? 'Последняя завершённая проверка: '.$escape($lastRun).' UTC.' : 'Воркер ещё не завершал проверку.' ?></p>

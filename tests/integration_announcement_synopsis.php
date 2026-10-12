@@ -29,6 +29,8 @@ try {
  $llm->partial=false;$out=LLM\AnnouncementSynopsis::generate($llm,$stories);check($out && $out[0]['episode_id']===$id,'neutral seeded synopsis obtained');
  check(str_contains($llm->prompt,'без роли персонажа') && !str_contains($llm->prompt,'Память'),'first stage is independent of persona and memory');
  LLM\AnnouncementSynopsis::generate($llm,$stories);check($llm->neutral===2,'cached verified result reused for subsequent posts and rewrites');
+ Infra\ConfigManager::getInstance()->setOption('announcements_prompt_synopsis',Domain\AnnouncementPrompts::defaults()['announcements_prompt_synopsis'].' CACHE_REVISION_CANARY');
+ LLM\AnnouncementSynopsis::generate($llm,$stories);check($llm->neutral===3 && str_contains($llm->prompt,'CACHE_REVISION_CANARY'),'edited synopsis prompt invalidates cache and reaches neutral generator');
  $paired=[['ids'=>[$id+2,$id+3],'titles'=>['My Little Pony Friendship is Magic - Season 1 Episode 17 - Stare Master','My Little Pony Friendship is Magic - Season 2 Episode 19 - Putting Your Hoof Down']]];
  $llm->swapped=true;check(LLM\AnnouncementSynopsis::generate($llm,$paired)===null,'verified reference cannot be assigned to another episode');$llm->swapped=false;
  $unknown=[['ids'=>[$id+1],'titles'=>['Unknown fixture title']]];
