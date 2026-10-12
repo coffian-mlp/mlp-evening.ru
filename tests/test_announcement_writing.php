@@ -22,6 +22,8 @@ class Content386 extends AnnouncementContent {
 $start=strtotime('2026-10-17 16:00:00 UTC');
 $body="Я освоила Telegram и зову вас смотреть вместе!\n\nПосмотрим, как Флаттершай присматривает за Меткоискателями.\n\nЖду вас 17.10.2026 в 19:00 МСК на https://mlp-evening.ru/.";
 check386(AnnouncementContent::caption($body,'main',179,$start)!==null,'natural date connector is accepted');
+check386(AnnouncementContent::textErrors(str_replace('присматривает','discovers',$body),'main',179,$start)!==[],'foreign word in Russian narration triggers repair');
+check386(AnnouncementContent::textErrors(str_replace('Меткоискателями','Меткоискателями в Stare Master',$body),'main',179,$start,['Stare Master'])===[],'canonical English episode title is allowed');
 $w=new Writer386();$w->drafts=['Я объясню рандом. 17.10.2026 19:00 МСК https://mlp-evening.ru/',$body];$c=new Content386($w);
 $f=['occurrence'=>['real_start_time'=>$start],'snapshot'=>['stories'=>[]],'chat'=>[['name'=>'User','text'=>'PUBLIC_CHAT_CANARY']]];
 $r=$c->generateText($f,'main',179);
