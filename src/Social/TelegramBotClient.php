@@ -110,7 +110,7 @@ class TelegramBotClient
         $proxy = $this->proxy->resolve();
         $curl = curl_init('https://api.telegram.org/bot' . $this->token . '/' . $method);
         $options = [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_TIMEOUT => 15, CURLOPT_FOLLOWLOCATION => false, CURLOPT_PROTOCOLS => CURLPROTO_HTTPS];
+            CURLOPT_TIMEOUT => $photoPath !== null ? 90 : 15, CURLOPT_FOLLOWLOCATION => false, CURLOPT_PROTOCOLS => CURLPROTO_HTTPS];
         // Empty string disables inherited process proxies; this transport has its own configuration.
         $options[CURLOPT_PROXY] = $proxy;
         $options[CURLOPT_NOPROXY] = '';
