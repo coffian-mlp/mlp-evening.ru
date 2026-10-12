@@ -121,11 +121,24 @@ class RouterAIProvider implements LLMProviderInterface {
         return $copy;
     }
 
+    public function withMaxTokens(int $tokens): static {
+        $copy = clone $this;
+        $copy->maxTokens = TokenBudget::resolve($tokens);
+        return $copy;
+    }
+
     /** Search is opt-in on an isolated utility-provider clone. */
     public function withWebSearch(int $maxResults = 3): static {
         $copy = clone $this;
         $copy->webSearch = ['id' => 'web', 'engine' => 'exa', 'max_results' => max(1, min(3, $maxResults))];
         $copy->searchEvidence = [];
+        return $copy;
+    }
+
+    /** Eight episode references for the announcement stage; ordinary search retains its cap. */
+    public function withSynopsisSearch(): static {
+        $copy = $this->withWebSearch();
+        $copy->webSearch['max_results'] = 8;
         return $copy;
     }
 

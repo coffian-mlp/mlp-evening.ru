@@ -807,6 +807,30 @@ class LLMManager {
         }
     }
 
+    /** Isolated announcement model chain, with the same persona and memory methods. */
+    public function forAnnouncements(): self {
+        $copy = clone $this;
+        $copy->providers = array_map(static fn($p) => $p instanceof RouterAIProvider
+            ? $p->withMaxTokens(max(8192, TokenBudget::fromConfig())) : clone $p, $this->fastProviders);
+        return $copy;
+    }
+
+    /** Neutral synopsis retrieval; citations must be returned by the provider itself. */
+    public function generateSynopsisUtility(array $context, string $prompt, int $deadlineSec): ?string {
+        if (!$this->isEnabled()) return null;
+        $provider = $this->providers[0] ?? null;
+        if (!$provider instanceof RouterAIProvider || $deadlineSec - time() < 5) return null;
+        try {
+            if (!$this->prepareScopedProxy()) return null;
+            $remaining = $deadlineSec - time();
+            if ($remaining < 5) return null;
+            $call = $provider->withSynopsisSearch()->withReasoningEffort('low')->withTimeout(min(60,$remaining));
+            $raw = RequestRetry::ask($call,$context,$prompt,(float)$deadlineSec,60);
+            if (!$raw || !$call->getSearchEvidence()) return null;
+            return json_encode(['content'=>$raw,'sources'=>$call->getSearchEvidence()],JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        } catch (\Throwable $e) { error_log('Announcement synopsis lookup failed: '.get_class($e)); return null; }
+    }
+
     /** JSON envelope with actual provider citations, never fabricated source URLs. */
     public function generateSearchUtility(array $context, string $prompt, ?int $deadlineSec = null): ?string {
         if (!$this->isEnabled()) return null;

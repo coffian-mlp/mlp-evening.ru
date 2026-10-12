@@ -25,6 +25,13 @@ namespace {
     expect(!isset($data['plugins']),'ordinary HTTP payload no search');
     expect(!isset($data['reasoning']),'ordinary HTTP payload reasoning default unchanged');
     expect($GLOBALS['router_fixture_options'][CURLOPT_TIMEOUT]===60,'ordinary timeout unchanged');
+    $synopsis=$main->withSynopsisSearch()->withMaxTokens(8192);
+    $synopsis->askChat([['role'=>'user','content'=>'episode list']],'neutral synopsis');
+    $data=json_decode($GLOBALS['router_fixture_options'][CURLOPT_POSTFIELDS],true);
+    expect($data['plugins'][0]['max_results']===8 && $data['max_tokens']===8192,'announcement clone has eight references and its own token budget');
+    $main->askChat([['role'=>'user','content'=>'ordinary']],'ordinary');
+    $data=json_decode($GLOBALS['router_fixture_options'][CURLOPT_POSTFIELDS],true);
+    expect($data['max_tokens']===200 && !isset($data['plugins']),'announcement clone does not mutate normal model limits');
     $invalid=false;try{$main->withReasoningEffort('disabled');}catch(\InvalidArgumentException $e){$invalid=true;}
     expect($invalid,'invalid effort fails closed');
     echo $fail?"FAILURES: $fail\n":"ALL PASS\n";exit($fail?1:0);
