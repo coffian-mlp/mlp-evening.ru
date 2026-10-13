@@ -16,8 +16,13 @@ foreach ([['announcements_token'=>'secret'],['announcements_owner_id'=>'-1'],['a
 $custom=AnnouncementSettings::normalize(['announcements_prompt_main'=>'NEW_WRITER_PROMPT','announcements_main_chars'=>'700'],$old);
 $check($custom['announcements_prompt_main']==='NEW_WRITER_PROMPT' && $custom['announcements_main_chars']==='700','generation settings accept custom instructions and target length');
 $check($custom['announcements_prompt_synopsis']===Domain\AnnouncementPrompts::defaults()['announcements_prompt_synopsis'],'missing generation fields retain defaults');
-foreach ([['announcements_prompt_main'=>''],['announcements_prompt_common'=>str_repeat('x',6001)],['announcements_prompt_image'=>['bad']],['announcements_main_chars'=>'901'],['announcements_reminder_chars'=>'199']] as $bad) {
+foreach ([['announcements_prompt_main'=>''],['announcements_prompt_common'=>str_repeat('x',6001)],['announcements_prompt_image_main'=>['bad']],['announcements_main_chars'=>'901'],['announcements_reminder_chars'=>'199']] as $bad) {
  try {AnnouncementSettings::normalize($bad,$old);$check(false,'invalid generation settings rejected');} catch(InvalidArgumentException $e){$check(true,'invalid generation settings rejected');}
+}
+$v=AnnouncementSettings::normalize(['announcements_reminder_use_playlist'=>'0','announcements_image_reminder_use_memory'=>'1'],$old);
+$check($v['announcements_reminder_use_playlist']==='0' && $v['announcements_main_use_playlist']==='1' && $v['announcements_image_reminder_use_memory']==='1','context switches are independent and preserve defaults');
+foreach (['2',[],1] as $bad) {
+ try {AnnouncementSettings::normalize(['announcements_main_use_memory'=>$bad],$old);$check(false,'invalid context switch rejected');}catch(InvalidArgumentException $e){$check(true,'invalid context switch rejected');}
 }
 $link='vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@example.org:443?security=reality&type=tcp&pbk=public&sid=00&sni=example.net&flow=xtls-rprx-vision';
 AnnouncementProxy::validate($link); $cfg=AnnouncementProxy::config($link,12345);

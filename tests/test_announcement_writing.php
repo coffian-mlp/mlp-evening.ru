@@ -15,7 +15,9 @@ class Writer386 extends LLM\LLMManager {
 class Content386 extends AnnouncementContent {
  public bool $debut=true;
  public int $summaryCalls=0;
- protected function communityMemory():string{return 'COMMUNITY_CANARY';}
+ public int $memoryCalls=0;
+ public function imageInstruction(array $f,string $kind,string $caption):string{return $this->imagePrompt($f,$kind,$caption);}
+ protected function communityMemory():string{$this->memoryCalls++;return 'COMMUNITY_CANARY';}
  protected function firstPublication():bool{return $this->debut;}
  protected function episodeSummaries(array $stories):?array{$this->summaryCalls++;return [['episode_id'=>1,'title'=>'Stare Master','summary'=>'Флаттершай присматривает за Меткоискателями.','source'=>'https://example.org/stare']];}
 }
@@ -40,6 +42,27 @@ $config=Infra\ConfigManager::getInstance();$config->getOption('announcements_pro
 $cache=new ReflectionProperty(Infra\ConfigManager::class,'cache');$initial=$cache->getValue($config);$edited=$initial;
 $edited['announcements_prompt_main']='CUSTOM_MAIN_CANARY';$edited['announcements_main_chars']='700';$cache->setValue($config,$edited);
 try {$w->drafts=[$body];$c->generateText($f,'main',179);check386(str_contains(end($w->calls)[0],'CUSTOM_MAIN_CANARY') && str_contains(end($w->calls)[0],'700 символов'),'dashboard prompt and target length reach persona writer');} finally {$cache->setValue($config,$initial);}
+$edited=$initial;
+foreach (Domain\AnnouncementContext::sources('reminder') as $source=>$label)$edited['announcements_reminder_use_'.$source]='0';
+$edited['announcements_prompt_image']='LEGACY_IMAGE_CANARY';
+foreach (Domain\AnnouncementContext::sources('image_reminder') as $source=>$label)$edited['announcements_image_reminder_use_'.$source]='0';
+$edited['announcements_prompt_image_main']='MAIN_IMAGE_CANARY';$edited['announcements_prompt_image_reminder']='REMINDER_IMAGE_CANARY';
+$cache->setValue($config,$edited);
+try {
+ $w->drafts=['Я жду вас 17.10.2026 19:00 МСК на https://mlp-evening.ru/'];$summaryBefore=$c->summaryCalls;$memoryBefore=$c->memoryCalls;
+ $f['occurrence']['description']='EVENT_CANARY';$f['night']=['title'=>'NIGHT_CANARY'];$f['snapshot']['stories']=[['titles'=>['EPISODE_CANARY']]];
+ $c->generateText($f,'reminder',179,'','OLD_DRAFT_CANARY');$instruction=end($w->calls)[0];
+ check386($c->summaryCalls===$summaryBefore && $c->memoryCalls===$memoryBefore,'simple reminder skips neutral synopsis and memory calls');
+ foreach (['COMMUNITY_CANARY','PUBLIC_CHAT_CANARY','EVENT_CANARY','NIGHT_CANARY','OLD_DRAFT_CANARY'] as $marker)check386(!str_contains($instruction,$marker),'disabled source absent from writer request: '.$marker);
+ check386(str_contains($instruction,'Плейлист отключён') && str_contains($instruction,'17.10.2026 19:00') && str_contains($instruction,'https://mlp-evening.ru/'),'simple reminder retains mandatory schedule/link and explicit no-episode task');
+ $image=$c->imageInstruction($f,'reminder','CAPTION_CANARY');
+ check386(str_contains($image,'REMINDER_IMAGE_CANARY') && !str_contains($image,'MAIN_IMAGE_CANARY') && !str_contains($image,'crayon'),'reminder image uses its own prompt without disabled global style');
+ foreach (['EPISODE_CANARY','EVENT_CANARY','NIGHT_CANARY','COMMUNITY_CANARY','PUBLIC_CHAT_CANARY','CAPTION_CANARY'] as $marker)check386(!str_contains($image,$marker),'disabled source absent from image request: '.$marker);
+ $edited['announcements_image_reminder_use_chat']='1';$edited['announcements_image_reminder_use_memory']='1';$edited['announcements_image_reminder_use_caption']='1';$cache->setValue($config,$edited);
+ $image=$c->imageInstruction($f,'reminder','CAPTION_CANARY');check386(str_contains($image,'PUBLIC_CHAT_CANARY') && str_contains($image,'COMMUNITY_CANARY') && str_contains($image,'CAPTION_CANARY'),'image context switches actually include selected data');
+ unset($edited['announcements_prompt_image_main'],$edited['announcements_prompt_image_reminder']);$cache->setValue($config,$edited);$settings=Domain\AnnouncementSettings::values();
+ check386($settings['announcements_prompt_image_main']==='LEGACY_IMAGE_CANARY' && $settings['announcements_prompt_image_reminder']==='LEGACY_IMAGE_CANARY','existing custom shared image prompt preserved in both new fields');
+} finally {$cache->setValue($config,$initial);}
 $catalogue=[['episode_id'=>1,'title'=>'Stare Master'],['episode_id'=>2,'title'=>'Part Two']];
 $rows=[['episode_id'=>1,'title'=>'Stare Master','summary'=>'Summary one','source'=>'https://example.org/a'],['episode_id'=>2,'title'=>'Part Two','summary'=>'Summary two','source'=>'https://example.org/b']];
 check386(AnnouncementSynopsis::decode(json_encode($rows),$catalogue,array_column($rows,'source'))!==null,'complete ordered summaries accepted');

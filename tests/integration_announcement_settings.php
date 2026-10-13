@@ -4,7 +4,7 @@ if ((it_config()['db']['host'] ?? '') !== 'db') it_skip('requires isolated Docke
 it_require_db()->close();
 $db=Infra\Database::getInstance()->getConnection();
 $c=Infra\ConfigManager::getInstance();
-$keys=['announcements_enabled','announcements_token','announcements_owner_id','announcements_channel','announcements_proxy_url','announcements_event_id','announcements_first_number','announcements_not_before','announcements_next_number','ai_proxy_url',...array_keys(Domain\AnnouncementPrompts::defaults()+Domain\AnnouncementSchedule::defaults())];
+$keys=['announcements_enabled','announcements_token','announcements_owner_id','announcements_channel','announcements_proxy_url','announcements_event_id','announcements_first_number','announcements_not_before','announcements_next_number','ai_proxy_url',...array_keys(Domain\AnnouncementPrompts::defaults()+Domain\AnnouncementSchedule::defaults()+Domain\AnnouncementContext::defaults())];
 $original=[];
 foreach($keys as $key) {$q=$db->prepare('SELECT value FROM site_options WHERE key_name=?');$q->bind_param('s',$key);$q->execute();$original[$key]=$q->get_result()->fetch_assoc();}
 try {

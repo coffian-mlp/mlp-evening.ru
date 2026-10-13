@@ -1,0 +1,22 @@
+const {test,expect}=require('@playwright/test');
+const fs=require('fs'),path=require('path');const BASE=process.env.MLP_BASE_URL;
+test.use({serviceWorkers:'block',viewport:{width:1280,height:900},launchOptions:{args:['--no-proxy-server'],firefoxUserPrefs:{'network.proxy.type':0}}});
+test('MLP-389 independent image prompts and source switches survive saving',async({page,browserName})=>{
+ const received=[];await page.route('**/api.php',async route=>{const response=await route.fetch();received.push(await response.json());await route.fulfill({response});});
+ const c=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../../docs/private/daybreaker-test-account.json'),'utf8'));
+ await page.goto(BASE+'/login.php',{waitUntil:'domcontentloaded'});await page.fill('#ajax-login-form input[name="username"]',c.login||c.username);await page.fill('#ajax-login-form input[name="password"]',c.password);await page.click('#ajax-login-form button[type="submit"]');await page.waitForURL(u=>!u.pathname.includes('login.php'),{waitUntil:'domcontentloaded'});
+ await page.goto(BASE+'/dashboard/#tab-announcements',{waitUntil:'domcontentloaded'});const form=page.locator('#announcement-settings-form');await form.locator('#announcement-generation-settings summary').click();
+ await expect(form.locator('[name="announcements_prompt_image"]')).toHaveCount(0);
+ const main=form.locator('#announcements_prompt_image_main'),reminder=form.locator('#announcements_prompt_image_reminder');const oldMain=await main.inputValue(),oldReminder=await reminder.inputValue();
+ await expect(main).toBeVisible();await expect(reminder).toBeVisible();
+ await main.fill('Main illustration: tea and friends.');await reminder.fill('Reminder illustration: a simple clock and moon.');
+ await form.locator('#announcements_reminder_use_playlist').uncheck();await form.locator('#announcements_reminder_use_memory').uncheck();await form.locator('#announcements_reminder_use_chat').uncheck();
+ await form.locator('#announcements_image_reminder_use_playlist').uncheck();await form.locator('#announcements_image_reminder_use_event').uncheck();await form.locator('#announcements_image_reminder_use_style').uncheck();await form.locator('#announcements_image_reminder_use_memory').check();
+ const submit=async()=>{const n=received.length;await form.locator('button[type="submit"]').click();await expect.poll(()=>received.length).toBeGreaterThan(n);expect(received.at(-1).success).toBe(true);await expect(page.locator('.flash-message')).toContainText('Расписание обновлено');};
+ await submit();await form.locator('#announcement-generation-settings summary').click();
+ await expect(main).toHaveValue('Main illustration: tea and friends.');await expect(reminder).toHaveValue('Reminder illustration: a simple clock and moon.');
+ for(const suffix of ['reminder_use_playlist','reminder_use_memory','reminder_use_chat','image_reminder_use_playlist','image_reminder_use_event','image_reminder_use_style'])await expect(form.locator('#announcements_'+suffix)).not.toBeChecked();
+ await expect(form.locator('#announcements_main_use_playlist')).toBeChecked();await expect(form.locator('#announcements_main_use_memory')).toBeChecked();await expect(form.locator('#announcements_image_main_use_playlist')).toBeChecked();await expect(form.locator('#announcements_image_main_use_memory')).not.toBeChecked();await expect(form.locator('#announcements_image_reminder_use_memory')).toBeChecked();
+ const dir=path.resolve(__dirname,'../../docs/tests/MLP-389');fs.mkdirSync(dir,{recursive:true});await page.locator('.flash-message').waitFor({state:'hidden'});await form.locator('[data-context="image_reminder"]').scrollIntoViewIfNeeded();await page.screenshot({path:path.join(dir,browserName+'-desktop.png')});await page.setViewportSize({width:390,height:844});await form.locator('[data-context="image_reminder"]').scrollIntoViewIfNeeded();expect(await form.evaluate(el=>el.getBoundingClientRect().right-innerWidth)).toBeLessThanOrEqual(1);await page.screenshot({path:path.join(dir,browserName+'-mobile.png')});
+ await main.fill(oldMain);await reminder.fill(oldReminder);for(const suffix of ['reminder_use_playlist','reminder_use_memory','reminder_use_chat','image_reminder_use_playlist','image_reminder_use_event','image_reminder_use_style'])await form.locator('#announcements_'+suffix).check();await form.locator('#announcements_image_reminder_use_memory').uncheck();await submit();
+});

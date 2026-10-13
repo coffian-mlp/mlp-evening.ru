@@ -23,14 +23,18 @@ final class AnnouncementSettings
             'announcements_event_id'=>(string)$c->getOption('announcements_event_id','0'),
             'announcements_next_number'=>(string)(new AnnouncementStore())->nextNumber(),
         ];
-        foreach (AnnouncementPrompts::defaults()+AnnouncementSchedule::defaults() as $key=>$default) $v[$key]=(string)$c->getOption($key,$default);
+        foreach (AnnouncementPrompts::defaults()+AnnouncementSchedule::defaults()+AnnouncementContext::defaults() as $key=>$default) $v[$key]=(string)$c->getOption($key,$default);
+        foreach (['main','reminder'] as $kind) {
+            $key='announcements_prompt_image_'.$kind;
+            $v[$key]=(string)$c->getOption($key,$c->getOption('announcements_prompt_image',AnnouncementPrompts::defaults()[$key]));
+        }
         if ($v['announcements_prompt_reminder']==='Напиши короткую напоминалку: до просмотра три часа. Программу назови очень кратко, без подробного пересказа всех серий.') $v['announcements_prompt_reminder']=AnnouncementPrompts::defaults()['announcements_prompt_reminder'];
         return $v;
     }
 
     public static function normalize(array $post, array $old): array
     {
-        $v = $old + AnnouncementPrompts::defaults() + AnnouncementSchedule::defaults();
+        $v = $old + AnnouncementPrompts::defaults() + AnnouncementSchedule::defaults() + AnnouncementContext::defaults();
         $v['announcements_next_number'] ??= $old['announcements_first_number'] ?? '1';
         unset($v['announcements_prompt_debut'],$v['announcements_first_number'],$v['announcements_not_before']);
         foreach (AnnouncementPrompts::defaults() as $key=>$default) {
@@ -44,6 +48,12 @@ final class AnnouncementSettings
             }
             $v[$key]=$value;
         }
+        foreach (AnnouncementContext::defaults() as $key=>$default) {
+            if (!isset($post[$key])) continue;
+            if (!is_string($post[$key]) || !in_array($post[$key],['0','1'],true)) throw new \InvalidArgumentException('Флажок контекста должен быть включён или выключен.');
+            $v[$key]=$post[$key];
+        }
+        unset($v['announcements_prompt_image']);
         foreach (['announcements_enabled','announcements_token','announcements_owner_id','announcements_channel','announcements_proxy_url','announcements_event_id','announcements_next_number','announcements_timezone','announcements_prepare_days','announcements_prepare_time','announcements_main_days','announcements_main_time','announcements_reminder_minutes','announcements_clear_proxy'] as $key) {
             if (!isset($post[$key])) continue;
             if (!is_string($post[$key])) throw new \InvalidArgumentException('Некорректный формат настройки.');
