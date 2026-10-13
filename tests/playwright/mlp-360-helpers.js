@@ -26,7 +26,7 @@ async function post(ctx, csrf, form) {
     form: { ...form, csrf_token: csrf }, headers: { 'X-CSRF-Token': csrf },
   })).json();
 }
-const NEW = { skull: '💀', clown: '🤡', hundred: '💯', poop: '💩' };
+const NEW = { skull: '💀', clown: '🤡', hundred: '💯', poop: '💩', eggplant: '🍆', hand: '✋', anchor: '⚓', pie: '🥧' };
 const OLD = { like:'👍', heart:'❤️', laugh:'😂', wow:'😮', fire:'🔥', party:'🎉',
   cool:'😎', think:'🤔', neutral:'😐', cry:'😢', eyes:'👀', dislike:'👎' };
 module.exports = { BASE, localFixture, login, post, NEW, OLD };

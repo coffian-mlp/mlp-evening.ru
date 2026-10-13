@@ -189,6 +189,26 @@ class JobQueue {
         return $res && $res->num_rows > 0;
     }
 
+    /** Persist prepared reply before publication; caller holds the worker lock. */
+    public function savePayload(int $id, array $payload): void {
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        $stmt = $this->db->prepare('UPDATE llm_jobs SET payload=? WHERE id=?');
+        $stmt->bind_param('si', $json, $id); $stmt->execute();
+    }
+
+    /** Administrative pause does not consume the delivery retry budget. */
+    public function pauseReply(int $id): void {
+        $stmt = $this->db->prepare("UPDATE llm_jobs SET status='pending',run_after=DATE_ADD(NOW(),INTERVAL 60 SECOND) WHERE id=?");
+        $stmt->bind_param('i', $id); $stmt->execute();
+    }
+
+    public function recoverStaleCommandReplies(int $seconds = 600): void {
+        $stmt = $this->db->prepare("UPDATE llm_jobs SET status='pending',run_after=DATE_ADD(NOW(),INTERVAL 60 SECOND),attempts=attempts+1
+            WHERE status='processing' AND type='dynamic_command' AND claimed_at<DATE_SUB(NOW(),INTERVAL ? SECOND)
+            AND (JSON_UNQUOTE(JSON_EXTRACT(payload,'$.command.handler_type')) IN ('text','schedule','command_reply_delivery'))");
+        $stmt->bind_param('i', $seconds); $stmt->execute();
+    }
+
     public function complete(array $ids): void {
         $this->markStatus($ids, 'done');
     }

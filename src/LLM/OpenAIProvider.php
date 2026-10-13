@@ -7,6 +7,7 @@ use Exception;
 
 class OpenAIProvider implements LLMProviderInterface {
     private $apiKey;
+    private ?bool $vision = null;
     private $model;
     private $baseUrl;
     private $proxyUrl;
@@ -21,6 +22,10 @@ class OpenAIProvider implements LLMProviderInterface {
         $this->baseUrl = $baseUrl; // Позволяет переопределить URL для GitHub Models, Groq и т.д.
         $this->proxyUrl = $proxyUrl;
         $this->maxTokens = $maxTokens; // MLP-348: null — потолок из настройки ai_max_tokens
+    }
+
+    public function withVision(bool $enabled): static {
+        $copy = clone $this; $copy->vision = $enabled; return $copy;
     }
 
     public function getModel(): string {
@@ -38,7 +43,7 @@ class OpenAIProvider implements LLMProviderInterface {
         
         $messages = array_merge($messages, $messagesContext);
 
-        $messages = VisionFormatter::maybeExpand($messages); // vision: развернуть картинки в image_url
+        $messages = VisionFormatter::maybeExpand($messages, $this->vision); // vision: развернуть картинки в image_url
 
         $data = [
             'model' => $this->model,

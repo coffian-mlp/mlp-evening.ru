@@ -7,6 +7,7 @@ use Exception;
 
 class OpenRouterProvider implements LLMProviderInterface {
     private $apiKey;
+    private ?bool $vision = null;
     private $model;
     private $proxyUrl;
     /** Потолок токенов ответа; null — из дашборда (TokenBudget::fromConfig, MLP-348). */
@@ -19,6 +20,10 @@ class OpenRouterProvider implements LLMProviderInterface {
         $this->model = $model;
         $this->proxyUrl = $proxyUrl;
         $this->maxTokens = $maxTokens; // MLP-348: null — потолок из настройки ai_max_tokens
+    }
+
+    public function withVision(bool $enabled): static {
+        $copy = clone $this; $copy->vision = $enabled; return $copy;
     }
 
     public function getModel(): string {
@@ -38,7 +43,7 @@ class OpenRouterProvider implements LLMProviderInterface {
         
         $messages = array_merge($messages, $messagesContext);
 
-        $messages = VisionFormatter::maybeExpand($messages); // vision: развернуть картинки в image_url
+        $messages = VisionFormatter::maybeExpand($messages, $this->vision); // vision: развернуть картинки в image_url
 
         $data = [
             'model' => $this->model,

@@ -530,9 +530,19 @@ class ChatManager {
         return str_contains($text, '@') ? UserMention::render($text, UserMention::directory()) : $text;
     }
 
+    /** Model reactions are additive; repeated delivery must not remove an existing reaction. */
+    public function setBotReaction(int $messageId, int $botId, string $type): array {
+        if (!in_array($type, \LLM\ReactionParser::ALLOWED, true)) return ['success' => false];
+        $stmt = $this->db->prepare('INSERT IGNORE INTO chat_reactions (message_id,user_id,reaction) SELECT id,?,? FROM chat_messages WHERE id=? AND is_deleted=0 AND user_id<>?');
+        $stmt->bind_param('isii', $botId, $type, $messageId, $botId); $stmt->execute();
+        $added = $stmt->affected_rows > 0;
+        if ($added) $this->broadcast(['type'=>'reaction_update', 'id'=>$messageId, 'reactions'=>$this->getReactionsForMessage($messageId)]);
+        return ['success'=>true, 'added'=>$added];
+    }
+
     public function toggleReaction($messageId, $userId, $reactionType) {
         // Validate reaction type
-        $allowed = ['like', 'dislike', 'laugh', 'cry', 'neutral', 'heart', 'fire', 'wow', 'think', 'party', 'cool', 'eyes', 'skull', 'clown', 'hundred', 'poop'];
+        $allowed = ['like', 'dislike', 'laugh', 'cry', 'neutral', 'heart', 'fire', 'wow', 'think', 'party', 'cool', 'eyes', 'skull', 'clown', 'hundred', 'poop', 'eggplant', 'hand', 'anchor', 'pie'];
         if (!in_array($reactionType, $allowed)) {
             return ['success' => false, 'message' => 'Неизвестная реакция'];
         }

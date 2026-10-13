@@ -379,7 +379,7 @@ function loadUsers() {
                 
                 res.data.users.forEach(function(u) {
                     var avatar = u.avatar_url 
-                        ? `<img src="${escapeHtml(u.avatar_url)}" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:8px;border:1px solid #eee;">` 
+                        ? `<img class="lightbox-trigger" role="button" tabindex="0" alt="Увеличить аватар" src="${escapeHtml(u.avatar_url)}" style="cursor:zoom-in;width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:8px;border:1px solid #eee;">`
                         : '';
                     var nameDisplay = `<span style="color:${escapeHtml(u.chat_color || '#333')}; font-weight:bold;">${escapeHtml(u.nickname)}</span>`;
 

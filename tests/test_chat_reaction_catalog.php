@@ -25,21 +25,18 @@ $backend = $keys[1];
 $parser = ReactionParser::ALLOWED;
 $frontend = array_keys($map);
 sort($backend); sort($parser); sort($frontend);
-check(count($frontend) === 16, 'UI содержит 16 уникальных реакций');
+check(count($frontend) === 20, 'UI содержит 20 уникальных реакций');
 check($backend === $frontend && $parser === $frontend, 'UI/backend/parser имеют одинаковый набор');
 
 $old = ['like'=>'👍','heart'=>'❤️','laugh'=>'😂','wow'=>'😮','fire'=>'🔥','party'=>'🎉',
     'cool'=>'😎','think'=>'🤔','neutral'=>'😐','cry'=>'😢','eyes'=>'👀','dislike'=>'👎'];
 foreach ($old as $key => $icon) check(($map[$key] ?? '') === $icon, "старый ключ $key и иконка сохранены");
-$prompt = file_get_contents($root . '/src/LLM/LLMManager.php');
-preg_match('/где X одно из: ([a-z, ]+)\./', $prompt, $list);
-$promptKeys = array_map('trim', explode(',', $list[1] ?? ''));
-sort($promptKeys);
-check($promptKeys === $frontend, 'инструкция Лиры содержит тот же набор');
-foreach (['skull'=>'💀','clown'=>'🤡','hundred'=>'💯','poop'=>'💩'] as $key => $icon) {
+$prompt = ReactionParser::instruction([]);
+check(str_contains($prompt, implode(', ', ReactionParser::ALLOWED)), 'инструкция Лиры содержит полный каталог');
+foreach (['skull'=>'💀','clown'=>'🤡','hundred'=>'💯','poop'=>'💩','eggplant'=>'🍆','hand'=>'✋','anchor'=>'⚓','pie'=>'🥧'] as $key => $icon) {
     check(($map[$key] ?? '') === $icon, "новая реакция $key отображается корректно");
     $parsed = ReactionParser::extract("[РЕАКЦИЯ: $key] ответ");
-    check($parsed === ['reaction'=>$key, 'text'=>'ответ'], "маркер $key распознаётся и не протекает");
+    check($parsed === ['reaction'=>$key, 'target'=>null, 'text'=>'ответ'], "маркер $key распознаётся и не протекает");
 }
 echo $fail ? "FAIL: $fail\n" : "ALL PASS\n";
 exit($fail ? 1 : 0);

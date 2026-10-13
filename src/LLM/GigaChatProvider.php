@@ -64,6 +64,7 @@ class GigaChatProvider implements LLMProviderInterface {
     }
 
     public function askChat(array $messagesContext, string $systemPrompt): ?string {
+        $messagesContext = VisionFormatter::maybeExpand($messagesContext, false);
         if (empty($this->authKey)) {
             throw new Exception("GigaChat Auth Key is missing");
         }

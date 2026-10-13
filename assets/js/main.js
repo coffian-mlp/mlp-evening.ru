@@ -66,6 +66,10 @@ $(document).ready(function() {
         });
     }
 
+    $(document).on('keydown', '.lightbox-trigger[role="button"]', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $(this).trigger('click'); }
+    });
+
     // Trigger on Chat Images, Sticker Previews, or explicit triggers
     // Exclude emojis and mobile stickers (if handled differently, but here standard is ok)
     $(document).on('click', '.chat-message img:not(.emoji), .sticker-preview-img, .lightbox-trigger, .chat-img', function(e) {

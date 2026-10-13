@@ -106,13 +106,13 @@ $(document).ready(function() {
         skull: '💀',
         clown: '🤡',
         hundred: '💯',
-        poop: '💩'
+        poop: '💩', eggplant: '🍆', hand: '✋', anchor: '⚓', pie: '🥧'
     };
     const REACTION_LABELS = {
         like: 'Нравится', heart: 'Сердце', laugh: 'Смех', wow: 'Удивление',
         fire: 'Огонь', party: 'Праздник', cool: 'Круто', think: 'Задумчивость',
         neutral: 'Без эмоций', cry: 'Грусть', eyes: 'Глазки', dislike: 'Не нравится',
-        skull: 'Череп', clown: 'Клоун', hundred: 'Сто процентов', poop: 'Какашка'
+        skull: 'Череп', clown: 'Клоун', hundred: 'Сто процентов', poop: 'Какашка', eggplant: 'Баклажан', hand: 'Ладонь', anchor: 'Якорь', pie: 'Пирог'
     };
 
     function toggleReaction(msgId, reaction) {
@@ -2325,7 +2325,7 @@ $(document).ready(function() {
     });
 
     $(document).on('keydown', '#chat-input', function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.originalEvent?.isComposing) {
             e.preventDefault(); // Prevent newline
             // Trigger submit
             // IMPORTANT: bubbles: true is required for delegated event handlers!
@@ -2528,8 +2528,7 @@ if (typeof window.openProfileModal !== 'function') {
 
 // === MLP-278: превью команд при вводе «/» (как в Telegram/Discord) ===
 // MLP-354 (прод-беклог №21, №23): выделенная команда показывает описание целиком, стрелки
-// выбирают, Tab подставляет. Enter по-прежнему отправляет сообщение (полностью набранная
-// команда не должна требовать двух нажатий).
+// выбирают, Enter и Tab подставляют. После закрытия списка Enter отправляет сообщение.
 (function () {
     let cmdActive = 0; // индекс выделенной команды в текущем списке
 
@@ -2611,7 +2610,7 @@ if (typeof window.openProfileModal !== 'function') {
         });
         const hint = document.createElement('div');
         hint.className = 'cmd-preview-hint';
-        hint.textContent = 'Tab — подставить · ↑↓ — выбрать · Esc — закрыть';
+        hint.textContent = 'Enter / Tab — подставить · ↑↓ — выбрать · Esc — закрыть';
         el.appendChild(hint);
         el.style.display = 'block';
         setCmdActive(0); // по мере набора выделена самая подходящая (верхняя) команда
@@ -2626,6 +2625,12 @@ if (typeof window.openProfileModal !== 'function') {
             hideCmdPreview();
         }
     });
+
+    // Capture selection before the delegated submit handler receives Enter.
+    document.addEventListener('keydown', function (e) {
+        if (e.target.id !== 'chat-input' || e.key !== 'Enter' || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || e.isComposing || !cmdPreviewOpen()) return;
+        e.preventDefault(); e.stopPropagation(); acceptCmd(e.target);
+    }, true);
 
     $(document).on('keydown', '#chat-input', function (e) {
         if (e.key === 'Escape') { hideCmdPreview(); return; }

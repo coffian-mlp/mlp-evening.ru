@@ -39,11 +39,11 @@ for (const route of ['/', '/chat_popup.php']) {
           const result = message.locator('.reaction-picker');
           await expect(result).toBeVisible();
           await expect(result).toHaveCSS('opacity', '1');
-          await expect(result.locator('.reaction-picker-item')).toHaveCount(16);
+          await expect(result.locator('.reaction-picker-item')).toHaveCount(20);
           return result;
         }
         const first = await picker();
-        const labels = { skull:'Череп', clown:'Клоун', hundred:'Сто процентов', poop:'Какашка' };
+        const labels = { skull:'Череп', clown:'Клоун', hundred:'Сто процентов', poop:'Какашка', eggplant:'Баклажан', hand:'Ладонь', anchor:'Якорь', pie:'Пирог' };
         for (const [key, glyph] of Object.entries(NEW)) {
           const button = first.locator(`[data-reaction="${key}"]`);
           await expect(button).toHaveText(glyph);

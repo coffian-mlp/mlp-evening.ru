@@ -230,9 +230,15 @@ $config = $arResult['config']; // Helper
             <label style="display: flex; align-items: center; cursor: pointer;">
                 <input type="hidden" name="ai_main_is_vision" value="0">
                 <input type="checkbox" name="ai_main_is_vision" value="1" <?= $config->getOption('ai_main_is_vision', 1) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
-                Модели чата — основная и быстрая — понимают картинки (vision)
+                Основная модель понимает картинки (vision)
             </label>
-            <p style="font-size: 0.85em; color: #666; margin-top: 4px;"><strong>Включать только если картинки понимают ОБЕ модели чата</strong> — основная и быстрая (MLP-332); иначе картинки уйдут модели, которая их не видит. Если выключено — картинки описывает вспомогательная vision-модель (ниже), и Лира получает текстовое описание вместо изображения. Описания кешируются на 7 дней.</p>
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Если выключено, основная модель получает описание от vision-помощника. Резервные провайдеры также получают описание. Успешные описания кешируются на 7 дней.</p>
+            <label style="display: flex; align-items: center; cursor: pointer; margin-top: 10px;">
+                <input type="hidden" name="ai_fast_is_vision" value="0">
+                <input type="checkbox" name="ai_fast_is_vision" value="1" <?= $config->getOption('ai_fast_is_vision', $config->getOption('ai_main_is_vision', 1)) ? 'checked' : '' ?> style="width: auto; margin-right: 10px;">
+                Быстрая модель понимает картинки (vision)
+            </label>
+            <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Настройка относится к указанной быстрой модели. Если она не задана, используется основная модель с её настройкой. Выключи, чтобы отправлять быстрой модели текстовое описание вместо изображения.</p>
         </div>
 
         <div style="display: flex; gap: 15px;">

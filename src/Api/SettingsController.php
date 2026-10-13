@@ -71,6 +71,7 @@ class SettingsController {
         'ai_live_confirm'    => 'int', // MLP-317: живые подтверждения команд (todo/запомни/забудь), fallback — фикс-фразы
         // --- ИИ: vision-помощник (MLP-268) и художница (MLP-274/275/276) ---
         'ai_main_is_vision'  => 'int',
+        'ai_fast_is_vision'  => 'int',
         'ai_vision_provider' => ['enum', ['routerai', 'openrouter', 'openai']],
         'ai_vision_model'    => 'string',
         'ai_vision_prompt'   => 'string',

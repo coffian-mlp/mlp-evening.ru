@@ -24,7 +24,9 @@ class VisionFormatter {
     const MAX_PIXELS     = 30000000; // защита памяти: не декодируем картинки крупнее ~30 Мпикс
 
     /** Развернуть картинки в messages, если включено ai_send_images. Иначе — вернуть как есть. */
-    public static function maybeExpand(array $messages): array {
+    public static function maybeExpand(array $messages, ?bool $vision = null): array {
+        foreach ($messages as &$message) unset($message['chat_message_id']);
+        unset($message);
         $c = ConfigManager::getInstance();
         if (!$c->getOption('ai_send_images', 1)) {
             return $messages;
@@ -42,7 +44,7 @@ class VisionFormatter {
         }
         // MLP-268: основная модель не понимает картинки → вместо мультимодального
         // разворота подставляем текстовые описания от вспомогательной vision-модели.
-        if (!$c->getOption('ai_main_is_vision', 1)) {
+        if (!($vision ?? (bool)$c->getOption('ai_main_is_vision', 1))) {
             return VisionDescriber::maybeDescribe($messages);
         }
         $base = (string)$c->getOption('ai_public_base_url', 'https://mlp-evening.ru');

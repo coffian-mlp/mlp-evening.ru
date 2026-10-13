@@ -38,11 +38,21 @@ check(ReactionParser::extract('[REACT: wow] ого')['reaction'] === 'wow', 'а�
 check(ReactionParser::extract('[REACTION: cool]')['reaction'] === 'cool', 'англ. REACTION');
 
 echo "\n== Новые реакции ==\n";
-foreach (['heart', 'fire', 'wow', 'think', 'party', 'cool', 'eyes', 'skull', 'clown', 'hundred', 'poop'] as $t) {
+foreach (['heart', 'fire', 'wow', 'think', 'party', 'cool', 'eyes', 'skull', 'clown', 'hundred', 'poop', 'eggplant', 'hand', 'anchor', 'pie'] as $t) {
     check(ReactionParser::extract("[РЕАКЦИЯ: $t] x")['reaction'] === $t, "реакция $t");
     $only = ReactionParser::extract("[REACTION: $t]");
     check($only['reaction'] === $t && $only['text'] === '', "реакция $t без текста");
 }
+
+$context = [['role'=>'user','chat_message_id'=>123,'content'=>'[19:00] User: text'], ['role'=>'assistant','chat_message_id'=>124,'content'=>'bot']];
+$r = ReactionParser::extract('[РЕАКЦИЯ: pie 123] Привет');
+check($r['target'] === 123 && $r['text'] === 'Привет', 'explicit target parsed and marker stripped');
+check(ReactionParser::target($r, $context, 999) === 123, 'valid real target takes precedence');
+check(ReactionParser::target(ReactionParser::extract('[REACT: pie 999]'), $context, 123) === null, 'hallucinated target does not react to another message');
+check(ReactionParser::target(ReactionParser::extract('[REACT: pie 124]'), $context, 123) === null, 'bot message cannot be reaction target');
+check(ReactionParser::target(ReactionParser::extract('[REACT: pie]'), $context, 123) === 123, 'legacy marker preserves default target');
+check(ReactionParser::extract('[REACT: pie -123] text')['reaction'] === null, 'malformed ID rejected');
+check(ReactionParser::extract('Ответ [РЕАКЦИЯ: pie 123')['text'] === 'Ответ', 'truncated marker does not leak into chat');
 
 echo "\n== null ==\n";
 $r = ReactionParser::extract(null);

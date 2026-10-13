@@ -26,6 +26,8 @@ class LLMManager {
     private $proxyUrl;
     private $vlessLink;
     private string $commandMessage = '';
+    private ?array $replyJob = null;
+    private bool $durableConfirmations = false;
 
     public function __construct() {
         $config = ConfigManager::getInstance();
@@ -78,13 +80,14 @@ class LLMManager {
 
         // Сначала добавляем основного, если он настроен
         if (isset($allProviders[$primary]) && $allProviders[$primary] !== null) {
-            $this->providers[] = $allProviders[$primary];
+            $provider = $allProviders[$primary];
+            $this->providers[] = method_exists($provider, 'withVision') ? $provider->withVision((bool)$config->getOption('ai_main_is_vision', 1)) : $provider;
         }
 
         // Затем добавляем остальных как фоллбек (за исключением уже добавленного)
         foreach ($allProviders as $key => $provider) {
             if ($provider !== null && $key !== $primary) {
-                $this->providers[] = $provider;
+                $this->providers[] = method_exists($provider, 'withVision') ? $provider->withVision(false) : $provider;
             }
         }
 
@@ -101,6 +104,7 @@ class LLMManager {
                 default      => null,
             };
         }
+        if ($fast !== null) $fast = $fast->withVision((bool)$config->getOption('ai_fast_is_vision', $config->getOption('ai_main_is_vision', 1)));
         $this->fastProviders = $fast ? array_merge([$fast], $this->providers) : $this->providers;
     }
 
@@ -111,9 +115,11 @@ class LLMManager {
 
     public function processTrigger($triggerType, $contextData = []) {
         $previous = $this->commandMessage;
+        $previousDurable = $this->durableConfirmations;
+        $this->durableConfirmations = !empty($contextData['_durable_confirmations']);
         $this->commandMessage = $triggerType === 'dynamic_command' ? (string)($contextData['message'] ?? '') : '';
         try { return $this->processTriggerInner($triggerType, $contextData); }
-        finally { $this->commandMessage = $previous; }
+        finally { $this->commandMessage = $previous; $this->durableConfirmations = $previousDurable; }
     }
 
     /** Bounded background for explicit subjects; identities never grant action permissions. */
@@ -222,7 +228,8 @@ class LLMManager {
                 }
 
                 $context = $this->buildContext($this->contextLimit());
-                $response = $this->askWithFallback($context, $this->personaPrompt());
+                $response = $this->generateReply($context);
+                $response = $this->applyReplyReaction($response, $context, (int)($contextData['message_id'] ?? 0));
                 
                 $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
                 
@@ -260,7 +267,9 @@ class LLMManager {
                 'content' => $instruction
             ];
 
-            $response = $this->askWithFallback($context, $this->personaPrompt(), 'chat', null, true); // MLP-332: быстрая модель
+            $response = $this->generateReply($context, '', true);
+            $targetIds = array_keys(ReactionParser::targets($context));
+            $response = $this->applyReplyReaction($response, $context, $targetIds ? (int)end($targetIds) : 0);
             
             $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
             
@@ -748,12 +757,29 @@ class LLMManager {
         return $this->buildContext($limit, $maxAgeHours, $beforeId, $includePinned, $includeMemory, $memoryQuery);
     }
 
+    public function commandConfirmationText(string $instruction, ?string $mustContain, string $message): ?string {
+        $previous = $this->commandMessage; $this->commandMessage = $message;
+        try { return $this->liveText($instruction, $mustContain); }
+        finally { $this->commandMessage = $previous; }
+    }
+
+    public function withReplyJob(array $job, callable $generate) {
+        $previous = $this->replyJob; $this->replyJob = $job;
+        try { return $generate(); } finally { $this->replyJob = $previous; }
+    }
+
     /**
      * Пост от имени бота (MLP-284): единая точка вместо копий
      * addMessage($this->botUserId, getBotUsername(), ...) по всем хендлерам.
      * Возвращает результат ChatManager::addMessage (id сообщения или true/false).
      */
     public function botSay(string $text, array $quotedIds = []) {
+        if ($this->replyJob !== null) {
+            $job = $this->replyJob;
+            $job['data']['prepared_reply'] = ['text' => $text, 'quotes' => $quotedIds];
+            (new JobQueue())->savePayload((int)$job['id'], $job['data']);
+            return CommandReplyDelivery::publish($this, $job);
+        }
         return $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(), $text, $quotedIds);
     }
 
@@ -765,6 +791,9 @@ class LLMManager {
      * LLM ничего не решает — только формулирует; данные в инструкции минимальны.
      */
     public function botSayLive(string $instruction, string $fallback, array $quotedIds = [], ?string $mustContain = null) {
+        if ($this->durableConfirmations) {
+            return CommandReplyDelivery::confirmation($this, $instruction, $fallback, $quotedIds, $mustContain, $this->commandMessage);
+        }
         // MLP-352: генерация вынесена в liveText() — ею пользуются и составные сообщения (пинги модераторов).
         return $this->botSay($this->liveText($instruction, $mustContain) ?? $fallback, $quotedIds);
     }
@@ -913,17 +942,24 @@ class LLMManager {
      * Сгенерировать текст ответа БЕЗ постинга (постит воркер — он решает цитату по политике).
      * $extraInstruction — доп. указание режима (адресация/сводность) из ReplyPolicy::instruction().
      */
-    public function generateReply(array $context, string $extraInstruction = ''): ?string {
+    public function generateReply(array $context, string $extraInstruction = '', bool $fast = false): ?string {
         $prompt = $this->personaPrompt();
         if ($extraInstruction !== '') {
             $prompt .= "\n\n" . $extraInstruction;
         }
         if (ConfigManager::getInstance()->getOption('ai_reactions', 1)) {
-            $prompt .= "\n\n[Реакции]: можешь поставить реакцию на сообщение — добавь в начале ответа маркер"
-                . " [РЕАКЦИЯ: X], где X одно из: like, heart, laugh, wow, fire, party, cool, think, neutral, cry, eyes, dislike, skull, clown, hundred, poop."
-                . " Ставь по настроению, не каждый раз. Если хочешь только отреагировать без слов — верни ТОЛЬКО маркер.";
+            $prompt .= ReactionParser::instruction($context);
         }
-        return $this->askWithFallback($context, $prompt);
+        return $this->askWithFallback($context, $prompt, 'chat', null, $fast);
+    }
+
+    public function applyReplyReaction(?string $raw, array $context, int $default): string {
+        $parsed = ReactionParser::extract($raw);
+        $target = ReactionParser::target($parsed, $context, $default > 0 ? $default : null);
+        if ($target !== null && ConfigManager::getInstance()->getOption('ai_reactions', 1)) {
+            $this->chatManager->setBotReaction($target, $this->botUserId, $parsed['reaction']);
+        }
+        return $parsed['text'];
     }
 
     /** MLP-260: длина контекста — настройка админки (мощным моделям можно больше). */
@@ -1033,8 +1069,9 @@ class LLMManager {
             }
             $entries[] = [
                 'role' => ($msg['user_id'] == $this->botUserId) ? 'assistant' : 'user',
+                'chat_message_id' => (int)$msg['id'],
                 // Имя и время в тексте — чтобы модель знала, кто говорит.
-                'content' => "[$time] {$msg['username']}: " . $msg['raw_message'],
+                'content' => "[$time] {$msg['username']}: [№{$msg['id']}] " . $msg['raw_message'],
             ];
         }
         $memoryUserIds = $memoryUserIds ?? [];
@@ -1280,7 +1317,7 @@ class LLMManager {
         } catch (\Throwable $e) {
             error_log('liveText degraded to fallback: ' . $e->getMessage());
         }
-        if ($text === null || $text === '' || ($mustContain !== null && mb_stripos($text, $mustContain) === false)) {
+        if ($text === null || $text === '' || preg_match('/^[\s\W]*SILENCE[\s\W]*$/iu', $text) || ($mustContain !== null && mb_stripos($text, $mustContain) === false)) {
             return null;
         }
         return $text;

@@ -23,6 +23,7 @@ class YandexGPTProvider implements LLMProviderInterface {
     }
 
     public function askChat(array $messagesContext, string $systemPrompt): ?string {
+        $messagesContext = VisionFormatter::maybeExpand($messagesContext, false);
         if (empty($this->apiKey) || empty($this->folderId)) {
             throw new Exception("YandexGPT API key or Folder ID is missing");
         }

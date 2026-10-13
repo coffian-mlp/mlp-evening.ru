@@ -96,13 +96,17 @@ class BotWorker {
                 ScheduleAnnouncement::processJob($this->llm, $this->queue, $job, $enabled);
                 continue;
             }
+            if (CommandReplyDelivery::handles($job)) {
+                CommandReplyDelivery::processJob($this->llm, $this->queue, $job, $enabled);
+                continue;
+            }
             $playlistJob = $job['type'] === 'dynamic_command' && in_array($job['data']['command']['handler_type'] ?? '', ['playlist', 'command_interaction_reply'], true);
             if ($enabled || $playlistJob) {
                 if ($job['type'] === 'greeting') {
                     $this->llm->processTrigger('greeting', $job['data'] ?? []);
                 } elseif ($job['type'] === 'dynamic_command') {
                     if ($playlistJob) $this->config->setOption('bot_worker_heartbeat', (string)time());
-                    try { $this->llm->processTrigger('dynamic_command', $job['data'] ?? []); }
+                    try { $this->llm->processTrigger('dynamic_command', ($job['data'] ?? []) + ['_durable_confirmations' => true]); }
                     finally { if ($playlistJob) $this->config->setOption('bot_worker_heartbeat', (string)time()); }
                 } elseif ($job['type'] === 'stream_command') {
                     // MLP-307: ответ Лиры на команду управления стримом
@@ -193,8 +197,9 @@ class BotWorker {
             $lastMention = end($mentions);
             $reactTarget = $lastMention['message_id'] ?? null;
         }
+        $reactTarget = ReactionParser::target($parsed, $context, $reactTarget ? (int)$reactTarget : null);
         if ($parsed['reaction'] && $reactTarget && $this->config->getOption('ai_reactions', 1)) {
-            $this->llm->getChatManager()->toggleReaction((int)$reactTarget, $this->llm->getBotUserId(), $parsed['reaction']);
+            $this->llm->getChatManager()->setBotReaction((int)$reactTarget, $this->llm->getBotUserId(), $parsed['reaction']);
         }
 
         if ($text !== null && $text !== '') {
@@ -508,6 +513,7 @@ class BotWorker {
         }
         $this->lastReapAt = time();
         $this->queue->recoverStaleAnnouncements(600);
+        $this->queue->recoverStaleCommandReplies(600);
         $n = $this->queue->failStaleAny(JobQueue::REACTIVE_TYPES, 600);
         if ($n > 0) {
             error_log("BotWorker: реапер закрыл зависших задач: {$n}");

@@ -1,0 +1,88 @@
+<?php
+require_once __DIR__ . '/integration_helpers.php';
+if ((it_config()['db']['host'] ?? '') !== 'db') it_skip('isolated Docker database required');
+it_require_db();
+use LLM\CommandReplyDelivery as Delivery;
+use LLM\JobQueue;
+use Infra\ConfigManager;
+$db = Infra\Database::getInstance()->getConnection();
+$config = ConfigManager::getInstance();
+$oldBot = $config->getOption('ai_bot_user_id', 0);
+$oldLive = $config->getOption('ai_live_confirm', 1);
+$oldEnabled = $config->getOption('ai_enabled', 0);
+$owned = ['messages'=>[], 'jobs'=>[]];
+$user = (new Domain\UserManager())->createUser('it_delivery_' . bin2hex(random_bytes(6)), bin2hex(random_bytes(16)), 'user', 'Delivery test');
+try {
+    $config->setOption('ai_bot_user_id', (string)$user);
+    $config->setOption('ai_enabled', '1');
+    $llm = new LLM\LLMManager(); $queue = new JobQueue();
+    $data = ['command'=>['handler_type'=>'text'], 'prepared_reply'=>['text'=>'Prepared reply & text', 'quotes'=>[]]];
+    $id = $queue->enqueue('dynamic_command', $data, 0); $owned['jobs'][]=$id;
+    $job = ['id'=>$id, 'type'=>'dynamic_command', 'data'=>$data, 'attempts'=>0];
+    Delivery::processJob($llm, $queue, $job, false);
+    $row = $db->query('SELECT status,payload FROM llm_jobs WHERE id=' . $id)->fetch_assoc();
+    $message = json_decode($row['payload'], true)['reply_message_id']; $owned['messages'][]=$message;
+    check($row['status']==='done' && $message>0, 'prepared reply delivers even when generation is disabled');
+    $db->query("UPDATE llm_jobs SET status='pending' WHERE id=" . $id);
+    Delivery::processJob($llm, $queue, $job, false);
+    $again=json_decode($db->query('SELECT payload FROM llm_jobs WHERE id='.$id)->fetch_assoc()['payload'],true);
+    check($again['reply_message_id']===$message, 'stale original payload cannot duplicate committed message');
+    check((int)$db->query('SELECT COUNT(*) AS n FROM chat_messages WHERE user_id='.$user)->fetch_assoc()['n']===1, 'one message after repeated delivery');
+    $data=['command'=>['handler_type'=>'schedule']]; $id=$queue->enqueue('dynamic_command',$data,0);$owned['jobs'][]=$id;
+    Delivery::processJob($llm,$queue,['id'=>$id,'type'=>'dynamic_command','data'=>$data,'attempts'=>0],false);
+    $row=$db->query('SELECT status,attempts FROM llm_jobs WHERE id='.$id)->fetch_assoc();
+    check($row['status']==='pending' && (int)$row['attempts']===1,'unavailable generation preserves ordinary command');
+    $db->query("UPDATE llm_jobs SET status='processing',claimed_at=DATE_SUB(NOW(),INTERVAL 15 MINUTE) WHERE id=".$id);
+    $queue->recoverStaleCommandReplies();$queue->failStaleAny(JobQueue::REACTIVE_TYPES,600);
+    check($db->query('SELECT status FROM llm_jobs WHERE id='.$id)->fetch_assoc()['status']==='pending','interrupted read-only command is recovered before stale reaper');
+    check(!Delivery::handles(['type'=>'dynamic_command','data'=>['command'=>['handler_type'=>'ban']]]),'side effects excluded from command replay');
+    check(!Delivery::handles(['type'=>'dynamic_command','data'=>['command'=>['handler_type'=>'memory_add']]]),'memory mutation excluded from replay');
+    Delivery::processJob($llm,$queue,['id'=>$id,'type'=>'dynamic_command','data'=>$data,'attempts'=>7],false);
+    check($db->query('SELECT status FROM llm_jobs WHERE id='.$id)->fetch_assoc()['status']==='failed','retry budget has terminal failure');
+    $data=['command'=>['handler_type'=>'command_reply_delivery'],'confirmation'=>['instruction'=>'Stored facts','fallback'=>'Fallback','quotes'=>[],'mustContain'=>null]];
+    $id=$queue->enqueue('dynamic_command',$data,0);$owned['jobs'][]=$id;
+    $model=new class extends LLM\LLMManager {
+        public int $calls=0;
+        public function commandConfirmationText(string $instruction, ?string $mustContain, string $message): ?string { return ++$this->calls === 1 ? null : 'Recovered confirmation'; }
+        public function processTrigger($type,$data=[]) { throw new RuntimeException('Action must not replay'); }
+    };
+    $job=['id'=>$id,'type'=>'dynamic_command','data'=>$data,'attempts'=>0];
+    Delivery::processJob($model,$queue,$job,true);
+    check($db->query('SELECT status FROM llm_jobs WHERE id='.$id)->fetch_assoc()['status']==='pending','failed confirmation remains queued instead of template');
+    $job['attempts']=1;Delivery::processJob($model,$queue,$job,true);
+    $row=$db->query('SELECT status,payload FROM llm_jobs WHERE id='.$id)->fetch_assoc();
+    $owned['messages'][]=json_decode($row['payload'],true)['reply_message_id'];
+    check($row['status']==='done' && $model->calls===2,'confirmation retry calls only speech generation, never action handler');
+    $data=['command'=>['handler_type'=>'text'],'prepared_reply'=>['text'=>'After pause','quotes'=>[]]];
+    $id=$queue->enqueue('dynamic_command',$data,0);$owned['jobs'][]=$id;
+    $config->setOption('ai_enabled','0');
+    $job=['id'=>$id,'type'=>'dynamic_command','data'=>$data,'attempts'=>0];Delivery::processJob($llm,$queue,$job,false);
+    $row=$db->query('SELECT status,attempts FROM llm_jobs WHERE id='.$id)->fetch_assoc();
+    check($row['status']==='pending' && (int)$row['attempts']===0,'master switch pauses delivery without spending retry budget');
+    $config->setOption('ai_enabled','1');
+    $db->query('UPDATE users SET is_banned=1 WHERE id='.$user);
+    Delivery::processJob($llm,$queue,$job,false);
+    check((int)$db->query('SELECT COUNT(*) AS n FROM chat_messages WHERE user_id='.$user)->fetch_assoc()['n']===count($owned['messages']),'publication permission failure inserts no message');
+    $db->query('UPDATE users SET is_banned=0 WHERE id='.$user);
+    Delivery::processJob($llm,$queue,$job,false);
+    $row=$db->query('SELECT status,payload FROM llm_jobs WHERE id='.$id)->fetch_assoc();$owned['messages'][]=json_decode($row['payload'],true)['reply_message_id'];
+    check($row['status']==='done','saved reply survives failed publication and delivers after recovery');
+    $data=['command'=>['handler_type'=>'command_reply_delivery'],'confirmation'=>['instruction'=>'Unavailable model','fallback'=>'Exhausted confirmation','quotes'=>[],'mustContain'=>null]];
+    $id=$queue->enqueue('dynamic_command',$data,0);$owned['jobs'][]=$id;
+    Delivery::processJob($llm,$queue,['id'=>$id,'type'=>'dynamic_command','data'=>$data,'attempts'=>7],false);
+    $row=$db->query('SELECT status,payload FROM llm_jobs WHERE id='.$id)->fetch_assoc();$owned['messages'][]=json_decode($row['payload'],true)['reply_message_id'];
+    check($row['status']==='done','unavailable provider uses stored fallback after retry budget');
+    $config->setOption('ai_live_confirm','0');
+    $data=['command'=>['handler_type'=>'command_reply_delivery'], 'confirmation'=>['instruction'=>'ignored','fallback'=>'Stored confirmation','quotes'=>[],'mustContain'=>null]];
+    $id=$queue->enqueue('dynamic_command',$data,0);$owned['jobs'][]=$id;
+    Delivery::processJob($llm,$queue,['id'=>$id,'type'=>'dynamic_command','data'=>$data,'attempts'=>0],true);
+    $row=$db->query('SELECT status,payload FROM llm_jobs WHERE id='.$id)->fetch_assoc();
+    $owned['messages'][]=json_decode($row['payload'],true)['reply_message_id'];
+    check($row['status']==='done','disabled live mode uses stored fallback without rerunning action');
+} finally {
+    foreach($owned['jobs'] as $id)$db->query('DELETE FROM llm_jobs WHERE id='.(int)$id);
+    foreach($owned['messages'] as $id)$db->query('DELETE FROM chat_messages WHERE id='.(int)$id);
+    $db->query('DELETE FROM users WHERE id='.(int)$user);
+    $config->setOption('ai_enabled',(string)$oldEnabled);$config->setOption('ai_bot_user_id',(string)$oldBot);$config->setOption('ai_live_confirm',(string)$oldLive);
+}
+it_done();
