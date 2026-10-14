@@ -97,10 +97,46 @@ final class AnnouncementStore
         });
     }
 
+    public function pollingBotId(string $credentialHash): ?int {
+        $hash = $this->option('announcements_verified_token_hash', '');
+        $id = (int)$this->option('announcements_verified_bot_id', '0');
+        return $id > 0 && hash_equals($hash, $credentialHash) ? $id : null;
+    }
+
+    /** Bind getMe identity to its cursor; token rotation retains the same bot namespace. */
+    public function activatePollingBot(int $botId, string $credentialHash, ?string $legacyHash = null): void {
+        if ($botId <= 0 || !preg_match('/^[a-f0-9]{64}$/D', $credentialHash)) throw new \InvalidArgumentException('Invalid polling identity');
+        Transaction::run($this->db, function () use ($botId, $credentialHash, $legacyHash): void {
+            $this->sql('INSERT IGNORE INTO telegram_announcement_bot_cursors(bot_id,update_offset) VALUES(?,0)', [$botId]);
+            $legacyHash ??= $this->option('announcements_legacy_token_hash', '');
+            if ($legacyHash !== '' && hash_equals($legacyHash,$credentialHash) && $this->option('announcements_legacy_bot_id','') === '') {
+                $offset = max(0,(int)$this->option('announcements_update_offset','0'));
+                $this->sql('UPDATE telegram_announcement_bot_cursors SET update_offset=GREATEST(update_offset,?) WHERE bot_id=?', [$offset,$botId]);
+                $this->sql('INSERT IGNORE INTO telegram_announcement_bot_updates(bot_id,update_id,processed_at) SELECT ?,update_id,processed_at FROM telegram_announcement_updates', [$botId]);
+                $this->setOption('announcements_legacy_bot_id',(string)$botId);
+            }
+            $this->setOption('announcements_verified_token_hash',$credentialHash);
+            $this->setOption('announcements_verified_bot_id',(string)$botId);
+        });
+    }
+
+    public function pollingOffset(int $botId): int {
+        return (int)($this->rows('SELECT update_offset FROM telegram_announcement_bot_cursors WHERE bot_id=?',[$botId])[0]['update_offset'] ?? 0);
+    }
+
     /** Exactly one durable action per Telegram update, including its offset. */
-    public function consume(int $id, callable $action): bool
+    public function consume(int $id, callable $action, ?int $botId = null): bool
     {
-        return Transaction::run($this->db, function () use ($id,$action) {
+        return Transaction::run($this->db, function () use ($id,$action,$botId) {
+            if ($botId !== null) {
+                if ($botId <= 0) throw new \InvalidArgumentException('Invalid polling bot');
+                $this->sql('INSERT IGNORE INTO telegram_announcement_bot_cursors(bot_id,update_offset) VALUES(?,0)',[$botId]);
+                $this->rows('SELECT bot_id FROM telegram_announcement_bot_cursors WHERE bot_id=? FOR UPDATE',[$botId]);
+                if (!$this->sql('INSERT IGNORE INTO telegram_announcement_bot_updates(bot_id,update_id,processed_at) VALUES(?,?,UTC_TIMESTAMP())',[$botId,$id])->affected_rows) return false;
+                $action();
+                $this->sql('UPDATE telegram_announcement_bot_cursors SET update_offset=GREATEST(update_offset,?) WHERE bot_id=?',[$id+1,$botId]);
+                return true;
+            }
             if (!$this->sql('INSERT IGNORE INTO telegram_announcement_updates VALUES(?,UTC_TIMESTAMP())', [$id])->affected_rows) return false;
             $action();
             $this->setOption('announcements_update_offset', (string)($id+1));

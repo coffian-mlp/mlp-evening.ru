@@ -27,6 +27,8 @@ $owner = 123456789; $channel = '@fixture375';
 $updates = []; $calls = []; $updateIds = [];
 $nextUpdate = random_int(1000000000, 1900000000); $nextMessage = 500;
 $channelMode = 'ok';
+$identityKeys=['announcements_verified_token_hash','announcements_verified_bot_id','announcements_legacy_bot_id'];$identitySaved=[];foreach($identityKeys as $key)$identitySaved[$key]=$db->query("SELECT value FROM site_options WHERE key_name='$key'")->fetch_assoc();
+$oldBotCursor=$db->query('SELECT update_offset FROM telegram_announcement_bot_cursors WHERE bot_id=98754321')->fetch_assoc();
 $offset = $db->query('SELECT value FROM site_options WHERE key_name="announcements_update_offset"')->fetch_assoc();
 $nextNumber=$db->query('SELECT value FROM site_options WHERE key_name="announcements_next_number"')->fetch_assoc();
 $counter = $db->query('SELECT value FROM site_options WHERE key_name="announcements_counter"')->fetch_assoc();
@@ -40,6 +42,7 @@ $content = new FixtureAnnouncementContent375('/upload/lyra/'.$basename);
 $store = new Domain\AnnouncementStore($db);
 $telegram = new Social\TelegramBotClient('123456789:'.str_repeat('a',35), static function ($method,$params) use (&$updates,&$calls,&$nextMessage,&$channelMode,$channel) {
     $calls[] = [$method,$params];
+    if ($method==='getMe') return ['status'=>200,'body'=>'{"ok":true,"result":{"is_bot":true,"id":98754321}}'];
     if ($method==='getUpdates') return ['status'=>200,'body'=>json_encode(['ok'=>true,'result'=>$updates])];
     if ($method==='answerCallbackQuery') return ['status'=>200,'body'=>'{"ok":true,"result":true}'];
     if (($params['chat_id'] ?? null)===$channel) {
@@ -138,7 +141,9 @@ try {
         }
         $db->query('DELETE FROM events WHERE id='.$eventId);
     }
-    foreach($updateIds as $updateId)$db->query('DELETE FROM telegram_announcement_updates WHERE update_id='.$updateId);
+    foreach($updateIds as $updateId)$db->query('DELETE FROM telegram_announcement_bot_updates WHERE bot_id=98754321 AND update_id='.$updateId);
+    if($oldBotCursor)$db->query('UPDATE telegram_announcement_bot_cursors SET update_offset='.(int)$oldBotCursor['update_offset'].' WHERE bot_id=98754321');else $db->query('DELETE FROM telegram_announcement_bot_cursors WHERE bot_id=98754321');
+    foreach($identitySaved as $key=>$old){if($old)$store->setOption($key,$old['value']);else $db->query("DELETE FROM site_options WHERE key_name='$key'");}
     foreach(['announcements_update_offset'=>$offset,'announcements_counter'=>$counter,'announcements_next_number'=>$nextNumber,'announcements_heartbeat'=>$heartbeat,'announcements_not_before'=>$notBefore] as $key=>$old) {
         if($old)$store->setOption($key,$old['value']);else $db->query('DELETE FROM site_options WHERE key_name="'.$key.'"');
     }

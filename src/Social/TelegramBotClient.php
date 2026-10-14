@@ -19,6 +19,9 @@ class TelegramBotClient
         $this->proxy = new AnnouncementProxy($proxyUrl);
     }
 
+    /** Credential binding only; callers never need the token itself. */
+    public function credentialFingerprint(): string { return hash('sha256', $this->token); }
+
     /** Fake transport receives (method, params) and returns status/body/errno. */
     public function request(string $method, array $params = []): array
     {

@@ -49,6 +49,16 @@ final class AnnouncementWorker
                 $settings = \Domain\AnnouncementSettings::values();
                 if ($settings['announcements_enabled'] !== '1' || !hash_equals($this->configurationFingerprint, \Domain\AnnouncementSettings::fingerprint($settings))) return;
             }
+            $credentialHash = $this->telegram->credentialFingerprint();
+            $botId = $this->store->pollingBotId($credentialHash);
+            if ($botId === null) {
+                $me = $this->telegram->request('getMe');
+                if (empty($me['is_bot']) || !is_int($me['id'] ?? null) || $me['id'] <= 0) throw new \RuntimeException('Telegram did not verify bot identity');
+                $botId = $me['id'];
+                $legacyToken = (string)\Infra\Env::get('TELEGRAM_ANNOUNCEMENTS_TOKEN', '');
+                $legacyHash = $this->store->option('announcements_legacy_token_hash', $legacyToken !== '' ? hash('sha256',$legacyToken) : '');
+                $this->store->activatePollingBot($botId,$credentialHash,$legacyHash);
+            }
             $this->scheduleSettings=\Domain\AnnouncementSettings::values();
             $this->store->recover();
             $events = EventManager::expandOccurrences((new EventManager())->getAllRaw(),14,$now);
@@ -60,13 +70,13 @@ final class AnnouncementWorker
                 if ($facts) $this->store->ensure($facts,AnnouncementContent::fingerprint($facts),$schedule,$this->initialNumber);
                 break;
             }
-            $updates = $this->telegram->request('getUpdates',['offset'=>(int)$this->store->option('announcements_update_offset','0')]);
+            $updates = $this->telegram->request('getUpdates',['offset'=>$this->store->pollingOffset($botId)]);
             foreach ($updates as $update) {
                 if (!is_array($update) || !is_int($update['update_id'] ?? null)) continue;
                 $response = null;
                 $accepted = $this->store->consume($update['update_id'],function () use ($update,$now,&$response) {
                     if (self::ownerUpdate($update,$this->owner)) $response = $this->handle($update,$now);
-                });
+                },$botId);
                 if ($accepted && $response !== null) $this->respond($update,$response);
             }
             // Delivery is checked before potentially slow content generation.
