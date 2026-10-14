@@ -32,15 +32,10 @@ class ModerationController {
 
         if (!$targetId) Response::json(false, "Не указан ID пользователя", 'error');
 
-        $check = self::checkHierarchy($targetId);
-        if ($check !== true) Response::json(false, $check, 'error');
-
         $userManager = new UserManager();
-        if ($userManager->banUser($targetId, $reason, Auth::userId())) {
-            Response::json(true, "Пользователь забанен! 🔨");
-        } else {
-            Response::json(false, "Ошибка при бане пользователя.", 'error');
-        }
+        $result = $userManager->applyModeration((int)Auth::userId(), $targetId, 'ban', null, $reason);
+        if ($result['error'] !== null) Response::json(false, $result['error'], 'error');
+        Response::json(true, "Пользователь забанен! 🔨");
     }
 
     /** Разбанить пользователя (moderator+). */
@@ -48,15 +43,10 @@ class ModerationController {
         $targetId = (int)($_POST['user_id'] ?? 0);
         if (!$targetId) Response::json(false, "Не указан ID пользователя", 'error');
 
-        $check = self::checkHierarchy($targetId);
-        if ($check !== true) Response::json(false, $check, 'error');
-
         $userManager = new UserManager();
-        if ($userManager->unbanUser($targetId, Auth::userId())) {
-            Response::json(true, "Пользователь разбанен! 🕊️");
-        } else {
-            Response::json(false, "Ошибка при разбане.", 'error');
-        }
+        $result = $userManager->applyModeration((int)Auth::userId(), $targetId, 'unban');
+        if ($result['error'] !== null) Response::json(false, $result['error'], 'error');
+        Response::json(true, "Пользователь разбанен! 🕊️");
     }
 
     /** Заглушить пользователя на N минут (moderator+). */
@@ -67,17 +57,12 @@ class ModerationController {
 
         if (!$targetId) Response::json(false, "Не указан ID пользователя", 'error');
 
-        $check = self::checkHierarchy($targetId);
-        if ($check !== true) Response::json(false, $check, 'error');
-
         if ($minutes < 1) $minutes = 15;
 
         $userManager = new UserManager();
-        if ($userManager->muteUser($targetId, $minutes, Auth::userId(), $reason)) {
-            Response::json(true, "Пользователь заглушен на $minutes мин. 🤐");
-        } else {
-            Response::json(false, "Ошибка при муте.", 'error');
-        }
+        $result = $userManager->applyModeration((int)Auth::userId(), $targetId, 'mute', $minutes, $reason);
+        if ($result['error'] !== null) Response::json(false, $result['error'], 'error');
+        Response::json(true, "Пользователь заглушен на $minutes мин. 🤐");
     }
 
     /** Вернуть голос (moderator+). */
@@ -85,15 +70,10 @@ class ModerationController {
         $targetId = (int)($_POST['user_id'] ?? 0);
         if (!$targetId) Response::json(false, "Не указан ID пользователя", 'error');
 
-        $check = self::checkHierarchy($targetId);
-        if ($check !== true) Response::json(false, $check, 'error');
-
         $userManager = new UserManager();
-        if ($userManager->unmuteUser($targetId, Auth::userId())) {
-            Response::json(true, "Голос возвращен! 🗣️");
-        } else {
-            Response::json(false, "Ошибка при снятии мута.", 'error');
-        }
+        $result = $userManager->applyModeration((int)Auth::userId(), $targetId, 'unmute');
+        if ($result['error'] !== null) Response::json(false, $result['error'], 'error');
+        Response::json(true, "Голос возвращен! 🗣️");
     }
 
     /** Удалить последние N сообщений пользователя (moderator+), с записью в аудит. */

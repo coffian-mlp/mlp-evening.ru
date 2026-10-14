@@ -26,7 +26,7 @@ ok(CommandDedup::key($draw, '/нарисуй кота') !== CommandDedup::key($d
 ok(CommandDedup::key($draw, '/нарисуй  Кота') === CommandDedup::key($draw, '/нарисуй кота'), '/нарисуй с тем же сюжетом — дубль');
 ok(CommandDedup::key($sched1, '/schedule') === CommandDedup::key($sched2, '/расписание пожалуйста'), 'алиасы расписания и аргументы — одна команда');
 ok(CommandDedup::key($drawChat, '/нарисуйчат') === CommandDedup::key($drawChat, '/нарисуйчат срочно'), '/нарисуйчат игнорирует аргументы');
-foreach (['todo', 'memory_add', 'memory_show', 'memory_forget', 'reminder', 'recap'] as $t) {
+foreach (['todo', 'memory_add', 'memory_show', 'memory_forget', 'reminder', 'recap', 'ban', 'mute', 'unban'] as $t) {
     ok(CommandDedup::key(['id' => 99, 'command_prefix' => '/x', 'handler_type' => $t], '/x') === null, "персональный тип $t не дедупится");
 }
 ok(CommandDedup::key(['command_prefix' => '/правила', 'handler_type' => 'text'], '/правила') === 'cmd:/правила|', 'без id — ключ по префиксу');

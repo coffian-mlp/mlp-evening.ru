@@ -6,6 +6,7 @@ use Core\FileCache;
 use Core\UserError;
 use Exception;
 use Infra\Database;
+use Infra\Transaction;
 
 
 class UserManager {
@@ -462,6 +463,37 @@ class UserManager {
 
 
     // --- Moderation Methods ---
+
+    /** Recheck both roles under row locks, then apply the sanction and its audit atomically. */
+    public function applyModeration(int $actorId, int $targetId, string $action, ?int $minutes = null, ?string $reason = null): array {
+        if (!in_array($action, ['ban', 'mute', 'unban', 'unmute', 'lift'], true)) {
+            throw new \InvalidArgumentException('Unknown moderation action');
+        }
+        return Transaction::run($this->db, function () use ($actorId, $targetId, $action, $minutes, $reason): array {
+            $stmt = $this->db->prepare('SELECT id, role, (is_banned = 1 AND (ban_until IS NULL OR ban_until > UTC_TIMESTAMP())) AS is_banned, (muted_until > UTC_TIMESTAMP()) AS is_muted FROM users WHERE id IN (?, ?) ORDER BY id FOR UPDATE');
+            $stmt->bind_param('ii', $actorId, $targetId);
+            $stmt->execute();
+            $rows = [];
+            foreach ($stmt->get_result() as $row) $rows[(int)$row['id']] = $row;
+            $actor = $rows[$actorId] ?? null;
+            $target = $rows[$targetId] ?? null;
+            $check = !$actor || !empty($actor['is_banned']) || !empty($actor['is_muted'])
+                ? 'У вас нет действующих прав модератора.'
+                : ModerationPolicy::check($actorId, (string)$actor['role'], $targetId, $target['role'] ?? null);
+            if ($check !== true) return ['error' => $check];
+            $banned = !empty($target['is_banned']);
+            $muted = !empty($target['is_muted']);
+            $ok = match ($action) {
+                'ban' => $this->banUser($targetId, $reason, $actorId, $minutes),
+                'mute' => $this->muteUser($targetId, max(1, $minutes ?? 15), $actorId, $reason),
+                'unban' => $this->unbanUser($targetId, $actorId),
+                'unmute' => $this->unmuteUser($targetId, $actorId),
+                'lift' => (!$banned || $this->unbanUser($targetId, $actorId)) && (!$muted || $this->unmuteUser($targetId, $actorId)),
+            };
+            if (!$ok) throw new \RuntimeException('Moderation update failed');
+            return ['error' => null, 'banned' => $banned, 'muted' => $muted];
+        });
+    }
 
     public function getBanStatus($userId, bool $current = false) {
         $stmt = $this->db->prepare("SELECT (is_banned = 1 AND (ban_until IS NULL OR ban_until > UTC_TIMESTAMP())) AS is_banned, ban_until, muted_until, ban_reason FROM users WHERE id = ?" . ($current ? " FOR SHARE" : "")); // MLP-352

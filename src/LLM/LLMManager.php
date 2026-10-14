@@ -311,7 +311,7 @@ class LLMManager {
             $command = $contextData['command'] ?? ['handler_type' => 'text', 'system_prompt' => ''];
 
             // MLP-326: повтор той же команды в окне дедупа — короткая живая реплика вместо повторной генерации.
-            if (!empty($contextData['dedup_of'])) {
+            if (!empty($contextData['dedup_of']) && !in_array($command['handler_type'] ?? '', ['ban', 'mute', 'unban'], true)) {
                 [$instruction, $fallback] = CommandDedup::notice($command, (array)$contextData['dedup_of'], (string)($contextData['username'] ?? 'Гость'));
                 $this->botSayLive($instruction, $fallback);
                 return true;

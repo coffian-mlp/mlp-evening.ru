@@ -12,7 +12,7 @@ use Domain\UserManager;
  * Команды /бан и /мут (MLP-350, по запросу владельца 26.09).
  *
  * Модератор или админ (флаг moderator_role в payload ставит ChatController — в воркере сессии
- * нет) применяет санкцию сразу, с той же иерархией, что в контекстном меню (ModerationPolicy).
+ * нет) задаёт режим команды. Текущие права проверяются в БД при применении санкции.
  * Формат: «/бан @ник [срок] причина», «/мут @ник [срок] причина»; срок — число минут или с единицей
  * (30м, 2ч, 1д). /бан без срока — бессрочный, /мут без срока — 15 минут (MLP-352).
  * Ответы Лиры — живые (LLMManager::liveText/botSayLive), прежние шаблоны — запасной вариант (MLP-352).
@@ -162,7 +162,7 @@ final class ModerationCommand {
         $actorRole = (string)($contextData['moderator_role'] ?? '');
         $isModerator = $userId > 0 && ModerationPolicy::isStaff($actorRole);
         if (($command['handler_type'] ?? '') === 'unban') {
-            return $this->lift($command, $contextData, $username, $userId, $actorRole, $isModerator); // MLP-353
+            return $this->lift($command, $contextData, $username, $userId, $isModerator); // MLP-353
         }
 
         $args = self::parseArgs(
@@ -201,28 +201,25 @@ final class ModerationCommand {
         }
 
         if ($isModerator) {
-            return $this->sanction($action, $userId, $username, $actorRole, $targetId, $targetNick, $targetRole, $args);
+            return $this->sanction($action, $userId, $username, $targetId, $targetNick, $args);
         }
         return $this->report($action, $userId, $username, $targetId, $targetNick, $targetRole, $args['reason']);
     }
 
     /** Санкция модератора: та же иерархия и те же методы, что у контекстного меню. */
-    private function sanction(string $action, int $actorId, string $actor, string $actorRole, int $targetId, string $targetNick, string $targetRole, array $args): bool {
-        $check = ModerationPolicy::check($actorId, $actorRole, $targetId, $targetRole);
-        if ($check !== true) {
-            $this->llm->botSayLive(self::refusalInstruction($actor, $check), "@{$actor}, {$check}", [], "@{$actor}");
+    private function sanction(string $action, int $actorId, string $actor, int $targetId, string $targetNick, array $args): bool {
+        $users = new UserManager();
+        $reason = $args['reason'] !== '' ? $args['reason'] : 'Нарушение правил';
+        $minutes = $action === 'mute' ? min(self::MUTE_MAX, $args['minutes'] ?? self::MUTE_DEFAULT) : $args['minutes'];
+        $result = $users->applyModeration($actorId, $targetId, $action, $minutes, $reason);
+        if ($result['error'] !== null) {
+            $this->llm->botSayLive(self::refusalInstruction($actor, $result['error']), "@{$actor}, {$result['error']}", [], "@{$actor}");
             return true;
         }
-        $users  = new UserManager();
-        $reason = $args['reason'] !== '' ? $args['reason'] : 'Нарушение правил';
         $why    = $args['reason'] !== '' ? " Причина: {$args['reason']}." : '';
         if ($action === 'mute') {
             $minutes = min(self::MUTE_MAX, $args['minutes'] ?? self::MUTE_DEFAULT);
             $label = ModerationPolicy::durationLabel($minutes);
-            if (!$users->muteUser($targetId, $minutes, $actorId, $reason)) {
-                $this->say($actor, "@{$actor}, не получилось заглушить — попробуй через меню сообщения.");
-                return true;
-            }
             $this->llm->botSayLive(
                 self::sanctionInstruction('mute', $actor, $targetNick, $minutes, $args['reason']),
                 "🤐 @{$targetNick} помолчит {$label} — решение @{$actor}.{$why}",
@@ -232,10 +229,6 @@ final class ModerationCommand {
         }
         $minutes = $args['minutes']; // null — бессрочно
         $term = $minutes !== null ? 'на ' . ModerationPolicy::durationLabel($minutes) : 'навсегда';
-        if (!$users->banUser($targetId, $reason, $actorId, $minutes)) {
-            $this->say($actor, "@{$actor}, не получилось забанить — попробуй через меню сообщения.");
-            return true;
-        }
         $this->llm->botSayLive(
             self::sanctionInstruction('ban', $actor, $targetNick, $minutes, $args['reason']),
             "🔨 @{$targetNick} — бан {$term}, решение @{$actor}.{$why}",
@@ -383,7 +376,7 @@ final class ModerationCommand {
      * /разбан (MLP-353): модератор или админ снимает с участника всё, что действует, — бан и мут.
      * Иерархия — как у кнопки «Разбанить» (ModerationPolicy). Остальным — только объяснение.
      */
-    private function lift(array $command, array $contextData, string $username, int $userId, string $actorRole, bool $isModerator): bool {
+    private function lift(array $command, array $contextData, string $username, int $userId, bool $isModerator): bool {
         $prefix = '/' . ltrim((string)($command['command_prefix'] ?? 'разбан'), '/');
         if (!$isModerator) {
             $this->llm->botSayLive(
@@ -407,29 +400,15 @@ final class ModerationCommand {
         }
         $targetId   = (int)$target['id'];
         $targetNick = trim((string)($target['nickname'] ?? '')) ?: (string)$target['login'];
-        $check = ModerationPolicy::check($userId, $actorRole, $targetId, (string)($target['role'] ?? 'user'));
-        if ($check !== true) {
-            $this->llm->botSayLive(self::refusalInstruction($username, $check, 'снять санкцию с участника'), "@{$username}, {$check}", [], "@{$username}");
+        $result = $users->applyModeration($userId, $targetId, 'lift');
+        if ($result['error'] !== null) {
+            $this->llm->botSayLive(self::refusalInstruction($username, $result['error'], 'снять санкцию с участника'), "@{$username}, {$result['error']}", [], "@{$username}");
             return true;
         }
-
-        // Действующие санкции: бан — с учётом срока (getBanStatus, MLP-352), мут — по времени.
-        $status = $users->getBanStatus($targetId) ?? [];
-        $banned = !empty($status['is_banned']);
-        $muted  = !empty($status['muted_until']) && strtotime($status['muted_until'] . ' UTC') > time();
+        $banned = $result['banned'];
+        $muted = $result['muted'];
         if (!$banned && !$muted) {
             $this->say($username, "@{$username}, у @{$targetNick} нет ни бана, ни мута — снимать нечего.");
-            return true;
-        }
-        $ok = true;
-        if ($banned) {
-            $ok = $users->unbanUser($targetId, $userId) && $ok;
-        }
-        if ($muted) {
-            $ok = $users->unmuteUser($targetId, $userId) && $ok;
-        }
-        if (!$ok) {
-            $this->say($username, "@{$username}, не получилось снять санкцию — попробуй кнопкой «Разбанить» в дашборде.");
             return true;
         }
         $lifted = self::liftedLabel($banned, $muted);
