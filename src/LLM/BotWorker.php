@@ -107,6 +107,7 @@ class BotWorker {
                 } elseif ($job['type'] === 'dynamic_command') {
                     if ($playlistJob) $this->config->setOption('bot_worker_heartbeat', (string)time());
                     try { $this->llm->processTrigger('dynamic_command', ($job['data'] ?? []) + ['_durable_confirmations' => true]); }
+                    catch (DrawingBusy $busy) { $this->queue->release([$id], 3); continue; }
                     finally { if ($playlistJob) $this->config->setOption('bot_worker_heartbeat', (string)time()); }
                 } elseif ($job['type'] === 'stream_command') {
                     // MLP-307: ответ Лиры на команду управления стримом

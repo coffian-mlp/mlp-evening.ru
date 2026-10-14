@@ -51,6 +51,10 @@ class LyraArtist {
      * дневной лимит ai_image_daily_limit (генерация дороже текста).
      */
     public function handleDraw(array $command, array $contextData, ?callable $generator = null): bool {
+        return DrawingSchedule::run(false, fn() => $this->handleDrawUnlocked($command, $contextData, $generator));
+    }
+
+    private function handleDrawUnlocked(array $command, array $contextData, ?callable $generator): bool {
         $subject = BotCommandManager::stripPrefix($command, (string)($contextData['message'] ?? ''), 'нарисуй');
         $username = (string)($contextData['username'] ?? 'Гость');
 
@@ -67,6 +71,10 @@ class LyraArtist {
      * в художественное описание сценки, дальше — общий путь художницы.
      */
     public function handleDrawChat(array $command, array $contextData, ?callable $director = null, ?callable $generator = null): bool {
+        return DrawingSchedule::run(!empty($contextData['auto']), fn() => $this->handleDrawChatUnlocked($command, $contextData, $director, $generator));
+    }
+
+    private function handleDrawChatUnlocked(array $command, array $contextData, ?callable $director, ?callable $generator): bool {
         $username = (string)($contextData['username'] ?? 'Гость');
         // MLP-316: авто-запуск по расписанию (BotWorker::autoDrawSchedule) — без адресата,
         // отказы и сбои не постятся в чат (авто-режим не должен спамить извинениями).

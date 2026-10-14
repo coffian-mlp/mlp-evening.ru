@@ -74,6 +74,11 @@ class BotDispatch {
             (new JobQueue())->enqueue($type, $payload, $delay);
             return;
         }
+        if ($type === 'dynamic_command' && empty($payload['dedup_of'])
+            && in_array($payload['command']['handler_type'] ?? '', ['image', 'image_chat'], true)) {
+            self::inlineDrawing($payload, $delay);
+            return;
+        }
         // Inline-фоллбек: прежнее поведение — «раздумье» + синхронная обработка.
         // Приветствие журналируем в llm_jobs (done) ДО обработки — троттл видит
         // его сразу, даже пока Лира «думает» (гонка вход-выход-вход закрыта).
@@ -93,6 +98,35 @@ class BotDispatch {
             return;
         }
         (new LLMManager())->processTrigger($type, $payload);
+    }
+
+    private static function inlineDrawing(array $payload, int $delay, ?callable $execute = null): void {
+        $queue = new JobQueue();
+        $id = $queue->reserveInline('dynamic_command', $payload, $delay);
+        if (function_exists('set_time_limit')) @set_time_limit(0);
+        @ignore_user_abort(true);
+        sleep($delay);
+        $until = time() + 180;
+        try {
+            if ($execute === null) {
+                $llm = new LLMManager();
+                $execute = fn() => $llm->processTrigger('dynamic_command', $payload);
+            }
+            do {
+                try {
+                    $execute();
+                    $queue->complete([$id]);
+                    return;
+                } catch (DrawingBusy $busy) {
+                    sleep(1);
+                }
+            } while (time() < $until);
+        } catch (\Throwable $error) {
+            // Only lock contention is known to precede every external side effect.
+            $queue->fail([$id]);
+            throw $error;
+        }
+        $queue->releaseProcessing($id, 3);
     }
 
     /** Задержка по типу: команды стрима (MLP-307) отвечаются немедленно, остальным — lifelike. */

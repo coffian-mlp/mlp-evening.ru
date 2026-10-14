@@ -4,9 +4,22 @@ namespace LLM;
 
 use Infra\ConfigManager;
 
-/** Manual drawings take precedence; the existing worker lock serializes execution. */
+/** Shared admission for worker and synchronous drawing paths. */
 final class DrawingSchedule {
     public const MANUAL_COOLDOWN = 1800;
+
+    public static function run(bool $auto, callable $draw): bool {
+        $db = \Infra\Database::getInstance()->getConnection();
+        if ((int)$db->query("SELECT GET_LOCK('bot_drawing', 0) AS acquired")->fetch_assoc()['acquired'] !== 1) {
+            throw new DrawingBusy('Another drawing is running');
+        }
+        try {
+            if ($auto && self::automaticBlocked()) return true;
+            return $draw();
+        } finally {
+            $db->query("SELECT RELEASE_LOCK('bot_drawing')");
+        }
+    }
 
     public static function automaticBlocked(): bool {
         $lastManual = (int)(ConfigManager::getInstance()->getOptionDetails('bot_last_manual_draw')['value'] ?? 0);

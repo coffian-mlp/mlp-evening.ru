@@ -123,15 +123,29 @@ class JobQueue {
         $jobs = [];
         if ($res) {
             while ($row = $res->fetch_assoc()) {
+                $id = (int)$row['id'];
+                $stmt = $this->db->prepare("UPDATE llm_jobs SET status='processing', claimed_at=NOW() WHERE id=? AND status='pending'");
+                $stmt->bind_param('i', $id); $stmt->execute();
+                if ($stmt->affected_rows !== 1) continue;
                 $row['data'] = json_decode($row['payload'] ?? '{}', true) ?: [];
                 $jobs[] = $row;
             }
         }
-        if ($jobs) {
-            $ids = implode(',', array_map(static fn($j) => (int)$j['id'], $jobs));
-            $this->db->query("UPDATE llm_jobs SET status='processing', claimed_at=NOW() WHERE id IN ($ids)");
-        }
         return $jobs;
+    }
+
+    /** Reserve a synchronous drawing before its lifelike delay; workers cannot claim it. */
+    public function reserveInline(string $type, array $payload, int $delay): int {
+        return \Infra\Transaction::run($this->db, function () use ($type, $payload, $delay): int {
+            $id = $this->enqueue($type, $payload, $delay);
+            $this->db->query("UPDATE llm_jobs SET status='processing',claimed_at=NOW() WHERE id=" . $id);
+            return $id;
+        });
+    }
+
+    public function releaseProcessing(int $id, int $delay): void {
+        $stmt = $this->db->prepare("UPDATE llm_jobs SET status='pending',run_after=DATE_ADD(NOW(),INTERVAL ? SECOND),attempts=attempts+1 WHERE id=? AND status='processing'");
+        $stmt->bind_param('ii', $delay, $id); $stmt->execute();
     }
 
     /**
