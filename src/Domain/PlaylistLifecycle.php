@@ -39,10 +39,14 @@ final class PlaylistLifecycle
                 $record = $known[$runId] ?? null;
                 $start = (int)$occurrence['real_start_time'];
                 $end = $record ? strtotime($record['end_at'].' UTC') : $start + 60*(int)$occurrence['duration_minutes'];
-                if ($record && $record['state'] === 'cancelled') continue;
+                if ($record && $record['state'] === 'cancelled') {
+                    if ($start <= $now || !in_array($runId, $currentRuns, true)) continue;
+                    $record = $owner->reviseUpcomingOccurrence($occurrence, $now);
+                    if (!$record || $record['state'] === 'cancelled') continue;
+                }
                 if ($start > $now) {
                     if ($record && !in_array($runId,$currentRuns,true)) {
-                        $owner->setOccurrenceState($runId,'cancelled');
+                        $owner->setOccurrenceState($runId,'cancelled', 'calendar');
                         continue;
                     }
                     if ($record) $owner->reviseUpcomingOccurrence($occurrence,$now);

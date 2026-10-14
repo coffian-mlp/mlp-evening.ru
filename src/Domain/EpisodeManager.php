@@ -257,10 +257,19 @@ class EpisodeManager {
 
     public function reviseUpcomingOccurrence(array $occurrence, int $now): ?array {
         return $this->tx(function () use ($occurrence, $now) {
-            $this->publicationLock();
+            $publishedId = $this->publicationLock();
             $row = $this->rows('SELECT * FROM playlist_occurrences WHERE run_id=? FOR UPDATE', [$occurrence['run_id']])[0] ?? null;
-            if (!$row || $row['state'] !== 'pending' || strtotime($row['start_at'].' UTC') <= $now) return $row;
+            if (!$row || strtotime($row['start_at'].' UTC') <= $now) return $row;
             $metadata = json_decode($row['metadata_json'], true);
+            if ($row['state'] === 'cancelled' && in_array($metadata['cancellation_source'] ?? 'calendar', ['calendar'], true)) {
+                $snapshotId = !empty($occurrence['use_playlist']) ? $publishedId : 0;
+                $metadata['state_revisions'][] = ['from'=>'cancelled','to'=>'pending','reason'=>'calendar_restored','revised_at'=>gmdate('Y-m-d H:i:s',$now)];
+                $metadata['snapshot_revisions'][] = ['previous_snapshot_id'=>(int)$row['snapshot_id'],'new_snapshot_id'=>$snapshotId,'revised_at'=>gmdate('Y-m-d H:i:s',$now)];
+                unset($metadata['cancellation_source']);
+                $this->sql('UPDATE playlist_occurrences SET state="pending",snapshot_id=?,metadata_json=? WHERE run_id=?', [$snapshotId,json_encode($metadata,JSON_THROW_ON_ERROR),$occurrence['run_id']]);
+                $row['state'] = 'pending'; $row['snapshot_id'] = $snapshotId;
+            }
+            if ($row['state'] !== 'pending') return $row;
             if (!empty($occurrence['use_playlist']) && (int)$row['snapshot_id'] === 0) {
                 $snapshot = $this->getCurrentSnapshot() ?? $this->importLegacySnapshot();
                 if (!$snapshot) {
@@ -296,8 +305,12 @@ class EpisodeManager {
         return $this->rows('SELECT * FROM playlist_occurrences ORDER BY start_at,run_id');
     }
 
-    public function setOccurrenceState(string $runId, string $state): void {
+    public function setOccurrenceState(string $runId, string $state, string $cancellationSource = 'explicit'): void {
         if (!in_array($state, ['started','cancelled','needs_attention'], true)) throw new \InvalidArgumentException('Invalid occurrence state');
+        if ($state === 'cancelled') {
+            $this->sql('UPDATE playlist_occurrences SET state=?,metadata_json=JSON_SET(metadata_json,"$.cancellation_source",?) WHERE run_id=? AND state<>"completed"', [$state,$cancellationSource,$runId]);
+            return;
+        }
         $this->sql('UPDATE playlist_occurrences SET state=? WHERE run_id=? AND state<>"completed"', [$state,$runId]);
     }
 
@@ -381,8 +394,35 @@ class EpisodeManager {
         });
     }
 
+    /** Keep a wish fulfilled by another surviving showing after its acceptance. */
+    private function reconcileCorrectedWishes(int $episodeId, string $removedKey): void {
+        $candidates = [];
+        foreach ($this->rows('SELECT c.completion_key,c.snapshot_id,c.start_at,c.shown_json,s.payload_json FROM playlist_completions c JOIN playlist_snapshots s ON s.id=c.snapshot_id WHERE c.completion_key<>? ORDER BY c.start_at DESC,c.completion_key FOR SHARE', [$removedKey]) as $completion) {
+            $shown = json_decode($completion['shown_json'], true, 512, JSON_THROW_ON_ERROR);
+            foreach (json_decode($completion['payload_json'], true, 512, JSON_THROW_ON_ERROR) as $story) {
+                if (in_array($story['story_id'], $shown, true) && in_array($episodeId, array_map('intval', $story['ids']), true)) {
+                    $candidates[] = $completion;
+                    break;
+                }
+            }
+        }
+        $replacement = static function (string $acceptedAt) use ($candidates): ?array {
+            foreach ($candidates as $completion) if ($completion['start_at'] >= $acceptedAt) return $completion;
+            return null;
+        };
+        foreach ($this->rows('SELECT user_id,accepted_at FROM episode_wishes WHERE episode_id=? AND status="fulfilled" AND fulfilled_completion_key=? FOR UPDATE', [$episodeId,$removedKey]) as $wish) {
+            $other = $replacement($wish['accepted_at']);
+            $this->sql('UPDATE episode_wishes SET status=?,fulfilled_snapshot_id=?,fulfilled_completion_key=?,updated_at=UTC_TIMESTAMP() WHERE user_id=? AND episode_id=?', [$other ? 'fulfilled' : 'active',$other['snapshot_id'] ?? null,$other['completion_key'] ?? null,$wish['user_id'],$episodeId]);
+        }
+        foreach ($this->rows('SELECT id,created_at FROM episode_wish_events WHERE user_id IS NULL AND episode_id=? AND status="fulfilled" AND fulfilled_completion_key=? FOR UPDATE', [$episodeId,$removedKey]) as $wish) {
+            $other = $replacement($wish['created_at']);
+            $this->sql('UPDATE episode_wish_events SET status=?,snapshot_id=?,fulfilled_completion_key=? WHERE id=?', [$other ? 'fulfilled' : 'active',$other['snapshot_id'] ?? null,$other['completion_key'] ?? null,$wish['id']]);
+        }
+    }
+
     public function correctCompletion(int $snapshotId, array $shownStoryIds, int $actorId, string $operationKey, ?string $completionKey = null): array {
         return $this->tx(function () use ($snapshotId, $shownStoryIds, $actorId, $operationKey, $completionKey) {
+            $this->publicationLock();
             $s = $this->rows('SELECT * FROM playlist_snapshots WHERE id=? FOR UPDATE', [$snapshotId])[0] ?? null;
             if (!$s || !$s['completed_at'])throw new \InvalidArgumentException('Not completed');
             if ($this->rows('SELECT id FROM playlist_corrections WHERE operation_key=?', [$operationKey]))return ['status' => 'accepted', 'code' => 'already_corrected', 'facts' => []];
@@ -403,10 +443,7 @@ class EpisodeManager {
                         $this->sql('UPDATE episode_wishes SET status="fulfilled",fulfilled_snapshot_id=?,fulfilled_completion_key=? WHERE episode_id=? AND status="active" AND accepted_at<=?', [$snapshotId, $completionKey, $id, $cutoff]);
                         $this->sql('UPDATE episode_wish_events SET status="fulfilled",snapshot_id=?,fulfilled_completion_key=? WHERE user_id IS NULL AND episode_id=? AND status="active" AND created_at<=?', [$snapshotId, $completionKey, $id, $cutoff]);
                     }
-                    else {
-                        $this->sql('UPDATE episode_wish_events SET status="active",snapshot_id=NULL,fulfilled_completion_key=NULL WHERE user_id IS NULL AND episode_id=? AND status="fulfilled" AND fulfilled_completion_key=?', [$id, $completionKey]);
-                    }
-                    if ($delta < 0)$this->sql('UPDATE episode_wishes SET status="active",fulfilled_snapshot_id=NULL,fulfilled_completion_key=NULL WHERE episode_id=? AND status="fulfilled" AND fulfilled_completion_key=?', [$id, $completionKey]);
+                    if ($delta < 0) $this->reconcileCorrectedWishes((int)$id, $completionKey);
                     $legacy = $this->rows('SELECT COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(outcome_json,"$.count")) AS UNSIGNED)),0) n FROM episode_wish_events WHERE user_id IS NULL AND episode_id=? AND status="active"', [$id])[0]['n'];
                     $this->sql('UPDATE episode_list SET legacy_wanna_watch=?,WANNA_WATCH=? WHERE ID=?', [$legacy, $legacy, $id]);
                 }
