@@ -533,8 +533,8 @@ class ChatManager {
     /** Model reactions are additive; repeated delivery must not remove an existing reaction. */
     public function setBotReaction(int $messageId, int $botId, string $type): array {
         if (!in_array($type, \LLM\ReactionParser::ALLOWED, true)) return ['success' => false];
-        $stmt = $this->db->prepare('INSERT IGNORE INTO chat_reactions (message_id,user_id,reaction) SELECT id,?,? FROM chat_messages WHERE id=? AND is_deleted=0 AND user_id<>?');
-        $stmt->bind_param('isii', $botId, $type, $messageId, $botId); $stmt->execute();
+        $stmt = $this->db->prepare('INSERT IGNORE INTO chat_reactions (message_id,user_id,reaction) SELECT id,?,? FROM chat_messages WHERE id=? AND is_deleted=0');
+        $stmt->bind_param('isi', $botId, $type, $messageId); $stmt->execute();
         $added = $stmt->affected_rows > 0;
         if ($added) $this->broadcast(['type'=>'reaction_update', 'id'=>$messageId, 'reactions'=>$this->getReactionsForMessage($messageId)]);
         return ['success'=>true, 'added'=>$added];

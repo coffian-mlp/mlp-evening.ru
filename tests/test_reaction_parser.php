@@ -5,7 +5,7 @@ use LLM\ReactionParser;
  * Запуск: php tests/test_reaction_parser.php
  */
 
-require_once __DIR__ . '/../src/LLM/ReactionParser.php';
+require_once __DIR__ . '/../autoload.php';
 
 $fail = 0;
 function check($cond, $label) {
@@ -49,10 +49,28 @@ $r = ReactionParser::extract('[РЕАКЦИЯ: pie 123] Привет');
 check($r['target'] === 123 && $r['text'] === 'Привет', 'explicit target parsed and marker stripped');
 check(ReactionParser::target($r, $context, 999) === 123, 'valid real target takes precedence');
 check(ReactionParser::target(ReactionParser::extract('[REACT: pie 999]'), $context, 123) === null, 'hallucinated target does not react to another message');
-check(ReactionParser::target(ReactionParser::extract('[REACT: pie 124]'), $context, 123) === null, 'bot message cannot be reaction target');
+check(ReactionParser::target(ReactionParser::extract('[REACT: pie 124]'), $context, 123) === 124, 'visible bot message can be an explicit reaction target');
 check(ReactionParser::target(ReactionParser::extract('[REACT: pie]'), $context, 123) === 123, 'legacy marker preserves default target');
 check(ReactionParser::extract('[REACT: pie -123] text')['reaction'] === null, 'malformed ID rejected');
 check(ReactionParser::extract('Ответ [РЕАКЦИЯ: pie 123')['text'] === 'Ответ', 'truncated marker does not leak into chat');
+
+$batchContext = [];
+$batchRaw = '[№34213] @CoFFian, держи! ';
+for ($id = 34210; $id < 34222; $id++) {
+    $batchContext[] = ['role'=>($id % 2 ? 'assistant':'user'),'chat_message_id'=>$id,'content'=>'Message '.$id];
+    $batchRaw .= "[РЕАКЦИЯ: poop $id]\n";
+}
+$actions = ReactionParser::actions($batchRaw, $batchContext, 34210);
+check(count($actions) === 10, 'multiple valid markers produce ten actions with a hard limit');
+check(array_column($actions, 'target') === range(34210,34219), 'whole batch includes both human and bot messages');
+check(ReactionParser::extract($batchRaw)['text'] === '@CoFFian, держи!', 'all reaction markers and source annotation removed');
+$duplicateRaw = str_repeat('[REACT: poop 34210]', 20).'[REACT: poop 34211]';
+check(count(ReactionParser::actions($duplicateRaw,$batchContext,34210)) === 2, 'duplicate markers do not use up the batch limit');
+check(count(ReactionParser::actions('[REACT: poop 999999][REACT: heart 34210]', $batchContext,34211)) === 1, 'invalid target skipped independently of valid markers');
+check(ReactionParser::actions('[REACT: poop]',$batchContext,34210) === [['target'=>34210,'reaction'=>'poop']], 'legacy single-marker action remains supported');
+check(ReactionParser::actions('[REACT: poop]',$batchContext,999999) === [['target'=>999999,'reaction'=>'poop']], 'trusted legacy quote target may be outside current context; storage checks existence');
+check(str_contains(ReactionParser::instruction($batchContext),'"id":34210'), 'IDs provided as separate server catalogue');
+check(!str_contains(ReactionParser::instruction($batchContext),'Метки [№ID] перед текстом'), 'instruction no longer teaches inline numbering');
 
 echo "\n== null ==\n";
 $r = ReactionParser::extract(null);

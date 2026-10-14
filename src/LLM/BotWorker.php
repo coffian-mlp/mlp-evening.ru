@@ -188,19 +188,13 @@ class BotWorker {
         $raw = $this->llm->generateReply($context);
 
         // Бот может поставить реакцию вместо/вместе с текстом.
-        $parsed = ReactionParser::extract($raw);
-        $text = $parsed['text'];
-
         // Реакцию вешаем на цитируемое (single) или новейшее сообщение из пачки.
         $reactTarget = $decision['quote_message_id'] ?? null;
         if (!$reactTarget) {
             $lastMention = end($mentions);
             $reactTarget = $lastMention['message_id'] ?? null;
         }
-        $reactTarget = ReactionParser::target($parsed, $context, $reactTarget ? (int)$reactTarget : null);
-        if ($parsed['reaction'] && $reactTarget && $this->config->getOption('ai_reactions', 1)) {
-            $this->llm->getChatManager()->setBotReaction((int)$reactTarget, $this->llm->getBotUserId(), $parsed['reaction']);
-        }
+        $text = $this->llm->applyReplyReaction($raw, $context, (int)($reactTarget ?? 0));
 
         if ($text !== null && $text !== '') {
             $quoted = $decision['quote_message_id'] ? [(int)$decision['quote_message_id']] : [];

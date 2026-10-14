@@ -173,13 +173,10 @@ class StreamCommand {
         $raw = $ask !== null ? $ask($context, $instruction) : $llm->generateReply($context, $instruction);
 
         // Бот может ответить реакцией вместо/вместе с текстом — как в обычной ветке.
-        $parsed = ReactionParser::extract((string)$raw);
-        $text = trim((string)($parsed['text'] ?? ''));
         $msgId = !empty($payload['message_id']) ? (int)$payload['message_id'] : null;
-
-        if ($parsed['reaction'] && $msgId && $config->getOption('ai_reactions', 1)) {
-            $llm->getChatManager()->toggleReaction($msgId, $botId, $parsed['reaction']);
-        }
+        // Test seam has no chat context; preserve the actual source as a validated target.
+        if ($ask !== null && $msgId) $context[] = ['role'=>'user','chat_message_id'=>$msgId,'content'=>$message];
+        $text = trim($llm->applyReplyReaction($raw, $context, $msgId ?? 0));
         if ($text === '') {
             return;
         }

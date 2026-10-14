@@ -955,9 +955,10 @@ class LLMManager {
 
     public function applyReplyReaction(?string $raw, array $context, int $default): string {
         $parsed = ReactionParser::extract($raw);
-        $target = ReactionParser::target($parsed, $context, $default > 0 ? $default : null);
-        if ($target !== null && ConfigManager::getInstance()->getOption('ai_reactions', 1)) {
-            $this->chatManager->setBotReaction($target, $this->botUserId, $parsed['reaction']);
+        if (ConfigManager::getInstance()->getOption('ai_reactions', 1)) {
+            foreach (ReactionParser::actions($raw, $context, $default > 0 ? $default : null) as $action) {
+                $this->chatManager->setBotReaction($action['target'], $this->botUserId, $action['reaction']);
+            }
         }
         return $parsed['text'];
     }
@@ -1071,7 +1072,7 @@ class LLMManager {
                 'role' => ($msg['user_id'] == $this->botUserId) ? 'assistant' : 'user',
                 'chat_message_id' => (int)$msg['id'],
                 // Имя и время в тексте — чтобы модель знала, кто говорит.
-                'content' => "[$time] {$msg['username']}: [№{$msg['id']}] " . $msg['raw_message'],
+                'content' => "[$time] {$msg['username']}: " . (($msg['user_id'] == $this->botUserId) ? ResponseSanitizer::stripMessageIds($msg['raw_message']) : $msg['raw_message']),
             ];
         }
         $memoryUserIds = $memoryUserIds ?? [];

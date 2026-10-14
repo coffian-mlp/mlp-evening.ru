@@ -16,7 +16,7 @@ class ResponseSanitizer {
      */
     public static function clean($response, $botNickname = '', $botLogin = '') {
         if ($response === null) return null;
-        $text = trim($response);
+        $text = self::stripMessageIds(trim($response));
         if ($text === '') return '';
 
         // Признак следов служебного текста — для финальной проверки короткого остатка.
@@ -48,7 +48,8 @@ class ResponseSanitizer {
 
         // (4) Обёртка кавычками + HTML-сущности (ChatManager при сохранении снова экранирует).
         $text = preg_replace('/^"(.*)"$/us', '$1', trim($text));
-        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = self::stripMessageIds(html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        $text = self::stripSpeakerPrefix(trim($text), $botNickname, $botLogin);
         $text = trim($text);
 
         // (5) Если были явные следы системщины, а остался лишь короткий огрызок
@@ -58,6 +59,11 @@ class ResponseSanitizer {
         }
 
         return $text;
+    }
+
+    /** Reserved chat-source annotations must not become visible prose. */
+    public static function stripMessageIds(string $text): string {
+        return preg_replace('/\[\s*№\s*[0-9]+\s*\]\h*/u', '', $text) ?? $text;
     }
 
     /**

@@ -54,6 +54,13 @@ eq(ResponseSanitizer::clean('TotallyNotAPony: Как дела?', $nick, $login),
 eq(ResponseSanitizer::clean('"В кавычках"', $nick, $login), 'В кавычках', 'unwrap surrounding quotes');
 eq(ResponseSanitizer::clean('Скажи &quot;привет&quot;', $nick, $login), 'Скажи "привет"', 'decode html entities');
 
+echo "\n== Chat source annotations ==\n";
+eq(ResponseSanitizer::clean('[№34213] @CoFFian, спасибо!'), '@CoFFian, спасибо!', 'production source-ID prefix removed');
+eq(ResponseSanitizer::clean('@CoFFian, [№34213] привет!'), '@CoFFian, привет!', 'inline source annotation removed');
+eq(ResponseSanitizer::clean('[&#8470;34213] @CoFFian, привет!'), '@CoFFian, привет!', 'encoded source annotation removed');
+eq(ResponseSanitizer::clean('[№34213] [19:00] TotallyNotAPony: Привет!', $nick, $login), 'Привет!', 'source annotation does not prevent speaker-prefix cleanup');
+eq(ResponseSanitizer::clean('Записала №42; серия S01E01, рейтинг 9.5.'), 'Записала №42; серия S01E01, рейтинг 9.5.', 'legitimate backlog numbers, episode codes and ratings preserved');
+
 echo "\n== Граничные ==\n";
 eq(ResponseSanitizer::clean(null, $nick, $login), null, 'null -> null');
 eq(ResponseSanitizer::clean('   ', $nick, $login), '', 'blank -> ""');
