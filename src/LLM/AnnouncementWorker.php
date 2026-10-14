@@ -55,9 +55,7 @@ final class AnnouncementWorker
                 $me = $this->telegram->request('getMe');
                 if (empty($me['is_bot']) || !is_int($me['id'] ?? null) || $me['id'] <= 0) throw new \RuntimeException('Telegram did not verify bot identity');
                 $botId = $me['id'];
-                $legacyToken = (string)\Infra\Env::get('TELEGRAM_ANNOUNCEMENTS_TOKEN', '');
-                $legacyHash = $this->store->option('announcements_legacy_token_hash', $legacyToken !== '' ? hash('sha256',$legacyToken) : '');
-                $this->store->activatePollingBot($botId,$credentialHash,$legacyHash);
+                $this->store->activatePollingBot($botId,$credentialHash);
             }
             $this->scheduleSettings=\Domain\AnnouncementSettings::values();
             $this->store->recover();

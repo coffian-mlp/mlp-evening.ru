@@ -104,11 +104,12 @@ final class AnnouncementStore
     }
 
     /** Bind getMe identity to its cursor; token rotation retains the same bot namespace. */
-    public function activatePollingBot(int $botId, string $credentialHash, ?string $legacyHash = null): void {
+    public function activatePollingBot(int $botId, string $credentialHash): void {
         if ($botId <= 0 || !preg_match('/^[a-f0-9]{64}$/D', $credentialHash)) throw new \InvalidArgumentException('Invalid polling identity');
-        Transaction::run($this->db, function () use ($botId, $credentialHash, $legacyHash): void {
+        Transaction::run($this->db, function () use ($botId, $credentialHash): void {
             $this->sql('INSERT IGNORE INTO telegram_announcement_bot_cursors(bot_id,update_offset) VALUES(?,0)', [$botId]);
-            $legacyHash ??= $this->option('announcements_legacy_token_hash', '');
+            // Only persisted migration provenance can associate historical state with this bot.
+            $legacyHash = $this->option('announcements_legacy_token_hash', '');
             if ($legacyHash !== '' && hash_equals($legacyHash,$credentialHash) && $this->option('announcements_legacy_bot_id','') === '') {
                 $offset = max(0,(int)$this->option('announcements_update_offset','0'));
                 $this->sql('UPDATE telegram_announcement_bot_cursors SET update_offset=GREATEST(update_offset,?) WHERE bot_id=?', [$offset,$botId]);
