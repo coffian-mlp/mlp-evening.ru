@@ -29,7 +29,7 @@ final class CommandReplyDelivery {
             if ((int)($job['attempts'] ?? 0) >= self::MAX_ATTEMPTS && !isset($job['data']['prepared_reply'])) {
                 if (!isset($job['data']['confirmation'])) { $queue->fail([$id]); return; }
                 $job['data']['prepared_reply'] = ['text' => $job['data']['confirmation']['fallback'], 'quotes' => $job['data']['confirmation']['quotes']];
-                $queue->savePayload($id, $job['data']);
+                $job['data'] = $queue->savePayload($id, $job['data']);
             }
             if (isset($job['data']['prepared_reply'])) {
                 if (self::publish($llm, $job)) return;
@@ -41,7 +41,7 @@ final class CommandReplyDelivery {
                         || (int)($job['attempts'] ?? 0) >= self::MAX_ATTEMPTS - 1)) $text = $confirmation['fallback'];
                     if ($text !== null) {
                         $job['data']['prepared_reply'] = ['text' => $text, 'quotes' => $confirmation['quotes']];
-                        $queue->savePayload($id, $job['data']);
+                        $job['data'] = $queue->savePayload($id, $job['data']);
                         if (self::publish($llm, $job)) return;
                     }
                 } elseif ($llm->withReplyJob($job, fn() => $llm->processTrigger('dynamic_command', $job['data']))) {

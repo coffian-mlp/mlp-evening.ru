@@ -777,7 +777,7 @@ class LLMManager {
         if ($this->replyJob !== null) {
             $job = $this->replyJob;
             $job['data']['prepared_reply'] = ['text' => $text, 'quotes' => $quotedIds];
-            (new JobQueue())->savePayload((int)$job['id'], $job['data']);
+            $job['data'] = (new JobQueue())->savePayload((int)$job['id'], $job['data']);
             return CommandReplyDelivery::publish($this, $job);
         }
         return $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(), $text, $quotedIds);

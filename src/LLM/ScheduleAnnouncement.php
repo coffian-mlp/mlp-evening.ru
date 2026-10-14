@@ -12,7 +12,9 @@ final class ScheduleAnnouncement {
     public static function processJob(LLMManager $llm, JobQueue $queue, array $job, bool $enabled): void {
         $id = (int)$job['id'];
         try {
-            $sent = $enabled && $llm->processTrigger('dynamic_command', $job['data']);
+            $sent = $enabled && (isset($job['data']['prepared_reply'])
+                ? CommandReplyDelivery::publish($llm, $job)
+                : $llm->withReplyJob($job, fn() => $llm->processTrigger('dynamic_command', $job['data'])));
         } catch (\Throwable $e) {
             $sent = false;
             error_log('Schedule announcement deferred: ' . get_class($e));

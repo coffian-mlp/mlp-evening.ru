@@ -134,6 +134,7 @@ class AnnouncementContent {
     }
 
     protected function communityMemory(): string {
+        $this->llm ??= new LLMManager();
         return (new LyraMemory($this->llm))->buildPromptBlock([]) ?? '';
     }
 

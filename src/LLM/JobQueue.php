@@ -190,10 +190,22 @@ class JobQueue {
     }
 
     /** Persist prepared reply before publication; caller holds the worker lock. */
-    public function savePayload(int $id, array $payload): void {
-        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-        $stmt = $this->db->prepare('UPDATE llm_jobs SET payload=? WHERE id=?');
-        $stmt->bind_param('si', $json, $id); $stmt->execute();
+    public function savePayload(int $id, array $payload): array {
+        return \Infra\Transaction::run($this->db, function () use ($id, $payload): array {
+            $stmt = $this->db->prepare('SELECT payload FROM llm_jobs WHERE id=? FOR UPDATE');
+            $stmt->bind_param('i', $id); $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc();
+            if (!$row) throw new \RuntimeException('Missing reply job');
+            $stored = json_decode($row['payload'], true, 512, JSON_THROW_ON_ERROR);
+            // A stale generator cannot replace committed delivery facts or the first prepared reply.
+            foreach (['prepared_reply', 'reply_message_id'] as $key) {
+                if (isset($stored[$key])) $payload[$key] = $stored[$key];
+            }
+            $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+            $stmt = $this->db->prepare('UPDATE llm_jobs SET payload=? WHERE id=?');
+            $stmt->bind_param('si', $json, $id); $stmt->execute();
+            return $payload;
+        });
     }
 
     /** Administrative pause does not consume the delivery retry budget. */
