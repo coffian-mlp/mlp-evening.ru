@@ -10,12 +10,12 @@ try{
  $store->setOption('announcements_legacy_token_hash',$hashA);$store->setOption('announcements_legacy_bot_id','');$store->setOption('announcements_update_offset',(string)($update+1));
  $db->query("INSERT INTO telegram_announcement_updates(update_id,processed_at) VALUES($update,UTC_TIMESTAMP())");
  $store->activatePollingBot($botA,$hashA);
- check($store->pollingOffset($botA)===$update+1,'verified original bot inherits legacy cursor');
- $actions=0;check(!$store->consume($update,function()use(&$actions){$actions++;},$botA),'legacy receipt is imported without repeating action');
+ check($store->pollingOffset($botA)===0,'migration-time credential hash does not assign the legacy cursor');
+ $actions=0;check($store->consume($update,function()use(&$actions){$actions++;},$botA),'unscoped legacy receipt does not suppress the verified bot update');
  $store->activatePollingBot($botB,$hashB);
  check($store->pollingOffset($botB)===0,'another bot begins at its own offset');
  check($store->consume($update,function()use(&$actions){$actions++;},$botB),'same update ID belongs independently to second bot');
- check($actions===1,'cross-bot ID collision does not suppress new action');
+ check($actions===2,'cross-bot ID collision does not suppress new action');
  check(!$store->consume($update,function()use(&$actions){$actions++;},$botB),'same-bot duplicate still suppressed');
  $store->activatePollingBot($botA,hash('sha256',$rotated));
  check($store->pollingOffset($botA)===$update+1,'token rotation preserves original bot cursor');

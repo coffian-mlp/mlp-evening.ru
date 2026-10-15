@@ -100,7 +100,7 @@ class BotDispatch {
         (new LLMManager())->processTrigger($type, $payload);
     }
 
-    private static function inlineDrawing(array $payload, int $delay, ?callable $execute = null): void {
+    private static function inlineDrawing(array $payload, int $delay, ?callable $execute = null, ?LLMManager $llm = null): void {
         $queue = new JobQueue();
         $id = $queue->reserveInline('dynamic_command', $payload, $delay);
         if (function_exists('set_time_limit')) @set_time_limit(0);
@@ -109,7 +109,7 @@ class BotDispatch {
         $until = time() + 180;
         try {
             if ($execute === null) {
-                $llm = new LLMManager();
+                $llm ??= new LLMManager();
                 $execute = fn() => $llm->processTrigger('dynamic_command', $payload);
             }
             do {
@@ -126,7 +126,16 @@ class BotDispatch {
             $queue->fail([$id]);
             throw $error;
         }
-        $queue->releaseProcessing($id, 3);
+        // Inline mode cannot rely on an external queue consumer after admission times out.
+        $queue->fail([$id]);
+        $llm ??= new LLMManager();
+        $username = (string)($payload['username'] ?? 'Гость');
+        $llm->botSayLive(
+            "@{$username} попросил рисунок, но ты уже три минуты занята другим рисунком. Этот запрос не начинался и не стоит в очереди. "
+                . "Коротко объясни @{$username}, что сейчас занята, и попроси повторить команду чуть позже. Не обещай автоматического выполнения.",
+            "@{$username}, сейчас занята другим рисунком. Повтори команду чуть позже — этот ещё не начинала.",
+            [], "@{$username}"
+        );
     }
 
     /** Задержка по типу: команды стрима (MLP-307) отвечаются немедленно, остальным — lifelike. */
