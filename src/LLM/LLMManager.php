@@ -138,8 +138,8 @@ class LLMManager {
                 return (new PlaylistCommand($this))->handle($contextData);
             }
             if ($handler === 'command_interaction_reply') {
-                if (!empty($contextData['continuation_work'])) return CommandInteractionContinuation::processWork($contextData, PlaylistCommand::interactionRegistry());
-                return (new PlaylistCommand($this))->handleInteractionReply($contextData);
+                if (!empty($contextData['continuation_work'])) return CommandInteractionContinuation::processWork($contextData, CommandInteractions::registry());
+                return CommandInteractions::deliver($this, $contextData);
             }
         }
         if (!$this->isEnabled()) return false;
@@ -322,6 +322,8 @@ class LLMManager {
             switch ($command['handler_type']) {
                 case 'poll':       // структурированный вывод → PollManager (MLP-240)
                     return $this->createPollFromCommand($command, $contextData);
+                case 'attendance':
+                    return (new AttendanceCommand($this))->handle($contextData);
                 case 'todo':       // запись фидбека БЕЗ LLM (MLP-270)
                     return $this->handleTodoCommand($command, $contextData);
                 case 'image':      // художница /нарисуй (MLP-274)

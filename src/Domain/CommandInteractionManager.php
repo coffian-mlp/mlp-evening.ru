@@ -245,12 +245,12 @@ final class CommandInteractionManager
     }
 
     public function createContinuation(string $type, int $ownerId, int $sourceMessageId, array $options,
-        array $handlerContext, string $initialState = 'pending'): int
+        array $handlerContext, string $initialState = 'pending', ?string $expectedSourceVersion = null): int
     {
         $this->continuationHandler($type);
         if (!in_array($initialState, ['pending', 'clarifying'], true)) throw new RuntimeException('Invalid initial state');
-        return $this->ownerLock($type, $ownerId, function () use ($type, $ownerId, $sourceMessageId, $options, $handlerContext, $initialState) {
-            return Transaction::run($this->db, function () use ($type, $ownerId, $sourceMessageId, $options, $handlerContext, $initialState) {
+        return $this->ownerLock($type, $ownerId, function () use ($type, $ownerId, $sourceMessageId, $options, $handlerContext, $initialState, $expectedSourceVersion) {
+            return Transaction::run($this->db, function () use ($type, $ownerId, $sourceMessageId, $options, $handlerContext, $initialState, $expectedSourceVersion) {
                 $stmt = $this->db->prepare('SELECT * FROM command_interactions WHERE type=? AND owner_id=? AND source_message_id=? FOR UPDATE');
                 $stmt->bind_param('sii', $type, $ownerId, $sourceMessageId); $stmt->execute();
                 $existing = $stmt->get_result()->fetch_assoc();
@@ -259,6 +259,7 @@ final class CommandInteractionManager
                 $this->assertAllowed($ownerId);
                 $this->lockOwnerRows($type, $ownerId);
                 $source = (new ChatManager())->lockInteractionMessages([array_filter(['id' => $sourceMessageId, 'user_id' => $ownerId, 'version' => $existing['source_version'] ?? null, 'version_encoding' => $existing ? $this->rowSourceEncoding($existing) : 'storage_v2'], static fn($v) => $v !== null)])[$sourceMessageId];
+                if ($expectedSourceVersion !== null && !hash_equals($expectedSourceVersion, $this->sourceVersion($source))) throw new UserError('Исходная команда изменилась. Повтори запрос.');
                 $this->capPermission($type, $ownerId, $handlerContext);
                 $options = $this->continuationOptions($options, $initialState);
                 $id = $this->create($type, $ownerId, $sourceMessageId, $options);

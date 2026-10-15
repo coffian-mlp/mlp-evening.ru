@@ -40,6 +40,7 @@ class LyraArtist {
     /** MLP-335: облики, придуманные при подготовке текущего рисунка — объявляются после картинки. */
     private array $ocCreated = [];
     private ?string $lastDrawingUrl = null;
+    private ?string $referenceUrl = null;
 
     public function __construct(LLMManager $llm) {
         $this->llm = $llm;
@@ -51,6 +52,20 @@ class LyraArtist {
      * дневной лимит ai_image_daily_limit (генерация дороже текста).
      */
     public function handleDraw(array $command, array $contextData, ?callable $generator = null): bool {
+        $subject = BotCommandManager::stripPrefix($command, (string)($contextData['message'] ?? ''), 'нарисуй');
+        $drafts = new DrawingCommand($this->llm);
+        if (isset($contextData['drawing_request'])) {
+            if (!DrawingCommand::allowed((int)($contextData['user_id'] ?? 0), ['command_id'=>(int)$command['id']])) return false;
+            $this->referenceUrl = $contextData['drawing_request']['reference_url'] ?? null;
+        } elseif (!empty($contextData['message_id'])) {
+            try {
+                $reference = $drafts->reference($contextData);
+                if ($reference !== null || $subject === '' || preg_match('/^черновик(?:\s|$)/iu', $subject)) return $drafts->start($command, $contextData, $reference);
+            } catch (\Core\UserError $error) {
+                $this->llm->botSayLive('Не удалось принять черновик рисунка. Коротко объясни причину и попроси повторить запрос: ' . $error->getMessage(), $error->getMessage(), [(int)$contextData['message_id']]);
+                return true;
+            }
+        }
         return DrawingSchedule::run(false, fn() => $this->handleDrawUnlocked($command, $contextData, $generator));
     }
 
@@ -293,7 +308,8 @@ class LyraArtist {
         $drawingSubject = $resolveMentions ? $this->mentionedDrawingSubject($subject, $drawingIdentity) : $subject;
         $prompt = $stylePrefix . ' ' . $drawingSubject; // MLP-341: сцена целиком, без обрезки
 
-        $generator = $generator ?? [ImageGenerator::class, 'generate'];
+        if ($this->referenceUrl !== null) $prompt = 'Edit the provided image. Preserve its composition, characters and drawing technique except for the explicitly requested changes. Requested changes: ' . $subject;
+        $generator = $generator ?? fn(string $text) => ImageGenerator::generate($text, null, $this->referenceUrl);
         $url = $generator($prompt);
 
         // MLP-336: фильтр безопасности рисовальной модели (Azure) режет бытовые сюжеты — «куриные сердца»

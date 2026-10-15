@@ -46,7 +46,7 @@ class ImageGenerator {
      * или null (детали сбоя — в error_log). $model переопределяет настройку
      * (используется дегустацией моделей).
      */
-    public static function generate(string $prompt, ?string $model = null): ?string {
+    public static function generate(string $prompt, ?string $model = null, ?string $reference = null): ?string {
         self::$lastError = null;
         $c = ConfigManager::getInstance();
         $model = $model ?? (string)$c->getOption('ai_image_model', 'black-forest-labs/flux.2-klein-4b');
@@ -83,12 +83,34 @@ class ImageGenerator {
             $endpoint = 'https://routerai.ru/api/v1/images/generations';
         }
 
+        $multipart = false;
+        if ($reference !== null) {
+            try { $dataUrl = self::referenceData($reference); }
+            catch (\Throwable $error) { self::$lastError = 'исходный рисунок недоступен'; return null; }
+            if ($provider === 'openai') {
+                $endpoint = preg_replace('#/images/generations$#', '/images/edits', $endpoint);
+                $payload['image'] = new \CURLStringFile(base64_decode(substr($dataUrl, strpos($dataUrl, ',') + 1)), basename($reference), substr($dataUrl, 5, strpos($dataUrl, ';') - 5));
+                $multipart = true;
+            } elseif (str_starts_with($model, 'google/')) {
+                $endpoint = 'https://routerai.ru/api/v1/chat/completions';
+                $payload = ['model'=>$model,'messages'=>[['role'=>'user','content'=>[
+                    ['type'=>'text','text'=>$prompt],['type'=>'image_url','image_url'=>['url'=>$dataUrl]],
+                ]]],'modalities'=>['image','text'],'image_config'=>['aspect_ratio'=>'1:1','image_size'=>'1K']];
+            } else {
+                $endpoint = 'https://routerai.ru/api/v1/images';
+                $payload['input_references'] = [['type'=>'image_url','image_url'=>['url'=>$dataUrl]]];
+            }
+        }
+        $logPayload = $payload;
+        if ($reference !== null) $logPayload = ['model'=>$model,'prompt'=>$prompt,'reference'=>$reference];
+        $headers = ['Authorization: Bearer ' . $key];
+        if (!$multipart) $headers[] = 'Content-Type: application/json';
         $ch = curl_init($endpoint);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => true,
-            CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $key, 'Content-Type: application/json'],
-            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_POSTFIELDS => $multipart ? $payload : json_encode($payload),
             CURLOPT_TIMEOUT => self::TIMEOUT,
         ]);
         if ($proxy !== null) {
@@ -103,7 +125,7 @@ class ImageGenerator {
 
         if ($err || $code >= 400 || !$res) {
             error_log("ImageGenerator [$model] HTTP $code: " . ($err ?: mb_substr((string)$res, 0, 200)));
-            LlmDebugLog::log('image', $provider, $model, $payload, $err ?: (string)$res, 'error', $ms);
+            LlmDebugLog::log('image', $provider, $model, $logPayload, $err ?: (string)$res, 'error', $ms);
             self::$lastError = self::failureReason((string)$res, $err, $code);
             return null;
         }
@@ -111,13 +133,17 @@ class ImageGenerator {
         $embedded = self::extractError((string)$res);
         if ($embedded !== null) {
             error_log("ImageGenerator [$model]: отказ в теле 200: $embedded");
-            LlmDebugLog::log('image', $provider, $model, $payload, trim((string)$res), 'error', $ms);
+            LlmDebugLog::log('image', $provider, $model, $logPayload, trim((string)$res), 'error', $ms);
             self::$lastError = $embedded;
             return null;
         }
-        LlmDebugLog::log('image', $provider, $model, $payload, (string)$res, 'ok', $ms);
+        LlmDebugLog::log('image', $provider, $model, $logPayload, (string)$res, 'ok', $ms);
         $data = json_decode(trim((string)$res), true);
         $b64 = $data['data'][0]['b64_json'] ?? null;
+        if (!$b64 && $reference !== null) {
+            $url = $data['choices'][0]['message']['images'][0]['image_url']['url'] ?? '';
+            if (preg_match('#^data:image/(?:png|jpeg|webp);base64,(.+)$#sD', $url, $match)) $b64 = $match[1];
+        }
         if (!$b64) {
             error_log("ImageGenerator [$model]: нет b64_json в ответе");
             self::$lastError = 'провайдер прислал ответ без картинки';
@@ -204,5 +230,16 @@ class ImageGenerator {
             return null;
         }
         return self::UPLOAD_DIR . $name;
+    }
+
+    /** Local generated images only; never fetch caller-supplied URLs or arbitrary files. */
+    public static function referenceData(string $webPath): string {
+        if (!preg_match('#^/upload/lyra/[a-zA-Z0-9_-]+\.(?:jpg|jpeg|png|webp)$#D', $webPath)) throw new \RuntimeException('Invalid drawing reference');
+        $root = realpath(dirname(__DIR__, 2) . self::UPLOAD_DIR);
+        $path = realpath(dirname(__DIR__, 2) . $webPath);
+        if (!$root || !$path || !str_starts_with($path, $root . DIRECTORY_SEPARATOR) || !is_file($path) || filesize($path) > 10 * 1024 * 1024) throw new \RuntimeException('Drawing reference unavailable');
+        $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($path);
+        if (!in_array($mime, ['image/jpeg','image/png','image/webp'], true)) throw new \RuntimeException('Invalid drawing reference type');
+        return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($path));
     }
 }

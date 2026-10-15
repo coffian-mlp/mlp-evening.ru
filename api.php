@@ -66,8 +66,8 @@ try {
 
     if (in_array($action, ['get_command_interaction', 'act_command_interaction'], true)) {
         \Api\CommandInteractionController::configure(
-            \LLM\PlaylistCommand::interactionRegistry(),
-            [\LLM\PlaylistCommand::class, 'queueInteractionReply']
+            \LLM\CommandInteractions::registry(),
+            [\LLM\CommandInteractions::class, 'notify']
         );
     }
 

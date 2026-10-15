@@ -41,6 +41,15 @@ class PollManager {
      * $options — список строк-вариантов (2..10, пустые отбрасываются).
      */
     public function create(int $userId, string $question, array $options, bool $isMulti = false, bool $isAnonymous = false, ?string $closesAt = null): int {
+        return $this->createValidated($userId, $question, $options, $isMulti, $isAnonymous, $closesAt, self::MIN_OPTIONS);
+    }
+
+    /** A public attendance check uses the existing vote storage with one reversible choice. */
+    public function createAttendance(int $userId, string $question): int {
+        return $this->createValidated($userId, $question, ['Я тут!'], false, false, null, 1);
+    }
+
+    private function createValidated(int $userId, string $question, array $options, bool $isMulti, bool $isAnonymous, ?string $closesAt, int $minimum): int {
         $question = trim($question);
         // Варианты: строка (только текст) ИЛИ ['text'=>, 'image_url'=>]. Валиден, если есть текст или картинка.
         $clean = [];
@@ -56,26 +65,25 @@ class PollManager {
                 $clean[] = ['text' => $text, 'image_url' => $img !== '' ? $img : null];
             }
         }
-        if ($question === '' || count($clean) < self::MIN_OPTIONS) return 0;
+        if ($question === '' || count($clean) < $minimum) return 0;
         $clean = array_slice($clean, 0, self::MAX_OPTIONS);
 
-        $this->db->begin_transaction();
         try {
-            $stmt = $this->db->prepare("INSERT INTO polls (question, created_by, created_at, is_multi, is_anonymous, closes_at) VALUES (?, ?, NOW(), ?, ?, ?)");
-            $im = $isMulti ? 1 : 0; $ia = $isAnonymous ? 1 : 0;
-            $stmt->bind_param("siiis", $question, $userId, $im, $ia, $closesAt);
-            $stmt->execute();
-            $pollId = (int)$this->db->insert_id;
+            return \Infra\Transaction::run($this->db, function () use ($question, $userId, $isMulti, $isAnonymous, $closesAt, $clean): int {
+                $stmt = $this->db->prepare("INSERT INTO polls (question, created_by, created_at, is_multi, is_anonymous, closes_at) VALUES (?, ?, NOW(), ?, ?, ?)");
+                $im = $isMulti ? 1 : 0; $ia = $isAnonymous ? 1 : 0;
+                $stmt->bind_param("siiis", $question, $userId, $im, $ia, $closesAt);
+                $stmt->execute();
+                $pollId = (int)$this->db->insert_id;
 
-            $optStmt = $this->db->prepare("INSERT INTO poll_options (poll_id, text, image_url, position) VALUES (?, ?, ?, ?)");
-            foreach ($clean as $pos => $opt) {
-                $optStmt->bind_param("issi", $pollId, $opt['text'], $opt['image_url'], $pos);
-                $optStmt->execute();
-            }
-            $this->db->commit();
-            return $pollId;
+                $optStmt = $this->db->prepare("INSERT INTO poll_options (poll_id, text, image_url, position) VALUES (?, ?, ?, ?)");
+                foreach ($clean as $pos => $opt) {
+                    $optStmt->bind_param("issi", $pollId, $opt['text'], $opt['image_url'], $pos);
+                    $optStmt->execute();
+                }
+                return $pollId;
+            });
         } catch (\Throwable $e) {
-            $this->db->rollback();
             error_log('PollManager::create ' . $e->getMessage());
             return 0;
         }

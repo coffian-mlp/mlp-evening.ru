@@ -27,6 +27,10 @@ final class CommandDedup {
         if (!in_array($type, self::TYPES, true)) {
             return null;
         }
+        if ($type === 'image') {
+            $subject = BotCommandManager::stripPrefix($command, $message, 'нарисуй');
+            if ($subject === '' || preg_match('/^черновик(?:\s|$)/iu', $subject)) return null;
+        }
         if (in_array($type, self::IGNORE_ARGS, true)) {
             return "cmd:{$type}|";
         }

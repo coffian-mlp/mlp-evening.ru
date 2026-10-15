@@ -156,7 +156,7 @@ class ChatController {
         if (!$matchedCommand && $mid !== null) {
             $continuationHandled = \LLM\CommandInteractionContinuation::routeMessage([
                 'message_id' => $mid, 'user_id' => (int)$userId,
-            ], \LLM\PlaylistCommand::interactionRegistry());
+            ], \LLM\CommandInteractions::registry());
         }
         Response::finish(json_encode([
             'success' => true, 'message' => 'Сообщение отправлено', 'type' => 'success', 'data' => []
@@ -165,7 +165,7 @@ class ChatController {
 
         // AR4-1: команда-опрос уважает polls_create_role — как и прямое создание.
         // Нет прав → сбрасываем в обычное упоминание (Лира поболтает, опрос не создаст).
-        if ($matchedCommand && ($matchedCommand['handler_type'] ?? '') === 'poll'
+        if ($matchedCommand && in_array($matchedCommand['handler_type'] ?? '', ['poll', 'attendance'], true)
             && !\Domain\PollManager::canCreate()) {
             $matchedCommand = null;
         }
@@ -238,6 +238,7 @@ class ChatController {
                 'command'    => $matchedCommand,
                 'user_id'    => $userId,
                 'username'   => $username,
+                'quoted_msg_ids' => $quotedMsgIds,
             ];
             if (($matchedCommand['handler_type'] ?? '') === 'memory_show' && $memoryAllowed) {
                 $payload['allowed'] = true; // fail-closed: ставится ТОЛЬКО здесь (MLP-314)

@@ -53,6 +53,7 @@
         var myVotes = st.myVotes || [];
         var voters = st.voters || {};
         var closed = poll.status !== 'open';
+        var attendance = (poll.options || []).length === 1;
 
         var badges = '';
         if (poll.is_anonymous == 1) badges += '<span class="poll-badge" title="Анонимный опрос">🔒</span>';
@@ -65,6 +66,10 @@
                 ? '<img src="' + esc(opt.image_url) + '" class="poll-option-img chat-img" alt="">'
                 : '';
             var tip = (poll.is_anonymous != 1) ? votersTooltipHtml(voters[opt.id]) : '';
+            if (attendance) {
+                return '<button type="button" class="poll-option poll-attendance-button' + (mine ? ' poll-option-mine' : '') + '" data-option-id="' + esc(opt.id) + '" aria-pressed="' + mine + '"' + (closed ? ' disabled' : '') + '>' + esc(opt.text) + (mine ? ' ✓' : '') + '</button>' +
+                    '<div class="poll-attendance-list">' + (tip || '<span class="poll-attendance-empty">Пока никто не отметился</span>') + '</div>';
+            }
             return '' +
                 '<div class="poll-option' + (mine ? ' poll-option-mine' : '') + (closed ? ' poll-option-closed' : '') + '" ' +
                      'data-option-id="' + esc(opt.id) + '">' +
@@ -79,8 +84,8 @@
         }).join('');
 
         var footer = '<div class="poll-footer">' +
-            '<span class="poll-total">Голосов: ' + (results.total_voters || 0) + '</span>' +
-            (canClose(poll) ? '<button type="button" class="poll-close-btn">Закрыть опрос</button>' : '') +
+            '<span class="poll-total">' + (attendance ? 'Вернулись: ' : 'Голосов: ') + (results.total_voters || 0) + '</span>' +
+            (canClose(poll) ? '<button type="button" class="poll-close-btn">' + (attendance ? 'Завершить перекличку' : 'Закрыть опрос') + '</button>' : '') +
             '</div>';
 
         el.innerHTML =
@@ -120,7 +125,7 @@
         if (!window.currentUserId) { alert('Войди, чтобы голосовать'); return; }
 
         var set;
-        if (poll.is_multi == 1) {
+        if (poll.is_multi == 1 || (poll.options || []).length === 1) {
             set = (st.myVotes || []).map(Number);
             var i = set.indexOf(Number(optionId));
             if (i === -1) set.push(Number(optionId)); else set.splice(i, 1);
@@ -299,8 +304,17 @@
         return { open: function () { if (!$modal) build(); } };
     })();
 
-    // Автомонтирование на обычных страницах (в чате виджеты монтирует сам чат по мере появления).
+    // History can arrive before this script; observe later insertions as well as the initial DOM.
     $(function () {
-        $('.poll-widget[data-poll-id]').each(function () { window.PollWidget.mount(this); });
+        function mountWithin(node) {
+            if (node.nodeType !== 1) return;
+            if (node.matches('.poll-widget[data-poll-id]')) window.PollWidget.mount(node);
+            node.querySelectorAll('.poll-widget[data-poll-id]').forEach(function (el) { window.PollWidget.mount(el); });
+        }
+        var observer = new MutationObserver(function (records) {
+            records.forEach(function (record) { record.addedNodes.forEach(mountWithin); });
+        });
+        observer.observe(document.body, {childList: true, subtree: true});
+        mountWithin(document.body);
     });
 })();

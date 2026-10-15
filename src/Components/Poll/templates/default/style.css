@@ -80,6 +80,13 @@
     white-space: nowrap; z-index: 20; max-width: 240px; overflow: hidden;
 }
 .poll-option:hover .poll-voters-tip { display: block; }
+.poll-attendance-list .poll-voters-tip {
+    display: flex; position: static; flex-wrap: wrap; gap: 6px 12px;
+    max-width: none; white-space: normal; margin: 8px 0 0;
+}
+.poll-attendance-button { width: 100%; color: inherit; font: inherit; text-align: center; padding: 10px; }
+.poll-attendance-button:disabled { cursor: default; opacity: 0.6; }
+.poll-attendance-empty { display: block; margin-top: 8px; font-size: 0.85em; opacity: 0.7; }
 .poll-voter { display: flex; align-items: center; gap: 5px; font-size: 0.85em; padding: 1px 0; }
 .poll-voter-av { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; }
 

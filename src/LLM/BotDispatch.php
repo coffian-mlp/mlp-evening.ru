@@ -52,6 +52,7 @@ class BotDispatch {
         if ($type === 'dynamic_command') {
             $window = (int)ConfigManager::getInstance()->getOption('ai_command_dedup_window', 60);
             $key = CommandDedup::key($payload['command'] ?? [], (string)($payload['message'] ?? ''));
+            if (($payload['command']['handler_type'] ?? '') === 'image' && !empty($payload['quoted_msg_ids'])) $key = null;
             if ($window > 0 && $key !== null) {
                 $original = CommandDedup::findOriginal((new JobQueue())->recentDynamicCommands($window), $key);
                 // MLP-344: для рисовальных команд «отвечена» значит «картинка опубликована» — отказ фильтра

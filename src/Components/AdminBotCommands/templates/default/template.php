@@ -34,6 +34,7 @@ use Domain\Auth;
                         <option value="todo">Беклог /todo (без LLM)</option>
                         <option value="image">Картинка /нарисуй (генерация)</option>
                         <option value="image_chat">Сценка чата /нарисуйчат (режиссёр+генерация)</option>
+                        <option value="attendance">Перекличка /перерыв (кнопка «Я тут!»)</option>
                         <option value="memory_add">Память /запомни (без LLM)</option>
                         <option value="memory_show">Память /память (без LLM)</option>
                         <option value="memory_forget">Память /забудь (без LLM)</option>
@@ -101,6 +102,7 @@ use Domain\Auth;
                                     $badges = [
                                         'schedule'   => ['Schedule', '#17a2b8'],
                                         'poll'       => ['Poll',     '#6f42c1'],
+                                        'attendance' => ['Attendance', '#6f42c1'],
                                         'todo'       => ['Todo',     '#fd7e14'],
                                         'image'      => ['Art',      '#d63384'],
                                         'image_chat' => ['ArtChat',  '#a83279'],

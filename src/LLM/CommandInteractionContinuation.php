@@ -43,14 +43,14 @@ final class CommandInteractionContinuation
     private static function routeHandler(CommandInteractionManager $manager, array $source, string $text, array $quotes, bool $addresses, string $type): ?bool
     {
         $capability = $manager->continuationHandler($type);
-        $parsed = ($capability['classify'])($text, 'pending');
+        $parsed = ($capability['classify'])($text, 'pending', ['has_quote' => $quotes !== []]);
         if (!self::canLookupTarget($quotes, $addresses, $parsed)) return null;
         $actor = (int)$source['user_id'];
         $target = $manager->lookupTarget($actor, $quotes, ['intent' => $parsed['intent'] ?? 'unknown', 'addressesBot' => $addresses]);
         if (($target['status'] ?? '') === 'target') {
             $selected = $target['target'];
             if ($selected['type'] !== $type) return null;
-            $parsed = ($capability['classify'])($text, $selected['state']);
+            $parsed = ($capability['classify'])($text, $selected['state'], ['has_quote' => $quotes !== []]);
             if (($parsed['intent'] ?? 'unknown') === 'unknown') return false;
             self::applyTarget($manager, $selected, $source, $parsed);
             return true;

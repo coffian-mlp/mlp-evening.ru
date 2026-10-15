@@ -87,11 +87,15 @@ class BotWorker {
         $enabled = $this->llm->isEnabled();
 
         // Durable interaction intent survives queue enqueue/claim/process failures.
-        CommandInteractionContinuation::reconcile(PlaylistCommand::interactionRegistry());
+        CommandInteractionContinuation::reconcile(CommandInteractions::registry());
 
         // Индивидуальные задачи: приветствия и команды (переиспользуем существующие триггеры).
         foreach ($this->queue->claimDue(50) as $job) {
             $id = (int)$job['id'];
+            if (!$enabled && !empty($job['data']['drawing_request'])) {
+                $this->queue->release([$id], 30);
+                continue;
+            }
             if (in_array($job['data']['schedule_announcement'] ?? '', ['finished', 'playlist_finished'], true)) {
                 ScheduleAnnouncement::processJob($this->llm, $this->queue, $job, $enabled);
                 continue;

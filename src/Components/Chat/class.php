@@ -82,7 +82,7 @@ class ChatComponent extends Component {
                 $canViewOwnMemory = \Domain\BotMemoryManager::canViewOwn();
                 foreach ($bcm->getActive() as $cmd) {
                     $ht = (string)($cmd['handler_type'] ?? '');
-                    if ($ht === 'poll' && !$canCreatePoll) {
+                    if (in_array($ht, ['poll', 'attendance'], true) && !$canCreatePoll) {
                         continue;
                     }
                     // MLP-314: команды памяти показываем только тем, кому они доступны

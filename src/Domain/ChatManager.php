@@ -82,7 +82,7 @@ class ChatManager {
 
     }
 
-    public function addMessage($userId, $username, $message, $quotedMsgIds = []) {
+    public function addMessage($userId, $username, $message, $quotedMsgIds = [], bool $deferTransport = false) {
         $this->assertCanSend((int)$userId);
 
         $message = trim($message);
@@ -138,7 +138,7 @@ class ChatManager {
 
             if ($result && $newId) {
                 $fullMsg = $this->getMessageById($newId);
-                if ($fullMsg) {
+                if ($fullMsg && !$deferTransport) {
                     $fullMsg['type'] = 'message';
                     $this->broadcast($fullMsg);
                 }
