@@ -175,8 +175,9 @@ test('MLP-412 chat readability preserves nickname colors and scales in both them
             const originalColors = await names.evaluateAll(elements => elements.map(el => getComputedStyle(el).color));
             for (const name of ['luna', 'celestia']) {
                 await choose(page, name); await theme(page, name);
-                await expect(page.locator('.chat-message[data-id="'+user.message+'"] .chat-text')).toHaveCSS('font-weight','600');
-                await expect(page.locator('.quote-content').last()).toHaveCSS('font-weight','600');
+                await expect(page.locator('.chat-message[data-id="'+user.message+'"] .chat-text')).toHaveCSS('font-weight','400');
+                await expect(page.locator('.chat-message[data-id="'+user.message+'"] .chat-text')).toHaveCSS('font-size','16px');
+                await expect(page.locator('.quote-content').last()).toHaveCSS('font-weight','400');
                 expect(await names.evaluateAll(elements => elements.map(el => getComputedStyle(el).color))).toEqual(originalColors);
                 const shadows = await names.evaluateAll(elements => elements.map(el => getComputedStyle(el).textShadow));
                 for (const shadow of shadows) expect(shadow).toContain(name === 'luna' ? '255, 255, 255' : '38, 20, 52');
@@ -185,7 +186,7 @@ test('MLP-412 chat readability preserves nickname colors and scales in both them
                 for (const width of [1440,390]) {
                     await page.setViewportSize({width,height:width === 390 ? 844 : 1000});
                     await page.evaluate(() => window.applyFontScale(150));
-                    await expect(page.locator('.chat-message[data-id="'+user.message+'"] .chat-text')).toHaveCSS('font-size','22.5px');
+                    await expect(page.locator('.chat-message[data-id="'+user.message+'"] .chat-text')).toHaveCSS('font-size','24px');
                     await page.evaluate(() => window.applyFontScale(100));
                     await ready(page);
                     await page.screenshot({path:path.join(shots,`mlp412-${info.project.name}-${name}-${url === '/' ? 'embedded' : 'popup'}-${width}.png`)});

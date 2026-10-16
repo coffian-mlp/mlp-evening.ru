@@ -39,7 +39,7 @@ test('profile font scale applies to message, quote, author, time and input in bo
    await page.goto(base+url,{waitUntil:'domcontentloaded'});const message=page.locator(`.chat-message[data-id="${s.message}"]`);await expect(message).toBeVisible();
    await page.evaluate(()=>{window.openProfileModal();window.switchProfileTab('visual');});
    const slider=page.locator('#ajax-profile-form input[name=font_scale]');
-   const set=async n=>{await slider.evaluate((el,value)=>{el.value=String(value);el.dispatchEvent(new Event('input',{bubbles:true}));},n);await expect.poll(()=>page.locator('#chat-input').evaluate(el=>parseFloat(getComputedStyle(el).fontSize))).toBeCloseTo(14*n/100,2);};
+   const set=async n=>{await slider.evaluate((el,value)=>{el.value=String(value);el.dispatchEvent(new Event('input',{bubbles:true}));},n);await expect.poll(()=>page.locator('#chat-input').evaluate(el=>parseFloat(getComputedStyle(el).fontSize))).toBeCloseTo(16*n/100,2);};
    const sizes=async()=>page.evaluate(id=>{const msg=document.querySelector(`.chat-message[data-id="${id}"]`);return ['.chat-text','.username','.timestamp','.md-quote','.md-code'].map(selector=>parseFloat(getComputedStyle(msg.querySelector(selector)).fontSize)).concat(parseFloat(getComputedStyle(document.querySelector('#chat-input')).fontSize));},s.message);
    await set(100);const standard=await sizes();await set(150);const large=await sizes();await set(50);const small=await sizes();
    for(let i=0;i<standard.length;i++){expect(large[i]/standard[i],JSON.stringify({url,i,standard,large,small})).toBeCloseTo(1.5,2);expect(small[i]/standard[i]).toBeCloseTo(.5,2);}

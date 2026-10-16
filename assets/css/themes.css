@@ -105,7 +105,7 @@ button, input, textarea, select { accent-color: var(--primary-color); }
 .chat-container { background: var(--chat-surface); border-color: var(--border-color); box-shadow: var(--theme-shadow); backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); }
 .chat-top-bar, .chat-input-area, .quote-preview-area { background: var(--bar-surface); border-color: var(--soft-border); }
 .chat-text, .quote-content, .search-result-text, .modal-content, .modal-subtitle { color: var(--text-main); }
-.chat-text, .quote-content, .search-result-text, #chat-input, #chat-mobile-input { font-weight: 600; }
+.chat-text, .quote-card, .search-result-text, #chat-input, #chat-mobile-input { font-size: 1rem; }
 .chat-container :is(.username, .quote-author, .pinned-author, .search-result-author),
 .reaction-tooltip-name { text-shadow: var(--nickname-shadow); }
 .timestamp, .chat-welcome, .message-edited, .chat-action-btn,
