@@ -100,7 +100,7 @@
                         </label>
                         <label for="profile-keywords" class="form-label" style="margin-top:10px;">Слова и фразы</label>
                         <textarea id="profile-keywords" class="form-input" rows="3" maxlength="700" placeholder="Твайлайт, Луна"></textarea>
-                        <small style="display:block; margin-top:5px;">До 10 слов или фраз через запятую или с новой строки, до 50 символов в каждой. Регистр и различие е/ё не важны. Совпадения — по целым словам.</small>
+                        <small style="display:block; margin-top:5px;">До 10 слов или фраз через запятую или с новой строки, до 50 символов в каждой. Регистр и различие е/ё не важны. Отдельные русские слова указывай в начальной форме: обычные падежные окончания учитываются, например «Твайка» → «Твайку», «Твайке». Фразы ищутся целиком, в любом месте сообщения.</small>
                         <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
                             <button type="button" class="btn-primary" id="profile-keywords-save">Сохранить уведомления</button>
                             <button type="button" class="btn btn-outline-primary" id="profile-keywords-test">Проверить звук</button>

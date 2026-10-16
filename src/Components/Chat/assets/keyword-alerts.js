@@ -11,6 +11,28 @@
             return {enabled: data.enabled, words: [...new Set(data.words.map(w => w.replace(/\s+/gu, ' ').trim()).filter(Boolean))]};
         } catch (_) { return empty(); }
     }
+    // Bounded noun endings, not prefix stemming: derived words remain separate.
+    // Phrases, short tokens and non-Russian keywords retain exact matching.
+    function wordForms(word) {
+        const forms = new Set([word]);
+        if (!/^[а-я]{4,}$/u.test(word)) return [...forms];
+        let stem = word, endings = [];
+        if (word.endsWith('а')) {
+            stem = word.slice(0, -1);
+            endings = [/[гкхжчшщ]$/u.test(stem) ? 'и' : 'ы', 'е', 'у', 'ой', 'ою', 'ам', 'ами', 'ах'];
+        } else if (word.endsWith('я')) {
+            stem = word.slice(0, -1);
+            endings = ['и', 'е', 'ю', 'ей', 'ею', 'ям', 'ями', 'ях'];
+        } else if (/[йь]$/u.test(word)) {
+            stem = word.slice(0, -1);
+            endings = ['я', 'ю', 'ем', 'е', 'и', 'ей', 'ям', 'ями', 'ях'];
+            if (word.endsWith('ь')) endings.push('ью');
+        } else if (/[бвгджзклмнпрстфхцчшщ]$/u.test(word)) {
+            endings = ['а', 'у', 'ом', 'е', /[гкхжчшщ]$/u.test(stem) ? 'и' : 'ы', 'ов', 'ам', 'ами', 'ах'];
+        }
+        if (stem.length >= 3) endings.forEach(ending => forms.add(stem + ending));
+        return [...forms];
+    }
     function matches(message, words) {
         // Decode stored entities as text; quoted history, attachments, URLs and code are not new speech.
         const decoder = document.createElement('textarea');
@@ -19,8 +41,10 @@
             .replace(/^\s*>.*$/gm, ' ').replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
             .replace(/\[\[command[^\]]*\]\]/g, ' ').replace(/https?:\/\/\S+/gi, ' '));
         return words.some(word => {
-            const escaped = fold(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            return escaped !== '' && new RegExp('(^|[^\\p{L}\\p{N}_])' + escaped + '(?=$|[^\\p{L}\\p{N}_])', 'u').test(text);
+            const normalized = fold(word);
+            if (!normalized) return false;
+            const escaped = wordForms(normalized).map(form => form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+            return new RegExp('(^|[^\\p{L}\\p{N}_])(?:' + escaped + ')(?=$|[^\\p{L}\\p{N}_])', 'u').test(text);
         });
     }
     let owner = 0, prefs = empty(), audio = null, lastRing = 0, revision = 0;
