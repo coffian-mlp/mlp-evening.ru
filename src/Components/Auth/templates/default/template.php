@@ -50,7 +50,7 @@
         <div id="social-auth-wrapper" style="display: none;">
             <h3 class="modal-title">🌐 Быстрый вход</h3>
             <p class="modal-desc">
-                Используй свой аккаунт для входа.<br>Если ты новенький, мы создадим профиль автоматически!
+                Используй свой аккаунт для входа.<br>Если ты здесь впервые, предложим создать профиль.
             </p>
             
             <div class="social-auth-buttons">

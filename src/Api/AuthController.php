@@ -95,8 +95,11 @@ class AuthController {
         }
 
         try {
-            $createdId = (new UserManager())->createUser($login, $password, 'user', $nickname, $email);
-            \Domain\Privacy::setAccountConsent((int)$createdId, true);
+            $createdId = \Infra\Transaction::run(\Infra\Database::getInstance()->getConnection(),static function()use($login,$password,$nickname,$email):int{
+                $id=(new UserManager())->createUser($login,$password,'user',$nickname,$email);
+                \Domain\Privacy::setAccountConsent((int)$id,true,false);
+                return $id;
+            });
 
             if (Auth::login($login, $password)) {
                 self::finishThenGreet(json_encode([
@@ -184,7 +187,13 @@ class AuthController {
             Response::json(false, "Неизвестный провайдер авторизации", 'error');
         }
 
-        $result = (new SocialAuthService())->handleLogin(new TelegramProvider(), $data);
+        if(!is_array($data))Response::fail('Некорректные данные входа.');
+        $consentVersion=null;
+        if(($_POST['account_consent']??'')==='1'){
+            if(!Auth::checkCsrfToken($_POST['csrf_token']??''))Response::fail('Обнови страницу и повтори подтверждение регистрации.');
+            $consentVersion=is_string($_POST['policy_version']??null)?$_POST['policy_version']:null;
+        }
+        $result = (new SocialAuthService())->handleLogin(new TelegramProvider(), $data,$consentVersion);
 
         if ($result['success']) {
             self::finishThenGreet(json_encode([
@@ -194,7 +203,9 @@ class AuthController {
                 'data' => ['redirect' => $result['redirect']]
             ]), Auth::username() ?? 'Гость');
         }
-        Response::json(false, $result['message'], 'error');
+        Response::json(false, $result['message'], 'error',!empty($result['registration_consent_required'])?[
+            'registration_consent_required'=>true,'policy_version'=>$result['policy_version'],'registration_name'=>$result['registration_name']
+        ]:[]);
     }
 
     /** Привязка соцсети к текущему аккаунту (user). */

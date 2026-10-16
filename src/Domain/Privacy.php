@@ -200,7 +200,7 @@ final class Privacy
         $_COOKIE[self::COOKIE] = $raw;
     }
 
-    public static function setAccountConsent(int $userId, bool $accept): array
+    public static function setAccountConsent(int $userId, bool $accept, bool $broadcast = true): array
     {
         self::lockAccount($userId);
         $db = Database::getInstance()->getConnection();
@@ -234,7 +234,7 @@ final class Privacy
         UserMention::invalidateDirectory();
         if (!$accept) self::saveChoices(false, false);
         if (!$accept) self::reviewLegacyFiles($userId);
-        (new ChatManager())->publishPrivacyChange($userId);
+        if($broadcast)(new ChatManager())->publishPrivacyChange($userId);
         return self::account($userId);
     }
 

@@ -594,24 +594,18 @@ $(document).ready(function() {
 
     // --- 5. Telegram Auth Callbacks ---
     
-    // Callback для ВХОДА (Login)
-    window.onTelegramAuth = function(user) {
-        // user = {id: ..., first_name: ..., username: ..., hash: ...}
-        
-        // Отправляем данные на сервер для проверки и входа
+    var pendingTelegramRegistration=null, telegramRegistrationBusy=false;
+    var telegramRegistrationDialog=document.getElementById('social-registration-dialog');
+    function telegramLogin(user, consentVersion) {
+        var data={action:'social_login',provider:'telegram',data:user,csrf_token:$('meta[name="csrf-token"]').attr('content')};
+        if(consentVersion){data.account_consent='1';data.policy_version=consentVersion;}
         $.ajax({
             url: '/api.php',
             method: 'POST',
-            data: {
-                action: 'social_login',
-                provider: 'telegram',
-                data: user,
-                // Для публичного входа CSRF токен может отсутствовать, 
-                // если мы не залогинены. На бэкенде проверим.
-                csrf_token: $('meta[name="csrf-token"]').attr('content')
-            },
+            data: data,
             success: function(response) {
                 if (response.success) {
+                    pendingTelegramRegistration=null;
                     showFlashMessage(response.message, 'success');
                     // Если есть редирект (или reload)
                     if (response.data && response.data.redirect) {
@@ -619,15 +613,40 @@ $(document).ready(function() {
                     } else {
                         location.reload();
                     }
+                } else if(response.data && response.data.registration_consent_required && telegramRegistrationDialog){
+                    pendingTelegramRegistration={user:user,version:response.data.policy_version};
+                    $('#social-registration-consent').prop('checked',false);
+                    $('#social-registration-name').text(response.data.registration_name||'твоего Telegram');
+                    $('#social-registration-error').text('');
+                    if(!telegramRegistrationDialog.open)telegramRegistrationDialog.showModal();
                 } else {
                     showFlashMessage(response.message, 'error');
+                    $('#social-registration-error').text(response.message);
                 }
             },
             error: function() {
                 showFlashMessage('Ошибка соединения с сервером', 'error');
+                $('#social-registration-error').text('Не удалось подтвердить регистрацию. Попробуй ещё раз.');
+            },
+            complete: function(){
+                telegramRegistrationBusy=false;
+                $('#social-registration-dialog button').prop('disabled',false);
             }
         });
+    }
+    window.onTelegramAuth = function(user) {
+        telegramLogin(user,null);
     };
+    $('#social-registration-form').on('submit',function(event){
+        event.preventDefault();
+        if(telegramRegistrationBusy || !pendingTelegramRegistration || !$('#social-registration-consent').prop('checked'))return;
+        telegramRegistrationBusy=true;$('#social-registration-dialog button').prop('disabled',true);
+        telegramLogin(pendingTelegramRegistration.user,pendingTelegramRegistration.version);
+    });
+    if(telegramRegistrationDialog){
+        telegramRegistrationDialog.addEventListener('close',()=>{pendingTelegramRegistration=null;$('#social-registration-consent').prop('checked',false);});
+        telegramRegistrationDialog.addEventListener('cancel',event=>{if(telegramRegistrationBusy)event.preventDefault();});
+    }
 
     // Callback для ПРИВЯЗКИ (Bind) в профиле
     window.onTelegramBind = function(user) {

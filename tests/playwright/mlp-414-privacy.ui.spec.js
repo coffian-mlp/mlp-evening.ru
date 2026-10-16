@@ -126,6 +126,8 @@ test('guest choice survives real registration and is available after login on a 
         expect((await post(page,{action:'captcha_check',answer:elements[captcha.image_url.split('/').pop()]})).success).toBe(true);
         expect((await post(page,{action:'captcha_check',answer:'спайк'})).data.completed).toBe(true);
         const version=await page.locator('input[name=policy_version]').first().inputValue();
+        expect((await post(page,{action:'register',login:user.registrationLogin,password:user.password,policy_version:version})).success).toBe(false);
+        expect((await post(page,{action:'register',login:user.registrationLogin,password:user.password,account_consent:'1',policy_version:'outdated'})).success).toBe(false);
         expect((await post(page,{action:'register',login:user.registrationLogin,password:user.password,account_consent:'1',policy_version:version})).success).toBe(true);
         await page.reload({waitUntil:'load'});await expect(page.locator('#privacy-panel')).toBeHidden();await expect(page.locator('#account-consent-dialog')).toBeHidden();
         other=await browser.newContext({serviceWorkers:'block'});const second=await other.newPage();await second.route('https://**',r=>r.abort());await second.route('**/chat_stream.php*',r=>r.abort());

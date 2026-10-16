@@ -42,3 +42,18 @@
     <p data-account-consent-error role="alert"></p>
 </dialog>
 <?php endif; ?>
+<?php if(!\Domain\Auth::userId()): ?>
+<dialog id="social-registration-dialog" aria-labelledby="social-registration-heading">
+    <form method="dialog" class="privacy-dialog-close"><button aria-label="Отменить регистрацию">×</button></form>
+    <h2 id="social-registration-heading">Регистрация через Telegram</h2>
+    <p>Telegram подтверждён. Для <strong id="social-registration-name"></strong> ещё нет аккаунта на сайте. Создадим его после твоего согласия.</p>
+    <p>Будут сохранены данные входа, имя и настройки. Сообщения, голоса и другие действия сохраняются для работы сайта; Лира может использовать публичные реплики в запросах к внешним моделям. <a href="/privacy.php#account-consent" target="_blank" rel="noopener">Полные условия и сведения об операторе</a>.</p>
+    <form id="social-registration-form">
+        <label class="privacy-option"><input type="checkbox" id="social-registration-consent" required><span>Даю отдельное согласие на обработку данных аккаунта.</span></label>
+        <button type="submit" class="btn-primary">Подтвердить и создать аккаунт</button>
+    </form>
+    <p>Разрешения статистики и плеера сохранятся по твоему выбору. Подтверждение регистрации не включает их автоматически.</p>
+    <form method="dialog"><button type="submit" class="privacy-secondary">Отмена</button></form>
+    <p id="social-registration-error" role="alert"></p>
+</dialog>
+<?php endif; ?>

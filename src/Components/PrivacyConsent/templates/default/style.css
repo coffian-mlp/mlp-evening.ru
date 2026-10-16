@@ -24,6 +24,11 @@
 #account-consent-dialog h2 { margin:0 20px 14px 0; }
 #account-consent-dialog p { line-height:1.5; }
 [data-account-consent-error] { color:var(--danger-text,#e37086); }
+#social-registration-dialog { box-sizing:border-box; width:min(600px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); padding:24px; border:1px solid var(--border-color,#87749a); border-radius:16px; color:var(--text-main,#eee); background:var(--panel-solid,#281f38); overflow:auto; }
+#social-registration-dialog::backdrop { background:#0009; }
+#social-registration-dialog h2 { margin:0 20px 14px 0; }
+#social-registration-dialog p { line-height:1.5; }
+#social-registration-error { color:var(--danger-text,#e37086); }
 .account-privacy { margin-top:20px; padding-top:18px; border-top:1px solid var(--border-color,#87749a); }
 .account-privacy p { font-size:14px; line-height:1.5; margin:10px 0; }
 .account-privacy .privacy-withdraw { color:var(--danger-text,#e37086); border:1px solid currentColor; background:transparent; padding:9px 12px; border-radius:6px; cursor:pointer; }

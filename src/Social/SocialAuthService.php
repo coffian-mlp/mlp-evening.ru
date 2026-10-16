@@ -23,7 +23,7 @@ class SocialAuthService {
      * @param array $rawData Сырые данные из запроса ($_GET/$_POST)
      * @return array Результат ['success' => bool, 'message' => string, 'redirect' => string]
      */
-    public function handleLogin(SocialProvider $provider, array $rawData): array {
+    public function handleLogin(SocialProvider $provider, array $rawData, ?string $consentVersion = null): array {
         // 1. Валидация данных провайдером
         $socialUser = $provider->validateCallback($rawData);
         
@@ -81,13 +81,23 @@ class SocialAuthService {
         
         // А. Пользователь уже залогинен -> Привязываем к текущему
         if (Auth::check()) {
+            if($consentVersion!==null)return ['success'=>false,'message'=>'Состояние входа изменилось. Обнови страницу перед регистрацией.'];
             $this->userManager->linkSocial($_SESSION['user_id'], $providerName, $socialUser);
             return ['success' => true, 'message' => 'Аккаунт успешно привязан!', 'redirect' => '/']; // Предполагаемый редирект
         }
 
         // Б. Новый пользователь (Регистрация)
+        if($consentVersion!==\Domain\Privacy::version()){
+            return ['success'=>false,'message'=>'Для создания аккаунта подтверди отдельное согласие на обработку данных.',
+                'registration_consent_required'=>true,'policy_version'=>\Domain\Privacy::version(),
+                'registration_name'=>$socialUser['first_name']?:$socialUser['username']];
+        }
         try {
-            $newUserId = $this->registerNewUser($providerName, $socialUser);
+            $newUserId = \Infra\Transaction::run($this->db,function()use($providerName,$socialUser):int{
+                $id=$this->registerNewUser($providerName,$socialUser);
+                \Domain\Privacy::setAccountConsent($id,true,false);
+                return $id;
+            });
             
             // Сразу логиним
             $user = $this->userManager->getUserById($newUserId);
