@@ -152,3 +152,46 @@ test('authenticated chat, profile and quote cards use readable theme surfaces in
         }
     } finally {if(fs.existsSync(state)) fixture('cleanup');}
 });
+test('MLP-412 chat readability preserves nickname colors and scales in both themes and layouts', async ({page}, info) => {
+    try {
+        fixture('setup'); const user = JSON.parse(fs.readFileSync(state, 'utf8')); await login(page, user, 'reader');
+        const colors = ['#9bffda', '#cf61cb', '#222222', '#f7e5a1', '#2853c9'];
+        for (const url of ['/', '/chat_popup.php']) {
+            await page.goto(base + url, {waitUntil:'domcontentloaded'});
+            // Render several inline nickname colors without creating extra database messages.
+            await expect(page.locator('.chat-message[data-id="'+user.message+'"]')).toBeVisible();
+            await page.evaluate(({id, colors}) => {
+                const source = document.querySelector(`.chat-message[data-id="${id}"]`);
+                colors.forEach((color, index) => {
+                    const sample = source.cloneNode(true);
+                    sample.dataset.id = 'readability-' + index;
+                    sample.querySelector('.username').textContent = 'Color ' + (index + 1);
+                    sample.querySelector('.username').style.color = color;
+                    sample.querySelector('.chat-text').firstChild.textContent = 'Проверка читаемости текста: обычный, ';
+                    source.after(sample);
+                });
+            }, {id:user.message, colors});
+            const names = page.locator('.chat-message[data-id^="readability-"] .username');
+            const originalColors = await names.evaluateAll(elements => elements.map(el => getComputedStyle(el).color));
+            for (const name of ['luna', 'celestia']) {
+                await choose(page, name); await theme(page, name);
+                await expect(page.locator('.chat-message[data-id="'+user.message+'"] .chat-text')).toHaveCSS('font-weight','600');
+                await expect(page.locator('.quote-content').last()).toHaveCSS('font-weight','600');
+                expect(await names.evaluateAll(elements => elements.map(el => getComputedStyle(el).color))).toEqual(originalColors);
+                const shadows = await names.evaluateAll(elements => elements.map(el => getComputedStyle(el).textShadow));
+                for (const shadow of shadows) expect(shadow).toContain(name === 'luna' ? '255, 255, 255' : '38, 20, 52');
+                const alpha = await page.locator('.chat-container').evaluate(el => Number(getComputedStyle(el).backgroundColor.match(/,\s*([\d.]+)\)$/)?.[1] || 1));
+                expect(alpha).toBeGreaterThan(name === 'luna' ? .70 : .77); expect(alpha).toBeLessThan(.85);
+                for (const width of [1440,390]) {
+                    await page.setViewportSize({width,height:width === 390 ? 844 : 1000});
+                    await page.evaluate(() => window.applyFontScale(150));
+                    await expect(page.locator('.chat-message[data-id="'+user.message+'"] .chat-text')).toHaveCSS('font-size','22.5px');
+                    await page.evaluate(() => window.applyFontScale(100));
+                    await ready(page);
+                    await page.screenshot({path:path.join(shots,`mlp412-${info.project.name}-${name}-${url === '/' ? 'embedded' : 'popup'}-${width}.png`)});
+                }
+            }
+            await page.setViewportSize({width:1672,height:941});
+        }
+    } finally {if(fs.existsSync(state)) fixture('cleanup');}
+});
