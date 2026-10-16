@@ -60,7 +60,9 @@ class ChatComponent extends Component {
         // Ядро чата (MLP-267, AR6-3): единые CSS/JS обоих шаблонов — ДО шаблонных
         // ассетов (includeTemplate ниже), чтобы popup/style.css мог переопределять.
         global $app;
+        $this->result['notification_after_id'] = (new \Domain\ChatManager())->latestMessageId();
         $app->addCss('/src/Components/Chat/assets/chat-core.css');
+        $app->addJs('/src/Components/Chat/assets/keyword-alerts.js');
         $app->addJs('/src/Components/Chat/assets/command-interactions.js');
         $app->addJs('/src/Components/Chat/assets/chat-core.js');
 

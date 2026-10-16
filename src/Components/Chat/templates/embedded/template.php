@@ -194,6 +194,7 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
 <script>
     // Inject PHP Variables into JS
     window.chatConfig = {
+        notification_after_id: <?= (int)$arResult['notification_after_id'] ?>,
         driver: <?= json_encode($arResult['chat_driver']) ?>,
         centrifugo: {
             url: <?= json_encode($arResult['centrifugo_url']) ?>,

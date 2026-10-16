@@ -94,6 +94,19 @@
                         <input type="checkbox" id="profile-title-toggle" style="margin-right: 8px;"> 
                         Моргание вкладки при упоминании
                     </label>
+                    <div style="margin-top: 14px;">
+                        <label style="display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" id="profile-keywords-enabled"> Звук по ключевым словам
+                        </label>
+                        <label for="profile-keywords" class="form-label" style="margin-top:10px;">Слова и фразы</label>
+                        <textarea id="profile-keywords" class="form-input" rows="3" maxlength="700" placeholder="Твайлайт, Луна"></textarea>
+                        <small style="display:block; margin-top:5px;">До 10 слов или фраз через запятую или с новой строки, до 50 символов в каждой. Регистр и различие е/ё не важны. Совпадения — по целым словам.</small>
+                        <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
+                            <button type="button" class="btn-primary" id="profile-keywords-save">Сохранить уведомления</button>
+                            <button type="button" class="btn btn-outline-primary" id="profile-keywords-test">Проверить звук</button>
+                        </div>
+                        <small id="profile-keywords-status" role="status" style="display:block; margin-top:7px;">Для звука сначала нажми любую кнопку на странице. В закрытом чате уведомлений нет.</small>
+                    </div>
                 </div>
 
                 <!-- Social Accounts Binding -->

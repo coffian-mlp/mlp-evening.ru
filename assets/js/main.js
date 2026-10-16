@@ -878,6 +878,7 @@ $(document).ready(function() {
                     window.currentUserNickname = u.nickname;
                     window.csrfToken = u.csrf_token;
                     window.userOptions = u.user_options;
+                    $(document).trigger('chat:user-options', [u.user_id, u.user_options]);
                     
                     // Update CSRF token in meta tag
                     $('meta[name="csrf-token"]').attr('content', u.csrf_token);

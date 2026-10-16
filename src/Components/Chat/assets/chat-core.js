@@ -1117,7 +1117,7 @@ $(document).ready(function() {
     });
 
     // Unified Message Handler
-    function processIncomingData(data) {
+    function processIncomingData(data, live = true) {
         // Handle specialized events
         if (data.type === 'reaction_update') {
              updateMessageReactions(data.id, data.reactions);
@@ -1181,6 +1181,7 @@ $(document).ready(function() {
             }
         } else {
             appendMessage(data);
+            if (live && window.ChatKeywordAlerts) window.ChatKeywordAlerts.notify(data);
 
             // Notification Logic
             const msgDate = new Date(data.created_at);
@@ -1285,7 +1286,7 @@ $(document).ready(function() {
                 res.data.messages.forEach(msg => {
                     // Add type 'message' if missing
                     if (!msg.type) msg.type = 'message';
-                    processIncomingData(msg);
+                    processIncomingData(msg, false);
                 });
                 
                 if (res.data.messages.length > 0) {

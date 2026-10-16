@@ -1127,4 +1127,8 @@ class ChatManager {
         return array_reverse($stmt->get_result()->fetch_all(MYSQLI_ASSOC));
     }
 
+    public function latestMessageId(): int {
+        return (int)$this->db->query('SELECT COALESCE(MAX(id),0) AS id FROM chat_messages')->fetch_assoc()['id'];
+    }
+
 }

@@ -87,13 +87,19 @@ class ProfileController {
         $key = $_POST['key'] ?? '';
         $value = $_POST['value'] ?? '';
 
-        $allowedKeys = ['chat_title_enabled'];
+        $allowedKeys = ['chat_title_enabled', 'chat_keyword_alerts'];
         if (!in_array($key, $allowedKeys)) {
             Response::json(false, "Некорректная настройка", 'error');
         }
 
+        if ($key === 'chat_keyword_alerts') {
+            if (!is_string($value)) Response::json(false, 'Некорректные настройки уведомлений.', 'error');
+            try { $value = \Domain\KeywordAlerts::normalize($value); }
+            catch (\InvalidArgumentException $e) { Response::json(false, $e->getMessage(), 'error'); }
+        }
+
         if ((new UserManager())->setUserOption(Auth::userId(), $key, $value)) {
-            Response::json(true, "Saved");
+            Response::json(true, "Настройка сохранена", 'success', ['value'=>$value]);
         }
         Response::json(false, "DB Error", 'error');
     }
