@@ -23,6 +23,7 @@
             const response = await fetch('/api.php', { method: 'POST', credentials: 'same-origin', body: form, signal: controller.signal });
             result = await response.json();
         } finally { clearTimeout(timeout); }
+        if(result.data?.privacy_required)window.requireAccountConsent?.();
         if (!result.success) throw new Error(result.message || 'Не удалось выполнить действие.');
         return result.data;
     }

@@ -21,7 +21,9 @@ class OnlineController {
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
 
         $online = new OnlineManager();
-        $online->beat($sessionId, $userId, $ip, $ua);
+        $active = $userId && \Domain\Privacy::isActive((int)$userId);
+        if ($userId && !$active) $online->removeSession($sessionId);
+        else $online->beat($sessionId, $userId, $ip, $ua);
         try { \Domain\UxStatistics::touch(); } catch (\Throwable $e) { error_log('UX heartbeat: ' . get_class($e)); }
 
         // Return detailed stats (default window 3 mins)
@@ -38,7 +40,7 @@ class OnlineController {
         // тем же путём, что и при логине (троттл ai_greeting_cooldown и гейт «уже написал сам»
         // работают как прежде). Бота самого не приветствуем.
         $greetLogin = null;
-        if ($userId) {
+        if ($active) {
             $config = ConfigManager::getInstance();
             $absenceSec = (int)$config->getOption('ai_greeting_absence_hours', 4) * 3600;
             if ((int)$userId !== (int)$config->getOption('ai_bot_user_id', 0)) {

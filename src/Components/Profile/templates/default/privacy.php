@@ -12,7 +12,7 @@ $accountExpired=($accountPrivacy['state']??'')==='withdrawn' && strtotime($accou
         <p><button type="button" class="privacy-withdraw" data-account-consent="withdraw" data-version="<?= \Domain\Privacy::version() ?>">Отозвать согласие на данные аккаунта</button></p>
     <?php else: ?>
         <?php if (($accountPrivacy['state'] ?? '') === 'withdrawn'): ?>
-            <p role="status"><strong>Учётная запись неактивна.</strong> Доступны вход и изменения профиля до срока удаления. Удаление данных запланировано до <?= htmlspecialchars((new \DateTimeImmutable($accountPrivacy['delete_after'],new \DateTimeZone('UTC')))->setTimezone(new \DateTimeZone('Europe/Moscow'))->format('d.m.Y H:i')) ?> МСК. <?php if(!$accountExpired): ?>Повторное согласие до этого срока восстановит активность.<?php endif; ?></p>
+            <p role="status"><strong>Учётная запись неактивна.</strong> Можно читать чат и расписание; доступны вход и изменения профиля до срока удаления. Удаление данных запланировано до <?= htmlspecialchars((new \DateTimeImmutable($accountPrivacy['delete_after'],new \DateTimeZone('UTC')))->setTimezone(new \DateTimeZone('Europe/Moscow'))->format('d.m.Y H:i')) ?> МСК. <?php if(!$accountExpired): ?>Повторное согласие до этого срока восстановит активность.<?php endif; ?></p>
         <?php else: ?>
             <p>Чтобы пользоваться аккаунтом, нужно отдельно подтвердить согласие на обработку его данных. Для статистики и плеера разрешения не обязательны.</p>
         <?php endif; ?>

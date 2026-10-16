@@ -5,6 +5,7 @@ ob_start();
 $db=Infra\Database::getInstance()->getConnection();
 require_once dirname(__DIR__).'/migrate.php';
 migrate_apply_file($db,dirname(__DIR__).'/migrations/2026_10_16_privacy_statistics.sql');
+migrate_apply_file($db,dirname(__DIR__).'/migrations/2026_10_16_privacy_account_choices.sql');
 $users=new Domain\UserManager(); $ids=[]; $messages=[]; $errors=0; $testFiles=[]; $testJobs=[]; $campaignId=0; $mailOriginal=null;
 $ok=static function(bool $condition,string $message) use (&$errors): void {echo ($condition?'[OK] ':'[FAIL] ').$message."\n";if(!$condition)$errors++;};
 try {

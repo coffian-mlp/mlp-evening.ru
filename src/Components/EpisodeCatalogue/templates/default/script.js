@@ -160,6 +160,7 @@
         try {
             const response = await fetch('/api.php', { method: 'POST', credentials: 'same-origin', body: new URLSearchParams({ action: request.action, episode_id: id, operation_token: request.token, csrf_token: window.csrfToken || '' }), signal: controller.signal });
             const result = await response.json();
+            if(result.data?.privacy_required)window.requireAccountConsent?.();
             if (!result.success) throw new Error(result.message || 'Действие не выполнено.');
             acceptResult(state, id, result.data);
         } catch (error) {

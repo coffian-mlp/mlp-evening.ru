@@ -20,10 +20,6 @@ if (Auth::userId()) {
         header('Location: /login.php'); exit;
     }
     \Domain\Privacy::rememberSession(Auth::userId());
-    $privacyPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
-    if (($privacyState['state'] ?? '') === 'withdrawn' && !in_array($privacyPath, ['/profile.php','/privacy.php'], true)) {
-        header('Location: /profile.php'); exit;
-    }
 }
 
 // 5. Инициализация приложения

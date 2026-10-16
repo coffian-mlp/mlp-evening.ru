@@ -233,6 +233,7 @@ class AuthController {
      * вербатим, MLP-264). Клиент не ждёт LLM.
      */
     private static function finishThenGreet(string $responseJson, string $greetUsername): never {
+        \Domain\Privacy::choices(); // Preserve an explicit guest choice across registration/login before headers are sent.
         Response::finish($responseJson); // MLP-265: общий fastcgi-паттерн в Response
         $uid = (int)(Auth::userId() ?? 0);
         if ($uid && !\Domain\Privacy::isActive($uid)) exit();

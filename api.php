@@ -74,7 +74,7 @@ try {
         }
         \Domain\Privacy::rememberSession($privacyUserId);
         if (!\Domain\Privacy::actionAllowed($action, $accountPrivacy)) {
-            \Api\Response::fail('Подтверди согласие на обработку данных аккаунта в профиле.', ['privacy_required'=>true,'redirect'=>'/profile.php']);
+            \Api\Response::fail('Подтверди согласие на обработку данных аккаунта.', ['privacy_required'=>true]);
         }
     }
 

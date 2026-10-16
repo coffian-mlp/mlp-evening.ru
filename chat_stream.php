@@ -6,7 +6,7 @@ use Domain\ChatManager;
 
 require_once __DIR__ . '/autoload.php'; // MLP-248
 
-if (Auth::userId() && !\Domain\Privacy::isActive(Auth::userId())) { http_response_code(403); exit; }
+if (Auth::userId() && (\Domain\Privacy::account(Auth::userId())['state'] ?? '') === 'deleted') { http_response_code(403); exit; }
 
 
 // Disable time limit for long-running script (or set to reasonable value like 60s for shared hosting)
@@ -79,7 +79,7 @@ $lastOnlineUpdate = 0; // Throttling
 // Identify current user for last_seen
 // Auth check was done above, but session closed.
 // We use cached $currentUserId from before session close.
-if ($currentUserId) {
+if ($currentUserId && \Domain\Privacy::isActive((int)$currentUserId)) {
     try {
         $userManager->updateLastSeen($currentUserId);
     } catch (Exception $e) { /* Ignore DB error if col missing */ }
@@ -94,11 +94,8 @@ while (true) {
     // --- Online Status Update (Every 10s) ---
     if (time() - $lastOnlineUpdate > 10) {
         try {
-            if ($currentUserId && \Domain\Privacy::isWithdrawn((int)$currentUserId)) {
-                sendEvent(['type'=>'privacy_changed','user_id'=>(int)$currentUserId]);
-                break;
-            }
-            if ($currentUserId) {
+            if ($currentUserId && (\Domain\Privacy::account((int)$currentUserId)['state']??'')==='deleted') break;
+            if ($currentUserId && \Domain\Privacy::isActive((int)$currentUserId)) {
                 $userManager->updateLastSeen($currentUserId);
             }
             

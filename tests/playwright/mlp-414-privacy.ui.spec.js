@@ -53,7 +53,7 @@ test('player is independently allowed and removed after withdrawal; analytics st
         await page.screenshot({path:path.join(shots,info.project.name+'-player-denied.png')});
     }finally{if(fs.existsSync(state))fixture('cleanup');}
 });
-test('withdrawn authenticated user keeps profile only; explicit renewal restores actions',async({page},info)=>{
+test('withdrawn authenticated user keeps public reading and profile; explicit renewal restores actions',async({page},info)=>{
     try{
         fixture('setup');const user=JSON.parse(fs.readFileSync(state,'utf8'));await login(page,user,'reader');
         await page.goto(base+'/profile.php',{waitUntil:'load'});await expect(page.locator('[data-account-consent=withdraw]')).toBeVisible();
@@ -64,11 +64,90 @@ test('withdrawn authenticated user keeps profile only; explicit renewal restores
             const result=await post(page,{action,message:'Must not send'});expect(result.success,action).toBe(false);expect(result.data.privacy_required).toBe(true);
         }
         expect((await post(page,{action:'update_profile',nickname:'Privacy reader updated'})).success).toBe(true);
-        await page.goto(base+'/',{waitUntil:'load'});await expect(page).toHaveURL(base+'/profile.php');
+        await page.goto(base+'/',{waitUntil:'load'});await expect(page).toHaveURL(base+'/');
+        await expect(page.locator('.chat-messages')).toContainText('Public fixture message');
+        expect((await post(page,{action:'get_public_events'})).success).toBe(true);
+        expect((await post(page,{action:'get_messages'})).success).toBe(true);
         await page.screenshot({path:path.join(shots,info.project.name+'-inactive-profile.png')});
-        await page.locator('#account-consent-check').check();await page.locator('[data-account-consent=accept]').click();
+        await page.goto(base+'/profile.php',{waitUntil:'load'});
+        await page.locator('#account-consent-check').check();await page.locator('.account-privacy [data-account-consent=accept]').click();
         await expect(page.locator('[data-account-consent=withdraw]')).toBeVisible();
         await page.goto(base+'/',{waitUntil:'load'});await expect(page).toHaveURL(base+'/');
+    }finally{if(fs.existsSync(state))fixture('cleanup');}
+});
+test('existing account gets an explicit consent dialog and keeps chat, schedule and admin reads',async({page},info)=>{
+    try{
+        fixture('setup');fixture('pending');const user=JSON.parse(fs.readFileSync(state,'utf8'));await login(page,user,'admin');
+        await page.goto(base+'/',{waitUntil:'load'});
+        const consent=page.locator('#account-consent-dialog');await expect(consent).toBeVisible();
+        await consent.getByRole('link',{name:'Полные условия и сведения об операторе'}).click();
+        await expect(page).toHaveURL(base+'/privacy.php#account-consent');await expect(consent).toBeHidden();
+        await expect(page.locator('#privacy-panel')).toHaveCSS('top','12px');
+        await page.goto(base+'/',{waitUntil:'load'});await expect(consent).toBeVisible();
+        await consent.getByRole('button',{name:'Пока только читать'}).click();
+        await expect(page.locator('.chat-messages')).toContainText('Public fixture message');
+        expect((await post(page,{action:'get_messages'})).success).toBe(true);
+        await page.goto(base+'/schedule.php',{waitUntil:'load'});await expect(page).toHaveURL(base+'/schedule.php');
+        expect((await post(page,{action:'get_public_events'})).success).toBe(true);
+        await page.goto(base+'/dashboard/#tab-settings',{waitUntil:'load'});
+        expect((await post(page,{action:'get_users'})).success).toBe(true);
+        await page.evaluate(()=>window.jQuery.post('/api.php',{action:'update_settings',csrf_token:window.csrfToken,privacy_operator:'Must not save'},()=>{},'json'));
+        await expect(consent).toBeVisible();await page.screenshot({path:path.join(shots,info.project.name+'-account-consent.png')});
+        await page.locator('#account-consent-dialog-check').check();await consent.locator('[data-account-consent=accept]').click();
+        await expect(consent).toBeHidden();await expect(page).toHaveURL(base+'/dashboard/#tab-settings');
+        await expect(page.locator('#privacy-settings [name=privacy_operator]')).toHaveValue('Овчаров Константин Александрович');
+    }finally{if(fs.existsSync(state))fixture('cleanup');}
+});
+test('account choices survive a fresh device and synchronize opt-out without another prompt',async({page,browser})=>{
+    let other;
+    try{
+        fixture('setup');const user=JSON.parse(fs.readFileSync(state,'utf8'));await login(page,user,'reader');
+        await page.goto(base+'/privacy.php',{waitUntil:'load'});await page.locator('[data-privacy-all]').click();await expect(page.locator('#privacy-panel')).toBeHidden();
+        other=await browser.newContext({serviceWorkers:'block'});const second=await other.newPage();await second.route('https://**',r=>r.abort());await second.route('**/chat_stream.php*',r=>r.abort());
+        await login(second,user,'reader');await second.goto(base+'/privacy.php',{waitUntil:'load'});
+        await expect(second.locator('#privacy-panel')).toBeHidden();await dialog(second);
+        await expect(second.locator('#privacy-analytics')).toBeChecked();await expect(second.locator('#privacy-external')).toBeChecked();
+        await second.locator('#privacy-analytics').uncheck();await second.locator('#privacy-external').uncheck();await second.locator('[data-privacy-save]').click();
+        expect((await post(page,{action:'ux_measure',page_id:'9'.repeat(32),path:'/'})).success).toBe(false);
+        await page.reload({waitUntil:'load'});await expect(page.locator('#privacy-panel')).toBeHidden();await dialog(page);
+        await expect(page.locator('#privacy-analytics')).not.toBeChecked();await expect(page.locator('#privacy-external')).not.toBeChecked();
+    }finally{if(other)await other.close();if(fs.existsSync(state))fixture('cleanup');}
+});
+test('guest choice survives real registration and is available after login on a fresh device',async({page,browser})=>{
+    let other;
+    try{
+        fixture('setup');const user=JSON.parse(fs.readFileSync(state,'utf8'));
+        await page.goto(base+'/',{waitUntil:'load'});await page.locator('[data-privacy-necessary]').click();await expect(page.locator('#privacy-panel')).toBeHidden();
+        let captcha=(await post(page,{action:'captcha_start'})).data;
+        const names={'Твайлайт Спаркл':'magic','Эпплджек':'honesty','Рэйнбоу Дэш':'loyalty','Пинки Пай':'laughter','Рарити':'generosity','Флаттершай':'kindness'};
+        const answer=Object.entries(names).find(([name])=>captcha.question.includes(name))[1];
+        captcha=(await post(page,{action:'captcha_check',answer})).data.next_step;
+        const elements={'q_a1.png':'magic','q_b2.png':'honesty','q_c3.png':'loyalty','q_d4.png':'laughter','q_e5.png':'generosity','q_f6.png':'kindness'};
+        expect((await post(page,{action:'captcha_check',answer:elements[captcha.image_url.split('/').pop()]})).success).toBe(true);
+        expect((await post(page,{action:'captcha_check',answer:'спайк'})).data.completed).toBe(true);
+        const version=await page.locator('input[name=policy_version]').first().inputValue();
+        expect((await post(page,{action:'register',login:user.registrationLogin,password:user.password,account_consent:'1',policy_version:version})).success).toBe(true);
+        await page.reload({waitUntil:'load'});await expect(page.locator('#privacy-panel')).toBeHidden();await expect(page.locator('#account-consent-dialog')).toBeHidden();
+        other=await browser.newContext({serviceWorkers:'block'});const second=await other.newPage();await second.route('https://**',r=>r.abort());await second.route('**/chat_stream.php*',r=>r.abort());
+        await login(second,{readerLogin:user.registrationLogin,password:user.password},'reader');await second.goto(base+'/privacy.php',{waitUntil:'load'});
+        await expect(second.locator('#privacy-panel')).toBeHidden();await dialog(second);await expect(second.locator('#privacy-analytics')).not.toBeChecked();await expect(second.locator('#privacy-external')).not.toBeChecked();
+    }finally{if(other)await other.close();if(fs.existsSync(state))fixture('cleanup');}
+});
+test('details page keeps the guest panel at the top of the window',async({page},info)=>{
+    await page.goto(base+'/privacy.php',{waitUntil:'load'});await expect(page.locator('#privacy-panel')).toBeVisible();
+    await expect.poll(async()=>Math.round((await page.locator('#privacy-panel').boundingBox()).y)).toBe(12);
+    await page.setViewportSize({width:390,height:844});await expect(page.locator('#privacy-panel')).toBeVisible();await page.waitForTimeout(100);
+    expect((await page.locator('#privacy-panel').boundingBox()).y).toBe(12);await page.screenshot({path:path.join(shots,info.project.name+'-details-top.png')});
+});
+test('SSE remains readable before consent and after withdrawal',async({page})=>{
+    try{
+        fixture('setup');fixture('pending');const user=JSON.parse(fs.readFileSync(state,'utf8'));await login(page,user,'reader');
+        await page.goto(base+'/profile.php',{waitUntil:'load'});await page.unroute('**/chat_stream.php*');
+        const streamStatus=()=>page.evaluate(async()=>{const controller=new AbortController();const response=await fetch('/chat_stream.php',{signal:controller.signal});const status=response.status;controller.abort();return status;});
+        expect(await streamStatus()).toBe(200);
+        const version=await page.locator('.account-privacy [data-account-consent=accept]').getAttribute('data-version');
+        expect((await post(page,{action:'privacy_account',decision:'withdraw',confirm:'withdraw',policy_version:version})).success).toBe(true);
+        expect(await streamStatus()).toBe(200);
     }finally{if(fs.existsSync(state))fixture('cleanup');}
 });
 test('expired account erasure invalidates the existing browser session and password login',async({page})=>{

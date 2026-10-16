@@ -15,13 +15,30 @@
 <dialog id="privacy-dialog" aria-labelledby="privacy-heading">
     <form method="dialog" class="privacy-dialog-close"><button aria-label="Закрыть">×</button></form>
     <h2 id="privacy-heading">Настройки приватности</h2>
-    <p>Разрешения действуют в этом браузере. Их можно изменить в любое время. Отказ от статистики не ограничивает аккаунт.</p>
+    <p>Для зарегистрированных пользователей выбор сохраняется в аккаунте и применяется на других устройствах после входа. Выбор гостя переносится при регистрации или входе. Его можно изменить в любое время; отказ от статистики не ограничивает аккаунт.</p>
     <label class="privacy-option"><input type="checkbox" checked disabled><span><strong>Работа сайта</strong><small>Вход, защита запросов, сохранение выбора приватности. Выбранные тобой настройки темы и громкости сохраняются как функциональные предпочтения.</small></span></label>
     <label class="privacy-option"><input type="checkbox" id="privacy-analytics"><span><strong>Техническая статистика</strong><small>Посещения, браузер и система, укрупнённые размеры экрана, тема, масштаб шрифта и технические ошибки. Без email, текста сообщений и IP в статистике. Детальные данные — 30 дней, сводки — год.</small></span></label>
     <label class="privacy-option"><input type="checkbox" id="privacy-external"><span><strong>Сторонний плеер</strong><small>При загрузке плеера Twitch или другого выбранного сервисом провайдера браузер обращается к нему напрямую. Провайдер может собирать IP, данные браузера и cookie по своей политике. Без разрешения плеер не загружается.</small></span></label>
     <button type="button" class="btn-primary" data-privacy-save>Сохранить выбор</button>
     <p><a href="/privacy.php">Политика обработки данных</a><?php if ($arResult['account']): ?> · <a href="/profile.php#privacy">Данные аккаунта и отзыв согласия</a><?php endif; ?></p>
-    <p>Выход отзывает разрешения и очищает настройки этого браузера. Для удаления аккаунта отзови согласие в профиле.</p>
+    <p>Выход отключает статистику и плеер, а также очищает настройки этого браузера. Для удаления аккаунта отзови согласие в профиле.</p>
     <p><a data-privacy-exit href="https://yandex.ru/images/search?text=%D0%B3%D1%80%D1%83%D1%81%D1%82%D0%BD%D0%B0%D1%8F%20%D0%9F%D0%B8%D0%BD%D0%BA%D0%B8%20%D0%9F%D0%B0%D0%B9" rel="noreferrer" referrerpolicy="no-referrer">Отказаться и уйти в Яндекс.Картинки ↗</a></p>
     <p id="privacy-error" role="alert"></p>
 </dialog>
+<?php if($arResult['account']): ?>
+<dialog id="account-consent-dialog" aria-labelledby="account-consent-heading" data-required="<?= \Domain\Privacy::isActive(\Domain\Auth::userId())?'0':'1' ?>" data-state="<?= htmlspecialchars($arResult['account']['state']??'pending') ?>">
+    <form method="dialog" class="privacy-dialog-close"><button aria-label="Закрыть запрос согласия">×</button></form>
+    <h2 id="account-consent-heading">Согласие на обработку данных аккаунта</h2>
+    <p>Мы добавили отдельное согласие на данные аккаунта. Чат и расписание можно читать без него. Для сообщений, голосов и других действий от своего имени нужно подтвердить согласие.</p>
+    <p>Обрабатываются имя, необязательный email, настройки и действия на сайте; Лира может использовать публичные реплики в запросах к внешним моделям. <a href="/privacy.php#account-consent">Полные условия и сведения об операторе</a>.</p>
+    <p data-account-withdrawn hidden>Ты ранее отозвал согласие. Повторное согласие до срока удаления восстановит активность. Срок указан <a href="/profile.php#privacy">в профиле</a>.</p>
+    <div data-account-accept-controls>
+        <label class="privacy-option"><input type="checkbox" id="account-consent-dialog-check"><span>Даю отдельное согласие на обработку данных аккаунта.</span></label>
+        <button type="button" class="btn-primary" data-account-consent="accept" data-consent-check="account-consent-dialog-check" data-version="<?= $arResult['version'] ?>">Подтвердить согласие</button>
+    </div>
+    <p data-account-expired hidden>Срок восстановления истёк. Данные ожидают удаления; подробности доступны в профиле.</p>
+    <p>Статистика и сторонний плеер настраиваются отдельно. Этот выбор не включает их автоматически.</p>
+    <form method="dialog"><button type="submit" class="privacy-secondary">Пока только читать</button></form>
+    <p data-account-consent-error role="alert"></p>
+</dialog>
+<?php endif; ?>

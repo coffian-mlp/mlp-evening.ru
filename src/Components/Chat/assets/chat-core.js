@@ -1120,8 +1120,8 @@ $(document).ready(function() {
     function processIncomingData(data, live = true) {
         // Handle specialized events
         if (data.type === 'privacy_changed') {
-            if (Number(data.user_id) === Number(window.currentUserId)) location.assign('/profile.php');
-            else if (window.reloadChatMessages) window.reloadChatMessages();
+            if (Number(data.user_id) === Number(window.currentUserId)) window.dispatchEvent(new Event('accountprivacychange'));
+            if (window.reloadChatMessages) window.reloadChatMessages();
             return;
         }
         if (data.type === 'reaction_update') {
