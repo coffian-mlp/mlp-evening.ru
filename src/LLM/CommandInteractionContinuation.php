@@ -19,9 +19,14 @@ final class CommandInteractionContinuation
         $manager = new CommandInteractionManager($registry);
         $text = html_entity_decode((string)($source['raw_message'] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $quotes = json_decode((string)($source['quoted_msg_ids'] ?? '[]'), true) ?: [];
+        if (DrawingChatCollection::acceptsWish($source, $quotes)) return true;
+        $quotedTypes = $quotes ? $manager->quotedTypes($quotes) : [];
+        // A quote of a normal reply (or a finished picture) is ordinary conversation.
+        if ($quotes && !$quotedTypes) return false;
         $addresses = (new LLMManager())->messageAddressesBot($text, []);
         foreach ($registry as $type => $handler) {
             if (!isset($handler['continuation'])) continue;
+            if ($quotes && !in_array($type, $quotedTypes, true)) continue;
             $result = self::routeHandler($manager, $source, $text, $quotes, $addresses, $type);
             if ($result !== null) return $result;
         }
@@ -46,7 +51,7 @@ final class CommandInteractionContinuation
         $parsed = ($capability['classify'])($text, 'pending', ['has_quote' => $quotes !== []]);
         if (!self::canLookupTarget($quotes, $addresses, $parsed)) return null;
         $actor = (int)$source['user_id'];
-        $target = $manager->lookupTarget($actor, $quotes, ['intent' => $parsed['intent'] ?? 'unknown', 'addressesBot' => $addresses]);
+        $target = $manager->lookupTarget($actor, $quotes, ['type' => $type, 'intent' => $parsed['intent'] ?? 'unknown', 'addressesBot' => $addresses]);
         if (($target['status'] ?? '') === 'target') {
             $selected = $target['target'];
             if ($selected['type'] !== $type) return null;

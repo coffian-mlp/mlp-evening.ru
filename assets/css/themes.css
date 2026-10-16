@@ -24,6 +24,13 @@
     --code-color: #f3afd2;
     --danger-text: #ffb4b4;
     --warning-text: #f1d58c;
+    --mention-surface: rgba(209, 181, 241, .12);
+    --mention-hover: rgba(209, 181, 241, .18);
+    --mention-border: #ad8dcc;
+    --reply-surface: rgba(149, 163, 216, .09);
+    --reply-hover: rgba(149, 163, 216, .15);
+    --reply-border: #7e8eb6;
+    --message-flash: rgba(177, 143, 222, .28);
 }
 :root[data-theme="celestia"] {
     color-scheme: light;
@@ -50,6 +57,13 @@
     --code-color: #9d2455;
     --danger-text: #ae2341;
     --warning-text: #805600;
+    --mention-surface: rgba(121, 80, 152, .08);
+    --mention-hover: rgba(121, 80, 152, .13);
+    --mention-border: #a183b4;
+    --reply-surface: rgba(126, 108, 154, .05);
+    --reply-hover: rgba(126, 108, 154, .10);
+    --reply-border: #b2a3c0;
+    --message-flash: rgba(145, 102, 177, .20);
 }
 html, body {
     background-color: var(--page-color);
@@ -116,6 +130,10 @@ button, input, textarea, select { accent-color: var(--primary-color); }
 .chat-format-btn:hover, .chat-action-btn:hover, .profile-link:hover, .icon-btn:hover,
 .reaction-item:hover, .sticker-tab-btn:hover, .sticker-tab-btn.active,
 .chat-context-menu li:hover, .chat-message:hover { color: var(--text-main); background: var(--hover-surface); }
+.chat-message.message-mentioned { --message-rest-surface: var(--mention-surface); background-color: var(--mention-surface); }
+.chat-message.message-mentioned:hover { background-color: var(--mention-hover); }
+.chat-message.message-quoted { --message-rest-surface: var(--reply-surface); background-color: var(--reply-surface); }
+.chat-message.message-quoted:hover { background-color: var(--reply-hover); }
 .login-btn-chat { color: var(--accent-color); background: var(--hover-surface); border-color: var(--border-color); }
 .chat-search-overlay, .chat-confirm-box, .chat-mobile-input-box, .sticker-picker,
 .chat-context-menu, .reaction-user-tooltip, .cmd-preview, .cmd-preview-hint, #sticker-zoom-preview,

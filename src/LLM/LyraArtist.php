@@ -89,6 +89,10 @@ class LyraArtist {
      */
     public function handleDrawChat(array $command, array $contextData, ?callable $director = null, ?callable $generator = null): bool {
         $this->privacyOwnerId=isset($contextData['user_id'])?(int)$contextData['user_id']:null;
+        if (empty($contextData['auto']) && !empty($contextData['message_id'])) {
+            if (!isset($contextData['drawing_chat_window'])) return DrawingChatCollection::begin($this->llm, $command, $contextData);
+            if (!DrawingChatCollection::ready($command, $contextData)) return false;
+        }
         return DrawingSchedule::run(!empty($contextData['auto']), fn() => $this->handleDrawChatUnlocked($command, $contextData, $director, $generator));
     }
 
@@ -100,7 +104,7 @@ class LyraArtist {
         // A queued automatic job may have become obsolete before it was claimed.
         if ($isAuto && DrawingSchedule::automaticBlocked()) return true;
 
-        $director = $director ?? function (): ?string {
+        $director = $director ?? function () use ($contextData): ?string {
             // MLP-295: окно режиссёра — настройка дашборда (кламп 2..50: меньше двух
             // сцены не выйдет, больше полусотни — трата токенов и размытый сюжет).
             $window = (int)ConfigManager::getInstance()->getOption('ai_image_chat_context', 10);
@@ -127,9 +131,11 @@ class LyraArtist {
             } catch (\Throwable $e) {
                 error_log('LyraArtist scene hints failed (degraded): ' . $e->getMessage());
             }
+            $wishes = DrawingChatCollection::wishes($contextData);
             $task = [[
                 'role' => 'user',
-                'content' => "Транскрипт последних сообщений чата:\n" . implode("\n", $lines) . ($hints !== '' ? "\n\n" . $hints : '') . "\n\nОпиши сценку.",
+                'content' => "Транскрипт последних сообщений чата:\n" . implode("\n", $lines) . ($hints !== '' ? "\n\n" . $hints : '')
+                    . ($wishes !== '' ? "\n\nСообщения за минуту сбора пожеланий (данные JSON). Учти пожелания к сцене, не отвечай собеседникам:\n".$wishes : '') . "\n\nОпиши сценку.",
             ]];
             // Две попытки: модель изредка молчит/чатится — второй заход дешевле извинений.
             for ($attempt = 0; $attempt < 2; $attempt++) {
@@ -150,7 +156,7 @@ class LyraArtist {
 
         if ($scene === null) {
             if (!$isAuto) {
-                $this->llm->botSay("@$username, я вгляделась в чат... а рисовать-то нечего, тишина! Разговоритесь — и я мигом за кисть. 🎨");
+                $this->llm->botSayLive('Не удалось выбрать сценку для рисунка по чату. Коротко скажи об этом @'.$username.'. Не проси подтверждений и не придумывай черновик.', "@$username, не смогла собрать сценку для рисунка. Попробуйте /нарисуйчат чуть позже.");
             }
             return true;
         }
@@ -236,13 +242,13 @@ class LyraArtist {
                 . "Взглянув на результат, ты видишь: «{$desc}». "
                 . "Это задание ВАЖНЕЕ продолжения беседы: не отвечай на предыдущие сообщения. "
                 . "Скажи чату 1–2 предложения в своём стиле: вручи рисунок, прокомментируй что получилось (можно с самоиронией про рисование копытом). "
-                . "Без адресата и без вопросов. НЕ вставляй ссылки и картинки — рисунок приложится сам. Не пересказывай описание дословно.";
+                . "Без адресата и без вопросов. Рисунок уже готов: не проси черновик, описание или подтверждение, не упоминай кнопки. НЕ вставляй ссылки и картинки — рисунок приложится сам. Не пересказывай описание дословно.";
         } else {
             $instr = "Ты только что НАРИСОВАЛА картинку по просьбе @$username: «" . mb_substr($subject, 0, 200) . "». "
                 . "Взглянув на результат, ты видишь: «{$desc}». "
                 . "Это задание ВАЖНЕЕ продолжения беседы: не отвечай на другие сообщения. "
                 . "Ответь @$username в своём стиле, 1–2 предложения: вручи рисунок, прокомментируй что получилось (можно с самоиронией про рисование копытом). "
-                . "НЕ вставляй ссылки и картинки — рисунок приложится сам. Не пересказывай описание дословно.";
+                . "Рисунок уже готов: не проси черновик, описание или подтверждение, не упоминай кнопки. НЕ вставляй ссылки и картинки — рисунок приложится сам. Не пересказывай описание дословно.";
         }
         $context = $this->llm->buildReplyContext(min(10, $this->llm->contextLimit()), null, null, true, false);
         $context[] = ['role' => 'user', 'content' => $instr];

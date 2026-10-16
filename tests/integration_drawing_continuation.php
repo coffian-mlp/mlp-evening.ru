@@ -16,6 +16,8 @@ try {
     check((new LLM\LyraArtist($llm))->handleDraw($command,$payload,static fn()=>throw new RuntimeException('Draft must not generate')), 'draft does not invoke generator');
     $reply=$chat->findBotReplyTo($source);preg_match('/\[\[command:(\d+)\]\]/',$reply['raw_message'],$m);$id=(int)$m[1];
     check($manager->readPublic($id,$owner,(int)$reply['id'])['can_act'], 'owner can use draft');
+    $greeting=$chat->addMessage($bot,'Drawing bot','Привет!');$normal=$chat->addMessage($owner,'Drawing owner','Что нового?',[$greeting]);
+    check(!LLM\CommandInteractionContinuation::routeMessage(['message_id'=>$normal,'user_id'=>$owner],LLM\CommandInteractions::registry()), 'ordinary quote ignores an existing unrelated drawing draft');
     check(!$manager->readPublic($id,$other,(int)$reply['id'])['can_act'], 'other user cannot use draft');
     $followup=$chat->addMessage($owner,'Drawing owner','на облаке',[(int)$reply['id']]);
     check(LLM\CommandInteractionContinuation::routeMessage(['message_id'=>$followup,'user_id'=>$owner],LLM\CommandInteractions::registry()), 'quoted continuation is routed');

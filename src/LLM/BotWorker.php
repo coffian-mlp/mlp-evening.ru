@@ -93,7 +93,7 @@ class BotWorker {
         foreach ($this->queue->claimDue(50) as $job) {
             $id = (int)$job['id'];
             if (!\Domain\Privacy::payloadAllowed($job['data'] ?? [])) { $this->queue->complete([$id]); continue; }
-            if (!$enabled && !empty($job['data']['drawing_request'])) {
+            if (!$enabled && (!empty($job['data']['drawing_request']) || !empty($job['data']['drawing_chat_window']))) {
                 $this->queue->release([$id], 30);
                 continue;
             }

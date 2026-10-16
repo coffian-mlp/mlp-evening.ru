@@ -110,6 +110,12 @@ class BotDispatch {
     private static function inlineDrawing(array $payload, int $delay, ?callable $execute = null, ?LLMManager $llm = null): void {
         $queue = new JobQueue();
         $id = $queue->reserveInline('dynamic_command', $payload, $delay);
+        self::runInlineDrawing($id, $payload, $delay, $execute, $llm);
+    }
+
+    /** Execute an already reserved drawing; also used after the chat-wish collection window. */
+    public static function runInlineDrawing(int $id, array $payload, int $delay, ?callable $execute = null, ?LLMManager $llm = null): void {
+        $queue = new JobQueue();
         if (function_exists('set_time_limit')) @set_time_limit(0);
         @ignore_user_abort(true);
         sleep($delay);

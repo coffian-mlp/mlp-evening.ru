@@ -346,12 +346,12 @@
 .md-mention {
     font-weight: bold;
     color: var(--accent-color);
-    background: rgba(156, 39, 176, 0.2);
+    background: var(--mention-surface, rgba(156, 39, 176, 0.2));
     padding: 0 4px;
     border-radius: 4px;
     cursor: pointer;
 }
-.md-mention:hover { background: rgba(156, 39, 176, 0.4); text-decoration: underline; }
+.md-mention:hover { background: var(--mention-hover, rgba(156, 39, 176, 0.4)); text-decoration: underline; }
 .md-quote {
     display: block;
     margin: 5px 0;
@@ -363,16 +363,16 @@
     border-radius: 0 4px 4px 0;
 }
 .message-mentioned {
-    background-color: rgba(255, 235, 59, 0.15);
-    border-left: 3px solid #ffeb3b !important;
+    background-color: var(--mention-surface, rgba(177, 143, 222, .12));
+    border-left: 3px solid var(--mention-border, #ad8dcc) !important;
 }
-.message-mentioned:hover { background-color: rgba(255, 235, 59, 0.2); }
+.message-mentioned:hover { background-color: var(--mention-hover, rgba(177, 143, 222, .18)); }
 
 .message-quoted {
-    background-color: rgba(186, 104, 200, 0.1);
-    border-left: 3px solid rgba(186, 104, 200, 0.5) !important;
+    background-color: var(--reply-surface, rgba(149, 163, 216, .09));
+    border-left: 3px solid var(--reply-border, #7e8eb6) !important;
 }
-.message-quoted:hover { background-color: rgba(186, 104, 200, 0.15); }
+.message-quoted:hover { background-color: var(--reply-hover, rgba(149, 163, 216, .15)); }
 
 /* --- Mobile Compact Mode --- */
 .chat-mobile-fab {
@@ -846,8 +846,8 @@
 .quote-preview-remove:hover { color: #ff8a80; }
 
 @keyframes highlightFade {
-    0% { background-color: rgba(186, 104, 200, 0.4); }
-    100% { background-color: transparent; }
+    0% { background-color: var(--message-flash, rgba(177, 143, 222, .28)); }
+    100% { background-color: var(--message-rest-surface, transparent); }
 }
 .highlight-message { animation: highlightFade 2s ease-out; }
 

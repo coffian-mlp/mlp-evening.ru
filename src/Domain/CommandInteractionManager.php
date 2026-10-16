@@ -312,6 +312,18 @@ final class CommandInteractionManager
     }
 
     /** Quotes are authoritative; callers supply persisted quotes, never browser claimed quotes. */
+    /** Include closed bindings: an old command quote must not redirect to another active command. */
+    public function quotedTypes(array $quotedMessageIds): array
+    {
+        $types = [];
+        foreach (array_unique(array_map('intval', $quotedMessageIds)) as $id) {
+            $stmt = $this->db->prepare("SELECT DISTINCT type FROM command_interactions WHERE bot_message_id=? OR JSON_CONTAINS(context_json,JSON_OBJECT('id',?),'$.question_bindings')");
+            $stmt->bind_param('ii', $id, $id); $stmt->execute();
+            foreach ($stmt->get_result()->fetch_all(MYSQLI_ASSOC) as $row) $types[$row['type']] = true;
+        }
+        return array_keys($types);
+    }
+
     public function lookupTarget(int $actorId, array $quotedMessageIds, array $intent): array
     {
         $quotes = array_values(array_unique(array_map('intval', $quotedMessageIds)));

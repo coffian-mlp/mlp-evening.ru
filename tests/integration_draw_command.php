@@ -20,7 +20,7 @@ $fixtureBotId = (new \Domain\UserManager())->createUser('it_user_draw_' . bin2he
 
 try {
     $cfg = \Infra\ConfigManager::getInstance();
-    foreach (['ai_enabled' => '1', 'ai_bot_user_id' => (string)$fixtureBotId, 'ai_routerai_key' => 'it-dummy', 'ai_image_daily_limit' => '20', 'ai_image_llm_caption' => '0', 'ai_memory_enabled' => '1'] as $k => $v) {
+    foreach (['ai_live_confirm' => '0', 'ai_enabled' => '1', 'ai_bot_user_id' => (string)$fixtureBotId, 'ai_routerai_key' => 'it-dummy', 'ai_image_daily_limit' => '20', 'ai_image_llm_caption' => '0', 'ai_memory_enabled' => '1'] as $k => $v) {
         $optBackup[$k] = $cfg->getOption($k, null);
         $cfg->setOption($k, $v);
     }
@@ -154,7 +154,7 @@ try {
     check($captured === null, 'пустая сцена — генератор не вызван');
     $row = $conn->query("SELECT id, message FROM chat_messages WHERE user_id=$fixtureBotId ORDER BY id DESC LIMIT 1")->fetch_assoc();
     $msgIds[] = (int)$row['id'];
-    check(str_contains($row['message'], 'рисовать-то нечего'), 'вежливый отказ на пустой чат');
+    check(str_contains($row['message'], 'не смогла собрать сценку'), 'вежливый отказ на пустой чат');
 } finally {
     foreach ($optBackup as $k => $v) {
         if ($v === null) $conn->query("DELETE FROM site_options WHERE key_name = '" . $conn->real_escape_string($k) . "'");

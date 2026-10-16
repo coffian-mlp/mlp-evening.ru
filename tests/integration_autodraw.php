@@ -34,7 +34,7 @@ try {
     }
     [$botId, $humanId] = $cleanupUserIds;
 
-    foreach (['ai_enabled' => '1', 'ai_bot_user_id' => (string)$botId, 'ai_routerai_key' => 'it-dummy',
+    foreach (['ai_live_confirm' => '0', 'ai_enabled' => '1', 'ai_bot_user_id' => (string)$botId, 'ai_routerai_key' => 'it-dummy',
               'ai_image_auto_interval' => '0', 'bot_last_autodraw' => '0', 'bot_last_manual_draw' => '0',
               'ai_image_daily_limit' => '0', 'ai_image_llm_caption' => '0'] as $k => $v) {
         $optBackup[$k] = $cfg->getOption($k, null);
@@ -115,7 +115,7 @@ try {
     // 6) Не-auto: отказ постится как раньше (регресс)
     $artist->handleDrawChat($cmd, ['username' => "{$marker}_Пони"], fn() => null, fn() => null);
     $row = $conn->query("SELECT id, message FROM chat_messages WHERE id > $msgBefore ORDER BY id DESC LIMIT 1")->fetch_assoc();
-    check($row && str_contains($row['message'], 'рисовать-то нечего'), 'ручной режим: отказ постится (регресс цел)');
+    check($row && str_contains($row['message'], 'не смогла собрать сценку'), 'ручной режим: отказ постится (регресс цел)');
     $cleanupMsgIds[] = (int)$row['id'];
 
     // 7) auto-успех: безадресная подпись с рисунком
