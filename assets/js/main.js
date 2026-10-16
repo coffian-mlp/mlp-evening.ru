@@ -443,6 +443,7 @@ $(document).ready(function() {
 
     // Specific Registration Handler
     window.startCaptchaRegistration = function() {
+        if (!document.querySelector('#ajax-register-form [name=account_consent]').checked) { $('#register-error').show().text('Подтверди согласие на обработку данных аккаунта.'); return; }
         // Validate Password Match first
         var p1 = $('#reg_pass').val();
         var p2 = $('#reg_pass_conf').val();
@@ -726,8 +727,10 @@ $(document).ready(function() {
     });
 
     function sendHeartbeat() {
+        if(window.privacyExiting)return;
         $.post('/api.php', { 
             action: 'heartbeat',
+            ux_visible: window.privacyChoices && window.privacyChoices.analytics && !document.hidden ? '1' : '0',
             csrf_token: $('meta[name="csrf-token"]').attr('content') 
         }, function(response) {
             if (response.success && response.data.online_stats) {
@@ -793,6 +796,7 @@ $(document).ready(function() {
 
     // Handle Window Close (Leave)
     window.addEventListener('beforeunload', function() {
+        if(window.privacyExiting)return;
         // Use sendBeacon if available for reliability
         const data = new FormData();
         data.append('action', 'leave');
@@ -1010,7 +1014,7 @@ function loadUserSocials() {
                         iframe.setAttribute('scrolling', 'no');
                         iframe.setAttribute('frameborder', '0');
                         
-                        $widgetContainer.append(iframe);
+                        $widgetContainer.append($('<button type="button" class="btn-primary">Подключить Telegram</button>').on('click',function(){ $widgetContainer.empty().append(iframe); }));
                         
                         // Слушаем ответ от Iframe (один раз, чтобы не плодить слушателей)
                         if (!window.telegramMessageListenerAdded) {
@@ -1391,3 +1395,5 @@ window.syncCustomSelectLabel = function (selectEl) {
     var opt = selectEl.options[selectEl.selectedIndex];
     $wrapper.children('.select-selected').html(opt ? opt.innerHTML : '');
 };
+
+$(function(){if(document.body.classList.contains("profile-page"))loadUserSocials();});

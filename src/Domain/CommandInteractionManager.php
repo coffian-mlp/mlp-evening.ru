@@ -1097,4 +1097,19 @@ final class CommandInteractionManager
         }
         return null;
     }
+
+    public function eraseUserData(int $userId): void {
+        foreach (['DELETE FROM command_interactions WHERE owner_id=?'] as $sql) {
+            $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
+            $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
+        }
+    }
+
+    public function cancelPrivacy(int $userId): void {
+        foreach (['UPDATE command_interactions SET state=\'cancelled\',updated_at=UTC_TIMESTAMP() WHERE owner_id=? AND state IN (\'pending\',\'clarifying\',\'resolving\')'] as $sql) {
+            $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
+            $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
+        }
+    }
+
 }

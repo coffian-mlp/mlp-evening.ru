@@ -507,4 +507,17 @@ class EpisodeManager {
     public function clearWatchingNowLog() {
         return $this->db->query('TRUNCATE TABLE watching_now');
     }
+
+    public function eraseUserData(int $userId): void {
+        foreach (['DELETE FROM episode_wishes WHERE user_id=?','DELETE FROM episode_wish_events WHERE user_id=?','DELETE FROM episode_wish_locks WHERE user_id=?','UPDATE playlist_corrections SET actor_id=0,operation_key=CONCAT(\'erased:\',id) WHERE actor_id=?'] as $sql) {
+            $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
+            $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
+        }
+    }
+
+
+    public function suspendPrivacy(int $userId, bool $suspend): void {
+        $from=$suspend?'active':'privacy_suspended';$to=$suspend?'privacy_suspended':'active';
+        $this->sql('UPDATE episode_wishes SET status=? WHERE user_id=? AND status=?',[$to,$userId,$from]);
+    }
 }

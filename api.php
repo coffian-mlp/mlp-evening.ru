@@ -64,6 +64,20 @@ try {
 
     $action = $_POST['action'] ?? '';
 
+    if ($isLoggedIn) {
+        $privacyUserId = Auth::userId();
+        \Domain\Privacy::lockAccount($privacyUserId);
+        $accountPrivacy = \Domain\Privacy::account($privacyUserId);
+        if (($accountPrivacy['state'] ?? '') === 'deleted') {
+            Auth::logout();
+            \Api\Response::fail('Учётная запись удалена. Войди снова.', ['redirect'=>'/login.php']);
+        }
+        \Domain\Privacy::rememberSession($privacyUserId);
+        if (!\Domain\Privacy::actionAllowed($action, $accountPrivacy)) {
+            \Api\Response::fail('Подтверди согласие на обработку данных аккаунта в профиле.', ['privacy_required'=>true,'redirect'=>'/profile.php']);
+        }
+    }
+
     if (in_array($action, ['get_command_interaction', 'act_command_interaction'], true)) {
         \Api\CommandInteractionController::configure(
             \LLM\CommandInteractions::registry(),

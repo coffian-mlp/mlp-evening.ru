@@ -11,8 +11,8 @@ $themeAssets = \Domain\SiteAppearance::assets();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= $app->getTitle() ?></title>
-    <link rel="icon" href="/favicon.png">
-    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="/favicon.png?v=<?= $app->assetVersion('/favicon.png') ?>">
+    <link rel="manifest" href="/manifest.json?v=mlp414">
     <meta name="theme-color" content="#2b1f43">
     <script src="/assets/js/theme.js?v=<?= $app->assetVersion('/assets/js/theme.js') ?>"></script>
     <style>
@@ -22,7 +22,7 @@ $themeAssets = \Domain\SiteAppearance::assets();
         }
     </style>
     <!-- iOS: standalone-режим и иконка на домашний экран (MLP-261) -->
-    <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">
+    <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png?v=<?= $app->assetVersion('/assets/img/apple-touch-icon.png') ?>">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="MLP Evening">
@@ -47,9 +47,7 @@ $themeAssets = \Domain\SiteAppearance::assets();
     <?php $app->showHead(); ?>
     <link rel="stylesheet" href="/assets/css/themes.css?v=<?= $app->assetVersion('/assets/css/themes.css') ?>">
     
-    <?php if (isset($_SESSION['user_id'])): ?>
         <meta name="csrf-token" content="<?= Auth::generateCsrfToken() ?>">
-    <?php endif; ?>
 
     <!-- jQuery (Local) -->
     <script src="/assets/js/jquery.min.js"></script>
@@ -59,7 +57,8 @@ $themeAssets = \Domain\SiteAppearance::assets();
         window.currentUserId = <?= isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'null' ?>;
         window.currentUserRole = "<?= isset($_SESSION['role']) ? $_SESSION['role'] : '' ?>";
         // CSRF-токен глобально (L4/MLP-229): нужен формам дашборда (события и т.п.)
-        window.csrfToken = <?= isset($_SESSION['user_id']) ? json_encode(Auth::generateCsrfToken()) : 'null' ?>;
+        window.csrfToken = <?= json_encode(Auth::generateCsrfToken()) ?>;
+        window.privacyChoices = <?= json_encode(\Domain\Privacy::choices()) ?>;
         // Pass server time (seconds) to calculate clock skew
         window.serverTime = <?= time() ?>;
         

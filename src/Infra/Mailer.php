@@ -6,12 +6,32 @@ use Exception;
 
 
 class Mailer {
+    public const DEFAULT_FROM_EMAIL = 'noreply@mlp-evening.ru';
+
+    /** Remove only attributable legacy recovery copies, without clearing unrelated history. */
+    public static function eraseRecipientLogs(string $email): void {
+        if(!filter_var($email,FILTER_VALIDATE_EMAIL))return;
+        self::eraseLogRecipient(dirname(__DIR__,2).'/logs/mail.log',$email,true);
+        self::eraseLogRecipient(dirname(__DIR__,2).'/logs/mail_errors.log',$email,false);
+    }
+    private static function eraseLogRecipient(string $path,string $email,bool $blocks): void {
+        if(!is_file($path))return;
+        $file=fopen($path,'c+');if(!$file||!flock($file,LOCK_EX))throw new \RuntimeException('Cannot lock recovery log');
+        try {
+            $old=stream_get_contents($file);
+            $new=$blocks?preg_replace_callback('/^={50}\RDate: [^\r\n]+\R.*?^={50}\R\R?/ms',static function($match)use($email){
+                return preg_match('/^To: ([^\r\n]+)$/m',$match[0],$to)&&strcasecmp(trim($to[1]),$email)===0?'':$match[0];
+            },$old):implode('',array_filter(preg_split('/(?<=\n)/',$old),static fn($line)=>stripos($line,$email)===false));
+            if($new===null)throw new \RuntimeException('Cannot parse recovery log');
+            if($new!==$old){rewind($file);if(fwrite($file,$new)!==strlen($new)||!ftruncate($file,strlen($new)))throw new \RuntimeException('Cannot rewrite recovery log');}
+        } finally {flock($file,LOCK_UN);fclose($file);}
+    }
     private $fromEmail;
     private $fromName;
 
     public function __construct() {
         // Можно вынести настройки в базу/конфиг, пока зададим дефолтные для проекта
-        $this->fromEmail = 'noreply@mlp-evening.ru';
+        $this->fromEmail = self::DEFAULT_FROM_EMAIL;
         $this->fromName = 'MLP Evening';
     }
 
@@ -55,9 +75,8 @@ class Mailer {
         
         $logEntry = str_repeat("=", 50) . "\n";
         $logEntry .= "Date: " . date('Y-m-d H:i:s') . "\n";
-        $logEntry .= "To: $to\n";
         $logEntry .= "Subject: $subject\n";
-        $logEntry .= "Body:\n$htmlMessage\n";
+        $logEntry .= "Recipient and body omitted: privacy policy\n";
         $logEntry .= str_repeat("=", 50) . "\n\n";
 
         // --- 2. ОТПРАВКА ---
@@ -65,7 +84,7 @@ class Mailer {
         $configManager = ConfigManager::getInstance();
         
         // Сначала пишем в лог (для истории)
-        if (file_put_contents($logFile, $logEntry, FILE_APPEND) === false) {
+        if (file_put_contents($logFile, $logEntry, FILE_APPEND | LOCK_EX) === false) {
              error_log("Mailer Error: Cannot write to $logFile");
              // Не падаем
         }
@@ -91,9 +110,9 @@ class Mailer {
                 
             } catch (Exception $e) {
                 // Если SMTP упал
-                $errorMsg = "SMTP Send Error: " . $e->getMessage();
+                $errorMsg = "SMTP Send Error: " . get_class($e) . " (code " . $e->getCode() . ")";
                 error_log($errorMsg);
-                file_put_contents($logDir . '/mail_errors.log', date('Y-m-d H:i:s') . " - " . $errorMsg . "\n", FILE_APPEND);
+                file_put_contents($logDir . '/mail_errors.log', date('Y-m-d H:i:s') . " - " . $errorMsg . "\n", FILE_APPEND | LOCK_EX);
                 
                 throw new Exception("Ошибка отправки через SMTP. Проверьте настройки.");
             }

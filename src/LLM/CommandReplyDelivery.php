@@ -15,7 +15,7 @@ final class CommandReplyDelivery {
 
     public static function confirmation(LLMManager $llm, string $instruction, string $fallback, array $quotes, ?string $mustContain, string $message): bool {
         $queue = new JobQueue();
-        $data = ['command' => ['handler_type' => 'command_reply_delivery'], 'message' => $message,
+        $data = ['user_id'=>$llm->privacyActorId(), 'command' => ['handler_type' => 'command_reply_delivery'], 'message' => $message,
             'confirmation' => compact('instruction', 'fallback', 'quotes', 'mustContain')];
         $id = $queue->enqueue('dynamic_command', $data, 0);
         self::processJob($llm, $queue, ['id' => $id, 'type' => 'dynamic_command', 'data' => $data, 'attempts' => 0], $llm->isEnabled());
@@ -24,6 +24,7 @@ final class CommandReplyDelivery {
 
     public static function processJob(LLMManager $llm, JobQueue $queue, array $job, bool $enabled): void {
         $id = (int)$job['id'];
+        if (!\Domain\Privacy::payloadAllowed($job['data'] ?? [])) { $queue->complete([$id]); return; }
         if (!(int)ConfigManager::getInstance()->getOption('ai_enabled', 0)) { $queue->pauseReply($id); return; }
         try {
             if ((int)($job['attempts'] ?? 0) >= self::MAX_ATTEMPTS && !isset($job['data']['prepared_reply'])) {
@@ -57,6 +58,7 @@ final class CommandReplyDelivery {
 
     /** Message and delivery receipt commit together, before realtime transport. */
     public static function publish(LLMManager $llm, array $job): int {
+        if (!\Domain\Privacy::payloadAllowed($job['data'] ?? [])) { (new JobQueue())->complete([(int)$job['id']]); return 0; }
         $db = Database::getInstance()->getConnection(); $id = (int)$job['id'];
         $reply = $job['data']['prepared_reply']; $payload = null; $receipt = 0;
         $chat = $llm->getChatManager();

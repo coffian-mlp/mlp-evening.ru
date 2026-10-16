@@ -92,6 +92,7 @@ class BotWorker {
         // Индивидуальные задачи: приветствия и команды (переиспользуем существующие триггеры).
         foreach ($this->queue->claimDue(50) as $job) {
             $id = (int)$job['id'];
+            if (!\Domain\Privacy::payloadAllowed($job['data'] ?? [])) { $this->queue->complete([$id]); continue; }
             if (!$enabled && !empty($job['data']['drawing_request'])) {
                 $this->queue->release([$id], 30);
                 continue;
@@ -398,6 +399,7 @@ class BotWorker {
             return;
         }
         foreach ((new \Domain\ReminderManager())->claimDue(5) as $r) {
+            $this->llm->withPrivacyActor((int)$r['user_id'],function() use ($r) {
             $fallback = "@{$r['username']}, напоминаю: {$r['text']} ⏰";
             if ($this->llm->isEnabled()) {
                 $this->llm->botSayLive(
@@ -408,6 +410,7 @@ class BotWorker {
             } else {
                 $this->llm->botSay($fallback);
             }
+            });
         }
     }
 

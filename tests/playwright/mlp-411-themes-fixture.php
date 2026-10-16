@@ -19,7 +19,7 @@ if (($argv[1] ?? '') === 'setup') {
     foreach (['admin', 'reader'] as $role) {
         $state[$role . 'Login'] = 'it_mlp411_' . $role . '_' . $state['suffix'];
         $state[$role] = $users->createUser($state[$role . 'Login'], $state['password'], $role === 'admin' ? 'admin' : 'user', 'Theme ' . ucfirst($role));
-        $state['users'][] = $state[$role]; $save($state);
+        $state['users'][] = $state[$role]; $save($state); \Domain\Privacy::setAccountConsent((int)$state[$role],true);
     }
     $text = htmlspecialchars("Theme fixture **bold** `code` ||spoiler||\n> Quote fixture", ENT_QUOTES, 'UTF-8');
     $stmt = $db->prepare("INSERT INTO chat_messages(user_id,username,message,created_at) VALUES(?,'Theme Reader',?,UTC_TIMESTAMP())");

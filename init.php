@@ -12,6 +12,20 @@ require_once __DIR__ . '/autoload.php';
 Auth::check();
 Auth::tryRememberLogin(); // remember-me: авто-вход по cookie, если сессии нет (MLP-223)
 
+if (Auth::userId()) {
+    \Domain\Privacy::lockAccount(Auth::userId());
+    $privacyState = \Domain\Privacy::account(Auth::userId());
+    if (($privacyState['state'] ?? '') === 'deleted') {
+        Auth::logout();
+        header('Location: /login.php'); exit;
+    }
+    \Domain\Privacy::rememberSession(Auth::userId());
+    $privacyPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+    if (($privacyState['state'] ?? '') === 'withdrawn' && !in_array($privacyPath, ['/profile.php','/privacy.php'], true)) {
+        header('Location: /profile.php'); exit;
+    }
+}
+
 // 5. Инициализация приложения
 global $app;
 $app = \Core\Application::getInstance();

@@ -77,6 +77,7 @@ class AuthController {
 
     /** Регистрация: капча, валидация, автовход (public). */
     public static function register(): void {
+        if (($_POST['account_consent'] ?? '') !== '1' || ($_POST['policy_version'] ?? '') !== \Domain\Privacy::version()) Response::fail('Подтверди отдельное согласие на обработку данных аккаунта.');
         $login = trim($_POST['login'] ?? '');
         $nickname = trim($_POST['nickname'] ?? '');
         $email = trim($_POST['email'] ?? '');
@@ -94,7 +95,8 @@ class AuthController {
         }
 
         try {
-            (new UserManager())->createUser($login, $password, 'user', $nickname, $email);
+            $createdId = (new UserManager())->createUser($login, $password, 'user', $nickname, $email);
+            \Domain\Privacy::setAccountConsent((int)$createdId, true);
 
             if (Auth::login($login, $password)) {
                 self::finishThenGreet(json_encode([
@@ -233,6 +235,7 @@ class AuthController {
     private static function finishThenGreet(string $responseJson, string $greetUsername): never {
         Response::finish($responseJson); // MLP-265: общий fastcgi-паттерн в Response
         $uid = (int)(Auth::userId() ?? 0);
+        if ($uid && !\Domain\Privacy::isActive($uid)) exit();
         // MLP-319: штампуем присутствие при входе, иначе первый heartbeat после логина
         // увидит старую отметку и продублирует приветствие (при ai_greeting_cooldown=0).
         if ($uid > 0) {

@@ -4,6 +4,38 @@
  */
 $config = $arResult['config']; // Helper
 ?>
+<div class="card" id="privacy-settings">
+    <h3 class="dashboard-title">Приватность и обработка данных</h3>
+    <form method="post" action="/api.php">
+        <input type="hidden" name="action" value="update_settings">
+        <label class="form-label">Оператор персональных данных</label>
+        <input class="form-input" name="privacy_operator" maxlength="200" required value="<?= htmlspecialchars(\Domain\Privacy::operator()['name']) ?>">
+        <label class="form-label">Email для обращений</label>
+        <input class="form-input" type="email" name="privacy_contact_email" maxlength="200" value="<?= htmlspecialchars(\Domain\Privacy::operator()['email']) ?>">
+        <p>Сведения публикуются в политике. Пустой email использует служебный адрес отправителя писем восстановления. Отзыв согласия на данные аккаунта сразу ограничивает действия; автоматическое удаление выполняется в течение 30 дней. Отказ от статистики аккаунт не отключает.</p>
+        <button class="btn-primary" type="submit">Сохранить сведения</button> <a href="/privacy.php">Открыть политику</a>
+        <?php $heartbeat=(int)$config->getOption('privacy_worker_heartbeat',0); ?>
+        <p>Обслуживание приватности: <?= $heartbeat && time()-$heartbeat<180 ? 'работает' : 'нет свежего подтверждения; проверь запуск privacy_worker.php по cron' ?>.</p>
+    </form>
+    <?php $withdrawals=\Domain\Privacy::withdrawals(); if($withdrawals): ?>
+    <details><summary>Неактивные аккаунты: <?= count($withdrawals) ?></summary>
+        <?php foreach($withdrawals as $withdrawal): ?><p>Учётная запись №<?= (int)$withdrawal['user_id'] ?> — удаление до <?= htmlspecialchars($withdrawal['delete_after']) ?> UTC</p><?php endforeach; ?>
+    </details>
+    <?php endif; ?>
+    <?php $fileReview=\Domain\Privacy::fileReview(); if($fileReview): ?>
+    <details open><summary>Проверка старых файлов: <?= count($fileReview) ?></summary>
+        <p>У этих файлов нет записи о загрузившем пользователе. Проверь принадлежность перед подтверждением. Подтверждённые файлы удаляются при удалении аккаунта; для уже удалённого аккаунта — при ближайшей очистке. Общие и чужие файлы сохраняются.</p>
+        <?php foreach($fileReview as $review): ?>
+        <div class="privacy-file-review">
+            <a href="<?= htmlspecialchars($review['path']) ?>" target="_blank" rel="noopener"><?= htmlspecialchars($review['path']) ?></a>
+            <small>Учётная запись: <?= $review['user_id']!==null ? (int)$review['user_id'] : 'уже удалена' ?></small>
+            <button type="button" class="privacy-secondary" data-review-file="<?= htmlspecialchars($review['path']) ?>" data-review-decision="belongs">Принадлежит пользователю</button>
+            <button type="button" class="privacy-secondary" data-review-file="<?= htmlspecialchars($review['path']) ?>" data-review-decision="shared">Общий или чужой</button>
+        </div>
+        <?php endforeach; ?>
+    </details>
+    <?php endif; ?>
+</div>
 <!-- MLP-256: вариант 'general' — системные, чат, соцавторизация, SMTP, плеер (вкладка «Настройки») -->
 <div class="card">
     <h3 class="dashboard-title">🛠️ Системные Настройки</h3>

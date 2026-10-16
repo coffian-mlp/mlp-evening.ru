@@ -49,6 +49,7 @@ class BotMemoryManager {
 
     /** Новая запись. Возвращает id или false (пустой текст после нормализации / кривые аргументы / сбой). */
     public function add(string $kind, ?int $userId, string $text, string $source = 'manual', ?int $createdBy = null) {
+        if (($userId && Privacy::isWithdrawn($userId)) || ($createdBy && Privacy::isWithdrawn($createdBy))) return false;
         if (!in_array($kind, self::KINDS, true) || !in_array($source, self::SOURCES, true)) {
             return false;
         }
@@ -100,7 +101,8 @@ class BotMemoryManager {
 
     /** Досье пользователя (для команды /память). */
     public function getByUser(int $userId): array {
-        $stmt = $this->db->prepare("SELECT * FROM bot_memory WHERE kind = 'dossier' AND user_id = ? ORDER BY id ASC");
+        if (Privacy::isWithdrawn($userId)) return [];
+        $stmt = $this->db->prepare("SELECT * FROM bot_memory WHERE kind = 'dossier' AND user_id = ? " . Privacy::sqlFilter('created_by') . " ORDER BY id ASC");
         $stmt->bind_param('i', $userId);
         $stmt->execute();
         $res = $stmt->get_result();
@@ -114,11 +116,12 @@ class BotMemoryManager {
     /** Досье участников окна, сгруппированные по user_id (порядок записей внутри — по id). */
     public function getDossiers(array $userIds): array {
         $ids = array_values(array_unique(array_filter(array_map('intval', $userIds), fn($v) => $v > 0)));
+        $ids = array_values(array_filter($ids, static fn($id)=>!Privacy::isWithdrawn($id)));
         if (!$ids) {
             return [];
         }
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $stmt = $this->db->prepare("SELECT * FROM bot_memory WHERE kind = 'dossier' AND user_id IN ($placeholders) ORDER BY id ASC");
+        $stmt = $this->db->prepare("SELECT * FROM bot_memory WHERE kind = 'dossier' AND user_id IN ($placeholders) " . Privacy::sqlFilter('created_by') . " ORDER BY id ASC");
         $stmt->bind_param(str_repeat('i', count($ids)), ...$ids);
         $stmt->execute();
         $res = $stmt->get_result();
@@ -135,7 +138,7 @@ class BotMemoryManager {
      * (compressIfNeeded) зовёт БЕЗ лимита — обязано видеть все auto-записи.
      */
     public function getMemes(?int $limit = null): array {
-        $sql = "SELECT * FROM bot_memory WHERE kind = 'meme' ORDER BY (source = 'manual') DESC, id DESC";
+        $sql = "SELECT * FROM bot_memory WHERE kind = 'meme' " . Privacy::sqlFilter('created_by') . " ORDER BY (source = 'manual') DESC, id DESC";
         if ($limit !== null) {
             $sql .= " LIMIT " . max(1, (int)$limit);
         }
@@ -286,6 +289,7 @@ class BotMemoryManager {
      * удаляются, новая пишется с $source ('oc' — придумала Лира, 'manual' — задал человек через /яос).
      */
     public function setAppearance(int $userId, string $text, string $source = 'oc', ?int $createdBy = null) {
+        if(Privacy::isWithdrawn($userId))return false;
         if ($userId <= 0 || !in_array($source, self::SOURCES, true)) {
             return false;
         }
@@ -300,6 +304,7 @@ class BotMemoryManager {
      * прежние записи с этим префиксом удаляются, новая пишется с $source.
      */
     public function setPersona(int $userId, string $text, string $source = 'manual', ?int $createdBy = null) {
+        if(Privacy::isWithdrawn($userId))return false;
         if ($userId <= 0 || !in_array($source, self::SOURCES, true)) {
             return false;
         }
@@ -308,4 +313,12 @@ class BotMemoryManager {
         $stmt->execute();
         return $this->add('dossier', $userId, $text, $source, $createdBy);
     }
+
+    public function eraseUserData(int $userId): void {
+        foreach (['DELETE FROM bot_memory WHERE user_id=? OR created_by=?'] as $sql) {
+            $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
+            $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
+        }
+    }
+
 }

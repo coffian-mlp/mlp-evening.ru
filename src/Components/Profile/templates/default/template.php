@@ -116,7 +116,7 @@
                     <div id="profile-socials-list">
                         <div class="social-item telegram-item" style="display: flex; justify-content: space-between; align-items: center;">
                             <span style="display: flex; align-items: center; gap: 5px; font-weight: 500;">
-                                <img src="https://telegram.org/favicon.ico" width="16"> Telegram
+                                Telegram
                             </span>
                             <div id="telegram-status-container"></div>
                             <div id="telegram-widget-container"></div>
@@ -130,6 +130,7 @@
             <div id="profile-error" class="error-msg" style="display:none; color: red; margin-top: 10px; text-align: center;"></div>
         </form>
 
+        <?php require __DIR__ . '/privacy.php'; ?>
         <!-- Profile Actions Footer -->
         <div class="profile-actions-footer">
             <form id="logout-form" method="post" action="/api.php" style="margin: 0;">

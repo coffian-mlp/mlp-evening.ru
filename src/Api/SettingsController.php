@@ -24,6 +24,8 @@ use Infra\ConfigManager;
 class SettingsController {
 
     private const KEYS = [
+        'privacy_operator' => 'string',
+        'privacy_contact_email' => 'string',
         // --- Система ---
         'debug_mode'         => 'int',
         'stream_url'         => 'url',
@@ -121,6 +123,11 @@ class SettingsController {
     /** Сохранить глобальные настройки (admin). Бывший action update_settings. */
     public static function update(): void {
         $config = ConfigManager::getInstance();
+        foreach (['privacy_operator','privacy_contact_email'] as $key) if (isset($_POST[$key])) {
+            if (!is_string($_POST[$key]) || mb_strlen(trim($_POST[$key])) > 200) Response::fail('Проверь сведения об операторе данных.');
+        }
+        if (isset($_POST['privacy_operator']) && trim($_POST['privacy_operator']) === '') Response::fail('Укажи оператора персональных данных.');
+        if (!empty($_POST['privacy_contact_email']) && !filter_var(trim($_POST['privacy_contact_email']), FILTER_VALIDATE_EMAIL)) Response::fail('Укажи корректный контактный email.');
 
         // Validate all appearance fields before saving any of them.
         $images = [];

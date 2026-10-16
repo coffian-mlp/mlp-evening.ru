@@ -6,6 +6,8 @@ use Domain\ChatManager;
 
 require_once __DIR__ . '/autoload.php'; // MLP-248
 
+if (Auth::userId() && !\Domain\Privacy::isActive(Auth::userId())) { http_response_code(403); exit; }
+
 
 // Disable time limit for long-running script (or set to reasonable value like 60s for shared hosting)
 set_time_limit(0); 
@@ -92,6 +94,10 @@ while (true) {
     // --- Online Status Update (Every 10s) ---
     if (time() - $lastOnlineUpdate > 10) {
         try {
+            if ($currentUserId && \Domain\Privacy::isWithdrawn((int)$currentUserId)) {
+                sendEvent(['type'=>'privacy_changed','user_id'=>(int)$currentUserId]);
+                break;
+            }
             if ($currentUserId) {
                 $userManager->updateLastSeen($currentUserId);
             }

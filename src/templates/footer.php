@@ -2,6 +2,8 @@
 // src/templates/footer.php
 global $app;
 ?>
+    <?php $app->includeComponent('PrivacyConsent'); ?>
+    <?php $app->addJs('/assets/js/ux-statistics.js'); ?>
     <!-- Global Smart Lightbox -->
     <div id="global-lightbox" class="lightbox" style="display: none;">
         <button id="lightbox-close" class="lightbox-close-btn">&times;</button>

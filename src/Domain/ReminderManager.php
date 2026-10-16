@@ -81,4 +81,19 @@ class ReminderManager {
         }
         return $rows;
     }
+
+    public function eraseUserData(int $userId): void {
+        foreach (['DELETE FROM reminders WHERE user_id=?'] as $sql) {
+            $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
+            $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
+        }
+    }
+
+    public function cancelPrivacy(int $userId): void {
+        foreach (['UPDATE reminders SET status=\'cancelled\' WHERE user_id=? AND status=\'pending\''] as $sql) {
+            $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
+            $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
+        }
+    }
+
 }

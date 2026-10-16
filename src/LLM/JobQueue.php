@@ -458,4 +458,11 @@ class JobQueue {
         $stmt->execute();
         return $stmt->affected_rows;
     }
+
+    public function eraseUserData(int $userId,array $messageIds): void {
+        $json=json_encode(array_values(array_map('intval',$messageIds)));
+        $stmt=$this->db->prepare('DELETE FROM llm_jobs WHERE JSON_UNQUOTE(JSON_EXTRACT(payload,"$.user_id"))=? OR JSON_UNQUOTE(JSON_EXTRACT(payload,"$.owner_id"))=? OR JSON_CONTAINS(?,JSON_EXTRACT(payload,"$.message_id")) OR JSON_OVERLAPS(?,COALESCE(JSON_EXTRACT(payload,"$.confirmation.quotes"),JSON_ARRAY())) OR JSON_OVERLAPS(?,COALESCE(JSON_EXTRACT(payload,"$.prepared_reply.quotes"),JSON_ARRAY()))');
+        $stmt->bind_param('iisss',$userId,$userId,$json,$json,$json);$stmt->execute();
+    }
+
 }

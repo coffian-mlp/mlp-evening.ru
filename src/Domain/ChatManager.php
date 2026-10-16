@@ -58,6 +58,7 @@ class ChatManager {
 
     /** Проверить санкции перед отправкой; не записывает данные. */
     public function assertCanSend(int $userId, bool $current = false): void {
+        if (Privacy::isWithdrawn($userId)) throw new \Core\UserError('Учётная запись неактивна. Проверь согласие в профиле.');
         // --- Moderation Check ---
         $userManager = new UserManager();
         $status = $userManager->getBanStatus($userId, $current);
@@ -358,7 +359,7 @@ class ChatManager {
           LEFT JOIN users u ON cm.user_id = u.id 
           LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
           LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
-          WHERE cm.message LIKE ? AND cm.is_deleted = 0
+          WHERE cm.message LIKE ? AND cm.is_deleted = 0 " . Privacy::sqlFilter('cm.user_id') . "
           ORDER BY cm.id DESC LIMIT ? OFFSET ?";
           
         $stmt = $this->db->prepare($sql);
@@ -593,7 +594,7 @@ class ChatManager {
                                     LEFT JOIN users u ON cr.user_id = u.id
                                     LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
                                     LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
-                                    WHERE cr.message_id = ? 
+                                    WHERE cr.message_id = ? " . Privacy::sqlFilter('cr.user_id') . "
                                     GROUP BY cr.reaction");
         $stmt->bind_param("i", $messageId);
         $stmt->execute();
@@ -612,6 +613,7 @@ class ChatManager {
 
     private function processMessages($messages) {
         if (empty($messages)) return [];
+        $messages = Privacy::redactRows($messages);
         UserMention::invalidateDirectory();
 
         // Collect all quoted message IDs & Current IDs
@@ -649,7 +651,7 @@ class ChatManager {
                        LEFT JOIN users u ON cr.user_id = u.id
                        LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
                        LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
-                       WHERE cr.message_id IN ($idsStr) 
+                       WHERE cr.message_id IN ($idsStr) " . Privacy::sqlFilter('cr.user_id') . "
                        GROUP BY cr.message_id, cr.reaction";
             $rRes = $this->db->query($rQuery);
             if ($rRes) {
@@ -684,7 +686,7 @@ class ChatManager {
             
             if ($idsStr) {
                 // Fetch minimal details for quoting
-                $qQuery = "SELECT cm.id, 
+                $qQuery = "SELECT cm.id, cm.user_id,
                                   COALESCE(NULLIF(u.nickname, ''), u.login, cm.username) as username,
                                   cm.message, cm.created_at, cm.is_deleted, 
                                   uo_color.option_value as chat_color, 
@@ -696,7 +698,7 @@ class ChatManager {
                            WHERE cm.id IN ($idsStr)";
                 $qRes = $this->db->query($qQuery);
                 if ($qRes) {
-                    while ($qRow = $qRes->fetch_assoc()) {
+                    foreach (Privacy::redactRows($qRes->fetch_all(MYSQLI_ASSOC)) as $qRow) {
                         // Default color
                         if (empty($qRow['chat_color'])) $qRow['chat_color'] = '#6d2f8e';
                         
@@ -954,7 +956,7 @@ class ChatManager {
                     cm.message AS text, cm.created_at
              FROM chat_messages cm
              LEFT JOIN users u ON cm.user_id = u.id
-             WHERE cm.id > ? AND cm.is_deleted = 0
+             WHERE cm.id > ? AND cm.is_deleted = 0 " . Privacy::sqlFilter('cm.user_id') . "
              ORDER BY cm.id ASC
              LIMIT ?"
         );
@@ -974,6 +976,7 @@ class ChatManager {
      * Удалённые не отдаются.
      */
     public function getUserMessagesSince(int $userId, int $hours, int $limit = 500): array {
+        if (Privacy::isWithdrawn($userId)) return [];
         $hours = max(1, $hours);
         $limit = max(1, min(2000, $limit));
         $stmt = $this->db->prepare(
@@ -1121,7 +1124,7 @@ class ChatManager {
     /** Bounded public, nondeleted evidence for a past viewing window; never current chat. */
     public function getAnnouncementEvidence(string $fromUtc, string $toUtc, int $limit = 180): array {
         $limit = max(1, min(180, $limit));
-        $stmt = $this->db->prepare('SELECT cm.id,cm.user_id,COALESCE(NULLIF(u.nickname,""),u.login,cm.username) AS username,LEFT(cm.message,1200) AS message,cm.created_at FROM chat_messages cm LEFT JOIN users u ON u.id=cm.user_id WHERE cm.is_deleted=0 AND cm.created_at>=? AND cm.created_at<? ORDER BY cm.id DESC LIMIT ?');
+        $stmt = $this->db->prepare('SELECT cm.id,cm.user_id,COALESCE(NULLIF(u.nickname,""),u.login,cm.username) AS username,LEFT(cm.message,1200) AS message,cm.created_at FROM chat_messages cm LEFT JOIN users u ON u.id=cm.user_id WHERE cm.is_deleted=0 ' . Privacy::sqlFilter('cm.user_id') . ' AND cm.created_at>=? AND cm.created_at<? ORDER BY cm.id DESC LIMIT ?');
         $stmt->bind_param('ssi', $fromUtc, $toUtc, $limit);
         $stmt->execute();
         return array_reverse($stmt->get_result()->fetch_all(MYSQLI_ASSOC));
@@ -1129,6 +1132,38 @@ class ChatManager {
 
     public function latestMessageId(): int {
         return (int)$this->db->query('SELECT COALESCE(MAX(id),0) AS id FROM chat_messages')->fetch_assoc()['id'];
+    }
+
+    public function publishPrivacyChange(int $userId): void {
+        $this->broadcast(['type'=>'privacy_changed','user_id'=>$userId]);
+    }
+
+
+    public function eraseUserData(int $userId): void {
+        foreach (['UPDATE chat_messages SET user_id=NULL,username=\'Удалённый пользователь\',message=\'\',quoted_msg_ids=NULL,is_deleted=1,is_pinned=0,deleted_at=UTC_TIMESTAMP(),edited_at=UTC_TIMESTAMP() WHERE user_id=?','DELETE FROM chat_reactions WHERE user_id=?'] as $sql) {
+            $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
+            $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
+        }
+    }
+
+    public function privacyExport(int $userId): array {
+        $stmt=$this->db->prepare('SELECT id,username,message FROM chat_messages WHERE user_id=?');$stmt->bind_param('i',$userId);$stmt->execute();
+        $out=['message_ids'=>[],'aliases'=>[],'files'=>[]];
+        $stmt->bind_result($messageId,$username,$message);
+        while($stmt->fetch()){
+            $out['message_ids'][]=(int)$messageId;$out['aliases'][$username]=$username;
+            preg_match_all('~/upload/(?:avatars|chat)/[a-zA-Z0-9_.-]+~',html_entity_decode($message),$matches);
+            $out['files']=array_merge($out['files'],$matches[0]);
+        }
+        $stmt->close();$out['aliases']=array_values($out['aliases']);$out['files']=array_values(array_unique($out['files']));
+        return $out;
+    }
+    public function privacySources(array $ids): array {
+        $ids=array_values(array_unique(array_filter(array_map('intval',$ids))));if(!$ids)return [];
+        return $this->db->query('SELECT id,user_id,username FROM chat_messages WHERE id IN ('.implode(',',$ids).')')->fetch_all(MYSQLI_ASSOC);
+    }
+    public function touchPrivacy(int $userId): void {
+        $stmt=$this->db->prepare('UPDATE chat_messages SET edited_at=UTC_TIMESTAMP() WHERE user_id=?');$stmt->bind_param('i',$userId);$stmt->execute();
     }
 
 }

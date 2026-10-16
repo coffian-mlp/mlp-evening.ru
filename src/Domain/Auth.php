@@ -32,6 +32,7 @@ class Auth {
     /** Смена ID сессии после аутентификации — защита от session fixation (MLP-222, M1). */
     public static function regenerateSession() {
         self::ensureSession();
+        Privacy::forgetSession(session_id());
         session_regenerate_id(true);
     }
 
@@ -135,11 +136,15 @@ class Auth {
 
         if ($row) {
             if (password_verify($password, $row['password_hash'])) {
+                Privacy::lockAccount((int)$row['id']);
+                if (!(new UserManager())->getUserById((int)$row['id'])) return false;
+                Privacy::forgetSession(session_id());
                 session_regenerate_id(true); // M1: защита от session fixation
                 $_SESSION['user_id'] = $row['id'];
                 // Теперь используем nickname для отображения!
                 $_SESSION['username'] = !empty($row['nickname']) ? $row['nickname'] : $row['login'];
                 $_SESSION['role'] = $row['role'];
+                Privacy::rememberSession((int)$row['id']);
                 
                 self::generateCsrfToken();
                 
@@ -158,6 +163,7 @@ class Auth {
             if ($selector) self::deleteRememberToken($selector);
             self::clearRememberCookie();
         }
+        Privacy::forgetSession(session_id());
         session_destroy();
     }
 
@@ -211,6 +217,7 @@ class Auth {
             self::deleteRememberToken($selector); self::clearRememberCookie(); return;
         }
 
+        Privacy::lockAccount((int)$row['user_id']);
         $user = self::fetchUserForSession((int)$row['user_id']);
         if (!$user) { self::deleteRememberToken($selector); self::clearRememberCookie(); return; }
 
@@ -219,6 +226,7 @@ class Auth {
         $_SESSION['user_id']  = $user['id'];
         $_SESSION['username'] = !empty($user['nickname']) ? $user['nickname'] : $user['login'];
         $_SESSION['role']     = $user['role'];
+        Privacy::rememberSession((int)$user['id']);
         self::generateCsrfToken();
 
         // Ротация: старый токен недействителен, выдаём новый с продлённым сроком.
@@ -393,4 +401,9 @@ class Auth {
         $stmt->bind_param("s", $ip);
         $stmt->execute();
     }
+
+    public static function eraseUserData(int $userId): void {
+        $db=Database::getInstance()->getConnection();$stmt=$db->prepare('DELETE FROM auth_tokens WHERE user_id=?');$stmt->bind_param('i',$userId);$stmt->execute();
+    }
+
 }

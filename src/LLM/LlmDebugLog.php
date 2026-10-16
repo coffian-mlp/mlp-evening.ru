@@ -85,4 +85,15 @@ class LlmDebugLog {
     public static function providerModel(object $provider): string {
         return method_exists($provider, 'getModel') ? (string)$provider->getModel() : '';
     }
+
+    public static function eraseAliases(array $aliases): void {
+        $db=Database::getInstance()->getConnection();
+        foreach(array_unique(array_filter($aliases)) as $name){
+            $pattern='(@|\\] +)'.preg_quote($name,'~').'([^[:alnum:]_]|$)';
+            $stmt=$db->prepare('UPDATE llm_debug_log SET request="[Удалено по запросу пользователя]",response="[Удалено по запросу пользователя]" WHERE REGEXP_LIKE(request,?) OR REGEXP_LIKE(response,?)');
+            $stmt->bind_param('ss',$pattern,$pattern);$stmt->execute();
+        }
+    }
+
+
 }

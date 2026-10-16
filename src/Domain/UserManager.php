@@ -220,7 +220,9 @@ class UserManager {
     // Алиас для профиля
     public function updateProfile($userId, $data) {
         unset($data['role']); 
-        return $this->updateUser($userId, $data);
+        $result=$this->updateUser($userId, $data);
+        if(Privacy::isWithdrawn((int)$userId))Privacy::reviewLegacyFiles((int)$userId);
+        return $result;
     }
 
     public function createUser($login, $password, $role = 'user', $nickname = null, $email = null) {
@@ -620,7 +622,7 @@ class UserManager {
         $sql = "SELECT u.id, u.nickname, uo_color.option_value as chat_color
                 FROM users u
                 LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
-                WHERE u.last_seen > ?
+                WHERE u.last_seen > ? " . Privacy::sqlFilter('u.id') . "
                 ORDER BY u.nickname ASC";
                 
         $stmt = $this->db->prepare($sql);
@@ -702,5 +704,26 @@ class UserManager {
         }
         unset($u);
         return $users;
+    }
+
+    public function eraseUserData(int $userId): void {
+        foreach (['DELETE FROM audit_logs WHERE user_id=? OR (target_id=? AND action IN (\'ban\',\'unban\',\'mute\',\'unmute\',\'purge\'))','DELETE FROM user_options WHERE user_id=?','DELETE FROM users WHERE id=?'] as $sql) {
+            $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
+            $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
+        }
+    }
+
+    public function privacyIdentity(int $userId, bool $lock = false): ?array {
+        $stmt=$this->db->prepare('SELECT id,login,nickname,email FROM users WHERE id=?'.($lock?' FOR UPDATE':''));
+        $stmt->bind_param('i',$userId);$stmt->execute();return $stmt->get_result()->fetch_assoc()?:null;
+    }
+    public function invalidatePrivacyCache(int $userId): void { $this->clearUserCache($userId); }
+    public function clearPrivacyPresence(int $userId): void {
+        $stmt=$this->db->prepare('UPDATE users SET last_seen=NULL WHERE id=?');$stmt->bind_param('i',$userId);$stmt->execute();
+    }
+
+
+    public function mentionDirectory(): array {
+        return $this->db->query('SELECT id,login,nickname FROM users WHERE 1'.Privacy::sqlFilter('id'))->fetch_all(MYSQLI_ASSOC);
     }
 }

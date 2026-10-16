@@ -15,6 +15,7 @@ use Infra\ConfigManager;
  * $director/$generator — инжекты для тестов (см. integration_draw_command).
  */
 class LyraArtist {
+    private ?int $privacyOwnerId = null;
 
     /**
      * Системный промпт режиссёра (MLP-293) — БЕЗ личности Лиры: через generateReply
@@ -52,6 +53,7 @@ class LyraArtist {
      * дневной лимит ai_image_daily_limit (генерация дороже текста).
      */
     public function handleDraw(array $command, array $contextData, ?callable $generator = null): bool {
+        $this->privacyOwnerId=isset($contextData['user_id'])?(int)$contextData['user_id']:null;
         $subject = BotCommandManager::stripPrefix($command, (string)($contextData['message'] ?? ''), 'нарисуй');
         $drafts = new DrawingCommand($this->llm);
         if (isset($contextData['drawing_request'])) {
@@ -86,6 +88,7 @@ class LyraArtist {
      * в художественное описание сценки, дальше — общий путь художницы.
      */
     public function handleDrawChat(array $command, array $contextData, ?callable $director = null, ?callable $generator = null): bool {
+        $this->privacyOwnerId=isset($contextData['user_id'])?(int)$contextData['user_id']:null;
         return DrawingSchedule::run(!empty($contextData['auto']), fn() => $this->handleDrawChatUnlocked($command, $contextData, $director, $generator));
     }
 
@@ -347,6 +350,10 @@ class LyraArtist {
             return true;
         }
         ImageGenerator::bumpToday();
+        if(!$auto && $this->privacyOwnerId) {
+            \Domain\Privacy::registerUpload($url,$this->privacyOwnerId);
+            if(\Domain\Privacy::isWithdrawn($this->privacyOwnerId))return true;
+        }
         $this->lastDrawingUrl = $url;
 
         // MLP-276: живой комментарий — Лира «смотрит» на свой рисунок (vision)

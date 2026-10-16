@@ -9,7 +9,7 @@ $original = $config->getOption('stream_url', null);
 try {
     $config->setOption('stream_url', $argv[1] ?? 'https://player.twitch.tv/?channel=coffian');
     ob_start();
-    echo '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><!-- APP_HEAD_STRINGS --><link rel="stylesheet" href="/assets/css/main.css"></head><body><main style="width:800px;max-width:100%">';
+    echo '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><!-- APP_HEAD_STRINGS --><link rel="stylesheet" href="/assets/css/main.css"></head><body><script>window.privacyChoices={decided:true,analytics:false,external_media:true};</script><main style="width:800px;max-width:100%">';
     $app->includeComponent('VideoPlayer');
     echo '</main>';
     $app->showFooterScripts();

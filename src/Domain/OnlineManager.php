@@ -68,7 +68,7 @@ class OnlineManager {
             JOIN users u ON os.user_id = u.id
             LEFT JOIN user_options uo ON u.id = uo.user_id AND uo.option_key = 'chat_color'
             LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
-            WHERE os.last_seen > NOW() - INTERVAL ? MINUTE
+            WHERE os.last_seen > NOW() - INTERVAL ? MINUTE " . Privacy::sqlFilter('u.id') . "
             GROUP BY u.id
             ORDER BY u.nickname ASC
         ");
@@ -172,4 +172,12 @@ class OnlineManager {
         }
         return $gapSec >= $thresholdSec;
     }
+
+    public function eraseUserData(int $userId): void {
+        foreach (['DELETE FROM online_sessions WHERE user_id=?'] as $sql) {
+            $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
+            $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
+        }
+    }
+
 }

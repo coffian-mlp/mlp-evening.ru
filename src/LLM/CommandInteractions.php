@@ -13,6 +13,7 @@ final class CommandInteractions
 
     public static function notify(int $id, int $actor, ?array $outcome = null): void
     {
+        if($actor>0 && \Domain\Privacy::isWithdrawn($actor))return;
         $result = (new CommandInteractionManager(self::registry()))->getResult($id, $actor, true);
         if (!empty($result['handler_context']['drawing_request'])) {
             CommandInteractionContinuation::reconcile(self::registry());

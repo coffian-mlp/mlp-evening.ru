@@ -16,7 +16,7 @@ final class UserMention {
 
     public static function directory(): array {
         if (self::$rows === null || time() - self::$loadedAt >= 2) {
-            self::$rows = Database::getInstance()->getConnection()->query('SELECT id,login,nickname FROM users')->fetch_all(MYSQLI_ASSOC);
+            self::$rows = (new UserManager())->mentionDirectory();
             self::$loadedAt = time();
         }
         return self::$rows;

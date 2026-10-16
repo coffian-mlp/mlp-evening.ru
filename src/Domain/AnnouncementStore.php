@@ -258,4 +258,14 @@ final class AnnouncementStore
         $this->sql('UPDATE telegram_announcement_revisions SET state="text_pending" WHERE state="text_generating"');
         $this->sql('UPDATE telegram_announcement_revisions SET state="image_pending" WHERE state="image_generating"');
     }
+
+    public function eraseChatEvidence(array $messageIds): void {
+        if(!$messageIds)return;
+        $ids=array_fill_keys(array_map('intval',$messageIds),true);
+        foreach($this->rows('SELECT id,facts_json FROM telegram_announcement_campaigns FOR UPDATE') as $row){
+            $facts=json_decode($row['facts_json'],true,512,JSON_THROW_ON_ERROR);$chat=$facts['chat']??[];
+            $kept=array_values(array_filter($chat,static fn($entry)=>!isset($ids[(int)($entry['id']??0)])));
+            if(count($kept)!==count($chat)){$facts['chat']=$kept;$this->sql('UPDATE telegram_announcement_campaigns SET facts_json=? WHERE id=?',[json_encode($facts,JSON_THROW_ON_ERROR),$row['id']]);}
+        }
+    }
 }

@@ -1,0 +1,12 @@
+.ux-statistics p { color:var(--text-muted); line-height:1.5; }
+.ux-counters { display:flex; gap:16px; flex-wrap:wrap; margin:20px 0; }
+.ux-counters>div { background:var(--panel-raised); border-radius:10px; padding:16px 24px; }
+.ux-counters strong { display:block; font-size:30px; color:var(--text-main); }
+.ux-distributions { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:14px; margin:20px 0; }
+.ux-statistics details { border:1px solid var(--border-color); border-radius:8px; padding:12px; min-width:0; }
+.ux-statistics summary { cursor:pointer; font-weight:600; }
+.ux-table-scroll { overflow:auto; max-height:320px; }
+.ux-statistics table { width:100%; border-collapse:collapse; font-size:14px; margin-top:12px; }
+.ux-statistics th,.ux-statistics td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--soft-border); }
+.ux-statistics th { color:var(--text-muted); }
+.ux-statistics select { display:inline-block; width:auto; }

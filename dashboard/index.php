@@ -59,6 +59,7 @@ require_once __DIR__ . '/../src/templates/header.php';
             <div class="icon">💾</div>
             <div class="label">База Данных</div>
         </div>
+        <div class="nav-tile" data-target="#tab-statistics"><div class="icon">📊</div><div class="label">Статистика</div></div>
     </div>
 
     <!-- Вкладка 1: Настройки (системные, чат, соцавторизация, SMTP, плеер) -->
@@ -112,4 +113,5 @@ require_once __DIR__ . '/../src/templates/header.php';
 
 </div>
 
+<div id="tab-statistics" class="tab-content container"><?php $app->includeComponent('AdminStatistics'); ?></div>
 <?php require_once __DIR__ . '/../src/templates/footer.php'; ?>

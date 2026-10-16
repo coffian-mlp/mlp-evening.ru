@@ -63,6 +63,8 @@ final class Response {
      * ChatController::send). Закрывает сессию и снимает лимит времени.
      */
     public static function finish(string $responseJson): void {
+        $privacyActor = \Domain\Auth::userId();
+        if ($privacyActor) \Domain\Privacy::unlockAccount($privacyActor);
         if (function_exists('fastcgi_finish_request')) {
             echo $responseJson;
             fastcgi_finish_request();

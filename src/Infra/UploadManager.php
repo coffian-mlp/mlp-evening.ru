@@ -171,6 +171,7 @@ class UploadManager {
         elseif ($this->context === 'icon') $relDir = '/upload/icons/';
         else $relDir = '/upload/avatars/';
         
+        \Domain\Privacy::registerUpload($relDir . $filename);
         return $relDir . $filename;
     }
 
@@ -240,6 +241,7 @@ class UploadManager {
         elseif ($this->context === 'icon') $relDir = '/upload/icons/';
         else $relDir = '/upload/avatars/';
         
+        \Domain\Privacy::registerUpload($relDir . $filename);
         return $relDir . $filename;
     }
 

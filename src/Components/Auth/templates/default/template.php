@@ -56,12 +56,12 @@
             <div class="social-auth-buttons">
                 <?php if ($arResult['telegram_auth_enabled'] && !empty($arResult['telegram_bot_username'])): ?>
                     <div style="text-align: center;">
-                        <script async src="https://telegram.org/js/telegram-widget.js?22" 
+                        <button type="button" class="btn-primary" data-load-telegram>Подключить Telegram для входа</button><template data-telegram-widget><script async src="https://telegram.org/js/telegram-widget.js?22"
                                 data-telegram-login="<?= htmlspecialchars($arResult['telegram_bot_username']) ?>" 
                                 data-size="large" 
                                 data-radius="5" 
                                 data-onauth="onTelegramAuth(user)" 
-                                data-request-access="write"></script>
+                                data-request-access="write"></script></template>
                     </div>
                 <?php endif; ?>
             </div>
@@ -77,6 +77,8 @@
             
             <form id="ajax-register-form">
                 <input type="hidden" name="action" value="register">
+                <input type="hidden" name="policy_version" value="<?= \Domain\Privacy::version() ?>">
+                <label class="privacy-option"><input type="checkbox" name="account_consent" value="1" required><span>Даю <a href="/privacy.php#account-consent">отдельное согласие на обработку данных аккаунта</a>.</span></label>
                 
                 <div class="form-group" style="margin-bottom: 10px;">
                     <input type="text" name="login" class="form-input" placeholder="Твой логин*" required minlength="3">

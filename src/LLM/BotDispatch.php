@@ -16,6 +16,7 @@ class BotDispatch {
 
     /** Диспетчеризация триггера: очередь или inline (с lifelike-задержкой). */
     public static function dispatch(string $type, array $payload): void {
+        if (!\Domain\Privacy::payloadAllowed($payload)) return;
         if ($type === 'dynamic_command' && in_array($payload['command']['handler_type'] ?? '', ['playlist', 'command_interaction_reply'], true)) {
             // Interactive commands remain recoverable even with AI disabled or a stale worker.
             (new JobQueue())->enqueue($type, $payload, 0);

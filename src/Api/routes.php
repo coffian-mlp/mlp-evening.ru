@@ -8,6 +8,12 @@
  */
 
 return [
+    'privacy_choices' => ['role'=>'public','handler'=>[\Api\PrivacyController::class,'choices']],
+    'privacy_status' => ['role'=>'public','handler'=>[\Api\PrivacyController::class,'status']],
+    'privacy_exit' => ['role'=>'public','handler'=>[\Api\PrivacyController::class,'leave']],
+    'privacy_file_review' => ['role'=>'admin','handler'=>[\Api\PrivacyController::class,'fileReview']],
+    'privacy_account' => ['role'=>'user','handler'=>[\Api\PrivacyController::class,'account']],
+    'ux_measure' => ['role'=>'public','handler'=>[\Api\StatisticsController::class,'record']],
     'catalogue_wish' => ['role' => 'user', 'handler' => [\Api\EpisodeCatalogueController::class, 'wish']],
     'catalogue_cancel_wish' => ['role' => 'user', 'handler' => [\Api\EpisodeCatalogueController::class, 'cancelWish']],
     'get_command_interaction' => ['role' => 'public', 'handler' => [\Api\CommandInteractionController::class, 'get']],

@@ -32,6 +32,7 @@
     }
 
     function fallback(element) {
+        if (!window.privacyChoices || !window.privacyChoices.external_media) return;
         element.replaceChildren();
         var iframe = document.createElement('iframe');
         iframe.src = element.dataset.streamUrl;
@@ -41,10 +42,12 @@
     }
 
     function mount(element) {
+        if (!window.privacyChoices || !window.privacyChoices.external_media) return;
         if (element._twitchMounted) return;
         element._twitchMounted = true;
+        var generation = element._privacyGeneration = (element._privacyGeneration || 0) + 1;
         sdk().then(function () {
-            if (!element.isConnected) return;
+            if (!element.isConnected || !window.privacyChoices.external_media || !element._twitchMounted || element._privacyGeneration !== generation) return;
             var options = JSON.parse(element.dataset.twitchOptions);
             options.width = '100%'; options.height = '100%';
             options.parent = Array.from(new Set([location.hostname].concat(options.parent || [])));
@@ -53,12 +56,13 @@
             container.id = 'mlp-twitch-player-' + (++sequence);
             element.replaceChildren(container);
             var player = new Twitch.Player(container.id, options);
+            element._privacyPlayer = player;
             var saved = readVolume();
             var restoring = saved !== null;
             var ready = false;
             var timer;
             function persist() {
-                if (!element.isConnected) { clearInterval(timer); return; }
+                if (!element.isConnected || !window.privacyChoices.external_media) { clearInterval(timer); return; }
                 if (!ready) return;
                 try {
                     var volume = player.getVolume();
@@ -80,18 +84,33 @@
                 persist();
                 // The documented SDK has no volume-change event; this reads local player state only.
                 timer = setInterval(persist, 500);
+                element._privacyTimer = timer;
             });
             function restoreOnPlayback() {
-                if (ready && restoring) { player.setVolume(saved); persist(); }
+                if (ready && restoring && window.privacyChoices.external_media) { player.setVolume(saved); persist(); }
             }
             player.addEventListener(Twitch.Player.PLAY, restoreOnPlayback);
             player.addEventListener(Twitch.Player.PLAYING, restoreOnPlayback);
             window.addEventListener('pagehide', function () { persist(); });
             document.addEventListener('visibilitychange', function () { if (document.hidden) persist(); });
-        }).catch(function () { if (element.isConnected) fallback(element); });
+        }).catch(function () {window.dispatchEvent(new CustomEvent('uxerror',{detail:'player'}));if (element.isConnected) fallback(element);});
     }
 
-    function start() { document.querySelectorAll('.video-content[data-twitch-options]').forEach(mount); }
+    function start() {
+        document.querySelectorAll('.video-content[data-stream-url]').forEach(function(element) {
+            if (!element._privacyPlaceholder) element._privacyPlaceholder = element.firstElementChild.cloneNode(true);
+            if (window.privacyChoices && window.privacyChoices.external_media) {
+                if (element.hasAttribute('data-twitch-options')) mount(element);
+                else if (!element.querySelector('iframe')) fallback(element);
+            } else {
+                clearInterval(element._privacyTimer);
+                try { if(element._privacyPlayer && typeof element._privacyPlayer.destroy==='function')element._privacyPlayer.destroy(); } catch(error) {}
+                element._privacyPlayer=null; element._twitchMounted=false; element._privacyGeneration=(element._privacyGeneration || 0)+1;
+                element.replaceChildren(element._privacyPlaceholder.cloneNode(true));
+            }
+        });
+    }
+    window.addEventListener('privacychange',start);
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
     else start();
 })();

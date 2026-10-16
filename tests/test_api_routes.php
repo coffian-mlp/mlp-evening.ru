@@ -27,6 +27,12 @@ $routes = require __DIR__ . '/../src/Api/routes.php';
 
 // Сверочная таблица «action → роль» (гейт ДО переноса = роль ПОСЛЕ).
 $expected = [
+    'privacy_choices'=>'public',
+    'privacy_status'=>'public',
+    'privacy_exit'=>'public',
+    'privacy_file_review'=>'admin',
+    'privacy_account'=>'user',
+    'ux_measure'=>'public',
     'catalogue_wish' => 'user',
     'catalogue_cancel_wish' => 'user',
     // MLP-229/238/242/245 (были в роутере до MLP-255)

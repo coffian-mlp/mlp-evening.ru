@@ -5,3 +5,6 @@
 
 # Telegram announcement editor (MLP-375). Enable only after dedicated bot readiness checks.
 # * * * * * /usr/bin/php /var/www/fastuser/data/www/mlp-evening.ru/cron_announcements.php >/dev/null 2>&1
+
+# Privacy erasure and aggregated statistics (MLP-414), independent of LLM availability.
+* * * * * /usr/bin/php /var/www/fastuser/data/www/mlp-evening.ru/privacy_worker.php 2>&1 | /usr/bin/logger -t mlp-privacy

@@ -1119,6 +1119,11 @@ $(document).ready(function() {
     // Unified Message Handler
     function processIncomingData(data, live = true) {
         // Handle specialized events
+        if (data.type === 'privacy_changed') {
+            if (Number(data.user_id) === Number(window.currentUserId)) location.assign('/profile.php');
+            else if (window.reloadChatMessages) window.reloadChatMessages();
+            return;
+        }
         if (data.type === 'reaction_update') {
              updateMessageReactions(data.id, data.reactions);
              return;
@@ -1332,6 +1337,7 @@ $(document).ready(function() {
                 centrifugeInstance = new Centrifuge(chatConfig.centrifugo.url, {
                     token: chatConfig.centrifugo.token
                 });
+                centrifugeInstance.on('error',function(){window.dispatchEvent(new CustomEvent('uxerror',{detail:'chat'}));});
 
                 const sub = centrifugeInstance.newSubscription("public:chat");
 
@@ -1370,6 +1376,7 @@ $(document).ready(function() {
             };
 
             evtSourceInstance.onerror = function(e) {
+                window.dispatchEvent(new CustomEvent('uxerror',{detail:'chat'}));
                 console.log("EventSource failed. Reconnecting...", e);
             };
         }
@@ -1388,6 +1395,10 @@ $(document).ready(function() {
         oldestMessageId = null;
         fetchHistory();
     };
+    window.addEventListener('privacyexit',function(){
+        if(centrifugeInstance)centrifugeInstance.disconnect();
+        if(evtSourceInstance)evtSourceInstance.close();
+    });
     
     window.updateChatConnection = function(config) {
         if (config) window.chatConfig = config;

@@ -28,6 +28,15 @@ class LLMManager {
     private string $commandMessage = '';
     private ?array $replyJob = null;
     private bool $durableConfirmations = false;
+    private ?int $privacyActor = null;
+
+    public function privacyActorId(): ?int { return $this->privacyActor; }
+
+    public function withPrivacyActor(int $userId, callable $work): mixed {
+        if(\Domain\Privacy::isWithdrawn($userId))return null;
+        $previous=$this->privacyActor;$this->privacyActor=$userId;
+        try{return $work();}finally{$this->privacyActor=$previous;}
+    }
 
     public function __construct() {
         $config = ConfigManager::getInstance();
@@ -114,12 +123,15 @@ class LLMManager {
     }
 
     public function processTrigger($triggerType, $contextData = []) {
+        if (!\Domain\Privacy::payloadAllowed($contextData)) return false;
+        $previousActor=$this->privacyActor;
+        $this->privacyActor=isset($contextData['user_id'])?(int)$contextData['user_id']:null;
         $previous = $this->commandMessage;
         $previousDurable = $this->durableConfirmations;
         $this->durableConfirmations = !empty($contextData['_durable_confirmations']);
         $this->commandMessage = $triggerType === 'dynamic_command' ? (string)($contextData['message'] ?? '') : '';
         try { return $this->processTriggerInner($triggerType, $contextData); }
-        finally { $this->commandMessage = $previous; $this->durableConfirmations = $previousDurable; }
+        finally { $this->commandMessage = $previous; $this->durableConfirmations = $previousDurable; $this->privacyActor=$previousActor; }
     }
 
     /** Bounded background for explicit subjects; identities never grant action permissions. */
@@ -776,6 +788,7 @@ class LLMManager {
      * Возвращает результат ChatManager::addMessage (id сообщения или true/false).
      */
     public function botSay(string $text, array $quotedIds = []) {
+        if (!\Domain\Privacy::payloadAllowed(['user_id'=>$this->privacyActor,'confirmation'=>['quotes'=>$quotedIds]])) return false;
         if ($this->replyJob !== null) {
             $job = $this->replyJob;
             $job['data']['prepared_reply'] = ['text' => $text, 'quotes' => $quotedIds];

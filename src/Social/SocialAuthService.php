@@ -44,6 +44,7 @@ class SocialAuthService {
         // Сценарий 1: Аккаунт уже привязан
         if ($linkedAccount) {
             $userId = $linkedAccount['user_id'];
+            \Domain\Privacy::lockAccount((int)$userId);
             
             // Если пользователь сейчас залогинен, и это НЕ его аккаунт -> Ошибка (уже занято другим)
             if (Auth::check() && $_SESSION['user_id'] != $userId) {
@@ -65,6 +66,7 @@ class SocialAuthService {
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['login'];
                 $_SESSION['role'] = $user['role'];
+                \Domain\Privacy::rememberSession((int)$user['id']);
                 Auth::issueRememberToken($user['id']); // соц-вход = «запомнить меня» включён (MLP-223)
             }
             
@@ -93,6 +95,7 @@ class SocialAuthService {
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['username'] = $user['login'];
             $_SESSION['role'] = $user['role'];
+            \Domain\Privacy::rememberSession((int)$user['id']);
             Auth::issueRememberToken($user['id']); // соц-вход = «запомнить меня» включён (MLP-223)
             
             return ['success' => true, 'message' => 'Добро пожаловать, новый пони!', 'redirect' => '/'];
@@ -153,4 +156,12 @@ class SocialAuthService {
 
         return $newUserId;
     }
+
+    public function eraseUserData(int $userId): void {
+        foreach (['DELETE FROM user_socials WHERE user_id=?'] as $sql) {
+            $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
+            $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
+        }
+    }
+
 }

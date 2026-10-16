@@ -105,6 +105,7 @@ class PollManager {
         $stmt->execute();
         $poll = $stmt->get_result()->fetch_assoc();
         if (!$poll) return null;
+        if (Privacy::isWithdrawn((int)$poll['created_by'])) return null;
         $poll['options'] = $this->options($id);
         return $poll;
     }
@@ -121,7 +122,7 @@ class PollManager {
 
     private function voteRows(int $pollId): array {
         $rows = [];
-        $stmt = $this->db->prepare("SELECT option_id, user_id FROM poll_votes WHERE poll_id = ?");
+        $stmt = $this->db->prepare("SELECT option_id, user_id FROM poll_votes WHERE poll_id = ? " . Privacy::sqlFilter('user_id') . "");
         $stmt->bind_param("i", $pollId);
         $stmt->execute();
         $res = $stmt->get_result();
@@ -192,7 +193,7 @@ class PollManager {
              LEFT JOIN users u ON pv.user_id = u.id
              LEFT JOIN user_options uo_color ON u.id = uo_color.user_id AND uo_color.option_key = 'chat_color'
              LEFT JOIN user_options uo_avatar ON u.id = uo_avatar.user_id AND uo_avatar.option_key = 'avatar_url'
-             WHERE pv.poll_id = ?
+             WHERE pv.poll_id = ? " . Privacy::sqlFilter('pv.user_id') . "
              GROUP BY pv.option_id");
         $stmt->bind_param("i", $pollId);
         $stmt->execute();
@@ -221,7 +222,7 @@ class PollManager {
     public function listActive(): array {
         $this->closeExpired(); // MLP-251: просроченные не считаются активными
         $rows = [];
-        $res = $this->db->query("SELECT * FROM polls WHERE status = 'open' ORDER BY id DESC");
+        $res = $this->db->query("SELECT * FROM polls WHERE status = 'open' " . Privacy::sqlFilter('created_by') . " ORDER BY id DESC");
         while ($res && $r = $res->fetch_assoc()) $rows[] = $r;
         return $rows;
     }
@@ -304,4 +305,12 @@ class PollManager {
             error_log('PollManager::broadcast ' . $e->getMessage());
         }
     }
+
+    public function eraseUserData(int $userId): void {
+        foreach (['DELETE v FROM poll_votes v JOIN polls p ON p.id=v.poll_id WHERE p.created_by=?','DELETE o FROM poll_options o JOIN polls p ON p.id=o.poll_id WHERE p.created_by=?','DELETE FROM poll_votes WHERE user_id=?','DELETE FROM polls WHERE created_by=?'] as $sql) {
+            $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
+            $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
+        }
+    }
+
 }

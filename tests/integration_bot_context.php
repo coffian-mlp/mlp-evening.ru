@@ -13,13 +13,14 @@ require_once __DIR__ . '/integration_helpers.php';
 
 $conn = it_require_db();
 
+$otherUser=(new \Domain\UserManager())->createUser('it_context_other_'.bin2hex(random_bytes(6)),'Aa!'.bin2hex(random_bytes(14)),'user','ЧужаяПони');
 $cm = new ChatManager();
 $marker = 'it_ctx_' . getmypid();
 $ids = [];
 $ids[] = (int)$cm->addMessage(1, 'ИтПони', "живое-1 $marker");
 $ids[] = $d1 = (int)$cm->addMessage(1, 'ИтПони', "секрет-1 $marker");
 $ids[] = $d2 = (int)$cm->addMessage(1, 'ИтПони', "секрет-2 $marker");
-$ids[] = $d3 = (int)$cm->addMessage(999888, 'ЧужаяПони', "секрет-3 $marker");
+$ids[] = $d3 = (int)$cm->addMessage($otherUser, 'ЧужаяПони', "секрет-3 $marker");
 $ids[] = (int)$cm->addMessage(1, 'ИтПони', "живое-2 $marker");
 $ids[] = $d4 = (int)$cm->addMessage(1, 'ИтПони', "секрет-4 $marker");
 foreach ([$d1, $d2, $d3, $d4] as $id) {
@@ -55,6 +56,7 @@ try {
     // Уборка: тестовые сообщения — физически (своя таблица под тестом, Docker-контур).
     $in = implode(',', array_map('intval', $ids));
     $conn->query("DELETE FROM chat_messages WHERE id IN ($in)");
+    (new \Domain\UserManager())->deleteUser($otherUser);
 }
 
 it_done();

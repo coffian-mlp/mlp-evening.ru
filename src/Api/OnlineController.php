@@ -22,6 +22,7 @@ class OnlineController {
 
         $online = new OnlineManager();
         $online->beat($sessionId, $userId, $ip, $ua);
+        try { \Domain\UxStatistics::touch(); } catch (\Throwable $e) { error_log('UX heartbeat: ' . get_class($e)); }
 
         // Return detailed stats (default window 3 mins)
         $stats = $online->getOnlineStats(3);

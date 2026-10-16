@@ -235,7 +235,7 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
 </script>
 
 <?php if (($arResult['chat_driver'] ?? '') === 'centrifugo'): ?>
-    <script src="https://unpkg.com/centrifuge@5.0.1/dist/centrifuge.js"></script>
+    <script src="/assets/js/centrifuge-5.0.1.js"></script>
 <?php endif; ?>
 
 <!-- Sticker Zoom Overlay -->
