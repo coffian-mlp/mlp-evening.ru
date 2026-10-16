@@ -8,6 +8,7 @@ class Writer386 extends LLM\LLMManager {
  public array $calls=[];
  public array $drafts=[];
  public function __construct(){}
+ public function forAnnouncements(): LLM\LLMManager { return $this; }
  public function liveTextBounded(string $instruction,?string $mustContain,int $deadlineSec,int $timeoutSec=10,?string $trustedTask=null,?array $actionContext=null):?string {
   $this->calls[]=[$instruction,$deadlineSec,$trustedTask];return array_shift($this->drafts);
  }

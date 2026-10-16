@@ -10,6 +10,7 @@ use Infra\ConfigManager;
 /** Facts and bounded generation for privately reviewed Telegram announcements. */
 class AnnouncementContent {
     private ?LLMManager $llm;
+    private ?LLMManager $writer = null;
 
     public function __construct(?LLMManager $llm = null) { $this->llm = $llm; }
 
@@ -143,7 +144,7 @@ class AnnouncementContent {
     }
 
     protected function episodeSummaries(array $stories): ?array {
-        return AnnouncementSynopsis::generate($this->llm,$stories);
+        return AnnouncementSynopsis::generate($this->writerModel(),$stories);
     }
 
     public static function textErrors(string $body, string $kind, int $number, int $start, array $allowedNames = []): array {
@@ -164,7 +165,7 @@ class AnnouncementContent {
     public function generateText(array $facts, string $kind, int $number, string $feedback = '', ?string $previous = null): ?string {
         if (!in_array($kind,['main','reminder'],true)) throw new \InvalidArgumentException('Invalid announcement kind');
         self::roman($number);
-        $llm=$this->llm ??= (new LLMManager())->forAnnouncements();
+        $llm=$this->writerModel();
         $settings=\Domain\AnnouncementSettings::values();
         $use=static fn(string $source)=>AnnouncementContext::enabled($settings,$kind,$source);
         $summaries=$use('playlist')?$this->episodeSummaries($facts['snapshot']['stories']):[];
@@ -243,6 +244,10 @@ class AnnouncementContent {
             foreach ($anchors[0] as $anchor) if (!str_contains($text,$anchor)) return $fallback;
             return $text;
         } catch (\Throwable $error) { return $fallback; }
+    }
+
+    private function writerModel(): LLMManager {
+        return $this->writer ??= ($this->llm ??= new LLMManager())->forAnnouncements();
     }
 
 }
