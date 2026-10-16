@@ -13,6 +13,10 @@
                 <input type="hidden" name="action" value="create_pack">
                 <input type="text" name="code" placeholder="Код (mane6)" class="form-input" style="margin-bottom: 5px; width: 100%;" required>
                 <input type="text" name="name" placeholder="Название (Mane 6)" class="form-input" style="margin-bottom: 5px; width: 100%;" required>
+                <label for="create-pack-author" class="form-label">Автор</label>
+                <input type="text" name="author_name" id="create-pack-author" maxlength="120" class="form-input" placeholder="Необязательно" style="margin-bottom:5px; width:100%;">
+                <label for="create-pack-author-url" class="form-label">Ссылка на автора</label>
+                <input type="url" name="author_url" id="create-pack-author-url" maxlength="2048" class="form-input" placeholder="https://…" style="margin-bottom:5px; width:100%;">
                 <div style="display:flex; align-items:center; gap:5px; margin-bottom:5px;">
                     <label style="font-size:0.8em; color:#666;">Иконка:</label>
                     <input type="file" name="icon_file" accept="image/*" class="form-input" style="padding:5px; font-size:0.8em;">
@@ -98,6 +102,14 @@
             <input type="hidden" name="action" value="update_pack">
             <input type="hidden" name="id" id="edit_pack_id">
             
+            <div class="form-group">
+                <label for="edit_pack_author_name" class="form-label">Автор</label>
+                <input type="text" name="author_name" id="edit_pack_author_name" maxlength="120" class="form-input" placeholder="Необязательно">
+            </div>
+            <div class="form-group">
+                <label for="edit_pack_author_url" class="form-label">Ссылка на автора</label>
+                <input type="url" name="author_url" id="edit_pack_author_url" maxlength="2048" class="form-input" placeholder="https://…">
+            </div>
             <div class="form-group">
                 <label class="form-label">Название</label>
                 <input type="text" name="name" id="edit_pack_name" class="form-input" required>

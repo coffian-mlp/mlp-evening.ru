@@ -51,6 +51,10 @@ class StickerController {
         if (empty($code) || empty($name)) Response::json(false, "Код и имя обязательны", 'error');
 
         try {
+            foreach (['author_name', 'author_url'] as $field) {
+                if (isset($_POST[$field]) && !is_string($_POST[$field])) throw new \Core\UserError('Некорректные сведения об авторе.');
+            }
+            [$authorName, $authorUrl] = \Domain\StickerPackAuthor::normalize($_POST['author_name'] ?? null, $_POST['author_url'] ?? null);
             // Upload Icon if provided
             if (isset($_FILES['icon_file']) && $_FILES['icon_file']['error'] !== UPLOAD_ERR_NO_FILE) {
                 $uploadManager = new UploadManager('icon');
@@ -58,7 +62,7 @@ class StickerController {
             }
 
             $sm = new StickerManager();
-            if ($sm->createPack($code, $name, $iconUrl)) {
+            if ($sm->createPack($code, $name, $iconUrl, $authorName, $authorUrl)) {
                 Response::json(true, "Пак создан! 🎉");
             } else {
                 Response::json(false, "Ошибка (возможно, такой код уже есть)", 'error');
@@ -78,6 +82,10 @@ class StickerController {
         if (!$id || empty($code) || empty($name)) Response::json(false, "Данные неполные", 'error');
 
         try {
+            foreach (['author_name', 'author_url'] as $field) {
+                if (isset($_POST[$field]) && !is_string($_POST[$field])) throw new \Core\UserError('Некорректные сведения об авторе.');
+            }
+            [$authorName, $authorUrl] = \Domain\StickerPackAuthor::normalize($_POST['author_name'] ?? null, $_POST['author_url'] ?? null);
             // Upload Icon if provided
             if (isset($_FILES['icon_file']) && $_FILES['icon_file']['error'] !== UPLOAD_ERR_NO_FILE) {
                 $uploadManager = new UploadManager('icon');
@@ -85,7 +93,7 @@ class StickerController {
             }
 
             $sm = new StickerManager();
-            if ($sm->updatePack($id, $code, $name, $iconUrl)) {
+            if ($sm->updatePack($id, $code, $name, $iconUrl, $authorName, $authorUrl)) {
                 Response::json(true, "Пак обновлен!");
             } else {
                 Response::json(false, "Ошибка обновления", 'error');

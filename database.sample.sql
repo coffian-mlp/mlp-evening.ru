@@ -149,6 +149,8 @@ CREATE TABLE IF NOT EXISTS `sticker_packs` (
   `code` varchar(50) NOT NULL COMMENT 'Уникальный код пака',
   `name` varchar(100) NOT NULL COMMENT 'Название пака',
   `icon_url` varchar(255) DEFAULT NULL,
+  `author_name` varchar(120) DEFAULT NULL,
+  `author_url` varchar(2048) DEFAULT NULL,
   `sort_order` int(11) DEFAULT '0',
   `is_active` tinyint(1) DEFAULT '1',
   PRIMARY KEY (`id`),

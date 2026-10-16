@@ -166,9 +166,10 @@ class StickerManager {
         return $packs;
     }
 
-    public function createPack($code, $name, $iconUrl = null) {
-        $stmt = $this->db->prepare("INSERT INTO sticker_packs (code, name, icon_url) VALUES (?, ?, ?)");
-        $stmt->bind_param("sss", $code, $name, $iconUrl);
+    public function createPack($code, $name, $iconUrl = null, ?string $authorName = null, ?string $authorUrl = null) {
+        [$authorName, $authorUrl] = StickerPackAuthor::normalize($authorName, $authorUrl);
+        $stmt = $this->db->prepare("INSERT INTO sticker_packs (code, name, icon_url, author_name, author_url) VALUES (?, ?, ?, ?, ?)");
+        $stmt->bind_param("sssss", $code, $name, $iconUrl, $authorName, $authorUrl);
         if ($stmt->execute()) {
             return $stmt->insert_id;
         }
@@ -182,14 +183,11 @@ class StickerManager {
         return $stmt->execute();
     }
 
-    public function updatePack($id, $code, $name, $iconUrl = null) {
-        if ($iconUrl !== null) {
-            $stmt = $this->db->prepare("UPDATE sticker_packs SET code = ?, name = ?, icon_url = ? WHERE id = ?");
-            $stmt->bind_param("sssi", $code, $name, $iconUrl, $id);
-        } else {
-            $stmt = $this->db->prepare("UPDATE sticker_packs SET code = ?, name = ? WHERE id = ?");
-            $stmt->bind_param("ssi", $code, $name, $id);
-        }
+    public function updatePack($id, $code, $name, $iconUrl = null, ?string $authorName = null, ?string $authorUrl = null) {
+        [$authorName, $authorUrl] = StickerPackAuthor::normalize($authorName, $authorUrl);
+        // Omitted optional fields preserve existing metadata; empty strings clear it.
+        $stmt = $this->db->prepare("UPDATE sticker_packs SET code=?, name=?, icon_url=COALESCE(?,icon_url), author_name=COALESCE(?,author_name), author_url=COALESCE(?,author_url) WHERE id=?");
+        $stmt->bind_param("sssssi", $code, $name, $iconUrl, $authorName, $authorUrl, $id);
         return $stmt->execute();
     }
 

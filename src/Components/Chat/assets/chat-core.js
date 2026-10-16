@@ -1922,8 +1922,6 @@ $(document).ready(function() {
 
     // 4. Profile Modal Logic
     const profileModal = $('#profile-modal');
-    const profileForm = $('#ajax-profile-form');
-    const profileError = $('#profile-error');
 
     // window.openProfileModal удален отсюда, так как он теперь в main.js
 
@@ -1937,44 +1935,7 @@ $(document).ready(function() {
         }
     });
 
-    if (profileForm.length > 0) {
-        profileForm.on('submit', function(e) {
-            e.preventDefault();
-            const btn = $(this).find('button[type="submit"]');
-            const originalText = btn.text();
-            btn.prop('disabled', true).text('Сохранение...');
-            profileError.hide();
-            
-            const formData = new FormData(this);
-
-            $.ajax({
-                url: '/api.php',
-                type: 'POST',
-                data: formData,
-                processData: false,
-                contentType: false,
-                dataType: 'json',
-                success: function(res) {
-                    if (res.success) {
-                        if (res.data && res.data.reload) {
-                            location.reload(); 
-                        } else {
-                            profileModal.fadeOut(200);
-                            if (window.showFlashMessage) window.showFlashMessage("Профиль обновлен!", "success");
-                            btn.prop('disabled', false).text(originalText);
-                        }
-                    } else {
-                        profileError.text(res.message).show();
-                        btn.prop('disabled', false).text(originalText);
-                    }
-                },
-                error: function() {
-                    profileError.text('Ошибка сервера :(').show();
-                    btn.prop('disabled', false).text(originalText);
-                }
-            });
-        });
-    }
+    // Profile submission is owned by main.js; do not send a second request.
 
     // 5. Chat Toolbar Logic
     
@@ -2004,7 +1965,7 @@ $(document).ready(function() {
             // Use name as fallback for icon text if no icon?
             const tabContent = pack.icon_url 
                 ? `<img src="${escapeHtml(pack.icon_url)}" title="${escapeHtml(pack.name)}">`
-                : `<span style="font-size:12px;">${escapeHtml(pack.name.substring(0, 3))}</span>`;
+                : `<span style="font-size:.75rem;">${escapeHtml(pack.name.substring(0, 3))}</span>`;
                 
             const btn = $(`<button class="sticker-tab-btn ${isActive}" data-pack-id="${pack.id}">${tabContent}</button>`);
             
@@ -2087,6 +2048,19 @@ $(document).ready(function() {
     function renderStickerGrid(packId) {
         const stickerGrid = $('#sticker-grid');
         stickerGrid.empty();
+        const pack = (window.stickerData.packs || []).find(p => Number(p.id) === Number(packId));
+        const credit = $('#sticker-pack-credit').empty().prop('hidden', true);
+        if (pack && (pack.author_name || pack.author_url)) {
+            credit.prop('hidden', false).append(document.createTextNode('Автор: '));
+            let url = null;
+            try {
+                const parsed = new URL(pack.author_url);
+                if (['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password) url = parsed.href;
+            } catch (_) {}
+            const label = pack.author_name || 'Страница автора';
+            if (url) credit.append($('<a>').attr({href: url, target: '_blank', rel: 'noopener noreferrer'}).text(label));
+            else credit.append($('<span>').text(label));
+        }
         const stickers = (window.stickerData.stickers[packId] || []);
         
         if (stickers.length === 0) {

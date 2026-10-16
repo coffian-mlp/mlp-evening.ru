@@ -559,3 +559,7 @@ option:checked {
 .announcement-context { display: flex; flex-wrap: wrap; gap: 12px 20px; border: 1px solid #635079; padding: 14px; margin: 14px 0; }
 .announcement-context legend { padding: 0 6px; }
 .announcement-context label { flex: 1 1 240px; min-width: 0; }
+
+/* Optional public sticker pack attribution. */
+.pack-info { flex-wrap: wrap; min-width: 0; }
+.pack-author-label { flex-basis: 100%; color: var(--text-muted); overflow-wrap: anywhere; }

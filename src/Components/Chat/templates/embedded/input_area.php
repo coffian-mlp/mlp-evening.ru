@@ -25,6 +25,7 @@
                 <button type="button" class="sticker-close-btn">&times;</button>
         </div>
         <div class="sticker-tabs" id="sticker-tabs"></div>
+        <div id="sticker-pack-credit" class="sticker-pack-credit" hidden></div>
         <div class="sticker-grid" id="sticker-grid"></div>
     </div>
 

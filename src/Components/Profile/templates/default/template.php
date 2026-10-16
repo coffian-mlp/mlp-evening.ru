@@ -68,7 +68,7 @@
                             <input type="file" name="avatar_file" class="form-input" accept="image/*" style="font-size: 0.9em;">
                         </div>
                     </div>
-                    <input type="text" name="avatar_url" value="<?= htmlspecialchars($arResult['user']['avatar_url'] ?? '') ?>" class="form-input" placeholder="Или ссылка на картинку..." style="font-size: 0.9em;">
+                    <input type="text" name="avatar_url" value="<?= htmlspecialchars(($arResult['user']['avatar_url'] ?? '') === '/assets/img/default-avatar.png' ? '' : ($arResult['user']['avatar_url'] ?? '')) ?>" class="form-input" placeholder="Или ссылка на картинку..." style="font-size: 0.9em;">
                 </div>
             </div>
 

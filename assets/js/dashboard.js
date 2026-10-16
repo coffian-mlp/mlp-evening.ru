@@ -799,6 +799,8 @@ function loadPacks() {
                     </div>
                 </li>`);
                 
+                if (p.author_name || p.author_url) item.find('.pack-info').append($('<small class="pack-author-label">').text('Автор: ' + (p.author_name || p.author_url)));
+
                 // Click on text -> Select
                 item.find('.pack-info').click(function() {
                     // Select logic for ZIP upload context
@@ -868,6 +870,8 @@ function openEditPackModal(pack) {
     $('#edit_pack_id').val(pack.id);
     $('#edit_pack_name').val(pack.name);
     $('#edit_pack_code').val(pack.code);
+    $('#edit_pack_author_name').val(pack.author_name || '');
+    $('#edit_pack_author_url').val(pack.author_url || '');
     $('#pack-modal').css('display', 'flex').hide().fadeIn(200);
 }
 

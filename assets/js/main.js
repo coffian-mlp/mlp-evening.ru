@@ -839,7 +839,7 @@ $(document).ready(function() {
     // --- 7.5 Font Scale Logic ---
     window.applyFontScale = function(scale) {
         // Ensure scale is within bounds
-        scale = Math.min(Math.max(parseInt(scale), 50), 150);
+        scale = Math.min(Math.max((parseInt(scale, 10) || 100), 50), 150);
         
         // We set font-size on html. Assuming base is 100% (browser default).
         // Using percentage allows user agent stylesheets to work normally.
@@ -878,6 +878,8 @@ $(document).ready(function() {
                     window.currentUserNickname = u.nickname;
                     window.csrfToken = u.csrf_token;
                     window.userOptions = u.user_options;
+                    window.currentUserFontScale = Number(u.user_options?.font_scale || 100);
+                    applyFontScale(window.currentUserFontScale);
                     $(document).trigger('chat:user-options', [u.user_id, u.user_options]);
                     
                     // Update CSRF token in meta tag
@@ -1200,6 +1202,10 @@ $(document).ready(function() {
             processData: false,
             success: function(response) {
                 if (response.success) {
+                    if (response.data && response.data.reload) {
+                        location.reload();
+                        return;
+                    }
                     showFlashMessage(response.message, 'success');
                     
                     // Обновляем UI без перезагрузки
