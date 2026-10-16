@@ -26,7 +26,7 @@ body, html {
     height: 100%;
     font-family: 'Open Sans', 'Segoe UI', Tahoma, sans-serif;
     /* Основной фон сайта */
-    background: url(../img/bg.jpg) no-repeat center center fixed #2B1F43;
+    background: var(--theme-background) no-repeat center center fixed #12152e;
     background-size: cover;
     color: var(--text-main);
 }

@@ -25,6 +25,30 @@ $config = $arResult['config']; // Helper
     </form>
 </div>
 
+<div class="card" id="appearance-settings">
+    <h3 class="dashboard-title">🎨 Оформление сайта</h3>
+    <p class="appearance-help">Для каждого изображения укажи путь от корня сайта, например /upload/background.webp, или ссылку HTTP(S). Пустое поле возвращает встроенное изображение. Для логотипов подойдут изображения с прозрачным фоном.</p>
+    <form method="post" action="/api.php">
+        <input type="hidden" name="action" value="update_settings">
+        <div class="appearance-settings-grid">
+            <?php foreach (['luna' => 'Луна — тёмная тема', 'celestia' => 'Селестия — светлая тема'] as $theme => $label): ?>
+            <fieldset>
+                <legend><?= $label ?></legend>
+                <?php foreach (['background' => 'Фон', 'logo' => 'Логотип'] as $asset => $assetLabel):
+                    $key = 'theme_' . $theme . '_' . $asset;
+                ?>
+                <div class="form-group">
+                    <label class="form-label" for="<?= $key ?>"><?= $assetLabel ?></label>
+                    <input type="text" class="form-input" id="<?= $key ?>" name="<?= $key ?>" maxlength="2048" value="<?= htmlspecialchars($config->getOption($key, ''), ENT_QUOTES, 'UTF-8') ?>" placeholder="<?= \Domain\SiteAppearance::DEFAULTS[$key] ?>">
+                </div>
+                <?php endforeach; ?>
+            </fieldset>
+            <?php endforeach; ?>
+        </div>
+        <button type="submit" class="btn-primary">Сохранить оформление</button>
+    </form>
+</div>
+
 <div class="card">
     <h3 class="dashboard-title">💬 Настройки Чата</h3>
     <form method="post" action="/api.php">

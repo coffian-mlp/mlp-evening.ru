@@ -21,5 +21,14 @@ test('v4.15.0 service worker activates, retires the previous cache and serves ca
         expect(asset.length).toBeGreaterThan(100);
         const keywords = await page.evaluate(async () => (await fetch('/src/Components/Chat/assets/keyword-alerts.js')).text());
         expect(keywords).toContain('function wordForms(word)');
+        const themes = await page.evaluate(async () => {
+            const results = [];
+            for (const url of ['/assets/css/themes.css', '/assets/js/theme.js', '/assets/img/themes/luna-background.webp', '/assets/img/themes/celestia-background.webp', '/assets/img/themes/luna-logo.webp', '/assets/img/themes/celestia-logo.webp']) {
+                const response = await fetch(url);
+                results.push({url, status:response.status, length:(await response.arrayBuffer()).byteLength});
+            }
+            return results;
+        });
+        for (const asset of themes) { expect(asset.status, asset.url).toBe(200); expect(asset.length, asset.url).toBeGreaterThan(100); }
     } finally { await context.setOffline(false); }
 });

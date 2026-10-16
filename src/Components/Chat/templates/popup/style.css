@@ -24,7 +24,7 @@ body, html {
     margin: 0 !important;
     box-shadow: none !important;
     /* Убедимся, что фон контейнера соответствует дизайну */
-    background: var(--bg-darker) !important; 
+    background: var(--chat-surface) !important;
     backdrop-filter: blur(2px) !important;
 }
 
@@ -37,7 +37,7 @@ body, html {
     display: block !important; 
     position: relative !important;
     bottom: 0 !important;
-    background: rgba(30, 20, 50, 0.4) !important;
+    background: var(--bar-surface) !important;
 }
 
 /* Скрываем мобильную кнопку (FAB) и мобильное окно ввода */

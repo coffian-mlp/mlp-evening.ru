@@ -3,9 +3,10 @@ use Domain\Auth;
 use Domain\UserManager;
 // src/templates/header.php
 global $app;
+$themeAssets = \Domain\SiteAppearance::assets();
 ?>
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="luna">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,6 +14,13 @@ global $app;
     <link rel="icon" href="/favicon.png">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#2b1f43">
+    <script src="/assets/js/theme.js?v=<?= $app->assetVersion('/assets/js/theme.js') ?>"></script>
+    <style>
+        :root {
+            --background-luna: url(<?= json_encode($themeAssets['theme_luna_background'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>);
+            --background-celestia: url(<?= json_encode($themeAssets['theme_celestia_background'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>);
+        }
+    </style>
     <!-- iOS: standalone-режим и иконка на домашний экран (MLP-261) -->
     <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -37,6 +45,7 @@ global $app;
     
     <!-- Application Assets (Component CSS) -->
     <?php $app->showHead(); ?>
+    <link rel="stylesheet" href="/assets/css/themes.css?v=<?= $app->assetVersion('/assets/css/themes.css') ?>">
     
     <?php if (isset($_SESSION['user_id'])): ?>
         <meta name="csrf-token" content="<?= Auth::generateCsrfToken() ?>">
@@ -73,11 +82,12 @@ global $app;
         <div class="header-content">
             <div class="logo-area">
                 <a href="/" title="MLP-evening.ru - Поняшный вечерок">
-                    <img src="/assets/img/logo.png" class="logo" alt="MLP Evening Logo" />
+                    <?php require __DIR__ . '/site-logo.php'; ?>
                 </a>
             </div>
 
             <?php $app->includeComponent('SiteMenu', 'header'); // MLP-259 ?>
+            <?php require __DIR__ . '/theme-switch.php'; ?>
 
             <?php if (isset($_SESSION['user_id'])): ?>
                 <div class="user-area">

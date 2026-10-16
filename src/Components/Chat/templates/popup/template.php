@@ -89,6 +89,7 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
         </div>
 
         <div class="chat-settings">
+            <?php require dirname(__DIR__, 4) . '/templates/theme-switch.php'; ?>
             <span id="online-counter" class="online-badge" title="Онлайн">(0)</span>
             <button id="chat-search-btn" class="icon-btn" title="Поиск">🔍</button>
             <!-- Кнопка popout удалена для popup-шаблона -->

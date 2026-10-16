@@ -112,11 +112,25 @@ class SettingsController {
         'ai_max_tokens' => 'uint', // MLP-348: потолок токенов ответа RouterAI/OpenRouter/OpenAI (0 = 5000, кламп 1000..32000)
         'ai_chat_rules' => 'string', // MLP-349: правила чата — в промпт персоны и в /правила ({rules})
         'ai_owner_user_id' => 'uint', // MLP-349: владелец сайта для строки ролей (0 = не задан)
+        'theme_luna_background' => 'image',
+        'theme_luna_logo' => 'image',
+        'theme_celestia_background' => 'image',
+        'theme_celestia_logo' => 'image',
     ];
 
     /** Сохранить глобальные настройки (admin). Бывший action update_settings. */
     public static function update(): void {
         $config = ConfigManager::getInstance();
+
+        // Validate all appearance fields before saving any of them.
+        $images = [];
+        try {
+            foreach (\Domain\SiteAppearance::DEFAULTS as $key => $default) {
+                if (isset($_POST[$key])) $images[$key] = \Domain\SiteAppearance::normalizeImageUrl($_POST[$key]);
+            }
+        } catch (\InvalidArgumentException $e) {
+            Response::json(false, $e->getMessage(), 'error');
+        }
 
         foreach (self::KEYS as $key => $rule) {
             if (!isset($_POST[$key])) {
@@ -132,6 +146,9 @@ class SettingsController {
             }
 
             switch ($rule) {
+                case 'image':
+                    $config->setOption($key, $images[$key]);
+                    break;
                 case 'int':
                     $config->setOption($key, (int)$raw);
                     break;

@@ -22,7 +22,7 @@ $keys = $ref->getValue();
 echo "== Правила корректны по форме ==\n";
 $badRules = [];
 foreach ($keys as $key => $rule) {
-    $valid = in_array($rule, ['int', 'uint', 'string', 'url'], true)
+    $valid = in_array($rule, ['int', 'uint', 'string', 'url', 'image'], true)
         || (is_array($rule) && ($rule[0] ?? '') === 'enum' && is_array($rule[1] ?? null) && $rule[1] !== []);
     if (!$valid) $badRules[] = $key;
 }
