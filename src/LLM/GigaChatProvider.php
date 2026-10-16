@@ -43,6 +43,7 @@ class GigaChatProvider implements LLMProviderInterface {
         ]);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // GigaChat often requires ignoring SSL or adding Russian certs
 
+        RequestDeadline::applyCurl($ch, $this->timeoutSec);
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
@@ -63,16 +64,13 @@ class GigaChatProvider implements LLMProviderInterface {
         throw new Exception("GigaChat Auth Invalid Response: " . $response);
     }
 
-    public function askChat(array $messagesContext, string $systemPrompt): ?string {
+    private function askWithinDeadline(array $messagesContext, string $systemPrompt): ?string {
         $messagesContext = VisionFormatter::maybeExpand($messagesContext, false);
         if (empty($this->authKey)) {
             throw new Exception("GigaChat Auth Key is missing");
         }
 
-        $deadlineAt = microtime(true) + $this->timeoutSec;
         $token = $this->getAccessToken();
-        $remaining = (int)floor($deadlineAt - microtime(true));
-        if ($remaining < 1) throw new Exception("GigaChat cURL Error: Operation timed out");
         $url = 'https://gigachat.devices.sberbank.ru/api/v1/chat/completions';
 
         $messages = [
@@ -92,7 +90,7 @@ class GigaChatProvider implements LLMProviderInterface {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         // MLP-314: таймауты внешних вызовов — зависший провайдер не держит воркер/веб-запрос.
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_TIMEOUT, $remaining);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeoutSec);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
@@ -102,6 +100,7 @@ class GigaChatProvider implements LLMProviderInterface {
         ]);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
+        RequestDeadline::applyCurl($ch, $this->timeoutSec);
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
@@ -123,5 +122,10 @@ class GigaChatProvider implements LLMProviderInterface {
         }
 
         throw new Exception("GigaChat Invalid Response: " . $response);
+    }
+
+    public function askChat(array $messagesContext, string $systemPrompt): ?string {
+        return RequestDeadline::within(RequestDeadline::now() + $this->timeoutSec,
+            fn() => $this->askWithinDeadline($messagesContext, $systemPrompt));
     }
 }

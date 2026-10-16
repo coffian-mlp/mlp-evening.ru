@@ -22,7 +22,7 @@ class YandexGPTProvider implements LLMProviderInterface {
         $this->folderId = $folderId;
     }
 
-    public function askChat(array $messagesContext, string $systemPrompt): ?string {
+    private function askWithinDeadline(array $messagesContext, string $systemPrompt): ?string {
         $messagesContext = VisionFormatter::maybeExpand($messagesContext, false);
         if (empty($this->apiKey) || empty($this->folderId)) {
             throw new Exception("YandexGPT API key or Folder ID is missing");
@@ -123,6 +123,7 @@ class YandexGPTProvider implements LLMProviderInterface {
             'Content-Type: application/json'
         ]);
 
+        RequestDeadline::applyCurl($ch, $this->timeoutSec);
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
@@ -151,5 +152,10 @@ class YandexGPTProvider implements LLMProviderInterface {
         }
 
         throw new Exception("YandexGPT Invalid Response: " . $response);
+    }
+
+    public function askChat(array $messagesContext, string $systemPrompt): ?string {
+        return RequestDeadline::within(RequestDeadline::now() + $this->timeoutSec,
+            fn() => $this->askWithinDeadline($messagesContext, $systemPrompt));
     }
 }

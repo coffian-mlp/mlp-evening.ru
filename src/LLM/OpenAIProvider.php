@@ -32,7 +32,7 @@ class OpenAIProvider implements LLMProviderInterface {
         return (string)$this->model;
     }
 
-    public function askChat(array $messagesContext, string $systemPrompt): ?string {
+    private function askWithinDeadline(array $messagesContext, string $systemPrompt): ?string {
         if (empty($this->apiKey)) {
             throw new Exception("OpenAI API key is missing");
         }
@@ -68,6 +68,7 @@ class OpenAIProvider implements LLMProviderInterface {
             curl_setopt($ch, CURLOPT_PROXY, $this->proxyUrl);
         }
 
+        RequestDeadline::applyCurl($ch, $this->timeoutSec);
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
@@ -99,5 +100,10 @@ class OpenAIProvider implements LLMProviderInterface {
         $copy = clone $this;
         $copy->timeoutSec = max(5, $sec);
         return $copy;
+    }
+
+    public function askChat(array $messagesContext, string $systemPrompt): ?string {
+        return RequestDeadline::within(RequestDeadline::now() + $this->timeoutSec,
+            fn() => $this->askWithinDeadline($messagesContext, $systemPrompt));
     }
 }

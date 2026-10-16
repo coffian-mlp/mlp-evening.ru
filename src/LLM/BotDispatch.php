@@ -75,6 +75,11 @@ class BotDispatch {
             (new JobQueue())->enqueue($type, $payload, $delay);
             return;
         }
+        $reply = ['type' => $type, 'data' => $payload];
+        if (CommandReplyDelivery::handles($reply)) {
+            self::inlineReply($payload, $delay);
+            return;
+        }
         if ($type === 'dynamic_command' && empty($payload['dedup_of'])
             && in_array($payload['command']['handler_type'] ?? '', ['image', 'image_chat'], true)) {
             self::inlineDrawing($payload, $delay);
@@ -137,6 +142,18 @@ class BotDispatch {
             "@{$username}, сейчас занята другим рисунком. Повтори команду чуть позже — этот ещё не начинала.",
             [], "@{$username}"
         );
+    }
+
+    /** Read-only commands share the queue receipt contract even on synchronous hosting. */
+    private static function inlineReply(array $payload, int $delay, ?LLMManager $llm = null): void {
+        $queue = new JobQueue();
+        $id = $queue->reserveInline('dynamic_command', $payload, $delay);
+        if (function_exists('set_time_limit')) @set_time_limit(0);
+        @ignore_user_abort(true);
+        sleep($delay);
+        $llm ??= new LLMManager();
+        CommandReplyDelivery::processJob($llm, $queue,
+            ['id' => $id, 'type' => 'dynamic_command', 'data' => $payload, 'attempts' => 0], $llm->isEnabled());
     }
 
     /** Задержка по типу: команды стрима (MLP-307) отвечаются немедленно, остальным — lifelike. */

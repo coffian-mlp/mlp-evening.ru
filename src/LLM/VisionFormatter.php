@@ -28,7 +28,7 @@ class VisionFormatter {
         foreach ($messages as &$message) unset($message['chat_message_id']);
         unset($message);
         $c = ConfigManager::getInstance();
-        if (!$c->getOption('ai_send_images', 1)) {
+        if (RequestDeadline::expired() || !$c->getOption('ai_send_images', 1)) {
             return $messages;
         }
         // MLP-292: стикеры хранятся текстовым кодом :code: (картинку рендерит фронт) —

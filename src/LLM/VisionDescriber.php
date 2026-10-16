@@ -82,6 +82,8 @@ class VisionDescriber {
             return null;
         }
 
+        if (RequestDeadline::expired()) return null;
+
         // Превью готовим только на живом пути (ConfigManager→БД); с инжектированной
         // моделью (тесты) отдаём URL как есть — resolveForModel там не нужен.
         $imagePart = ($model !== null) ? $url : VisionFormatter::resolveForModel($url);
@@ -91,6 +93,7 @@ class VisionDescriber {
 
         $model = $model ?? [self::class, 'callModel'];
         try {
+            if (RequestDeadline::expired()) return null;
             $desc = $model($imagePart);
         } catch (\Throwable $e) {
             error_log('VisionDescriber: ' . get_class($e) . ': ' . $e->getMessage());

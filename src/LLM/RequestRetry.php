@@ -31,11 +31,15 @@ final class RequestRetry {
 
     /** $provider receives the successful clone, including provider search evidence. */
     public static function ask(LLMProviderInterface &$provider, array $context, string $prompt, ?float $deadlineAt = null, int $timeoutSec = 60): ?string {
-        if (!method_exists($provider, 'withTimeout')) return $provider->askChat($context, $prompt);
-        $base = $provider;
-        return self::run(static function (int $timeout) use ($base, &$provider, $context, $prompt) {
-            $provider = $base->withTimeout($timeout);
-            return $provider->askChat($context, $prompt);
-        }, $deadlineAt ?? microtime(true) + max(75, $timeoutSec), $timeoutSec);
+        $deadlineAt ??= RequestDeadline::now() + max(75, $timeoutSec);
+        return RequestDeadline::within($deadlineAt, static function () use (&$provider, $context, $prompt, $deadlineAt, $timeoutSec) {
+            $deadlineAt = RequestDeadline::at();
+            $base = $provider;
+            return self::run(static function (int $timeout) use ($base, &$provider, $context, $prompt) {
+                $provider = method_exists($base, 'withTimeout') ? $base->withTimeout($timeout) : $base;
+                return RequestDeadline::within(RequestDeadline::now() + $timeout,
+                    static fn() => $provider->askChat($context, $prompt));
+            }, $deadlineAt, $timeoutSec, [RequestDeadline::class, 'now']);
+        });
     }
 }
