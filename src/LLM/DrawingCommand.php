@@ -84,7 +84,19 @@ final class DrawingCommand
     public function reference(array $payload): ?string
     {
         $source = $payload['_source'] ?? (!empty($payload['message_id']) ? (new ChatManager())->getMessageById((int)$payload['message_id']) : null);
-        $quotes = $source['quoted_msg_ids'] ?? ($payload['quoted_msg_ids'] ?? []);
+        $found = $this->referencePaths($source ?? $payload);
+        if (count($found)>1) throw new UserError('Для правки процитируй один рисунок.');
+        $path = $found[0] ?? null;
+        if ($path !== null) {
+            try { ImageGenerator::referenceData($path); }
+            catch (\RuntimeException $error) { throw new UserError('Исходный рисунок недоступен. Процитируй другой рисунок.'); }
+        }
+        return $path;
+    }
+
+    private function referencePaths(array $source): array
+    {
+        $quotes = $source['quoted_msg_ids'] ?? [];
         if (is_string($quotes)) $quotes=json_decode($quotes,true) ?: [];
         $found = [];
         foreach ($quotes as $id) {
@@ -94,13 +106,42 @@ final class DrawingCommand
                 foreach ($matches[1] as $path) $found[$path]=true;
             }
         }
-        if (count($found)>1) throw new UserError('Для правки процитируй один рисунок.');
-        $path = array_key_first($found);
-        if ($path !== null) {
-            try { ImageGenerator::referenceData($path); }
-            catch (\RuntimeException $error) { throw new UserError('Исходный рисунок недоступен. Процитируй другой рисунок.'); }
+        return array_keys($found);
+    }
+
+    /** Explicit edit requests only: quoting or discussing a picture is insufficient. */
+    public static function wantsEdit(string $text, array $botNames = []): bool
+    {
+        $imperative = 'сделай|измени|поменяй|замени|добавь|дополни|дорисуй|нарисуй|убери|удали|перерисуй|исправь|переделай|поверни|сдвинь|перемести|увеличь|уменьши|осветли|затемни|перекрась|покрась|приблизь|отдали';
+        $infinitive = 'сделать|изменить|поменять|заменить|добавить|дополнить|дорисовать|нарисовать|убрать|удалить|перерисовать|исправить|переделать|повернуть|сдвинуть|переместить|увеличить|уменьшить|осветлить|затемнить|перекрасить|покрасить|приблизить|отдалить';
+        $text = preg_replace('/```[\s\S]*?```|`[^`]*`|«[^»]*»|"[^"]*"/u', '', $text);
+        $names = array_filter(array_map('trim', $botNames));
+        usort($names, static fn($a,$b)=>mb_strlen($b)<=>mb_strlen($a));
+        $address = implode('|', array_map(static fn($name)=>preg_quote($name,'/'), $names));
+        foreach (preg_split('/[.!?\n]+\s*/u', trim($text)) as $sentence) {
+            if (preg_match('/^[>«"`\/!]/u', $sentence)) continue;
+            if ($address !== '') $sentence = preg_replace('/^@?(?:'.$address.')(?:\s*[:,—]\s*|\s+)/iu', '', $sentence);
+            $sentence = preg_replace('/^(?:(?:а|ну|тогда|теперь|ещ[её]|пожалуйста|давай(?:те)?)\s*[,—-]?\s+){0,5}/iu', '', $sentence);
+            if (preg_match('/^(?:'.$imperative.')\b/iu', $sentence)) return true;
+            if (preg_match('/^(?:можешь|можно|могла\s+бы|мог\s+бы)\s+(?:пожалуйста\s+)?(?:'.$infinitive.')\b/iu', $sentence)) return true;
         }
-        return $path;
+        return false;
+    }
+
+    /** Recognition performs no model calls or writes; dispatch follows the HTTP acknowledgement. */
+    public function matchQuotedEdit(int $sourceId, int $actor): ?array
+    {
+        $source = (new ChatManager())->getMessageById($sourceId);
+        if (!$source || !empty($source['deleted']) || (int)$source['user_id'] !== $actor) return null;
+        $text = html_entity_decode($source['raw_message'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if (!$this->referencePaths($source)) return null;
+        $bot = (new UserManager())->getUserById($this->llm->getBotUserId());
+        $names = array_merge([$bot['nickname'] ?? '', $bot['login'] ?? ''], explode(',', (string)\Infra\ConfigManager::getInstance()->getOption('ai_aliases', 'лира, lyra, хартстрингс, lyra heartstrings, лирочка')));
+        if (!self::wantsEdit($text, $names)) return null;
+        foreach ((new BotCommandManager())->getActive() as $command) {
+            if ($command['handler_type'] === 'image') return ['command'=>$command, 'source_version'=>ChatManager::interactionSourceVersion($source)];
+        }
+        return null;
     }
 
     public function start(array $command, array $payload, ?string $reference = null): bool
@@ -111,10 +152,17 @@ final class DrawingCommand
         if (!$source || !empty($source['deleted']) || (int)$source['user_id']!==$actor) return false;
         $reference = $this->reference(['_source'=>$source]);
         $text=html_entity_decode($source['raw_message'],ENT_QUOTES|ENT_HTML5,'UTF-8');
-        $active=BotCommandManager::matchCommand((new BotCommandManager())->getActive(),$text);
-        if (($active['handler_type'] ?? '')!=='image' || (int)$active['id']!==(int)$command['id']) return false;
-        $subject=BotCommandManager::stripPrefix($command,$text,'нарисуй');
-        $subject=trim((string)preg_replace('/^черновик(?:\s|$)/iu','',$subject));
+        if (!empty($payload['drawing_reply'])) {
+            $matched = $this->matchQuotedEdit($sourceId, $actor);
+            if (!$matched || (int)$matched['command']['id'] !== (int)$command['id'] || $reference === null
+                || !hash_equals((string)($payload['drawing_reply_version'] ?? ''), ChatManager::interactionSourceVersion($source))) return false;
+            $subject = trim($text);
+        } else {
+            $active=BotCommandManager::matchCommand((new BotCommandManager())->getActive(),$text);
+            if (($active['handler_type'] ?? '')!=='image' || (int)$active['id']!==(int)$command['id']) return false;
+            $subject=BotCommandManager::stripPrefix($command,$text,'нарисуй');
+            $subject=trim((string)preg_replace('/^черновик(?:\s|$)/iu','',$subject));
+        }
         if (mb_strlen($subject)>4000) throw new UserError('Описание превышает 4000 символов.');
         $context=['drawing_request'=>true,'original_query'=>$subject,'clarifications'=>[],'reference_url'=>$reference,'source_id'=>$sourceId,'command_id'=>(int)$command['id']];
         $db=Database::getInstance()->getConnection();$key='drawing_draft:'.$sourceId;

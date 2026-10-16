@@ -62,7 +62,7 @@ class LyraArtist {
         } elseif (!empty($contextData['message_id'])) {
             try {
                 $reference = $drafts->reference($contextData);
-                if ($reference !== null || $subject === '' || preg_match('/^черновик(?:\s|$)/iu', $subject)) return $drafts->start($command, $contextData, $reference);
+                if (!empty($contextData['drawing_reply']) || $reference !== null || $subject === '' || preg_match('/^черновик(?:\s|$)/iu', $subject)) return $drafts->start($command, $contextData, $reference);
             } catch (\Core\UserError $error) {
                 $this->llm->botSayLive('Не удалось принять черновик рисунка. Коротко объясни причину и попроси повторить запрос: ' . $error->getMessage(), $error->getMessage(), [(int)$contextData['message_id']]);
                 return true;

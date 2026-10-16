@@ -163,6 +163,12 @@ class ChatController {
         ]));
         if ($continuationHandled) exit();
 
+        $drawingReply = null;
+        if (!$matchedCommand && $mid !== null && $quotedMsgIds) {
+            $drawingReply = (new \LLM\DrawingCommand(new \LLM\LLMManager()))->matchQuotedEdit((int)$mid, (int)$userId);
+            if ($drawingReply !== null) $matchedCommand = $drawingReply['command'];
+        }
+
         // AR4-1: команда-опрос уважает polls_create_role — как и прямое создание.
         // Нет прав → сбрасываем в обычное упоминание (Лира поболтает, опрос не создаст).
         if ($matchedCommand && in_array($matchedCommand['handler_type'] ?? '', ['poll', 'attendance'], true)
@@ -240,6 +246,10 @@ class ChatController {
                 'username'   => $username,
                 'quoted_msg_ids' => $quotedMsgIds,
             ];
+            if ($drawingReply !== null) {
+                $payload['drawing_reply'] = true;
+                $payload['drawing_reply_version'] = $drawingReply['source_version'];
+            }
             if (($matchedCommand['handler_type'] ?? '') === 'memory_show' && $memoryAllowed) {
                 $payload['allowed'] = true; // fail-closed: ставится ТОЛЬКО здесь (MLP-314)
             }
