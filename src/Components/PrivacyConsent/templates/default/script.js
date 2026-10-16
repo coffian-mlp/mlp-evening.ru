@@ -77,6 +77,7 @@
         var exit=event.target.closest('[data-privacy-exit]');
         if(exit && !exit.dataset.confirmed){
             event.preventDefault();
+            if(window.currentUserId && !confirm('Выйти из аккаунта, отключить статистику и плеер и перейти в Яндекс.Картинки?'))return;
             window.privacyExiting=true;
             window.dispatchEvent(new Event('privacyexit'));
             changed({decided:true,analytics:false,external_media:false});
@@ -97,8 +98,19 @@
         }
         var telegram=event.target.closest('[data-load-telegram]');
         if(telegram){
-            var source=telegram.parentElement.querySelector('template[data-telegram-widget] script');
-            if(source){var script=document.createElement('script');Array.from(source.attributes).forEach(a=>script.setAttribute(a.name,a.value));telegram.replaceWith(script);}
+            if(telegram.disabled)return;
+            var template=telegram.parentElement.querySelector('template[data-telegram-widget]');
+            var source=template && template.content.querySelector('script');
+            if(source){
+                var script=document.createElement('script');Array.from(source.attributes).forEach(a=>script.setAttribute(a.name,a.value));
+                var label=telegram.textContent;telegram.disabled=true;telegram.textContent='Подключаем Telegram…';
+                script.onload=function(){telegram.remove();};
+                script.onerror=function(){
+                    script.remove();telegram.disabled=false;telegram.textContent=label;
+                    notice('Не удалось загрузить Telegram. Проверь доступ к telegram.org и попробуй ещё раз.',true);
+                };
+                telegram.insertAdjacentElement('afterend',script);
+            }
             return;
         }
         var target=event.target.closest('[data-privacy-open], [data-privacy-save], [data-privacy-necessary], [data-privacy-all], [data-privacy-media], [data-account-consent]');

@@ -1,0 +1,40 @@
+const {test,expect}=require('@playwright/test');
+const {execFileSync}=require('child_process');const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'../..'),base=process.env.MLP_BASE_URL,state=path.join(root,'docs/private/mlp414-local.json');
+const fixture=action=>execFileSync('docker',['exec','mlp375-php-1','php','tests/playwright/mlp-414-privacy-fixture.php',action],{cwd:root});
+const widget=`const frame=document.createElement('iframe');frame.dataset.testTelegram='1';frame.src='about:blank';document.currentScript.parentElement.appendChild(frame);`;
+test.use({serviceWorkers:'block',viewport:{width:1366,height:900},launchOptions:{args:['--no-proxy-server'],firefoxUserPrefs:{'network.proxy.type':0}}});
+test.beforeEach(async({page})=>{
+    if(!base||!['localhost','127.0.0.1'].includes(new URL(base).hostname))throw Error('Isolated localhost required');
+    await page.route('https://**',r=>r.abort());await page.route('**/chat_stream.php*',r=>r.abort());
+    fixture('setup');
+});
+test.afterEach(()=>{if(fs.existsSync(state))fixture('cleanup');});
+test('Telegram widget loads from the modal only on request and offers retry on network failure',async({page})=>{
+    let attempts=0;
+    await page.route('https://telegram.org/js/telegram-widget.js?*',r=>{attempts++;return attempts===1?r.abort('failed'):r.fulfill({contentType:'application/javascript',body:widget});});
+    await page.goto(base+'/',{waitUntil:'load'});await page.locator('[data-privacy-necessary]').click();await expect(page.locator('#privacy-panel')).toBeHidden();
+    expect(attempts).toBe(0);await page.locator('.login-btn-chat').click();
+    await page.locator('#login-modal button[onclick="showSocialAuth()"]').click();
+    const button=page.locator('#login-modal [data-load-telegram]');await expect(button).toBeVisible();expect(attempts).toBe(0);
+    await button.click();await expect.poll(()=>attempts).toBe(1);await expect(button).toBeEnabled();
+    await button.click();await expect(page.locator('#login-modal iframe[data-test-telegram]')).toBeVisible();
+    expect(attempts).toBe(2);await expect(button).toHaveCount(0);
+    expect(await page.evaluate(()=>window.privacyChoices)).toEqual({decided:true,analytics:false,external_media:false});
+});
+test('full exit is confirmed and standalone Telegram login remains available afterwards',async({page})=>{
+    await page.route('https://yandex.ru/images/search?**',r=>r.fulfill({contentType:'text/html',body:'<p>Exit destination</p>'}));
+    await page.route('https://telegram.org/js/telegram-widget.js?*',r=>r.fulfill({contentType:'application/javascript',body:widget}));
+    const user=JSON.parse(fs.readFileSync(state,'utf8'));
+    expect((await(await page.request.post(base+'/api.php',{form:{action:'login',username:user.readerLogin,password:user.password}})).json()).success).toBe(true);
+    await page.goto(base+'/',{waitUntil:'load'});await page.locator('[data-privacy-necessary]').click();await expect(page.locator('#privacy-panel')).toBeHidden();
+    await page.locator('.privacy-settings-link').click();
+    page.once('dialog',d=>d.dismiss());await page.locator('#privacy-dialog [data-privacy-exit]').click();
+    await expect(page).toHaveURL(base+'/');await expect(page.locator('#privacy-dialog')).toBeVisible();
+    page.once('dialog',d=>d.accept());await page.locator('#privacy-dialog [data-privacy-exit]').click();
+    await expect(page).toHaveURL(/yandex.ru\/images\/search/);
+    await page.goto(base+'/login.php',{waitUntil:'load'});await page.locator('[data-privacy-necessary]').click();await expect(page.locator('#privacy-panel')).toBeHidden();
+    await page.locator('button[onclick="showSocialAuth()"]').click();await page.locator('[data-load-telegram]').click();
+    await expect(page.locator('iframe[data-test-telegram]')).toBeVisible();expect(await page.evaluate(()=>window.currentUserId)).toBeNull();
+    expect(await page.evaluate(()=>window.privacyChoices.analytics)).toBe(false);expect(await page.evaluate(()=>window.privacyChoices.external_media)).toBe(false);
+});
