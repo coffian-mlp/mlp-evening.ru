@@ -107,7 +107,9 @@ test('account choices survive a fresh device and synchronize opt-out without ano
         await login(second,user,'reader');await second.goto(base+'/privacy.php',{waitUntil:'load'});
         await expect(second.locator('#privacy-panel')).toBeHidden();await dialog(second);
         await expect(second.locator('#privacy-analytics')).toBeChecked();await expect(second.locator('#privacy-external')).toBeChecked();
-        await second.locator('#privacy-analytics').uncheck();await second.locator('#privacy-external').uncheck();await second.locator('[data-privacy-save]').click();
+        await second.locator('#privacy-analytics').uncheck();await second.locator('#privacy-external').uncheck();
+        const saved=second.waitForResponse(r=>r.url().endsWith('/api.php')&&r.request().postData()?.includes('action=privacy_choices'));
+        await second.locator('[data-privacy-save]').click();expect((await(await saved).json()).success).toBe(true);
         expect((await post(page,{action:'ux_measure',page_id:'9'.repeat(32),path:'/'})).success).toBe(false);
         await page.reload({waitUntil:'load'});await expect(page.locator('#privacy-panel')).toBeHidden();await dialog(page);
         await expect(page.locator('#privacy-analytics')).not.toBeChecked();await expect(page.locator('#privacy-external')).not.toBeChecked();

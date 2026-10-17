@@ -7,8 +7,10 @@ class CentrifugoService {
     private $apiUrl;
     private $apiKey;
     private $secret;
+    private int $timeoutSec;
 
-    public function __construct() {
+    public function __construct(int $timeoutSec = 0) {
+        $this->timeoutSec = max(0, min(60, $timeoutSec));
         // Системные настройки окружения — из .env (MLP-252), не из site_options
         // (ConfigManager — про БД-опции, а это инфраструктура).
         $this->apiUrl = Env::get('CENTRIFUGO_API_URL', 'http://centrifugo:8000/api');
@@ -119,6 +121,10 @@ class CentrifugoService {
             'X-API-Key: ' . $this->apiKey
         ]);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        if ($this->timeoutSec > 0) {
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, min(1, $this->timeoutSec));
+            curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeoutSec);
+        }
         
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);

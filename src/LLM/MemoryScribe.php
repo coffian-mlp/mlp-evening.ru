@@ -157,7 +157,7 @@ class MemoryScribe {
         ]];
 
         $remaining = self::JOB_DEADLINE_SEC - (time() - $startedAt);
-        $raw = $this->llm->generateUtility($context, self::SCRIBE_PROMPT, max(1, $remaining));
+        $raw = UsageMeter::within('memory',fn()=>$this->llm->generateUtility($context, self::SCRIBE_PROMPT, max(1, $remaining)));
         if ($raw === null) {
             // Все провайдеры отпали/пусто: отказ, а не «нет фактов» — маркер НЕ сдвигается,
             // батч будет повторён следующим прогоном.
@@ -205,7 +205,7 @@ class MemoryScribe {
                 array_values(array_filter($this->memory->getByUser($uid), fn($r) => $r['source'] === 'auto'))
             );
             $context = [['role' => 'user', 'content' => "Заметки об одном участнике (сожми в 1-3 коротких факта, суммарно до {$userLimit} символов):\n- " . implode("\n- ", $autoTexts)]];
-            $compact = $this->llm->generateUtility($context, self::COMPRESS_PROMPT, $remaining);
+            $compact = UsageMeter::within('memory',fn()=>$this->llm->generateUtility($context, self::COMPRESS_PROMPT, $remaining));
             if ($compact !== null && trim($compact) !== '') {
                 $this->memory->replaceAutoDossier($uid, mb_substr(trim(preg_replace('/\R+/u', ' ', $compact)), 0, $userLimit));
             }
@@ -218,7 +218,7 @@ class MemoryScribe {
                 array_values(array_filter($this->memory->getMemes(), fn($r) => $r['source'] === 'auto'))
             );
             $context = [['role' => 'user', 'content' => "Мемы чата (сожми список: важные легенды оставь по одной строке, суммарно до {$memeLimit} символов):\n- " . implode("\n- ", $autoMemes)]];
-            $compact = $this->llm->generateUtility($context, self::COMPRESS_PROMPT, $remaining);
+            $compact = UsageMeter::within('memory',fn()=>$this->llm->generateUtility($context, self::COMPRESS_PROMPT, $remaining));
             if ($compact !== null && trim($compact) !== '') {
                 // Результат усечён КОДОМ по бюджету: иначе многословная модель оставляла бы
                 // порог 2×meme_limit превышенным и сжатие звалось бы на каждом прогоне вечно.

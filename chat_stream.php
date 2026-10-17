@@ -44,6 +44,8 @@ if ($isLoggedIn) {
 session_write_close();
 
 $chat = new ChatManager();
+$streamReactions = new \Domain\StreamReactions();
+$lastReactionId = $streamReactions->latestId();
 $userManager = new UserManager();
 $lastId = isset($_SERVER["HTTP_LAST_EVENT_ID"]) ? (int)$_SERVER["HTTP_LAST_EVENT_ID"] : 0;
 // Мы можем использовать отдельный заголовок или параметр для отслеживания времени последнего обновления,
@@ -111,6 +113,12 @@ while (true) {
     }
 
     // Ищем новые сообщения (ID > lastId) ИЛИ измененные (edited_at > lastCheckTime)
+    foreach($streamReactions->after($lastReactionId) as $reactionEvent) {
+        echo "event: stream_reaction\n";
+        echo 'data: '.json_encode(\Domain\StreamReactions::event($reactionEvent))."\n\n";
+        $lastReactionId=(int)$reactionEvent['id'];
+        flush();
+    }
     // Используем нахлёст (overlap) в 5 секунд, чтобы не пропустить события из-за рассинхрона часов
     // Клиент должен уметь обрабатывать дубликаты (он это уже делает)
     $searchTime = date('Y-m-d H:i:s', strtotime($lastCheckTime) - 5);

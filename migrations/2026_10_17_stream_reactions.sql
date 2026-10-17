@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS stream_reactions (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ reaction VARCHAR(20) NOT NULL, created_at DATETIME NOT NULL, INDEX(created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS stream_reaction_limits (
+ user_id INT PRIMARY KEY, last_at DATETIME NOT NULL
+) ENGINE=InnoDB;

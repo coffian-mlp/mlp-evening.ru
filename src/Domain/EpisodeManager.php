@@ -520,4 +520,17 @@ class EpisodeManager {
         $from=$suspend?'active':'privacy_suspended';$to=$suspend?'privacy_suspended':'active';
         $this->sql('UPDATE episode_wishes SET status=? WHERE user_id=? AND status=?',[$to,$userId,$from]);
     }
+
+    /** Fetch one extra row for public archive pagination without mutating lifecycle state. */
+    public function getArchivePage(int $limit = 10, int $offset = 0, ?int $now = null): array {
+        $limit = max(1, min(50, $limit));
+        $offset = max(0, min(100000, $offset));
+        return $this->rows('SELECT o.run_id,o.start_at,o.metadata_json,s.payload_json,c.shown_json,
+            EXISTS(SELECT 1 FROM playlist_corrections r WHERE r.completion_key=c.completion_key AND r.snapshot_id=s.id) AS corrected
+            FROM playlist_occurrences o JOIN playlist_snapshots s ON s.id=o.snapshot_id
+            LEFT JOIN playlist_completions c ON c.completion_key=o.run_id AND c.snapshot_id=o.snapshot_id
+            WHERE o.end_at<=? AND o.state<>"cancelled"
+            ORDER BY o.start_at DESC,o.run_id DESC LIMIT '.($limit + 1).' OFFSET '.$offset,
+            [gmdate('Y-m-d H:i:s', $now ?? time())]);
+    }
 }

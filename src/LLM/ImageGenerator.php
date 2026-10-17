@@ -122,6 +122,7 @@ class ImageGenerator {
         $err = curl_error($ch);
         curl_close($ch);
         $ms = (int)round((microtime(true) - $t0) * 1000);
+        UsageMeter::capture($provider,$model,is_string($res)?$res:null,(int)$code,(bool)$err,$ms,'image');
 
         if ($err || $code >= 400 || !$res) {
             error_log("ImageGenerator [$model] HTTP $code: " . ($err ?: mb_substr((string)$res, 0, 200)));

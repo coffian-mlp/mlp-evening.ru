@@ -23,7 +23,10 @@ class CliUtilityProvider implements LLMProviderInterface {
         $escapedPrompt = escapeshellarg($fullPrompt);
         $command = sprintf($this->commandTemplate, $escapedPrompt);
 
+        $started=microtime(true);
         $output = shell_exec($command);
+        $ok=is_string($output) && trim($output)!=='';
+        UsageMeter::capture('cli','cli',$ok?'{"ok":true}':null,$ok?200:500,false,(int)round((microtime(true)-$started)*1000));
         
         if ($output === null || trim($output) === '') {
             throw new Exception("CLI Utility returned empty response");

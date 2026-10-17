@@ -29,6 +29,7 @@ final class AccountErasure
             (new CommandInteractionManager())->eraseUserData($userId);
             (new FeedbackManager())->eraseUserData($userId);
             (new EpisodeManager())->eraseUserData($userId);
+            (new StreamReactions())->eraseUserData($userId);
             (new ReminderManager())->eraseUserData($userId);
             (new OnlineManager())->eraseUserData($userId);
             (new \Social\SocialAuthService())->eraseUserData($userId);

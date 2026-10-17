@@ -15,6 +15,7 @@ use Domain\OnlineManager;
 
 
 class LLMManager {
+    private string $usageTask = 'other';
     private $providers = [];
     /** MLP-332: цепочка для спонтанных реплик — быстрая модель того же провайдера первой, затем общий фоллбек. */
     private $fastProviders = [];
@@ -130,7 +131,8 @@ class LLMManager {
         $previousDurable = $this->durableConfirmations;
         $this->durableConfirmations = !empty($contextData['_durable_confirmations']);
         $this->commandMessage = $triggerType === 'dynamic_command' ? (string)($contextData['message'] ?? '') : '';
-        try { return $this->processTriggerInner($triggerType, $contextData); }
+        $usageTask=$triggerType==='dynamic_command'?'command_'.($contextData['command']['handler_type']??'text'):(string)$triggerType;
+        try { return UsageMeter::within($usageTask,fn()=>$this->processTriggerInner($triggerType, $contextData)); }
         finally { $this->commandMessage = $previous; $this->durableConfirmations = $previousDurable; $this->privacyActor=$previousActor; }
     }
 
@@ -665,7 +667,8 @@ class LLMManager {
             try {
                 // MLP-358: свой таймаут вызова — через копию провайдера (общий экземпляр не меняется).
                 $call = ($timeoutSec !== null && method_exists($provider, 'withTimeout')) ? $provider->withTimeout($timeoutSec) : $provider;
-                $response = RequestRetry::ask($call, $context, $prompt, $deadlineAt, $timeoutSec ?? 60);
+                $usageTask=UsageMeter::task()==='other'?($this->usageTask==='other'?$logKind:$this->usageTask):UsageMeter::task();
+                $response = UsageMeter::ask($usageTask,$call,$context,$prompt,$deadlineAt,$timeoutSec??60);
                 LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
                     ['system' => $prompt, 'messages' => $context], (string)$response, 'ok',
                     (int)round((microtime(true) - $t0) * 1000));
@@ -844,7 +847,7 @@ class LLMManager {
             if ($remaining < 5) return null;
             $call = $provider->withTimeout(min(8, $timeoutSec, $remaining));
             if ($call instanceof RouterAIProvider) $call = $call->withReasoningEffort('low');
-            return RequestRetry::ask($call, $context, $prompt, (float)$deadlineSec, min(8, $timeoutSec));
+            return UsageMeter::ask('search', $call, $context, $prompt, (float)$deadlineSec, min(8, $timeoutSec));
         } catch (\Throwable $e) {
             error_log('Playlist query normalization unavailable: ' . get_class($e));
             return null;
@@ -854,6 +857,7 @@ class LLMManager {
     /** Isolated announcement model chain, with the same persona and memory methods. */
     public function forAnnouncements(): self {
         $copy = clone $this;
+        $copy->usageTask = 'announcement';
         $copy->providers = array_map(static fn($p) => $p instanceof RouterAIProvider
             ? $p->withMaxTokens(max(8192, TokenBudget::fromConfig())) : clone $p, $this->fastProviders);
         return $copy;
@@ -869,7 +873,7 @@ class LLMManager {
             $remaining = $deadlineSec - time();
             if ($remaining < 5) return null;
             $call = $provider->withSynopsisSearch()->withReasoningEffort('low')->withTimeout(min(60,$remaining));
-            $raw = RequestRetry::ask($call,$context,$prompt,(float)$deadlineSec,60);
+            $raw = UsageMeter::ask('synopsis',$call,$context,$prompt,(float)$deadlineSec,60);
             if (!$raw || !$call->getSearchEvidence()) return null;
             return json_encode(['content'=>$raw,'sources'=>$call->getSearchEvidence()],JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         } catch (\Throwable $e) { error_log('Announcement synopsis lookup failed: '.get_class($e)); return null; }
@@ -888,7 +892,7 @@ class LLMManager {
             $remaining = $deadlineSec - time();
             if ($remaining < 5) return null;
             $call = $provider->withWebSearch(3)->withReasoningEffort('low')->withTimeout(min(25, $remaining));
-            $raw = RequestRetry::ask($call, $context, $prompt, (float)$deadlineSec, 25);
+            $raw = UsageMeter::ask('search',$call,$context,$prompt,(float)$deadlineSec,25);
             if (!$raw || !$call->getSearchEvidence()) return null;
             return json_encode(['content' => $raw, 'sources' => $call->getSearchEvidence()], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         } catch (\Throwable $e) {
@@ -939,7 +943,8 @@ class LLMManager {
             if ($remaining < 5) return null;
             $call = $provider->withTimeout(min($timeoutSec, $remaining));
             if ($call instanceof RouterAIProvider) $call = $call->withReasoningEffort('low');
-            $raw = RequestRetry::ask($call, $context, $prompt, (float)$deadlineSec, $timeoutSec);
+            $usageTask=UsageMeter::task()==='other'?($this->usageTask==='other'?($chat?'chat':'utility'):$this->usageTask):UsageMeter::task();
+            $raw = UsageMeter::ask($usageTask,$call,$context,$prompt,(float)$deadlineSec,$timeoutSec);
             $clean = ResponseSanitizer::clean($raw);
             if (!$clean || ($chat && (!ResponseSanitizer::isMeaningful($clean) || ResponseSanitizer::hasImage($clean)))) return null;
             return $clean;
@@ -1368,7 +1373,7 @@ class LLMManager {
         $retryPrompt = $prompt . "\n\n[Язык]: в прошлом варианте ответа были английские слова ({$list}). Напиши ответ заново, полностью по-русски.";
         $t0 = microtime(true);
         try {
-            $again = RequestRetry::ask($provider, $context, $retryPrompt, $deadlineAt, $timeoutSec);
+            $again = UsageMeter::ask(UsageMeter::task() !== 'other' ? UsageMeter::task() : ($this->usageTask !== 'other' ? $this->usageTask : $logKind), $provider, $context, $retryPrompt, $deadlineAt, $timeoutSec);
             LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
                 ['system' => $retryPrompt, 'messages' => $context], (string)$again, 'ok',
                 (int)round((microtime(true) - $t0) * 1000));

@@ -1118,6 +1118,10 @@ $(document).ready(function() {
 
     // Unified Message Handler
     function processIncomingData(data, live = true) {
+        if(data.type === 'stream_reaction') {
+            if(live) window.dispatchEvent(new CustomEvent('mlp:stream-reaction',{detail:data}));
+            return;
+        }
         // Handle specialized events
         if (data.type === 'privacy_changed') {
             if (Number(data.user_id) === Number(window.currentUserId)) window.dispatchEvent(new Event('accountprivacychange'));
@@ -1355,6 +1359,9 @@ $(document).ready(function() {
             // SSE Fallback
             console.log("🔌 Connecting via SSE...");
             evtSourceInstance = new EventSource('/chat_stream.php');
+            evtSourceInstance.addEventListener('stream_reaction',function(e){
+                try{processIncomingData(JSON.parse(e.data));}catch(error){}
+            });
 
             evtSourceInstance.addEventListener('online_count', function(e) {
                 try {

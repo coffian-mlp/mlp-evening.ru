@@ -8,6 +8,9 @@
  */
 
 return [
+    'send_stream_reaction' => ['role'=>'user','handler'=>[\Api\StreamReactionController::class,'send']],
+    'get_llm_usage' => ['role'=>'admin','handler'=>[\Api\UsageController::class,'summary']],
+    'save_llm_usage_rates' => ['role'=>'admin','handler'=>[\Api\UsageController::class,'saveRates']],
     'privacy_choices' => ['role'=>'public','handler'=>[\Api\PrivacyController::class,'choices']],
     'privacy_status' => ['role'=>'public','handler'=>[\Api\PrivacyController::class,'status']],
     'privacy_exit' => ['role'=>'public','handler'=>[\Api\PrivacyController::class,'leave']],

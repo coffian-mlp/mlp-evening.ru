@@ -191,6 +191,7 @@ use Domain\Auth;
 </div>
 
 <!-- MLP-280: метрики Лиры (загрузка — script.js, loadLyraMetrics) -->
+<?php global $app; $app->includeComponent('AdminUsage'); ?>
 <div class="card" style="margin-top: 20px;">
     <h3 class="dashboard-title">📊 Метрики Лиры (7 дней)</h3>
     <div id="lyra-metrics" style="color:#888;">Загрузка…</div>

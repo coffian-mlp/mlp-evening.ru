@@ -62,6 +62,8 @@ class BotWorker {
         try { (new PollManager())->closeExpired(); } catch (\Throwable $e) { error_log('BotWorker closeExpired error: ' . $e->getMessage()); }
         try { $this->config->setOption('bot_worker_heartbeat', (string)time()); } catch (\Throwable $e) {}
         try { $this->queue->purgeOld(168); /* MLP-280: неделя журнала — окно метрик */ } catch (\Throwable $e) {}
+        try { (new \Domain\LlmUsage())->purgeExpired(); } catch (\Throwable $e) {}
+        try { (new \Domain\StreamReactions())->purgeExpired(); } catch (\Throwable $e) {}
         // MLP-314: автопись памяти — ПОСЛЕ heartbeat: бюджет scribe (75с) отсчитывается
         // от свежей отметки живости, к концу шага возраст ≤ 75с+ε < 90с (workerStale) —
         // иначе reactive-часть тика съедала бы запас и диспетчер уходил в inline.

@@ -9,6 +9,8 @@ class VideoPlayerComponent extends Component {
         $config = ConfigManager::getInstance();
         $this->result['stream_url'] = $config->getOption('stream_url', 'https://goodgame.ru/player?161438#autoplay');
         $this->result['twitch'] = self::twitchOptions($this->result['stream_url']);
+        global $app;
+        $app->addJs('/src/Components/VideoPlayer/assets/reactions.js');
         
         $this->includeTemplate();
     }

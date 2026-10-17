@@ -127,6 +127,7 @@ class YandexGPTProvider implements LLMProviderInterface {
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
+        UsageMeter::capture('YandexGPT',$modelUri,is_string($response)?$response:null,(int)$httpCode,(bool)$error,(int)round(curl_getinfo($ch,CURLINFO_TOTAL_TIME)*1000));
         curl_close($ch);
 
         if ($error) {
