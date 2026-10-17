@@ -25,10 +25,13 @@ async function theme(page, name) {
     }
 }
 async function choose(page, name) {
-    await page.locator('[data-theme-toggle]').click();
-    await page.locator('[data-theme-choice="'+name+'"]').click();
+    if(await page.locator('#privacy-panel').isVisible())await page.locator('[data-privacy-necessary]').click();
+    const switcher=page.locator('[data-theme-toggle]:visible');
+    if(await switcher.count())await switcher.click();else await page.locator('#chat-menu-btn').click();
+    await page.locator('[data-theme-choice="'+name+'"]:visible').click();
 }
 async function ready(page) {
+    if(await page.locator('#privacy-panel').isVisible())await page.locator('[data-privacy-necessary]').click();
     await page.evaluate(async () => {
         await document.fonts.ready;
         await Promise.all([...document.images].filter(img => img.classList.contains('logo')).map(img => img.decode().catch(() => {})));
@@ -55,7 +58,7 @@ test('guest switches themes, persists before paint and shares with popup; mobile
             await theme(page, name);
             const bounds = await page.locator('.site-logo').evaluate(el => {const r = el.getBoundingClientRect();return {left:r.left, right:r.right, bottom:r.bottom};});
             expect(bounds.left).toBeGreaterThanOrEqual(0); expect(bounds.right).toBeLessThanOrEqual(width);
-            await expect(page.locator('[data-theme-toggle]')).toBeInViewport();
+            await expect(page.locator(width > 768 ? '#chat-menu-btn' : '[data-theme-toggle]')).toBeInViewport();
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
             await ready(page);
             await page.screenshot({path: path.join(shots, `${info.project.name}-${name}-${width}.png`)});
@@ -74,6 +77,34 @@ test('theme still switches when browser storage is unavailable', async ({page}) 
     await page.goto(base + '/', {waitUntil:'domcontentloaded'}); await theme(page, 'luna');
     await choose(page, 'celestia'); await theme(page, 'celestia');
 });
+test('MLP-423 desktop theme choices stay inside chat settings at narrow and zoom-equivalent sizes', async ({page},info) => {
+    await page.goto(base+'/',{waitUntil:'domcontentloaded'});
+    if(await page.locator('#privacy-panel').isVisible())await page.locator('[data-privacy-necessary]').click();
+    for(const width of [1920,1440,1200,1101,960,800,769]){
+        // 960 CSS px also covers the layout of a 1920 px screen at 200% browser zoom.
+        await page.setViewportSize({width,height:width===1920?1080:700});
+        await expect(page.locator('.video-container .header [data-theme-toggle]')).toBeHidden();
+        await page.locator('#chat-menu-btn').click();
+        await expect(page.locator('.chat-theme-choices')).toBeVisible();
+        const bounds=await page.locator('#chat-dropdown-menu').boundingBox();
+        expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(width);
+        const overlaps=await page.evaluate(()=>{
+            const chat=document.querySelector('.chat-container').getBoundingClientRect();
+            return [...document.querySelector('.video-container .header').children].filter(el=>getComputedStyle(el).display!=='none').some(el=>el.getBoundingClientRect().right>chat.left+1);
+        });
+        expect(overlaps,'header must stay outside chat at '+width+' CSS px').toBe(false);
+        await expect(page.locator('.chat-theme-choices [data-theme-choice="luna"]')).toBeVisible();
+        if([1920,960].includes(width)){await ready(page);await page.screenshot({path:path.join(shots,`mlp423-${info.project.name}-${width}.png`)});}
+        await page.keyboard.press('Escape');await expect(page.locator('#chat-menu-btn')).toHaveAttribute('aria-expanded','false');await expect(page.locator('#chat-menu-btn')).toBeFocused();
+    }
+    await choose(page,'celestia');await theme(page,'celestia');await expect(page.locator('#chat-dropdown-menu')).toBeHidden();
+    await page.reload({waitUntil:'domcontentloaded'});await theme(page,'celestia');
+    for(const width of [768,390]){
+        await page.setViewportSize({width,height:844});await expect(page.locator('[data-theme-toggle]')).toBeVisible();
+        await page.locator('#chat-menu-btn').click();await expect(page.locator('.chat-theme-choices')).toBeHidden();await page.keyboard.press('Escape');
+        await choose(page,'luna');await theme(page,'luna');
+    }
+});
 test('system preference drives default theme and live changes until a manual override; automatic mode can be restored', async ({page}) => {
     await page.emulateMedia({colorScheme:'light'});
     await page.goto(base + '/', {waitUntil:'domcontentloaded'}); await theme(page,'celestia');
@@ -87,10 +118,10 @@ test('system preference drives default theme and live changes until a manual ove
     expect(await page.evaluate(()=>localStorage.getItem('mlp.theme'))).toBe(null);
     await page.emulateMedia({colorScheme:'light'}); await theme(page,'celestia');
     await page.reload({waitUntil:'domcontentloaded'}); await theme(page,'celestia');
-    await page.locator('[data-theme-toggle]').focus(); await page.keyboard.press('Enter');
-    await expect(page.locator('.theme-choices')).toBeVisible();
-    await page.keyboard.press('Escape'); await expect(page.locator('.theme-choices')).toBeHidden();
-    await expect(page.locator('[data-theme-toggle]')).toBeFocused();
+    await page.locator('#chat-menu-btn').focus(); await page.keyboard.press('Enter');
+    await expect(page.locator('.chat-theme-choices')).toBeVisible();
+    await page.keyboard.press('Escape'); await expect(page.locator('.chat-theme-choices')).toBeHidden();
+    await expect(page.locator('#chat-menu-btn')).toBeFocused();
 });
 test('admin changes all four assets, rejects unsafe references before writes and can restore defaults', async ({page}, info) => {
     try {
@@ -180,7 +211,7 @@ test('MLP-412 chat readability preserves nickname colors and scales in both them
                 await expect(page.locator('.quote-content').last()).toHaveCSS('font-weight','400');
                 expect(await names.evaluateAll(elements => elements.map(el => getComputedStyle(el).color))).toEqual(originalColors);
                 const shadows = await names.evaluateAll(elements => elements.map(el => getComputedStyle(el).textShadow));
-                for (const shadow of shadows) expect(shadow).toContain(name === 'luna' ? '255, 255, 255' : '38, 20, 52');
+                for (const shadow of shadows) {if(name === 'luna')expect(shadow).toBe('none');else expect(shadow).toContain('38, 20, 52');}
                 const alpha = await page.locator('.chat-container').evaluate(el => Number(getComputedStyle(el).backgroundColor.match(/,\s*([\d.]+)\)$/)?.[1] || 1));
                 expect(alpha).toBeGreaterThan(name === 'luna' ? .70 : .77); expect(alpha).toBeLessThan(.85);
                 for (const width of [1440,390]) {

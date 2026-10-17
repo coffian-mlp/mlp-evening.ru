@@ -14,7 +14,7 @@
     --panel-solid: #1e203d;
     --panel-raised: #2d2b4d;
     --chat-surface: rgba(15, 19, 43, .74);
-    --nickname-shadow: 0 0 2px rgba(255, 255, 255, .45), 0 0 6px rgba(209, 181, 241, .22);
+    --nickname-shadow: none;
     --bar-surface: rgba(33, 30, 65, .70);
     --field: rgba(10, 12, 32, .52);
     --hover-surface: rgba(177, 143, 222, .16);
@@ -98,9 +98,18 @@ button, input, textarea, select { accent-color: var(--primary-color); }
 .theme-switch::-webkit-details-marker { display: none; }
 .theme-picker { position: relative; flex: 0 0 auto; z-index: 1000; }
 .theme-choices { position: absolute; right: 0; top: calc(100% + 8px); min-width: 220px; padding: 6px; background: var(--panel-solid); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--theme-shadow); }
-.theme-choices button { display: block; width: 100%; text-align: left; color: var(--text-main); background: transparent; border: 0; border-radius: 6px; padding: 10px; font: inherit; cursor: pointer; }
-.theme-choices button:hover, .theme-choices button[aria-pressed="true"] { background: var(--hover-surface); color: var(--accent-color); }
+.theme-choices button, .chat-theme-choices button { display: block; width: 100%; text-align: left; color: var(--text-main); background: transparent; border: 0; border-radius: 6px; padding: 10px; font: inherit; cursor: pointer; }
+.theme-choices button:hover, .theme-choices button[aria-pressed="true"],
+.chat-theme-choices button:hover, .chat-theme-choices button[aria-pressed="true"] { background: var(--hover-surface); color: var(--accent-color); }
+.chat-theme-choices { display: none; border-top: 1px solid var(--soft-border); margin-top: 5px; padding: 6px; }
+.chat-theme-label { display: block; padding: 5px 10px; font-size: 12px; color: var(--text-muted); }
+.chat-dropdown-content a { color: var(--text-main) !important; }
+@media (min-width: 769px) {
+    .player-layout .video-container .header > .theme-picker { display: none; }
+    .chat-theme-choices { display: block; }
+}
 .video-container .header > .theme-picker { order: 4; margin-left: auto; }
+.video-container .header .site-nav-stream { min-width: 0; flex-wrap: wrap; }
 .header { color: var(--text-main); }
 .site-nav { padding: 6px; border: 1px solid var(--border-color); border-radius: 14px; background: var(--bar-surface); flex: 0 1 auto; }
 .site-nav-link, .video-container .header .site-nav-stream .site-nav-link,

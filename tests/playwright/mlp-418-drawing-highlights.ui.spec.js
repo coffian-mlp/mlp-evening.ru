@@ -45,7 +45,9 @@ test('mention, reply and quote-jump highlights stay subtle in both themes',async
  const mentioned=page.locator(`.chat-message[data-id="${s.mentioned}"]`),quoted=page.locator(`.chat-message[data-id="${s.quoted}"]`);
  await expect(mentioned).toHaveClass(/message-mentioned/);await expect(quoted).toHaveClass(/message-quoted/);
  for(const name of ['celestia','luna']){
-  await page.locator('[data-theme-toggle]').click();await page.locator(`[data-theme-choice="${name}"]`).click();
+  const switcher=page.locator('[data-theme-toggle]:visible');
+  if(await switcher.count())await switcher.click();else await page.locator('#chat-menu-btn').click();
+  await page.locator(`[data-theme-choice="${name}"]:visible`).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme',name);
   await page.mouse.move(0,0);
   await expect(mentioned).toHaveCSS('background-color',name==='celestia'?'rgba(121, 80, 152, 0.08)':'rgba(209, 181, 241, 0.12)');

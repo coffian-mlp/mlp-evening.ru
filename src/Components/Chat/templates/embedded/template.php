@@ -97,7 +97,7 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
                 }
             </style>
             <div class="chat-dropdown" style="position: relative; display: inline-block;">
-                <button class="icon-btn" id="chat-menu-btn" onclick="toggleChatMenu(event)" title="Меню чата">⚙️</button>
+                <button type="button" class="icon-btn" id="chat-menu-btn" onclick="toggleChatMenu(event)" title="Меню чата" aria-expanded="false" aria-controls="chat-dropdown-menu">⚙️</button>
                 <div id="chat-dropdown-menu" class="chat-dropdown-content" style="display:none; position:absolute; right:0; background: var(--bg-dark); border:1px solid rgba(255,255,255,0.1); border-radius:5px; box-shadow:0 15px 50px rgba(0,0,0,0.6); backdrop-filter: blur(5px); z-index:100; min-width: 180px; padding: 5px 0;">
                     <!-- MLP-260: «Расписание» переехало в меню сайта (сенобургер) -->
                     <a href="javascript:void(0)" id="chat-search-btn" style="display:block; padding:8px 15px; color:#eee; text-decoration:none; white-space:nowrap;">🔍 Поиск сообщений</a>
@@ -105,6 +105,10 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
                     <?php if ($arResult['mode'] !== 'popup'): ?>
                         <a href="#" id="popout-chat" onclick="window.open('/chat_popup.php', 'ChatWindow', 'width=450,height=700'); return false;" style="display:block; padding:8px 15px; color:#eee; text-decoration:none; white-space:nowrap;">❐ В отдельном окне</a>
                     <?php endif; ?>
+                    <div class="chat-theme-choices" role="group" aria-label="Тема оформления">
+                        <span class="chat-theme-label">Тема оформления</span>
+                        <?php require dirname(__DIR__, 4) . '/templates/theme-choices.php'; ?>
+                    </div>
                 </div>
             </div>
             
@@ -113,11 +117,22 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
                     e.stopPropagation();
                     const menu = document.getElementById('chat-dropdown-menu');
                     menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+                    e.currentTarget.setAttribute('aria-expanded', String(menu.style.display === 'block'));
                 }
                 document.addEventListener('click', function(e) {
                     const menu = document.getElementById('chat-dropdown-menu');
-                    if (menu && menu.style.display === 'block') {
+                    if (menu && menu.style.display === 'block' && (!menu.contains(e.target) || e.target.closest('a, [data-theme-choice]'))) {
                         menu.style.display = 'none';
+                        document.getElementById('chat-menu-btn').setAttribute('aria-expanded', 'false');
+                    }
+                });
+                document.addEventListener('keydown', function(e) {
+                    const menu = document.getElementById('chat-dropdown-menu');
+                    if (e.key === 'Escape' && menu && menu.style.display === 'block') {
+                        menu.style.display = 'none';
+                        const button = document.getElementById('chat-menu-btn');
+                        button.setAttribute('aria-expanded', 'false');
+                        button.focus();
                     }
                 });
             </script>
