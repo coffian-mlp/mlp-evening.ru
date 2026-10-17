@@ -117,6 +117,15 @@ $config = $arResult['config']; // Helper
                 <label class="form-label">Основная модель (RouterAI)</label>
                 <input type="text" name="ai_routerai_model" value="<?= htmlspecialchars($config->getOption('ai_routerai_model', 'openai/gpt-4o-mini')) ?>" class="form-input">
             </div>
+            <div class="form-group">
+                <label class="form-label" for="ai-routerai-reasoning">Уровень рассуждений RouterAI</label>
+                <select id="ai-routerai-reasoning" name="ai_routerai_reasoning_effort" class="form-input">
+                    <?php foreach (['auto' => 'Автоматически — выбор модели', 'low' => 'Низкий — рекомендуется', 'high' => 'Высокий', 'max' => 'Максимальный'] as $effort => $label): ?>
+                        <option value="<?= $effort ?>" <?= $config->getOption('ai_routerai_reasoning_effort', 'auto') === $effort ? 'selected' : '' ?>><?= $label ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Для основной и быстрой моделей, режиссёра рисунков, памяти и описания изображений через RouterAI. Низкий уровень обычно ускоряет ответ; поддержка зависит от модели. Поиск эпизодов и короткие подтверждения команд всегда используют low. Бюджет токенов задаётся отдельно.</p>
+            </div>
         </div>
 
         <div id="ai_group_yandex" class="ai-provider-group" <?= $config->getOption('ai_primary_provider', 'openai') === 'yandex' ? '' : 'style="display:none;"' ?>>

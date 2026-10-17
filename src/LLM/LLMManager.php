@@ -71,7 +71,7 @@ class LLMManager {
 
         $routerAiKey = $config->getOption('ai_routerai_key', '');
         $routerAiModel = $config->getOption('ai_routerai_model', 'openai/gpt-4o-mini');
-        $routerAiProvider = $routerAiKey ? new RouterAIProvider($routerAiKey, $routerAiModel, $this->proxyUrl) : null;
+        $routerAiProvider = $routerAiKey ? (new RouterAIProvider($routerAiKey, $routerAiModel, $this->proxyUrl))->withConfiguredReasoning() : null;
 
         $yandexKey = $config->getOption('ai_yandex_key', '');
         $yandexFolderId = $config->getOption('ai_yandex_folder_id', '');
@@ -108,7 +108,7 @@ class LLMManager {
         $fast = null;
         if ($fastModel !== '' && !empty($this->providers)) {
             $fast = match ($primary) {
-                'routerai'   => $routerAiKey ? new RouterAIProvider($routerAiKey, $fastModel, $this->proxyUrl) : null,
+                'routerai'   => $routerAiKey ? (new RouterAIProvider($routerAiKey, $fastModel, $this->proxyUrl))->withConfiguredReasoning() : null,
                 'openrouter' => $openRouterKey ? new OpenRouterProvider($openRouterKey, $fastModel, $this->proxyUrl) : null,
                 'openai'     => $openAiKey ? new OpenAIProvider($openAiKey, $fastModel, $openAiBaseUrl, $this->proxyUrl) : null,
                 default      => null,

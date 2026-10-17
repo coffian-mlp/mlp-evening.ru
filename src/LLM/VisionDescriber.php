@@ -146,7 +146,7 @@ class VisionDescriber {
 
         $provider = null;
         if ($providerKey === 'routerai' && ($k = $c->getOption('ai_routerai_key', ''))) {
-            $provider = new RouterAIProvider($k, $modelName, null);
+            $provider = (new RouterAIProvider($k, $modelName, null))->withConfiguredReasoning();
         } elseif ($providerKey === 'openrouter' && ($k = $c->getOption('ai_openrouter_key', ''))) {
             $provider = new OpenRouterProvider($k, $modelName, $proxy);
         } elseif ($providerKey === 'openai' && ($k = $c->getOption('ai_openai_key', ''))) {

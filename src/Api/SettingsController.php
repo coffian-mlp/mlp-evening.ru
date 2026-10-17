@@ -118,6 +118,7 @@ class SettingsController {
         'theme_luna_logo' => 'image',
         'theme_celestia_background' => 'image',
         'theme_celestia_logo' => 'image',
+        'ai_routerai_reasoning_effort' => ['enum', \LLM\RouterAIProvider::REASONING_EFFORTS],
     ];
 
     /** Сохранить глобальные настройки (admin). Бывший action update_settings. */

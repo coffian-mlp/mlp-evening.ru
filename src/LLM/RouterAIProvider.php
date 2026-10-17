@@ -11,6 +11,7 @@ use Exception;
  * В отличие от OpenRouter не блокируется Cloudflare по гео (RU), поэтому прокси обычно не требуется.
  */
 class RouterAIProvider implements LLMProviderInterface {
+    public const REASONING_EFFORTS = ['auto', 'low', 'high', 'max'];
     private $apiKey;
     private ?bool $vision = null;
     private $model;
@@ -153,18 +154,23 @@ class RouterAIProvider implements LLMProviderInterface {
         return $this->searchEvidence;
     }
 
-    /** RouterAI unified reasoning control; ordinary provider keeps its model default. */
+    /** RouterAI unified reasoning control; auto omits the parameter. */
     public function withReasoningEffort(string $effort): static {
-        if (!in_array($effort, ['low', 'high', 'max'], true)) {
+        if (!in_array($effort, self::REASONING_EFFORTS, true)) {
             throw new \InvalidArgumentException('Unsupported reasoning effort');
         }
         $copy = clone $this;
-        $copy->reasoningEffort = $effort;
+        $copy->reasoningEffort = $effort === 'auto' ? null : $effort;
         return $copy;
     }
 
     public function askChat(array $messagesContext, string $systemPrompt): ?string {
         return RequestDeadline::within(RequestDeadline::now() + $this->timeoutSec,
             fn() => $this->askWithinDeadline($messagesContext, $systemPrompt));
+    }
+
+    public function withConfiguredReasoning(): static {
+        $effort = \Infra\ConfigManager::getInstance()->getOption('ai_routerai_reasoning_effort', 'auto');
+        return $this->withReasoningEffort(in_array($effort, self::REASONING_EFFORTS, true) ? $effort : 'auto');
     }
 }
