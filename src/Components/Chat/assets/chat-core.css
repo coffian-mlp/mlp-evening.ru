@@ -1121,6 +1121,7 @@
 }
 
 .add-reaction-btn {
+    touch-action: manipulation;
     width: 24px;
     height: 24px;
     display: flex;
@@ -1148,6 +1149,11 @@
 .add-reaction-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     color: #fff; /* White on hover */
+}
+
+@media (hover: none), (pointer: coarse) {
+    .add-reaction-btn { opacity: 1; width: 36px; height: 36px; }
+    .reaction-picker .reaction-picker-item { min-width: 36px; min-height: 36px; }
 }
 
 /* Make SVG inherit color */
@@ -1219,6 +1225,7 @@
 }
 
 .reaction-picker-item {
+    touch-action: manipulation;
     appearance: none;
     background: transparent;
     border: 0;

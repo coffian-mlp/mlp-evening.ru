@@ -187,17 +187,26 @@ $(document).ready(function() {
         
         // Add "Gray Thumb" Button (Trigger)
         // Using a DIV instead of BUTTON to allow valid nesting of the picker
-        const addBtn = $('<div class="add-reaction-btn" role="button" title="Нравится (или выбери другое)">' +
+        const addBtn = $('<div class="add-reaction-btn" role="button" tabindex="0" aria-label="Добавить реакцию" aria-expanded="false" title="Нравится (или выбери другое)">' +
             '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.11 7 8.5V21h14c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1.91l-.01-.01L23 10z"/></svg>' +
             '</div>');
         container.append(addBtn);
     }
 
-    function showReactionPicker(msgId, btn) {
+    const reactionHover = window.matchMedia('(hover: hover) and (pointer: fine)');
+
+    function closeReactionPickers() {
+        $('.reaction-picker').remove();
+        $('.add-reaction-btn.active').removeClass('active').attr('aria-expanded', 'false').removeData('picker-mode');
+    }
+
+    function showReactionPicker(msgId, btn, mode = 'hover') {
+        btn.data('picker-mode', mode);
         // Don't recreate if already exists inside this btn
         if (btn.find('.reaction-picker').length > 0) return;
 
-        $('.reaction-picker').remove(); // Close others
+        closeReactionPickers();
+        btn.data('picker-mode', mode).addClass('active').attr('aria-expanded', 'true');
         
         const picker = $('<div class="reaction-picker"></div>');
         
@@ -209,7 +218,7 @@ $(document).ready(function() {
             item.click(function(e) {
                 e.stopPropagation();
                 toggleReaction(msgId, type);
-                picker.remove();
+                closeReactionPickers();
             });
             picker.append(item);
         }
@@ -262,30 +271,60 @@ $(document).ready(function() {
         toggleReaction(msgId, reaction);
     });
 
-    // Hover: Show Picker
+    // Touch compatibility mouse events must not open a picker before the tap completes.
+    $(document).on('pointerover pointerdown touchstart', '.add-reaction-btn', function(e) {
+        if ($(e.target).closest('.reaction-picker').length) return;
+        $(this).data('reaction-pointer', e.type === 'touchstart' ? 'touch' : e.originalEvent.pointerType);
+    });
+
+    // Hover remains available for an actual mouse.
     $(document).on('mouseenter', '.add-reaction-btn', function(e) {
+        if (!reactionHover.matches || ['touch', 'pen'].includes($(this).data('reaction-pointer'))) return;
         const msgId = $(this).closest('.chat-message').data('id');
         showReactionPicker(msgId, $(this));
     });
 
     // Leave: Hide Picker
     $(document).on('mouseleave', '.add-reaction-btn', function(e) {
-        $(this).find('.reaction-picker').remove();
+        if ($(this).data('picker-mode') === 'hover') closeReactionPickers();
     });
 
-    // Click: Default Like
+    // Mouse keeps the quick like; touch explicitly opens/closes the choice without voting.
     $(document).on('click', '.add-reaction-btn', function(e) {
         e.stopPropagation();
-        // Ignore if clicking inside the picker (should be handled by picker item click, but just in case)
-        if ($(e.target).closest('.reaction-picker').length) return;
+        // The hover bridge may cover the trigger; keep its physical hit area clickable.
+        if ($(e.target).closest('.reaction-picker').length) {
+            const rect = this.getBoundingClientRect();
+            if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
+        }
 
+        const btn = $(this);
         const msgId = $(this).closest('.chat-message').data('id');
+        const pointer = e.originalEvent?.pointerType || btn.data('reaction-pointer');
+        if (!reactionHover.matches || ['touch', 'pen'].includes(pointer) || e.originalEvent?.detail === 0) {
+            if (btn.find('.reaction-picker').length && btn.data('picker-mode') !== 'hover') closeReactionPickers();
+            else showReactionPicker(msgId, btn, 'tap');
+            return;
+        }
         toggleReaction(msgId, 'like');
+    });
+
+    $(document).on('keydown', '.add-reaction-btn', function(e) {
+        if ($(e.target).closest('.reaction-picker').length) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault(); e.stopPropagation();
+            showReactionPicker($(this).closest('.chat-message').data('id'), $(this), 'keyboard');
+        }
+    });
+    $(document).on('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        const trigger = $('.reaction-picker').closest('.add-reaction-btn')[0];
+        if (trigger) { closeReactionPickers(); trigger.focus(); }
     });
     
     $(document).on('click', function(e) {
         if (!$(e.target).closest('.add-reaction-btn').length) {
-            $('.reaction-picker').remove();
+            closeReactionPickers();
         }
     });
 
@@ -638,7 +677,7 @@ $(document).ready(function() {
                 </div>`;
             }
         }
-        reactionsHtml += `<div class="add-reaction-btn" role="button" title="Нравится (или выбери другое)">
+        reactionsHtml += `<div class="add-reaction-btn" role="button" tabindex="0" aria-label="Добавить реакцию" aria-expanded="false" title="Нравится (или выбери другое)">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.11 7 8.5V21h14c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1.91l-.01-.01L23 10z"/></svg>
         </div></div>`;
 

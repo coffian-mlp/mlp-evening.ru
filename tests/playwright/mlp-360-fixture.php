@@ -22,6 +22,7 @@ if ($mode === 'setup') {
     $login = 'it_user_mlp360_' . bin2hex(random_bytes(6));
     $password = bin2hex(random_bytes(24));
     $id = $users->createUser($login, $password, 'user', 'MLP360 Test');
+    Domain\Privacy::setAccountConsent($id, true);
     $message = 'mlp360-fixture-' . bin2hex(random_bytes(6));
     $oldId = $chat->addMessage($id, $login, $message . '-legacy');
     $messageId = $chat->addMessage($id, $login, $message);
@@ -60,6 +61,7 @@ if ($mode === 'setup') {
         $stmt->bind_param('ii', $messageId, $user['id']);
         $stmt->execute();
     }
+    Domain\Privacy::stageErasure((int)$user['id'], []);
     $users->deleteUser($user['id']);
     unlink($path);
     echo "Fixture removed\n";

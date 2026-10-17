@@ -24,6 +24,7 @@ for (const route of ['/', '/chat_popup.php']) {
       });
       try {
         await page.goto(BASE + route, { waitUntil:'domcontentloaded' });
+        if(await page.locator('#privacy-panel').isVisible())await page.locator('[data-privacy-necessary]').click();
         const message = page.locator(`.chat-message[data-id="${fixture.messageId}"]`);
         const legacy = page.locator(`.chat-message[data-id="${fixture.legacyId}"]`);
         await expect(message).toBeVisible({ timeout:10000 });
@@ -34,9 +35,8 @@ for (const route of ['/', '/chat_popup.php']) {
 
         async function picker() {
           await message.scrollIntoViewIfNeeded();
-          await message.hover();
-          await message.locator('.add-reaction-btn').hover();
           const result = message.locator('.reaction-picker');
+          if(!await result.isVisible())await message.locator('.add-reaction-btn').tap();
           await expect(result).toBeVisible();
           await expect(result).toHaveCSS('opacity', '1');
           await expect(result.locator('.reaction-picker-item')).toHaveCount(20);
