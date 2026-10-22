@@ -39,6 +39,9 @@ check386(str_contains($w->calls[0][0],'перед сюжетами явно по
 $w->drafts=[$body];$c->debut=false;$c->generateText($f,'reminder',179);
 check386(str_contains(end($w->calls)[0],'"is_first_publication":false') && str_contains(end($w->calls)[0],'reminder_minutes'),'later reminder does not repeat Telegram debut');
 $w->calls=[];$w->drafts=array_fill(0,4,'Общий анонс без даты.');check386($c->generateText($f,'main',179)===null && count($w->calls)===3,'writer stops after two repairs without canned public text');
+check386($c->lastError()==='text_invalid','exhausted validation has a specific cause');
+$w->drafts=[null];check386($c->generateText($f,'main',179)===null && $c->lastError()==='text_unavailable','model outage distinguished from invalid text');
+$w->drafts=[$body];check386($c->generateText($f,'main',179)!==null && $c->lastError()===null,'successful text clears previous error');
 $config=Infra\ConfigManager::getInstance();$config->getOption('announcements_prompt_main');
 $cache=new ReflectionProperty(Infra\ConfigManager::class,'cache');$initial=$cache->getValue($config);$edited=$initial;
 $edited['announcements_prompt_main']='CUSTOM_MAIN_CANARY';$edited['announcements_main_chars']='700';$cache->setValue($config,$edited);

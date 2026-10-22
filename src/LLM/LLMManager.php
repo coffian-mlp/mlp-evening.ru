@@ -872,9 +872,9 @@ class LLMManager {
             if (!$this->prepareScopedProxy()) return null;
             $remaining = $deadlineSec - time();
             if ($remaining < 5) return null;
-            $call = $provider->withSynopsisSearch()->withReasoningEffort('low')->withTimeout(min(60,$remaining));
-            $raw = UsageMeter::ask('synopsis',$call,$context,$prompt,(float)$deadlineSec,60);
-            if (!$raw || !$call->getSearchEvidence()) return null;
+            $call = $provider->withWebSearch(3)->withReasoningEffort('low')->withTimeout(min(35,$remaining));
+            $raw = UsageMeter::ask('synopsis',$call,$context,$prompt,(float)$deadlineSec,35);
+            if (!$raw) return null;
             return json_encode(['content'=>$raw,'sources'=>$call->getSearchEvidence()],JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         } catch (\Throwable $e) { error_log('Announcement synopsis lookup failed: '.get_class($e)); return null; }
     }

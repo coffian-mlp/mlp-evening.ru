@@ -9,6 +9,8 @@ if ($db->query('SELECT id FROM telegram_announcement_campaigns LIMIT 1')->num_ro
 class FixtureAnnouncementContent375 extends LLM\AnnouncementContent {
     public int $variant = 1;
     public bool $throwText = false;
+    public ?string $failureReason = null;
+    public function lastError(): ?string { return $this->failureReason; }
     public array $generations = [];
     public function __construct(public string $path) {}
     public function editorText(string $fallback): string { return $fallback; }
@@ -18,6 +20,7 @@ class FixtureAnnouncementContent375 extends LLM\AnnouncementContent {
     public function generateText(array $facts, string $kind, int $number, string $feedback = '', ?string $previous = null): ?string {
         $this->generations[] = [$kind,$feedback,$previous];
         if ($this->throwText) throw new RuntimeException('fixture generation failure');
+        if ($this->failureReason!==null) return null;
         return ($kind==='main'?'#'.$number:'Notificatio '.self::roman($number)).' fixture '.$this->variant.' '.$feedback;
     }
     public function generateImage(array $facts, string $kind, string $caption, string $feedback = ''): ?string { return $this->path; }
@@ -130,6 +133,18 @@ try {
     check($mainGenerations()===$beforeGenerations+1,'generation failure counted as one attempt');
     $worker->tick($nextWed+1);
     check($mainGenerations()===$beforeGenerations+1 && (int)$rows()['main']['attempts']===1,'generation backoff prevents immediate second attempt for same post');
+    $content->throwText=false;$content->failureReason='synopsis_sources_missing:123';
+    $worker->tick($nextWed+600);$worker->tick($nextWed+1200);
+    $failedMain=$rows()['main'];
+    check($failedMain['state']==='failed' && $failedMain['retry_at']===null && $failedMain['last_error']==='synopsis_sources_missing:123','specific stage error survives all attempts without advertising another retry');
+    $notifications=array_filter($calls,static fn($call)=>$call[0]==='sendMessage');
+    check((bool)array_filter($notifications,static fn($call)=>str_contains($call[1]['text']??'','подтверждённые источники') && str_contains($call[1]['text'],'/retry '.$failedMain['id'])),'failure notification explains cause and offers retry for correct revision');
+    $command('/status');$worker->tick($nextWed+1201);$updates=[];
+    check((bool)array_filter($calls,static fn($call)=>$call[0]==='sendMessage' && str_contains($call[1]['text']??'','подтверждённые источники')),'Telegram status includes human explanation');
+    $content->failureReason=null;
+    check($store->action((int)$failedMain['id'],$failedMain['nonce'],'both','', $nextWed+1202,true)==='regenerating','failed post can be regenerated from dashboard');
+    $worker->tick($nextWed+1202);$worker->tick($nextWed+1203);$worker->tick($nextWed+1204);
+    check($rows()['main']['state']==='pending' && $rows()['main']['last_error']===null && $rows()['main']['retry_at']===null && $rows()['main']['approved_at']===null,'successful regeneration clears old errors and awaits fresh approval');
 } finally {
     if($eventId) {
         $campaignIds=array_column($db->query('SELECT id FROM telegram_announcement_campaigns WHERE run_id REGEXP "^'.$eventId.'_[0-9]+$"')->fetch_all(MYSQLI_ASSOC),'id');

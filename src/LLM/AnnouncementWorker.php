@@ -123,6 +123,7 @@ final class AnnouncementWorker
             foreach ($this->store->active() as $row) {
                 $r = $this->store->revision((int)$row['id']);
                 $lines[] = '#'.$r['stream_number'].' '.$r['kind'].' v'.$r['version'].' — '.$r['state'].'; '.(new \DateTimeImmutable($r['due_at'],new \DateTimeZone('UTC')))->setTimezone(new \DateTimeZone('Europe/Moscow'))->format('d.m H:i').' МСК; ID '.$r['id'];
+                if ($r['last_error']) $lines[]=\Domain\AnnouncementError::describe($r['last_error'],json_decode($r['facts_json'],true)??[]);
             }
             return $lines ? implode("\n",$lines) : 'Активных черновиков нет. Они появятся в среду после 19:00 МСК, когда готов плейлист.';
         }
@@ -205,21 +206,23 @@ final class AnnouncementWorker
         $id = (int)$r['id'];
         if ($r['state']==='text_pending') {
             if (!$this->store->change($id,'text_pending','text_generating')) return;
+            $error='text_unavailable';
             try { $caption = $this->content->generateText($facts,$r['kind'],(int)$r['stream_number'],$r['feedback'],$r['previous_caption']); }
-            catch (\Throwable $error) { $caption=null; error_log('Announcement text generation failed: '.get_class($error)); }
-            if (!$caption) { $this->generationFailure($r,'text_generating','text_pending'); return; }
-            $this->store->change($id,'text_generating',$r['image_path']?'preview_pending':'image_pending',['caption'=>$caption,'attempts'=>0,'retry_at'=>null]);
+            catch (\Throwable $e) { $caption=null; $error='text_exception'; error_log('Announcement text generation failed: '.get_class($e)); }
+            if (!$caption) { $this->generationFailure($r,'text_generating','text_pending',$error==='text_exception'?$error:($this->content->lastError()??$error)); return; }
+            $this->store->change($id,'text_generating',$r['image_path']?'preview_pending':'image_pending',['caption'=>$caption,'attempts'=>0,'retry_at'=>null,'last_error'=>null]);
         } elseif ($r['state']==='image_pending') {
             if (!$this->store->change($id,'image_pending','image_generating')) return;
+            $error='image_unavailable';
             try { $image = $this->content->generateImage($facts,$r['kind'],$r['caption'],$r['feedback']); }
-            catch (\Throwable $error) { $image=null; error_log('Announcement image generation failed: '.get_class($error)); }
-            if (!$image) { $this->generationFailure($r,'image_generating','image_pending'); return; }
-            $this->store->change($id,'image_generating','preview_pending',['image_path'=>$image,'attempts'=>0,'retry_at'=>null]);
+            catch (\Throwable $e) { $image=null; $error='image_exception'; error_log('Announcement image generation failed: '.get_class($e)); }
+            if (!$image) { $this->generationFailure($r,'image_generating','image_pending',$error==='image_exception'?$error:($this->content->lastError()??$error)); return; }
+            $this->store->change($id,'image_generating','preview_pending',['image_path'=>$image,'attempts'=>0,'retry_at'=>null,'last_error'=>null]);
         } elseif ($r['state']==='preview_pending') {
             if (!$this->store->change($id,'preview_pending','preview_sending')) return;
             try {
                 $result = $this->telegram->sendPhoto($this->owner,$r['caption'],$r['image_path'],self::keyboard($r));
-                $this->store->change($id,'preview_sending','pending',['preview_photo_id'=>$result['message_id']]);
+                $this->store->change($id,'preview_sending','pending',['preview_photo_id'=>$result['message_id'],'last_error'=>null,'retry_at'=>null,'attempts'=>0]);
                 $due = (new \DateTimeImmutable($r['due_at'],new \DateTimeZone('UTC')))->setTimezone(new \DateTimeZone('Europe/Moscow'))->format('d.m.Y H:i');
                 $reason = (str_starts_with($r['feedback'],'Расписание или плейлист изменились') || str_starts_with($r['feedback'],'Сроки публикации изменились')) ? ' Расписание или плейлист изменились; прежнее одобрение снято.' : '';
                 $this->notify('Черновик #'.$r['stream_number'].' ('.$r['kind'].'), версия '.$r['version'].'. Публикация: '.$due.' МСК.' . $reason . ' Для правок ответь на картинку.');
@@ -229,7 +232,7 @@ final class AnnouncementWorker
             try {
                 $due = (new \DateTimeImmutable($r['due_at'],new \DateTimeZone('UTC')))->setTimezone(new \DateTimeZone('Europe/Moscow'))->format('d.m.Y H:i');
                 $result = $this->telegram->request('sendMessage',['chat_id'=>$this->owner,'text'=>'Черновик #'.$r['stream_number'].' ('.$r['kind'].'), версия '.$r['version'].'. Публикация: '.$due.' МСК. Одобри пост или ответь на картинку с замечаниями.','reply_parameters'=>['message_id'=>(int)$r['preview_photo_id']]]);
-                $this->store->change($id,'controls_sending','pending',['preview_controls_id'=>$result['message_id']]);
+                $this->store->change($id,'controls_sending','pending',['preview_controls_id'=>$result['message_id'],'last_error'=>null,'retry_at'=>null,'attempts'=>0]);
             } catch (TelegramBotException $e) { $this->deliveryFailure($r,'controls_sending','controls_pending',$e); }
         }
     }
@@ -241,15 +244,15 @@ final class AnnouncementWorker
         if (!$this->store->change((int)$r['id'],'approved','sending')) return;
         try {
             $result = $this->telegram->sendPhoto($this->channel,$r['caption'],$r['image_path']);
-            $this->store->change((int)$r['id'],'sending','published',['channel_message_id'=>$result['message_id']]);
+            $this->store->change((int)$r['id'],'sending','published',['channel_message_id'=>$result['message_id'],'last_error'=>null,'retry_at'=>null,'attempts'=>0]);
         } catch (TelegramBotException $e) { $this->deliveryFailure($r,'sending','approved',$e); }
     }
 
-    private function generationFailure(array $r, string $expected, string $retry): void
+    private function generationFailure(array $r, string $expected, string $retry, string $error): void
     {
         $attempts = (int)$r['attempts']+1;
-        $this->store->change((int)$r['id'],$expected,$attempts>=3?'failed':$retry,['attempts'=>$attempts,'retry_at'=>gmdate('Y-m-d H:i:s',($this->explicitNow ?? time())+600),'last_error'=>'generation_failed']);
-        if ($attempts>=3) $this->notify('Не удалось подготовить пост после трёх попыток. /status покажет его ID; ответь на черновик, если он уже был доставлен.');
+        $this->store->change((int)$r['id'],$expected,$attempts>=3?'failed':$retry,['attempts'=>$attempts,'retry_at'=>$attempts>=3?null:gmdate('Y-m-d H:i:s',($this->explicitNow ?? time())+600),'last_error'=>$error]);
+        if ($attempts>=3) $this->notify('Не удалось подготовить пост #'.$r['stream_number'].' ('.$r['kind'].'), ID '.$r['id'].'. '.\Domain\AnnouncementError::describe($error,json_decode($r['facts_json'],true)??[]).' Автоматические попытки закончились. Повтори подготовку в дашборде или через /retry '.$r['id'].'.');
     }
 
     private function deliveryFailure(array $r, string $expected, string $retry, TelegramBotException $e): void
