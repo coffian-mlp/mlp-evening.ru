@@ -16,7 +16,8 @@ try{
  }finally{
      $db->query("DELETE FROM site_options WHERE key_name IN ('current_playlist','current_playlist_snapshot_id')");$restore=$db->prepare('INSERT INTO site_options(key_name,value,updated_at) VALUES(?,?,?)');foreach($options as $opt){$restore->bind_param('sss',$opt['key_name'],$opt['value'],$opt['updated_at']);$restore->execute();}foreach(array_unique($raceIds) as $rid)$db->query('DELETE FROM playlist_snapshots WHERE id='.$rid);Infra\ConfigManager::getInstance()->flushCache();
  }
- $now=strtotime('2026-10-20 10:00:00 UTC');$m->voteForEpisode($ids[0]);check((int)array_values(array_filter($m->getAllEpisodes(),fn($r)=>(int)$r['ID']===$ids[0]))[0]['WANNA_WATCH']===1,'anonymous adapter preserves separate contribution');$m->wish($u,$ids[0],'life:pre:'.$u,$now-10);$m->wish($u,$ids[1],'life:post:'.$u,$now+10);
+ // The legacy adapter and publication SQL use real UTC; keep the simulated start ahead of their clock.
+ $now=time()+60;$m->voteForEpisode($ids[0]);check((int)array_values(array_filter($m->getAllEpisodes(),fn($r)=>(int)$r['ID']===$ids[0]))[0]['WANNA_WATCH']===1,'anonymous adapter preserves separate contribution');$m->wish($u,$ids[0],'life:pre:'.$u,$now-10);$m->wish($u,$ids[1],'life:post:'.$u,$now+10);
  $run='test361:'.$u;$runs[]=$run;$m->bindOccurrence(['run_id'=>$run,'id'=>99999,'real_start_time'=>$now,'duration_minutes'=>60],$snapshot);
  try{Infra\Transaction::run($core,function()use($m,$snapshot,$run,$now){$m->completeSnapshot($snapshot,$run,null,$now+3600);throw new RuntimeException('injected rollback');});}catch(RuntimeException $e){}
  check((int)$db->query('SELECT TIMES_WATCHED FROM episode_list WHERE ID='.$ids[0])->fetch_assoc()['TIMES_WATCHED']===0,'transaction rollback');
