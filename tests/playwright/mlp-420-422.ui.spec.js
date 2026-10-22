@@ -41,14 +41,24 @@ test('usage is admin-only, preserves unknown costs and applies edited rates only
  const dir=path.resolve(__dirname,'../../docs/tests/MLP-420-422');fs.mkdirSync(dir,{recursive:true});await root.screenshot({path:path.join(dir,info.project.name+'-usage-mobile.png')});
 });
 test('broadcast emotions send once, consume SSE events, suppress replay, expire and respect personal and reduced-motion settings',async({page},info)=>{
+ await page.clock.install();
  await login(page,'reader');await page.goto(base+'/');await necessary(page);await page.locator('[data-privacy-media]').click();await expect(page.locator('.video-content iframe')).toBeVisible();
  const stage=page.locator('.video-stage');await stage.getByRole('button',{name:'Эмоции к эфиру',exact:true}).click();
  const fullscreen=stage.getByRole('button',{name:'На весь экран с эмоциями'});if(await fullscreen.isVisible()){await fullscreen.click();await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement?.classList.contains('video-stage'))).toBe(true);await page.evaluate(()=>document.exitFullscreen());}
+ await page.clock.pauseAt(await page.evaluate(()=>Date.now()+1000));
  const sent=page.waitForResponse(r=>r.url().endsWith('/api.php')&&r.request().postData()?.includes('action=send_stream_reaction'));await stage.getByRole('button',{name:'Огонь',exact:true}).click();const out=await(await sent).json();expect(out.success).toBe(true);await expect(stage.locator('.stream-emotion')).toHaveCount(1);
- expect((await post(page,'send_stream_reaction',{reaction:'heart'})).success).toBe(false);await page.evaluate(data=>window.fixtureStreamEvent(data),out.data.event);await expect(stage.locator('.stream-emotion')).toHaveCount(1);await expect(stage.locator('.stream-emotion')).toHaveCount(0,{timeout:4000});
+ expect((await post(page,'send_stream_reaction',{reaction:'heart'})).success).toBe(false);await page.evaluate(data=>window.fixtureStreamEvent(data),out.data.event);await expect(stage.locator('.stream-emotion')).toHaveCount(1);
+ expect(await stage.locator('.stream-emotion').evaluate(el=>getComputedStyle(el).animationDuration)).toBe('3s');
+ const opacity=await stage.locator('.stream-emotion').evaluate(el=>{el.getAnimations().forEach(animation=>{animation.pause();animation.currentTime=1500;});return Number(getComputedStyle(el).opacity);});expect(opacity).toBeGreaterThan(0.95);
+ const reactionDir=path.join(root,'docs/tests/MLP-429');fs.mkdirSync(reactionDir,{recursive:true});await stage.screenshot({path:path.join(reactionDir,info.project.name+'-reaction.png')});
+ await page.clock.runFor(2100);await expect(stage.locator('.stream-emotion')).toHaveCount(1);await expect(stage.getByRole('button',{name:'Огонь',exact:true})).toBeDisabled();
+ await page.clock.runFor(900);await expect(stage.locator('.stream-emotion')).toHaveCount(1);
+ await page.clock.runFor(500);await expect(stage.getByRole('button',{name:'Огонь',exact:true})).toBeEnabled();await expect(stage.locator('.stream-reaction-hint')).toHaveText('Одна эмоция раз в 3 секунды');
+ await expect(stage.locator('.stream-emotion')).toHaveCount(0);
  await page.emulateMedia({reducedMotion:'reduce'});await page.evaluate(()=>window.fixtureStreamEvent({type:'stream_reaction',event_id:'sr-90001',reaction:'heart',expires_at:Date.now()+7000}));await expect(stage.locator('.stream-emotion')).toHaveClass(/reduced-motion/);
+ expect(await stage.locator('.stream-emotion').evaluate(el=>getComputedStyle(el).animationDuration)).toBe('3s');
  await stage.locator('.stream-emotions-enabled').uncheck();await expect(stage.locator('.stream-emotion')).toHaveCount(0);await page.evaluate(()=>window.fixtureStreamEvent({type:'stream_reaction',event_id:'sr-90002',reaction:'heart',expires_at:Date.now()+7000}));await expect(stage.locator('.stream-emotion')).toHaveCount(0);
- await page.reload();await stage.getByRole('button',{name:'Эмоции к эфиру',exact:true}).click();await expect(stage.locator('.stream-emotions-enabled')).not.toBeChecked();await stage.locator('.stream-emotions-enabled').check();
+ await page.clock.resume();await page.reload();await stage.getByRole('button',{name:'Эмоции к эфиру',exact:true}).click();await expect(stage.locator('.stream-emotions-enabled')).not.toBeChecked();await stage.locator('.stream-emotions-enabled').check();
  await page.evaluate(()=>window.fixtureStreamEvent({type:'stream_reaction',event_id:'sr-90003',reaction:'heart',expires_at:Date.now()-1000}));await expect(stage.locator('.stream-emotion')).toHaveCount(0);
  fixture('ban');expect((await post(page,'send_stream_reaction',{reaction:'heart'})).success).toBe(false);
  await page.setViewportSize({width:390,height:844});expect(await stage.locator('.stream-reaction-panel').evaluate(el=>el.getBoundingClientRect().right<=innerWidth)).toBe(true);

@@ -28,8 +28,8 @@ final class StreamReactions
                 $s=$this->db->prepare('SELECT id FROM users WHERE id=? FOR UPDATE');$s->bind_param('i',$userId);$s->execute();
                 if(!$s->get_result()->fetch_assoc())throw new UserError('Участник не найден.');
                 (new ChatManager())->assertCanSend($userId,true);
-                $s=$this->db->prepare('SELECT last_at>UTC_TIMESTAMP()-INTERVAL 5 SECOND AS limited FROM stream_reaction_limits WHERE user_id=?');$s->bind_param('i',$userId);$s->execute();
-                if((int)($s->get_result()->fetch_assoc()['limited']??0))throw new UserError('Следующую эмоцию можно отправить через 5 секунд.');
+                $s=$this->db->prepare('SELECT last_at>UTC_TIMESTAMP()-INTERVAL 3 SECOND AS limited FROM stream_reaction_limits WHERE user_id=?');$s->bind_param('i',$userId);$s->execute();
+                if((int)($s->get_result()->fetch_assoc()['limited']??0))throw new UserError('Следующую эмоцию можно отправить через 3 секунды.');
                 $recent=$this->db->query('SELECT COUNT(*) n FROM stream_reactions WHERE created_at>UTC_TIMESTAMP()-INTERVAL 2 SECOND')->fetch_assoc();
                 if((int)$recent['n']>=20)throw new UserError('Эмоций сейчас много. Попробуй через несколько секунд.');
                 $s=$this->db->prepare('INSERT INTO stream_reactions(reaction,created_at) VALUES(?,UTC_TIMESTAMP())');$s->bind_param('s',$reaction);$s->execute();$id=$this->db->insert_id;

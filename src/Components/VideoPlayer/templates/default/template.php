@@ -18,7 +18,7 @@
             <button type="button" data-stream-reaction="<?= htmlspecialchars($key,ENT_QUOTES,'UTF-8') ?>" aria-label="<?= htmlspecialchars($reaction[1],ENT_QUOTES,'UTF-8') ?>" title="<?= htmlspecialchars($reaction[1],ENT_QUOTES,'UTF-8') ?>"><?= $reaction[0] ?></button>
         <?php endforeach; ?>
         </div>
-        <small class="stream-reaction-hint" role="status">Одна эмоция раз в 5 секунд</small>
+        <small class="stream-reaction-hint" role="status">Одна эмоция раз в 3 секунды</small>
     </section>
 </div>
 </div>

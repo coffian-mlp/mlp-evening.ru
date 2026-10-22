@@ -23,6 +23,14 @@ try{
     $check(($sent['channel']??null)==='public:chat' && ($sent['data']??null)===$event && $GLOBALS['stream_realtime_options'][CURLOPT_TIMEOUT]===2,'Centrifugo publishes the exact anonymous event with a bounded timeout');
     $check($event['reaction']==='heart' && !isset($event['user_id']) && $event['expires_at']>time()*1000,'event carries an expiry but no identity');
     $check($blocked(fn()=>$owner->send($id,'poop')),'server cooldown cannot be bypassed by a second click');
+    // Freeze only this DB connection to check exact boundaries without wall-clock sleeps or rounding races.
+    $last=(int)$db->query('SELECT UNIX_TIMESTAMP(last_at) n FROM stream_reaction_limits WHERE user_id='.(int)$id)->fetch_assoc()['n'];
+    try {
+        $db->query('SET timestamp='.($last+2));
+        $check($blocked(fn()=>$owner->send($id,'poop')),'emotion is still blocked at two seconds');
+        $db->query('SET timestamp='.($last+3));
+        $check($owner->send($id,'poop')['reaction']==='poop','next emotion is accepted at three seconds');
+    } finally {$db->query('SET timestamp=0');}
     $check($blocked(fn()=>$owner->send(0,'heart')) && $blocked(fn()=>$owner->send($id,'<img>')),'guest and arbitrary reaction rejected');
     $db->query('UPDATE stream_reaction_limits SET last_at=UTC_TIMESTAMP()-INTERVAL 10 SECOND WHERE user_id='.(int)$id);
     $db->query('UPDATE users SET muted_until=UTC_TIMESTAMP()+INTERVAL 1 HOUR WHERE id='.(int)$id);

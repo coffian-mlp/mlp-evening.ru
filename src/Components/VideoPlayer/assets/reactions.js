@@ -18,7 +18,7 @@
                 if(!checkbox.checked||!mediaAllowed()||document.hidden||overlay.children.length>=12)return;
                 var particle=document.createElement('span');particle.className='stream-emotion';particle.textContent=catalog[data.reaction];particle.style.left=(15+Math.random()*70)+'%';
                 if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)particle.classList.add('reduced-motion');
-                overlay.appendChild(particle);setTimeout(function(){particle.remove();},2000);
+                overlay.appendChild(particle);setTimeout(function(){particle.remove();},3100);
             }
             window.addEventListener('mlp:stream-reaction',render);
             checkbox.onchange=function(){try{localStorage.setItem(key,checkbox.checked?'on':'off');}catch(error){}if(!checkbox.checked)clear();};
@@ -29,7 +29,7 @@
             document.addEventListener('click',function(event){if(!stage.querySelector('.stream-reaction-tools').contains(event.target)){panel.hidden=true;toggle.setAttribute('aria-expanded','false');}});
             panel.addEventListener('keydown',function(event){if(event.key==='Escape'){panel.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.focus();}});
             function notice(text){if(window.showFlashMessage)window.showFlashMessage(text,'error');else hint.textContent=text;}
-            function update(){var seconds=Math.max(0,Math.ceil((cooldown-Date.now())/1000));buttons.forEach(function(button){button.disabled=pending||seconds>0;});hint.textContent=seconds?'Следующая эмоция через '+seconds+' с':'Одна эмоция раз в 5 секунд';}
+            function update(){var seconds=Math.max(0,Math.ceil((cooldown-Date.now())/1000));buttons.forEach(function(button){button.disabled=pending||seconds>0;});hint.textContent=seconds?'Следующая эмоция через '+seconds+' с':'Одна эмоция раз в 3 секунды';}
             buttons.forEach(function(button){button.onclick=async function(){
                 if(pending||Date.now()<cooldown)return;
                 if(!window.currentUserId){notice('Войди, чтобы отправлять эмоции.');return;}
@@ -38,7 +38,7 @@
                 try{
                     var response=await fetch('/api.php',{method:'POST',body:new URLSearchParams({action:'send_stream_reaction',reaction:button.dataset.streamReaction,csrf_token:window.csrfToken||''})});
                     var out=await response.json();if(!out.success)throw Error(out.message);
-                    cooldown=Date.now()+5000;window.dispatchEvent(new CustomEvent('mlp:stream-reaction',{detail:out.data.event}));
+                    cooldown=Date.now()+3000;window.dispatchEvent(new CustomEvent('mlp:stream-reaction',{detail:out.data.event}));
                 }catch(error){notice(error.message||'Не удалось отправить эмоцию.');}finally{pending=false;update();}
             };});
             var timer=setInterval(update,500);window.addEventListener('pagehide',function(){clearInterval(timer);clear();});window.addEventListener('pageshow',function(event){if(event.persisted){clearInterval(timer);timer=setInterval(update,500);update();}});update();
