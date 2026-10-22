@@ -10,7 +10,7 @@ final class PlaylistSelector {
         return max(array_keys($dp));
     }
 
-    public static function select(array $stories, int $budget = 8, ?callable $random = null): array {
+    public static function select(array $stories, int $budget = 8, ?callable $random = null, array $excludedEpisodeIds = []): array {
         if ($budget <= 0) return [];
         $pool = [];
         $used = [];
@@ -19,6 +19,7 @@ final class PlaylistSelector {
             $cost = $s['length'] ?? 0;
             $w = $s['weight'] ?? 0;
             if (!$ids  ||  count(array_unique($ids)) !== count($ids)  ||  array_filter($ids, fn($id) => !is_int($id) || $id <= 0)  ||  !is_int($cost)  ||  $cost <= 0  ||  $cost > $budget  ||  !is_finite((float)$w)  ||  $w <= 0  ||  array_intersect($ids, array_keys($used))) continue;
+            if (array_intersect($ids, $excludedEpisodeIds)) continue;
             foreach ($ids as $id) $used[$id] = true;
             $pool[] = $s;
         }

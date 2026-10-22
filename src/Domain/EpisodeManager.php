@@ -51,7 +51,7 @@ class EpisodeManager {
     }
 
     private function generateWeightedPlaylist($limit) {
-        return PlaylistSelector::select(EpisodeCatalog::normalize($this->getAllEpisodes()), (int)$limit);
+        return PlaylistSelector::select(EpisodeCatalog::normalize($this->getAllEpisodes()), (int)$limit, null, $this->lastWatchedEpisodeIds());
     }
 
     public function getSnapshot(int $snapshotId): ?array {
@@ -532,5 +532,19 @@ class EpisodeManager {
             WHERE o.end_at<=? AND o.state<>"cancelled"
             ORDER BY o.start_at DESC,o.run_id DESC LIMIT '.($limit + 1).' OFFSET '.$offset,
             [gmdate('Y-m-d H:i:s', $now ?? time())]);
+    }
+
+    /** Exclude the last actual viewing, including corrections, rather than the last generated list. */
+    private function lastWatchedEpisodeIds(): array {
+        $last=$this->rows('SELECT c.shown_json,s.payload_json FROM playlist_completions c JOIN playlist_snapshots s ON s.id=c.snapshot_id ORDER BY c.start_at DESC,c.completed_at DESC,c.completion_key DESC LIMIT 1 FOR SHARE')[0]??null;
+        if (!$last) return [];
+        $shown=json_decode($last['shown_json'],true,512,JSON_THROW_ON_ERROR);
+        $stories=json_decode($last['payload_json'],true,512,JSON_THROW_ON_ERROR);
+        $ids=[];
+        foreach ($stories as $story) {
+            if (!in_array($story['story_id'],$shown,true)) continue;
+            foreach ($story['ids'] as $id) $ids[(int)$id]=true;
+        }
+        return array_keys($ids);
     }
 }
