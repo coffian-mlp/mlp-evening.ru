@@ -9,6 +9,7 @@ class Synopsis386 extends LLM\LLMManager {
     public bool $fabricated=false;
     public bool $wrongSeed=false;
     public bool $noSources=false;
+    public array $inputs=[];
     public function __construct() {}
     public function generateBoundedUtility(array $context,string $prompt,int $deadlineSec,int $timeoutSec=20): ?string {
         $input=json_decode($context[0]['content'],true);
@@ -27,6 +28,7 @@ class Synopsis386 extends LLM\LLMManager {
     public function generateSynopsisUtility(array $context,string $prompt,int $deadlineSec): ?string {
         $input=json_decode($context[0]['content'],true);
         check(count($input)===1,'search receives exactly one episode');
+        $this->inputs[]=$input[0];
         $episode=$input[0];$this->calls[]=['search',$episode['episode_id'],$prompt,$deadlineSec];
         if (in_array($episode['episode_id'],$this->fail,true)) return null;
         $rows=[$episode+['summary'=>'Проверенное описание.','source'=>$this->fabricated?'https://invented.invalid':'https://evidence.example/episode']];
@@ -68,6 +70,10 @@ try {
     check(LLM\AnnouncementSynopsis::generate($llm,[$story($id+5,'My Little Pony Friendship is Magic - Season 2 Episode 19 - Putting Your Hoof Down')])!==null,'normalization restores known reference source');
     $llm->noSources=true;
     check(LLM\AnnouncementSynopsis::generate($llm,[$story($id+6,'No evidence fixture')])===null && LLM\AnnouncementSynopsis::lastError()==='synopsis_sources_missing:'.($id+6),'uncited output distinguished from unavailable model and never cached');
+    $llm->noSources=false;
+    check(LLM\AnnouncementSynopsis::generate($llm,[$story($id+7,'My Little Pony Friendship is Magic - Season 8 Episode 22 - What Lies Beneath')])!==null,'ambiguous episode can be resolved');
+    $input=end($llm->inputs);
+    check(str_contains($input['search_query'],'My Little Pony Friendship is Magic Season 8 Episode 22 What Lies Beneath') && $input['series']==='My Little Pony: Friendship Is Magic','retrieval user message includes franchise, season and episode to disambiguate other shows');
     check(LLM\AnnouncementSynopsis::generate($llm,[['ids'=>[1,2],'titles'=>['Broken']]])===null && LLM\AnnouncementSynopsis::lastError()==='synopsis_catalogue_invalid','malformed playlist has explicit failure reason');
 } finally { $db->rollback();Infra\ConfigManager::getInstance()->flushCache(); }
 it_done();
