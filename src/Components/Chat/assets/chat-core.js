@@ -2324,6 +2324,7 @@ $(document).ready(function() {
                 case 'strike': startTag = '~~'; endTag = '~~'; break;
                 case 'code': startTag = '`'; endTag = '`'; break;
                 case 'spoiler': startTag = '||'; endTag = '||'; break;
+                case 'plainlink': startTag = '<'; endTag = '>'; break;
             }
             replacement = startTag + selectedText + endTag;
             

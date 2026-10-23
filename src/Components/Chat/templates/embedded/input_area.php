@@ -12,6 +12,7 @@
         <button type="button" class="chat-format-btn" data-format="quote" title="Цитата (> text)">❞</button>
         <button type="button" class="chat-format-btn" data-format="code" title="Код (`text`)">&lt;/&gt;</button>
         <button type="button" class="chat-format-btn" data-format="spoiler" title="Спойлер (||text||)">👁</button>
+        <button type="button" class="chat-format-btn" data-format="plainlink" title="Ссылка без превью (&lt;https://…&gt;)" aria-label="Ссылка без превью">🔗</button>
         <div class="toolbar-separator"></div>
         <button type="button" class="chat-format-btn" id="sticker-btn" title="Стикеры">😊</button>
         <button type="button" class="chat-format-btn" id="chat-upload-btn" title="Загрузить файл (Картинка/Док)">📎</button>

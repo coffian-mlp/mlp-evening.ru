@@ -50,6 +50,17 @@ try {
     $msg = $cm->getMessageById($msgId);
     check(strpos($msg['message'] ?? '', 'Отредактировано') !== false, 'новый текст виден');
 
+    $plainLink = '<https://example.test/preview.png?x=1&y=2>';
+    check($cm->editMessage($msgId, $userId, $plainLink) !== false, 'ссылка без превью сохраняется при редактировании');
+    $msg = $cm->getMessageById($msgId);
+    check(str_contains($msg['message'], '<a ') && !str_contains($msg['message'], '<img '), 'сохранённая ссылка отображается без картинки');
+    check(html_entity_decode($msg['raw_message'], ENT_QUOTES, 'UTF-8') === $plainLink, 'исходная разметка доступна для повторного редактирования');
+    $quoteId = $cm->addMessage($userId, 'Ит. Чат-Пони', 'Цитата ссылки', [$msgId]);
+    $quote = $cm->getMessageById($quoteId);
+    check(str_contains($quote['quotes'][0]['message'] ?? '', '<a ') && !str_contains($quote['quotes'][0]['message'] ?? '', '<img '), 'цитата сохраняет ссылку без превью');
+    check($cm->editMessage($msgId, $userId, 'https://example.test/preview.png') !== false, 'снятие скобок сохраняется');
+    check(str_contains($cm->getMessageById($msgId)['message'], '<img '), 'снятие скобок восстанавливает автоматическое превью');
+
     // --- Soft-delete и восстановление ---
     check($cm->deleteMessage($msgId, $userId) !== false, 'deleteMessage помечает удалённым');
     $row = $conn->query("SELECT is_deleted FROM chat_messages WHERE id = " . (int)$msgId)->fetch_assoc();

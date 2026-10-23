@@ -464,6 +464,17 @@ class ChatManager {
     // ✨ Parse Markdown and Mentions (Safe after htmlspecialchars)
     private function parseMarkdown($text) {
         $text = preg_replace('/\[\[command-delivery:(?:(?:source|interaction|notice)_\d+|work_[a-zA-Z0-9_-]+)\]\]/', '', $text);
+        // Protect explicit autolinks from media expansion and Markdown substitutions.
+        // Input is already HTML-escaped by addMessage/editMessage.
+        $plainLinks = [];
+        $linkToken = "\x1Aplain-link-";
+        while (str_contains($text, $linkToken)) $linkToken .= '-';
+        $text = preg_replace_callback('~&lt;(https?://(?:(?!&(?:lt|gt);)[^\s<>])+)&gt;~i',
+            static function ($match) use (&$plainLinks, $linkToken) {
+                $token = $linkToken . count($plainLinks) . "\x1A";
+                $plainLinks[$token] = '<a href="' . $match[1] . '" target="_blank" rel="noopener noreferrer" class="chat-link">' . $match[1] . '</a>';
+                return $token;
+            }, $text);
         // 0. Blockquote: > text (standard Markdown style)
         // We use multiline modifier 'm'
         // Regex matches lines starting with > (possibly with space) and wraps content in <blockquote>
@@ -528,6 +539,7 @@ class ChatManager {
         // Use a negative lookbehind to ensure we aren't in a tag attribute like src="..." or href="..."
         $text = preg_replace('/(?<!href="|src=")(?<!>)(https?:\/\/[^\s<]+)(?![^<]*>)/', '<a href="$1" target="_blank" rel="noopener noreferrer" class="chat-link">$1</a>', $text);
 
+        $text = strtr($text, $plainLinks);
         return str_contains($text, '@') ? UserMention::render($text, UserMention::directory()) : $text;
     }
 

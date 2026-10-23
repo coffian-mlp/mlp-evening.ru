@@ -1,0 +1,58 @@
+const {test, expect} = require('@playwright/test');
+const {execFileSync} = require('child_process');
+const fs = require('fs'), path = require('path');
+const {BASE, login, post} = require('./mlp-360-helpers');
+const root = path.resolve(__dirname, '../..'), stateFile = path.join(root, 'docs/private/mlp430-local.json');
+const fixture = mode => execFileSync('docker', ['exec', 'mlp375-php-1', 'php', 'tests/playwright/mlp-430-plain-links-fixture.php', mode], {cwd: root, encoding: 'utf8'});
+test.use({serviceWorkers: 'block', launchOptions: {args: ['--no-proxy-server'], firefoxUserPrefs: {'network.proxy.type': 0}}});
+test.beforeEach(async ({page}) => {
+    if (!BASE || !['localhost', '127.0.0.1'].includes(new URL(BASE).hostname)) throw Error('Isolated localhost required');
+    fixture('setup');
+    await page.route('https://**', route => route.abort());
+    await page.addInitScript(() => { window.EventSource = class {addEventListener() {} close() {}}; });
+});
+test.afterEach(() => { if (fs.existsSync(stateFile)) fixture('cleanup'); });
+for (const mobile of [false, true]) for (const route of ['/', '/chat_popup.php']) {
+    test(`MLP-430 ${mobile ? 'mobile' : 'desktop'} ${route}: plain links survive sending, editing, quoting and reloading`, async ({page}, info) => {
+        await page.setViewportSize(mobile ? {width: 390, height: 844} : {width: 1280, height: 850});
+        const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+        const csrf = await login(page.request, state);
+        await page.goto(BASE + route, {waitUntil: 'domcontentloaded'});
+        if (await page.locator('#privacy-panel').isVisible()) await page.locator('[data-privacy-necessary]').click();
+        const input = page.locator('#chat-input');
+        const button = page.locator('.chat-toolbar [data-format=plainlink]');
+        await input.fill(''); await button.click();
+        await expect(input).toHaveValue('<>');
+        expect(await input.evaluate(el => el.selectionStart)).toBe(1);
+        const url = 'https://example.test/no-preview.png?x=1&y=2';
+        const raw = state.login + ' ' + url + ' https://example.test/preview.png';
+        await input.fill(raw);
+        await input.evaluate((el, url) => { const start = el.value.indexOf(url); el.setSelectionRange(start, start + url.length); }, url);
+        await button.click();
+        await expect(input).toHaveValue(state.login + ' <' + url + '> https://example.test/preview.png');
+        const sent = page.waitForResponse(r => r.url().endsWith('/api.php') && r.request().postData()?.includes('action=send_message'));
+        if (mobile) await page.locator('#chat-form button[type=submit]').click(); else await input.press('Enter');
+        expect((await (await sent).json()).success).toBe(true);
+        const history = await post(page.request, csrf, {action: 'get_messages', limit: 100});
+        const row = history.data.messages.find(message => message.raw_message?.includes(state.login));
+        expect(row).toBeTruthy();
+        await page.reload({waitUntil: 'domcontentloaded'});
+        const message = page.locator(`.chat-message[data-id="${row.id}"]`);
+        await expect(message.locator('a.chat-link')).toHaveAttribute('href', url);
+        await expect(message.locator('img.chat-img')).toHaveCount(1);
+        await expect(message.locator('a.chat-link')).toHaveText(url);
+        await page.reload({waitUntil: 'domcontentloaded'});
+        await expect(message.locator('a.chat-link')).toHaveAttribute('href', url);
+        const video = 'https://youtu.be/abcdefghijk';
+        expect((await post(page.request, csrf, {action: 'edit_message', message_id: row.id, message: state.login + ' <' + video + '>'})).success).toBe(true);
+        await page.reload({waitUntil: 'domcontentloaded'});
+        await expect(message.locator('a.chat-link')).toHaveAttribute('href', video);
+        await expect(message.locator('iframe, video, img.chat-img')).toHaveCount(0);
+        const quoted = await post(page.request, csrf, {action: 'send_message', message: state.login + ' quote', quoted_msg_ids: String(row.id)});
+        expect(quoted.success, JSON.stringify(quoted)).toBe(true);
+        await page.reload({waitUntil: 'domcontentloaded'});
+        await expect(page.locator('.quote-block a.chat-link, .quote-card a.chat-link')).toHaveCount(1);
+        const dir = path.join(root, 'docs/tests/MLP-430'); fs.mkdirSync(dir, {recursive: true});
+        await page.screenshot({path: path.join(dir, info.project.name + (mobile ? '-mobile' : '-desktop') + (route === '/' ? '-embedded' : '-popup') + '.png')});
+    });
+}
