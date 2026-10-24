@@ -71,6 +71,105 @@ class EpisodeRatingManager
         }
     }
 
+    /** Atomically append standalone titles and rebind the previously validated observations. CLI only. */
+    public function extendCatalogue(array $entries, bool $apply=false, ?string $expectedCatalog=null, ?string $expectedBatch=null, ?int $now=null): array
+    {
+        $this->requireOwnedTransaction();
+        $now??=time();
+        if (!array_is_list($entries) || !$entries || count($entries)>32) throw new UserError('invalid_catalogue_extension');
+        $titles=[];$external=[];
+        foreach ($entries as $entry) {
+            if (!is_array($entry) || array_diff(array_keys($entry),['title','runtime_minutes','observation'])
+                || !is_string($entry['title']??null) || trim($entry['title'])!==$entry['title'] || mb_strlen($entry['title'])<1 || mb_strlen($entry['title'])>500
+                || !is_int($entry['runtime_minutes']??null) || $entry['runtime_minutes']<1 || $entry['runtime_minutes']>600
+                || !is_array($entry['observation']??null) || isset($entry['observation']['episode_id'])
+                || !is_string($entry['observation']['imdb_id']??null)) throw new UserError('invalid_catalogue_extension');
+            $title=mb_strtolower($entry['title']);$imdb=$entry['observation']['imdb_id'];
+            if (isset($titles[$title]) || isset($external[$imdb])) throw new UserError('duplicate_catalogue_extension');
+            $titles[$title]=true;$external[$imdb]=true;
+        }
+        if ($apply && (!is_string($expectedCatalog)||!preg_match('/^[a-f0-9]{64}$/D',$expectedCatalog)||!is_string($expectedBatch)||!preg_match('/^[a-f0-9]{64}$/D',$expectedBatch))) throw new UserError('extension_expectations_required');
+        if ((int)$this->sql("SELECT GET_LOCK('episode_ratings_import',5) acquired")->get_result()->fetch_assoc()['acquired']!==1) throw new UserError('rating_import_busy');
+        try {
+            return Transaction::run($this->db,function()use($entries,$apply,$expectedCatalog,$expectedBatch,$now){
+                $header=$this->header();
+                $rows=$this->sql('SELECT * FROM episode_list ORDER BY ID FOR UPDATE')->get_result()->fetch_all(MYSQLI_ASSOC);
+                if (!$header) throw new UserError('rating_snapshot_required');
+                [$input,$mapping]=$this->storedSnapshot($rows,$header);
+                $previous=EpisodeRatingSnapshot::validate($input,$rows,$mapping,$now);
+                if ($previous['batch_hash']!==$header['batch_hash']) throw new UserError('existing_rating_snapshot_changed');
+                $existing=[];
+                foreach ($entries as $entry) {
+                    // Use the database collation when detecting a conflicting title.
+                    $matches=$this->sql('SELECT ID,TITLE,IMDB_ID,LENGTH FROM episode_list WHERE TITLE=? OR IMDB_ID=?',[$entry['title'],$entry['observation']['imdb_id']])->get_result()->fetch_all(MYSQLI_ASSOC);
+                    if (count($matches)>1) throw new UserError('catalogue_entry_conflict');
+                    if ($matches) {
+                        $row=$matches[0];
+                        if ($row['TITLE']!==$entry['title'] || $row['IMDB_ID']!==$entry['observation']['imdb_id'] || (int)$row['LENGTH']!==EpisodeCatalog::durationSlots($entry['runtime_minutes'])) throw new UserError('catalogue_entry_conflict');
+                        $existing[]=(int)$row['ID'];
+                    }
+                }
+                if ($existing && count($existing)!==count($entries)) throw new UserError('partial_catalogue_extension');
+                if ($existing) {
+                    $check=$input;$check['scope']=['kind'=>'explicit_ids','coverage'=>'complete','ids'=>$existing];$check['records']=[];
+                    foreach ($entries as $i=>$entry) $check['records'][]=['episode_id'=>$existing[$i]]+$entry['observation'];
+                    $verified=EpisodeRatingSnapshot::validate($check,$rows,$mapping,$now);
+                    $old=array_column($previous['records'],null,'episode_id');
+                    foreach ($verified['records'] as $row) if ($row!==$old[$row['episode_id']]) throw new UserError('catalogue_entry_conflict');
+                    return $this->summary($previous,'unchanged',0)+['added'=>0,'expected_catalog'=>$previous['catalog_fingerprint'],'expected_batch'=>$header['batch_hash']];
+                }
+                if ($apply && ($expectedCatalog!==$previous['catalog_fingerprint'] || $expectedBatch!==$header['batch_hash'])) throw new UserError('catalogue_extension_changed');
+                $prepare=function(array $ids)use($entries,$rows,$input,$mapping,$now){
+                    $catalog=$rows;$next=$input;$approved=$mapping;
+                    foreach ($entries as $i=>$entry) {
+                        $id=$ids[$i];$imdb=$entry['observation']['imdb_id'];
+                        $catalog[]=['ID'=>$id,'TITLE'=>$entry['title'],'TWOPART_ID'=>null,'LENGTH'=>EpisodeCatalog::durationSlots($entry['runtime_minutes'])];
+                        $next['scope']['ids'][]=$id;$next['records'][]=['episode_id'=>$id]+$entry['observation'];
+                        $approved['records'][]=['episode_id'=>$id,'imdb_id'=>$imdb,'kind'=>'special','season'=>null,'episode'=>null,'identity_url'=>'https://www.imdb.com/title/'.$imdb.'/'];
+                    }
+                    $next['catalog_fingerprint']=$approved['catalog_fingerprint']=EpisodeRatingSnapshot::catalogFingerprint($catalog);
+                    return EpisodeRatingSnapshot::validate($next,$catalog,$approved,$now);
+                };
+                $nextId=max(array_map(static fn($r)=>(int)$r['ID'],$rows))+1;
+                $slice=$prepare(range($nextId,$nextId+count($entries)-1));
+                if (!$apply) return $this->summary($slice,'validated',0)+['added'=>count($entries),'expected_catalog'=>$previous['catalog_fingerprint'],'expected_batch'=>$header['batch_hash']];
+                $ids=[];
+                foreach ($entries as $entry) {
+                    $this->sql('INSERT INTO episode_list(TITLE,LENGTH) VALUES(?,?)',[$entry['title'],EpisodeCatalog::durationSlots($entry['runtime_minutes'])]);
+                    $ids[]=(int)$this->db->insert_id;
+                }
+                $slice=$prepare($ids);
+                foreach ($slice['records'] as $row) $this->writeRecord($row,$slice);
+                $this->writeHeader($slice,$now);
+                return $this->summary($slice,'applied',count($slice['records']))+['added'=>count($entries)];
+            });
+        } finally {
+            $this->sql("SELECT RELEASE_LOCK('episode_ratings_import')");
+            $this->config->flushCache();
+        }
+    }
+
+    private function storedSnapshot(array $rows,array $header): array
+    {
+        $fingerprint=EpisodeRatingSnapshot::catalogFingerprint($rows);
+        $ids=array_map(static fn($r)=>(int)$r['ID'],$rows);
+        if (($header['source']??null)!=='imdb' || ($header['catalog_fingerprint']??null)!==$fingerprint || ($header['scope']['kind']??null)!=='catalogue' || ($header['scope']['ids']??null)!==$ids) throw new UserError('complete_rating_snapshot_required');
+        $input=['schema_version'=>1,'source'=>'imdb','parent_series'=>'tt1751105','catalog_fingerprint'=>$fingerprint,'scope'=>['kind'=>'catalogue','ids'=>$ids,'coverage'=>'complete'],'records'=>[]];
+        $mapping=array_diff_key($input,['scope'=>true]);
+        foreach ($rows as $row) {
+            $p=json_decode($row['IMDB_PROVENANCE']??'',true);$id=(int)$row['ID'];$imdb=$row['IMDB_ID'];
+            if (!is_array($p) || ($p['batch_hash']??null)!==($header['batch_hash']??null) || ($p['vote_scope']??null)!=='all_countries' || ($p['source_url']??null)!=='https://www.imdb.com/title/'.$imdb.'/ratings/') throw new UserError('invalid_existing_rating');
+            $hist=$row['IMDB_HISTOGRAM']===null?null:json_decode($row['IMDB_HISTOGRAM'],true,64,JSON_THROW_ON_ERROR);
+            if ($hist!==null && ($row['IMDB_SD']===null || abs(EpisodeRatingSnapshot::statistics($hist)['sd']-(float)$row['IMDB_SD'])>0.0000000005)) throw new UserError('invalid_existing_distribution');
+            $meta=EpisodeCatalog::metadata($row['TITLE']);
+            $mapping['records'][]=['episode_id'=>$id,'imdb_id'=>$imdb,'kind'=>$meta?'episode':'special','season'=>$meta['season']??null,'episode'=>$meta['episode']??null,'identity_url'=>'https://www.imdb.com/title/'.$imdb.'/'];
+            $input['records'][]=['episode_id'=>$id,'imdb_id'=>$imdb,'rating'=>(float)$row['IMDB_RATING'],'votes'=>(int)$row['IMDB_VOTES'],'histogram'=>$hist,
+                'retrieved_at'=>str_replace(' ','T',$row['IMDB_RETRIEVED_AT']??'').'Z','source_asof'=>$row['IMDB_SOURCE_ASOF']===null?null:str_replace(' ','T',$row['IMDB_SOURCE_ASOF']).'Z',
+                'source_url'=>$p['source_url'],'vote_scope'=>'all_countries','provenance'=>array_intersect_key($p,['channel'=>true,'capture_hash'=>true])];
+        }
+        return [$input,$mapping];
+    }
+
     private function requireOwnedTransaction(string $reason='rating_import_nested_transaction'): void
     {
         if (Transaction::depth($this->db)>0) throw new UserError($reason);

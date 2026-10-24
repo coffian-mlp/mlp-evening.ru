@@ -3,6 +3,12 @@ namespace Domain;
 /** Pure catalogue parsing and canonical story construction. */
 final class EpisodeCatalog {
 
+    /** One 24-minute slot, with up to five extra minutes kept in the lower slot count. */
+    public static function durationSlots(int $minutes): int {
+        if ($minutes<=0) throw new \InvalidArgumentException('Duration must be positive');
+        return max(1,intdiv($minutes,24)+($minutes%24>5?1:0));
+    }
+
     public static function metadata(string $title): ?array {
         if (!preg_match('/^My Little Pony Friendship is Magic - Season (\d+) Episode (\d+) - (.+)$/u', $title, $m)) return null;
         return ['season' => (int)$m[1], 'episode' => (int)$m[2], 'name' => $m[3]];
