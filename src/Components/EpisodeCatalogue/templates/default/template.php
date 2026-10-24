@@ -35,9 +35,9 @@ $states = ['stale' => 'устарело', 'low_votes' => 'мало оценок'
         <button type="button" data-catalogue-direction aria-label="Изменить направление сортировки">По возрастанию</button>
         <button type="button" data-catalogue-reset>Сбросить</button>
     </div>
-    <p class="episode-catalogue-note">До <?= (int)$data['limits']['daily'] ?> разных пожеланий в день; повторное желание той же серии — через 7 дней. Отмена не возвращает лимит.</p>
+    <p class="episode-catalogue-note">До <?= (int)$data['limits']['daily'] ?> пожеланий в день. За ту же серию можно добавлять ещё один голос каждые 7 дней — до её просмотра. Отмена снимает все твои действующие голоса за серию и не возвращает лимит.</p>
     <p class="episode-catalogue-note" data-catalogue-rating-help>Разброс оценок σ показывает, насколько различаются оценки зрителей на IMDb. Чем выше значение, тем больше разброс; это не показатель спорности эпизода в фандоме.</p>
-    <details class="episode-catalogue-about"><summary>О пожеланиях и оценках</summary><p class="episode-catalogue-note">Желания: действующие пожелания участников и прежние голоса. IMDb — опубликованная оценка; σ — стандартное отклонение голосов, не оценка качества.</p>
+    <details class="episode-catalogue-about"><summary>О пожеланиях и оценках</summary><p class="episode-catalogue-note">Желания: сумма действующих голосов участников и прежних голосов. Повторные пожелания учитываются отдельно. Голоса, поданные после начала вечерка, сохраняются для следующего показа. IMDb — опубликованная оценка; σ — стандартное отклонение голосов, не оценка качества.</p>
     <p class="episode-catalogue-observation">Данные IMDb собраны (UTC): <?= $esc($data['ratings']['observation_min'] ?? 'дата неизвестна') ?><?= !empty($data['ratings']['observation_max']) && $data['ratings']['observation_max'] !== $data['ratings']['observation_min'] ? ' — ' . $esc($data['ratings']['observation_max']) : '' ?>. Устаревшие значения не являются актуальным рейтингом.</p></details>
     <p data-catalogue-quota role="status"><?= $data['viewer']['authenticated'] ? ($exhausted ? 'Дневной лимит исчерпан; отмена доступна.' : ($quotaValid ? 'Осталось сегодня: ' . (int)$quota['remaining'] . ' из 3.' : 'Остаток дневного лимита неизвестен; действие проверит сервер.')) : '' ?></p>
     <p data-catalogue-count>Показано <?= count($data['rows']) ?> эпизодов</p>
@@ -60,7 +60,11 @@ $states = ['stale' => 'устарело', 'low_votes' => 'мало оценок'
             </div></details></td>
             <td><?= (int)$row['views'] ?></td><td><?= (int)$row['wishes'] ?></td>
             <td><?= $esc($value($rating['score'])) ?><?php if (isset($states[$rating['status']])): ?><small><?= $states[$rating['status']] ?></small><?php endif; ?></td><td><?= $esc($rating['sd'] === null ? '—' : round($rating['sd'], 3)) ?></td>
-            <td><?php if (!$data['viewer']['authenticated']): ?><a href="/login.php?redirect=%2Fepisodes.php" data-catalogue-login>Войти, чтобы пожелать</a><?php else: ?><button type="button" data-catalogue-action="<?= (int)$row['id'] ?>"<?= $exhausted && !$row['own_active'] ? ' disabled title="Дневной лимит исчерпан. Отмена своего желания доступна." data-quota-disabled="true"' : '' ?>><?= $row['own_active'] ? 'Отменить желание' : ($exhausted ? 'Лимит на сегодня' : 'Хочу посмотреть') ?></button><?php endif; ?></td>
+            <td><div class="episode-catalogue-actions"><?php if (!$data['viewer']['authenticated']): ?><a href="/login.php?redirect=%2Fepisodes.php" data-catalogue-login>Войти, чтобы пожелать</a><?php else:
+                $repeatAt=$row['own_next_allowed_at']??null;
+                $repeatReady=is_string($repeatAt) && strtotime($repeatAt)!==false && strtotime($repeatAt)<=time();
+                if (!$row['own_active'] || $repeatReady): ?><button type="button" data-catalogue-action="<?= (int)$row['id'] ?>" data-catalogue-kind="wish"<?= $exhausted ? ' disabled title="Дневной лимит исчерпан. Отмена своего желания доступна." data-quota-disabled="true"' : '' ?>><?= $exhausted ? 'Лимит на сегодня' : ($row['own_active'] ? 'Пожелать ещё раз' : 'Хочу посмотреть') ?></button><?php endif;
+                if ($row['own_active']): ?><button type="button" data-catalogue-action="<?= (int)$row['id'] ?>" data-catalogue-kind="cancel" title="Отменить все свои действующие голоса за этот эпизод.">Отменить желание</button><span class="episode-catalogue-own-votes">Твоих голосов: <?= (int)($row['own_votes']??1) ?></span><?php endif; endif; ?></div></td>
             <?php if ($admin): ?><td><?= (int)$row['id'] ?></td><td><?= $esc($value($row['admin']['two_part_id'])) ?></td><td><?= (int)$row['admin']['length'] ?></td><?php endif; ?>
         </tr>
     <?php endforeach; ?>

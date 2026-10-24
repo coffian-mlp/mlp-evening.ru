@@ -47,7 +47,10 @@ class EpisodeManager {
 
     /** Nontransactional summary read; rating owner provides the shared read view. */
     public function getCatalogueRows(?int $actorId = null): array {
-        return $this->rows('SELECT e.ID,e.TITLE,e.TWOPART_ID,e.LENGTH,e.TIMES_WATCHED,e.legacy_wanna_watch+COALESCE(w.active_count,0) AS WANNA_WATCH,COALESCE(own.status="active",0) AS own_active FROM episode_list e LEFT JOIN (SELECT episode_id,COUNT(*) active_count FROM episode_wishes WHERE status="active" GROUP BY episode_id) w ON w.episode_id=e.ID LEFT JOIN episode_wishes own ON own.episode_id=e.ID AND own.user_id=? ORDER BY e.ID', [$actorId ?? 0]);
+        return $this->rows('SELECT e.ID,e.TITLE,e.TWOPART_ID,e.LENGTH,e.TIMES_WATCHED,e.legacy_wanna_watch+COALESCE(w.active_count,0) AS WANNA_WATCH,COALESCE(own.active_count,0)>0 AS own_active,COALESCE(own.active_count,0) AS own_votes,
+            (SELECT DATE_ADD(h.created_at,INTERVAL '.self::COOLDOWN_SECONDS.' SECOND) FROM episode_wish_events h WHERE h.user_id=? AND h.episode_id=e.ID AND h.kind="wish" AND h.status="accepted" ORDER BY h.id DESC LIMIT 1) AS own_next_allowed_at
+            FROM episode_list e LEFT JOIN (SELECT episode_id,COUNT(*) active_count FROM episode_wishes WHERE status="active" GROUP BY episode_id) w ON w.episode_id=e.ID
+            LEFT JOIN (SELECT episode_id,COUNT(*) active_count FROM episode_wishes WHERE user_id=? AND status="active" GROUP BY episode_id) own ON own.episode_id=e.ID ORDER BY e.ID', [$actorId ?? 0,$actorId ?? 0]);
     }
 
     private function generateWeightedPlaylist($limit) {
@@ -192,7 +195,7 @@ class EpisodeManager {
                 return $this->event($userId, $episodeId, $operationKey, 'wish', $out, $now);
             }
             $stamp = gmdate('Y-m-d H:i:s', $now);
-            $this->sql('INSERT INTO episode_wishes(user_id,episode_id,status,accepted_at,updated_at) VALUES(?,?,"active",?,?) ON DUPLICATE KEY UPDATE status="active",accepted_at=VALUES(accepted_at),updated_at=VALUES(updated_at),fulfilled_snapshot_id=NULL,fulfilled_completion_key=NULL', [$userId, $episodeId, $stamp, $stamp]);
+            $this->sql('INSERT INTO episode_wishes(user_id,episode_id,status,accepted_at,updated_at) VALUES(?,?,"active",?,?)', [$userId, $episodeId, $stamp, $stamp]);
             return $this->event($userId, $episodeId, $operationKey, 'wish', ['status' => 'accepted', 'code' => 'accepted', 'facts' => $facts + ['quota_remaining' => self::DAILY_LIMIT-1-$n]], $now);
         });
     }
@@ -236,7 +239,7 @@ class EpisodeManager {
     }
 
     public function getUserWishes(int $userId): array {
-        return $this->rows('SELECT w.episode_id,e.TITLE AS title,w.accepted_at,w.status FROM episode_wishes w JOIN episode_list e ON e.ID=w.episode_id WHERE w.user_id=? AND w.status="active" ORDER BY w.accepted_at DESC', [$userId]);
+        return $this->rows('SELECT w.episode_id,e.TITLE AS title,MAX(w.accepted_at) AS accepted_at,w.status,COUNT(*) AS votes FROM episode_wishes w JOIN episode_list e ON e.ID=w.episode_id WHERE w.user_id=? AND w.status="active" GROUP BY w.episode_id,e.TITLE,w.status ORDER BY accepted_at DESC,w.episode_id', [$userId]);
     }
 
     public function getWishTop(int $limit = 5): array {
@@ -410,9 +413,9 @@ class EpisodeManager {
             foreach ($candidates as $completion) if ($completion['start_at'] >= $acceptedAt) return $completion;
             return null;
         };
-        foreach ($this->rows('SELECT user_id,accepted_at FROM episode_wishes WHERE episode_id=? AND status="fulfilled" AND fulfilled_completion_key=? FOR UPDATE', [$episodeId,$removedKey]) as $wish) {
+        foreach ($this->rows('SELECT id,accepted_at FROM episode_wishes WHERE episode_id=? AND status="fulfilled" AND fulfilled_completion_key=? FOR UPDATE', [$episodeId,$removedKey]) as $wish) {
             $other = $replacement($wish['accepted_at']);
-            $this->sql('UPDATE episode_wishes SET status=?,fulfilled_snapshot_id=?,fulfilled_completion_key=?,updated_at=UTC_TIMESTAMP() WHERE user_id=? AND episode_id=?', [$other ? 'fulfilled' : 'active',$other['snapshot_id'] ?? null,$other['completion_key'] ?? null,$wish['user_id'],$episodeId]);
+            $this->sql('UPDATE episode_wishes SET status=?,fulfilled_snapshot_id=?,fulfilled_completion_key=?,updated_at=UTC_TIMESTAMP() WHERE id=?', [$other ? 'fulfilled' : 'active',$other['snapshot_id'] ?? null,$other['completion_key'] ?? null,$wish['id']]);
         }
         foreach ($this->rows('SELECT id,created_at FROM episode_wish_events WHERE user_id IS NULL AND episode_id=? AND status="fulfilled" AND fulfilled_completion_key=? FOR UPDATE', [$episodeId,$removedKey]) as $wish) {
             $other = $replacement($wish['created_at']);

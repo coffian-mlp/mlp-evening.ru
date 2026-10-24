@@ -3,3 +3,4 @@
 @media(max-width:600px){.episode-catalogue-page .main-header .header-content{padding:0 10px;gap:10px}.episode-catalogue-page .main-header .logo-area{flex:1;min-width:0}.episode-catalogue-page .main-header .logo{max-width:100%;height:auto;max-height:40px}.episode-catalogue-filters label{min-width:0}}
 
 .episode-catalogue button[data-quota-disabled=true]{cursor:not-allowed}.episode-catalogue-flash{box-sizing:border-box;min-width:min(300px,calc(100vw - 24px));max-width:calc(100vw - 24px);overflow-wrap:anywhere}.episode-catalogue [data-catalogue-quota]{color:#eac28a}
+.episode-catalogue-actions{display:flex;flex-direction:column;align-items:flex-start;gap:6px}.episode-catalogue-own-votes{font-size:.85em;opacity:.8}

@@ -598,7 +598,7 @@ WHERE NOT EXISTS (SELECT 1 FROM `bot_commands` WHERE `handler_type` = 'reminder'
 
 -- MLP-361 additive playlist and interaction schema.
 CREATE TABLE IF NOT EXISTS episode_wish_locks (user_id INT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
-CREATE TABLE IF NOT EXISTS episode_wishes (user_id INT NOT NULL,episode_id INT NOT NULL,status VARCHAR(20) NOT NULL,accepted_at DATETIME NOT NULL,updated_at DATETIME NOT NULL,fulfilled_snapshot_id INT NULL,PRIMARY KEY(user_id,episode_id),INDEX(status,episode_id)) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS episode_wishes (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,user_id INT NOT NULL,episode_id INT NOT NULL,status VARCHAR(20) NOT NULL,accepted_at DATETIME NOT NULL,updated_at DATETIME NOT NULL,fulfilled_snapshot_id INT NULL,INDEX idx_episode_wish_owner(user_id,episode_id,status),INDEX(status,episode_id)) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS episode_wish_events (id BIGINT AUTO_INCREMENT PRIMARY KEY,operation_key VARCHAR(190) NOT NULL UNIQUE,user_id INT NULL,episode_id INT NOT NULL,kind VARCHAR(20) NOT NULL,status VARCHAR(20) NOT NULL,created_at DATETIME NOT NULL,outcome_json JSON NOT NULL,snapshot_id INT NULL,INDEX(user_id,created_at),INDEX(episode_id,created_at)) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS playlist_snapshots (id INT AUTO_INCREMENT PRIMARY KEY,created_at DATETIME NOT NULL,payload_json JSON NOT NULL,completed_at DATETIME NULL,completion_json JSON NULL,origin VARCHAR(30) NOT NULL) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS playlist_occurrences (run_id VARCHAR(100) PRIMARY KEY,event_id INT NOT NULL,start_at DATETIME NOT NULL,end_at DATETIME NOT NULL,snapshot_id INT NOT NULL,state VARCHAR(30) NOT NULL DEFAULT 'pending',metadata_json JSON NOT NULL,INDEX(state,end_at)) ENGINE=InnoDB;

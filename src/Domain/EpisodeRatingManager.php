@@ -221,7 +221,8 @@ class EpisodeRatingManager
                 $id=(int)$episode['ID'];$meta=EpisodeCatalog::metadata($episode['TITLE']);
                 $row=['id'=>$id,'code'=>$meta?sprintf('S%02dE%02d',$meta['season'],$meta['episode']):null,
                     'title'=>$meta['name']??$episode['TITLE'],'season'=>$meta['season']??null,'episode'=>$meta['episode']??null,
-                    'views'=>(int)$episode['TIMES_WATCHED'],'wishes'=>(int)$episode['WANNA_WATCH'],'own_active'=>(bool)$episode['own_active'],
+                    'views'=>(int)$episode['TIMES_WATCHED'],'wishes'=>(int)$episode['WANNA_WATCH'],'own_active'=>(bool)$episode['own_active'],'own_votes'=>(int)$episode['own_votes'],
+                    'own_next_allowed_at'=>$episode['own_next_allowed_at']===null?null:str_replace(' ','T',$episode['own_next_allowed_at']).'Z',
                     'related'=>$this->cataloguePartner($episode,$map),'rating'=>$this->catalogueRating($observations[$id],$header,$now)];
                 if($includeAdmin)$row['admin']=['two_part_id'=>$episode['TWOPART_ID']===null?null:(int)$episode['TWOPART_ID'],'length'=>(int)$episode['LENGTH']];
                 $rows[]=$row;

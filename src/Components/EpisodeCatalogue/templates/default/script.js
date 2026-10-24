@@ -110,18 +110,41 @@
         if (!state.quota) return 'Остаток дневного лимита неизвестен; действие проверит сервер.';
         return state.quota.remaining === 0 ? 'Дневной лимит исчерпан. Новые пожелания доступны после следующей полуночи по Калининграду; отмена доступна.' : `Осталось сегодня: ${state.quota.remaining} из ${state.quota.limit}.`;
     }
-    function actionButton(row, state, pending) {
+    function repeatReady(row, state) {
+        return row.own_active && quotaISO(row.own_next_allowed_at) && Date.parse(row.own_next_allowed_at) <= state.serverEpoch + performance.now() - state.serverMono;
+    }
+    function armRepeat(state) {
+        clearTimeout(state.repeatTimer);
+        const now = state.serverEpoch + performance.now() - state.serverMono;
+        const future = Array.from(state.rows.values()).filter(row => row.own_active && quotaISO(row.own_next_allowed_at)).map(row => Date.parse(row.own_next_allowed_at)).filter(at => at > now);
+        if (future.length) state.repeatTimer = setTimeout(() => render(state), Math.min(2147483647, Math.max(1, Math.min(...future) - now)));
+    }
+    function actionButton(row, state, pending, kind) {
         if (!state.authenticated) return element('a', 'Войти, чтобы пожелать', { href: '/login.php?redirect=%2Fepisodes.php', 'data-catalogue-login': '' });
-        const exhausted = !pending && !row.own_active && state.quota?.remaining === 0;
-        const text = exhausted ? 'Лимит на сегодня' : pending ? (pending.busy ? 'Выполняется…' : 'Повторить запрос') : (row.own_active ? 'Отменить желание' : 'Хочу посмотреть');
-        const button = element('button', text, { type: 'button', 'data-catalogue-action': row.id }); button.disabled = !!pending?.busy || exhausted; if (exhausted) { button.title = 'Дневной лимит исчерпан. Можно отменить своё желание или дождаться следующего дня.'; button.dataset.quotaDisabled = 'true'; } return button;
+        const requestAction = kind === 'cancel' ? 'catalogue_cancel_wish' : 'catalogue_wish';
+        const retry = pending?.action === requestAction;
+        const exhausted = !retry && kind === 'wish' && state.quota?.remaining === 0;
+        const text = retry ? (pending.busy ? 'Выполняется…' : 'Повторить запрос') : exhausted ? 'Лимит на сегодня' : kind === 'cancel' ? 'Отменить желание' : row.own_active ? 'Пожелать ещё раз' : 'Хочу посмотреть';
+        const button = element('button', text, { type: 'button', 'data-catalogue-action': row.id, 'data-catalogue-kind': kind });
+        button.disabled = !!pending?.busy || (!!pending && !retry) || exhausted;
+        if (kind === 'cancel') button.title = 'Отменить все свои действующие голоса за этот эпизод.';
+        if (exhausted) { button.title = 'Дневной лимит исчерпан. Можно отменить своё желание или дождаться следующего дня.'; button.dataset.quotaDisabled = 'true'; } return button;
+    }
+    function actions(row, state) {
+        const pending = state.pending.get(row.id), node = element('div', null, { class: 'episode-catalogue-actions' });
+        if (!state.authenticated || !row.own_active || repeatReady(row, state) || pending?.action === 'catalogue_wish') node.append(actionButton(row, state, pending, 'wish'));
+        if (state.authenticated && row.own_active) {
+            node.append(actionButton(row, state, pending, 'cancel'));
+            node.append(element('span', `Твоих голосов: ${row.own_votes || 1}`, { class: 'episode-catalogue-own-votes' }));
+        }
+        return node;
     }
     function rowNode(row, state) {
         const node = element('tr', null, { id: `episode-${row.id}`, 'data-episode-id': row.id });
         const title = element('td', null); title.append(details(row, state.open.has(row.id)));
         const score = element('td', value(row.rating.score));
         if (labels[row.rating.status]) score.append(element('small', labels[row.rating.status]));
-        const action = element('td', null); action.append(actionButton(row, state, state.pending.get(row.id)));
+        const action = element('td', null); action.append(actions(row, state));
         node.append(element('td', row.code || 'Спецвыпуск'), title, element('td', row.views), element('td', row.wishes), score, element('td', (row.rating.sd === null ? '—' : String(Number(row.rating.sd.toFixed(3))))), action);
         if (state.admin) node.append(element('td', row.id), element('td', value(row.admin.two_part_id)), element('td', row.admin.length));
         return node;
@@ -136,6 +159,7 @@
         state.root.querySelector('[data-catalogue-empty]').hidden = rows.length !== 0;
         state.direction.textContent = state.descending ? 'По убыванию' : 'По возрастанию';
         state.root.querySelectorAll('[data-catalogue-column]').forEach(th => th.setAttribute('aria-sort', th.dataset.catalogueColumn === key ? (state.descending ? 'descending' : 'ascending') : 'none'));
+        armRepeat(state);
     }
     function feedback(state, text, error = false, notify = true) {
         const node = state.root.querySelector('[data-catalogue-feedback]'); node.textContent = text; node.dataset.error = String(error);
@@ -146,15 +170,15 @@
     }
     function outcomeText(outcome, row, state) {
         if (!row) return 'Эпизод больше не доступен.';
-        if (outcome.code === 'accepted') return row.own_active ? `Желание принято. ${quotaText(state)}` : 'Операция ранее принята; сейчас желание не активно.';
+        if (outcome.code === 'accepted') return row.own_active ? `Желание принято. Сейчас твоих голосов за серию: ${row.own_votes || 1}. ${quotaText(state)}` : 'Операция ранее принята; сейчас желание не активно.';
         if (outcome.code === 'cancelled') return row.own_active ? 'Отмена ранее выполнена; сейчас желание активно.' : 'Желание отменено. Лимит и срок повторного желания сохраняются.';
         const text = { daily_limit: 'Дневной лимит исчерпан.', cooldown: `Повторное желание доступно после ${outcome.facts.next_allowed_at || 'окончания срока ожидания'} (UTC).`, not_active: 'Активного желания уже нет.', missing: 'Эпизод не найден.' };
         return text[outcome.code] || 'Действие не выполнено.';
     }
-    async function sendAction(state, id) {
+    async function sendAction(state, id, kind) {
         expireQuota(state); const row = state.rows.get(id); if (!row || state.pending.get(id)?.busy) return;
-        if (!state.pending.has(id) && !row.own_active && state.quota?.remaining === 0) { render(state); feedback(state, 'Дневной лимит исчерпан.', true); return; }
-        const request = state.pending.get(id) || { token: uuid(), action: row.own_active ? 'catalogue_cancel_wish' : 'catalogue_wish' };
+        if (!state.pending.has(id) && kind !== 'cancel' && state.quota?.remaining === 0) { render(state); feedback(state, 'Дневной лимит исчерпан.', true); return; }
+        const request = state.pending.get(id) || { token: uuid(), action: kind === 'cancel' ? 'catalogue_cancel_wish' : 'catalogue_wish' };
         request.busy = true; state.pending.set(id, request); render(state); feedback(state, 'Выполняется…', false, false);
         const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 10000);
         try {
@@ -191,7 +215,7 @@
     function click(state, event) {
         const target = event.target.closest('button,a'); if (!target) return;
         if (target.hasAttribute('data-catalogue-login') && typeof window.openLoginModal === 'function') { event.preventDefault(); window.openLoginModal(event); }
-        if (target.dataset.catalogueAction) sendAction(state, Number(target.dataset.catalogueAction));
+        if (target.dataset.catalogueAction) sendAction(state, Number(target.dataset.catalogueAction), target.dataset.catalogueKind);
         if (target.hasAttribute('data-catalogue-reset')) reset(state);
         if (target.hasAttribute('data-catalogue-direction')) { state.descending = !state.descending; render(state); }
         if (target.dataset.catalogueSortKey) { state.descending = state.sort.value === target.dataset.catalogueSortKey && !state.descending; state.sort.value = target.dataset.catalogueSortKey; render(state); }
