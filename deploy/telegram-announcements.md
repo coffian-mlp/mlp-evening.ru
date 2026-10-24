@@ -53,3 +53,11 @@ Outbound sends checkpoint their state before HTTP. A network-ambiguous result or
 The dedicated administrator-only form writes announcement settings atomically. Empty token/proxy fields preserve stored credentials; the explicit proxy-clear checkbox selects direct connection. Token and proxy values are never rendered into the form. Existing environment credentials remain fallback values until an option is stored. Enabling performs Telegram readiness checks before saving. Changing bot, owner, channel or event is blocked while unfinished posts exist. Configuration changes share the worker publication lock.
 
 The Telegram proxy is independent of ai_proxy_url. HTTP, HTTPS and SOCKS5 are supported; SOCKS DNS resolution is remote. VLESS uses src/LLM/bin/xray with a separate temporary configuration (mode600), random loopback SOCKS port and short-lived child process. It does not reuse or replace the LLM tunnel. Install the official Xray-core Linux binary at that path (mode755, owned by root); no automatic binary downloads occur in web requests. Temporary configuration/process are removed when the request/worker exits normally. Telegram TLS certificate validation remains enabled.
+
+## Диагностика доставки
+
+Журнал `logs/announcements.log` содержит JSON-записи UTC: этап, ID поста и ревизии, номер вечерка, безопасные коды HTTP/API/cURL, неопределённость доставки и решение о повторе. Подтверждённая отправка записывается отдельно; она не стирает предыдущие ошибки. Токены, адресаты, текст сообщения и исходные ответы провайдера не записываются.
+
+Файл создаётся от имени воркера с правами 0640. При достижении 1 МиБ сохраняется одна предыдущая копия `.1`; запись и ротация защищены общей блокировкой `.lock`. Каталог `logs/` закрыт от HTTP в конфигурациях nginx и Apache. Если файл недоступен, запись направляется в syslog с префиксом `mlp-announcements journal fallback`. Ошибки верхнего уровня cron также попадают в этот журнал, даже при перенаправлении stderr в `/dev/null`.
+
+Сбой `getUpdates` не меняет курсор и не мешает отправке согласованных постов. Успешно прочитанные команды отмены и правки применяются до проверки публикации. Проверка конфигурации и личности бота, блокировка воркера и запрет автоматического повтора неопределённой доставки сохраняются.

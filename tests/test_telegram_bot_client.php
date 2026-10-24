@@ -53,6 +53,15 @@ $expectError(fn() => new TelegramBotClient('secret'), false, 'invalid credential
 $expectError(fn() => $client->request('deleteMessage'), false, 'unsupported method rejected');
 $throwing = new TelegramBotClient($token, static function () use ($token) { throw new RuntimeException('https://api.telegram.org/bot' . $token); });
 $expectError(fn() => $throwing->request('sendMessage'), true, 'transport exception credentials and chain removed');
+foreach ([
+    [['status'=>0,'errno'=>28,'body'=>'','request_started'=>false],['reason'=>'network','curl_errno'=>28,'http_status'=>0]],
+    [['status'=>403,'body'=>'{"ok":false,"error_code":403,"description":"secret"}'],['reason'=>'http_rejected','http_status'=>403,'api_code'=>403]],
+    [['status'=>200,'body'=>'{"ok":false,"error_code":429,"description":"secret"}'],['reason'=>'rate_limit','http_status'=>200,'api_code'=>429]],
+] as [$response,$expected]) {
+    $reply=$response;
+    try{$client->request('getMe');verifyTelegram(false,'diagnostic failure expected');}
+    catch(TelegramBotException $error){verifyTelegram($error->diagnostics===$expected,'safe diagnostic codes retained without raw response');}
+}
 $reply = ['status' => 200, 'body' => '{"ok":true,"result":true}'];
 verifyTelegram($client->request('answerCallbackQuery', ['callback_query_id' => 'x']) === ['ok' => true], 'boolean callback result normalized');
 

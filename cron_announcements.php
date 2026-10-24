@@ -24,6 +24,7 @@ if (!$token || $owner<=0 || $event<=0 || $number<1 || $number>3999 || !preg_matc
 try {
     (new AnnouncementWorker($store,\Domain\AnnouncementSettings::client($settings),new AnnouncementContent(),$owner,$channel,$event,$number,\Domain\AnnouncementSettings::fingerprint($settings)))->tick();
 } catch (\Throwable $e) {
+    (new \Infra\AnnouncementLog())->record('worker_failed',[],$e);
     error_log('Telegram announcements worker failed: '.get_class($e));
     exit(1);
 }

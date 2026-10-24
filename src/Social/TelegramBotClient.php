@@ -40,7 +40,7 @@ class TelegramBotClient
             $photoPath = $this->resolvePhoto($params['photo'] ?? null);
             $caption = $params['caption'] ?? '';
             if (!is_string($caption) || !mb_check_encoding($caption, 'UTF-8') || strlen(mb_convert_encoding($caption, 'UTF-16LE', 'UTF-8')) / 2 > 1024) {
-                throw new TelegramBotException('Telegram photo caption is invalid or too long.');
+                throw new TelegramBotException('Telegram photo caption is invalid or too long.', false, ['reason'=>'invalid_caption']);
             }
         }
         try {
@@ -49,35 +49,38 @@ class TelegramBotClient
                 : $this->transport($method, $params, $photoPath);
         } catch (\Throwable $error) {
             // Transport messages and previous exceptions may contain credentials.
-            throw new TelegramBotException('Telegram transport failed.', $mutating);
+            throw new TelegramBotException('Telegram transport failed.', $mutating, ['reason'=>'transport_exception']);
         }
         if (!is_array($response) || (int)($response['errno'] ?? 0) !== 0) {
-            throw new TelegramBotException('Telegram network request failed.', $mutating && ($response['request_started'] ?? null) !== false);
+            $details=is_array($response)?$response:[];
+            throw new TelegramBotException('Telegram network request failed.', $mutating && ($details['request_started'] ?? null) !== false,
+                ['reason'=>'network','curl_errno'=>(int)($details['errno']??0),'http_status'=>(int)($details['status']??0)]);
         }
         $status = (int)($response['status'] ?? 0);
         $body = json_decode(is_string($response['body'] ?? null) ? $response['body'] : '', true);
+        $diagnostics = ['http_status'=>$status,'api_code'=>(int)($body['error_code']??0)];
         if ($status === 429 || (is_array($body) && ($body['error_code'] ?? null) === 429)) {
-            throw new TelegramBotException('Telegram rate limit reached.', false);
+            throw new TelegramBotException('Telegram rate limit reached.', false, ['reason'=>'rate_limit']+$diagnostics);
         }
         if ($status >= 400 && $status < 500) {
-            throw new TelegramBotException('Telegram request rejected (HTTP ' . $status . ').', false);
+            throw new TelegramBotException('Telegram request rejected (HTTP ' . $status . ').', false, ['reason'=>'http_rejected']+$diagnostics);
         }
         if ($status < 200 || $status >= 300) {
-            throw new TelegramBotException('Telegram service response failed.', $mutating);
+            throw new TelegramBotException('Telegram service response failed.', $mutating, ['reason'=>'service_response']+$diagnostics);
         }
         if (!is_array($body) || !array_key_exists('ok', $body) || !is_bool($body['ok'])) {
-            throw new TelegramBotException('Telegram response is invalid.', $mutating);
+            throw new TelegramBotException('Telegram response is invalid.', $mutating, ['reason'=>'invalid_response']+$diagnostics);
         }
         if ($body['ok'] !== true) {
             $code = (int)($body['error_code'] ?? 0);
-            throw new TelegramBotException('Telegram API request rejected.', $mutating && ($code < 400 || $code >= 500));
+            throw new TelegramBotException('Telegram API request rejected.', $mutating && ($code < 400 || $code >= 500), ['reason'=>'api_rejected']+$diagnostics);
         }
         if (!array_key_exists('result', $body) || (!is_array($body['result']) && !($method === 'answerCallbackQuery' && $body['result'] === true))) {
-            throw new TelegramBotException('Telegram result is invalid.', $mutating);
+            throw new TelegramBotException('Telegram result is invalid.', $mutating, ['reason'=>'invalid_result']+$diagnostics);
         }
         if (in_array($method, ['sendPhoto', 'sendMessage'], true)
             && (!is_int($body['result']['message_id'] ?? null) || $body['result']['message_id'] <= 0)) {
-            throw new TelegramBotException('Telegram sent-message identifier is missing.', true);
+            throw new TelegramBotException('Telegram sent-message identifier is missing.', true, ['reason'=>'missing_message_id']+$diagnostics);
         }
         return is_array($body['result']) ? $body['result'] : ['ok' => true];
     }
@@ -94,7 +97,7 @@ class TelegramBotClient
     private function resolvePhoto(mixed $webpath): string
     {
         if (!is_string($webpath) || !preg_match('~\A/upload/lyra/[A-Za-z0-9_-]+\.jpg\z~D', $webpath)) {
-            throw new TelegramBotException('Telegram photo path is invalid.');
+            throw new TelegramBotException('Telegram photo path is invalid.', false, ['reason'=>'invalid_photo']);
         }
         $root = dirname(__DIR__, 2);
         $directory = realpath($root . '/upload/lyra');
@@ -103,7 +106,7 @@ class TelegramBotClient
         if ($directory === false || $resolved === false || !is_file($resolved) || !is_readable($resolved)
             || is_link($path) || is_link($root . '/upload/lyra') || dirname($resolved) !== $directory
             || $directory !== $root . '/upload/lyra') {
-            throw new TelegramBotException('Telegram photo is not an allowed local file.');
+            throw new TelegramBotException('Telegram photo is not an allowed local file.', false, ['reason'=>'invalid_photo']);
         }
         return $resolved;
     }

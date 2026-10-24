@@ -30,6 +30,10 @@ $owner = 123456789; $channel = '@fixture375';
 $updates = []; $calls = []; $updateIds = [];
 $nextUpdate = random_int(1000000000, 1900000000); $nextMessage = 500;
 $channelMode = 'ok';
+$pollMode = 'ok';
+$journalPath = sys_get_temp_dir().'/mlp_ann_worker_'.bin2hex(random_bytes(8)).'.log';
+$journal = new Infra\AnnouncementLog($journalPath);
+$journalRows = static fn(): array => is_file($journalPath)?array_map(static fn($line)=>json_decode($line,true,512,JSON_THROW_ON_ERROR),file($journalPath,FILE_IGNORE_NEW_LINES)):[];
 $identityKeys=['announcements_verified_token_hash','announcements_verified_bot_id','announcements_legacy_bot_id'];$identitySaved=[];foreach($identityKeys as $key)$identitySaved[$key]=$db->query("SELECT value FROM site_options WHERE key_name='$key'")->fetch_assoc();
 $oldBotCursor=$db->query('SELECT update_offset FROM telegram_announcement_bot_cursors WHERE bot_id=98754321')->fetch_assoc();
 $offset = $db->query('SELECT value FROM site_options WHERE key_name="announcements_update_offset"')->fetch_assoc();
@@ -43,10 +47,10 @@ $basename = 'worker375_'.bin2hex(random_bytes(8)).'.jpg';
 $file = $directory.'/'.$basename; file_put_contents($file,'fixture image');
 $content = new FixtureAnnouncementContent375('/upload/lyra/'.$basename);
 $store = new Domain\AnnouncementStore($db);
-$telegram = new Social\TelegramBotClient('123456789:'.str_repeat('a',35), static function ($method,$params) use (&$updates,&$calls,&$nextMessage,&$channelMode,$channel) {
+$telegram = new Social\TelegramBotClient('123456789:'.str_repeat('a',35), static function ($method,$params) use (&$updates,&$calls,&$nextMessage,&$channelMode,&$pollMode,$channel) {
     $calls[] = [$method,$params];
     if ($method==='getMe') return ['status'=>200,'body'=>'{"ok":true,"result":{"is_bot":true,"id":98754321}}'];
-    if ($method==='getUpdates') return ['status'=>200,'body'=>json_encode(['ok'=>true,'result'=>$updates])];
+    if ($method==='getUpdates') return $pollMode==='timeout'?['status'=>0,'body'=>'','errno'=>28,'request_started'=>false]:['status'=>200,'body'=>json_encode(['ok'=>true,'result'=>$updates])];
     if ($method==='answerCallbackQuery') return ['status'=>200,'body'=>'{"ok":true,"result":true}'];
     if (($params['chat_id'] ?? null)===$channel) {
         if ($channelMode==='429') return ['status'=>429,'body'=>'{"ok":false,"error_code":429}'];
@@ -69,7 +73,7 @@ $callback = static function (array $r, string $action='approve', ?int $sender=nu
 try {
     $stmt=$db->prepare('INSERT INTO events(title,description,start_time,duration_minutes,is_recurring,recurrence_rule,use_playlist,generate_new_playlist) VALUES(?,"fixture",?,240,1,"weekly",1,0)');
     $title='Announcement worker fixture '.bin2hex(random_bytes(8)); $date=gmdate('Y-m-d H:i:s',$start);$stmt->bind_param('ss',$title,$date);$stmt->execute();$eventId=(int)$db->insert_id;
-    $worker = new LLM\AnnouncementWorker($store,$telegram,$content,$owner,$channel,$eventId,123);
+    $worker = new LLM\AnnouncementWorker($store,$telegram,$content,$owner,$channel,$eventId,123,null,$journal);
     $store->setOption('announcements_not_before',(string)($start+7*86400));
     $worker->tick($wed-60);
     check(count($rows())===0,'relative preparation deadline postpones draft creation');
@@ -101,18 +105,31 @@ try {
     $content->variant=2;$worker->tick($thurs);
     check($channelCalls()===0 && $rows()['main']['approved_at']===null && $rows()['reminder']['approved_at']===null,'changed live programme invalidates both approvals before delivery');
     for($i=0;$i<6;$i++)$worker->tick($thurs+1);
+    $pollMode='timeout';$worker->tick($thurs+1);$pollMode='ok';
+    check($rows()['main']['state']==='pending' && $channelCalls()===0,'polling failure never grants approval to pending posts');
     $callback($rows()['main']);$channelMode='429';$worker->tick($thurs+2);$updates=[];
     $rejected=$rows()['main'];$sent=$channelCalls();
     check($rejected['state']==='approved' && (int)$rejected['attempts']===1 && $rejected['retry_at']!==null,'definitive rejection schedules bounded retry');
     $worker->tick($thurs+3);
     check($channelCalls()===$sent,'429 backoff prevents immediate repeat send');
-    $channelMode='ok';$worker->tick($thurs+400);
+    $channelMode='ok';$pollMode='timeout';$pollBlocked=false;
+    $cursorBefore=$store->pollingOffset(98754321);
+    try{$worker->tick($thurs+400);}catch(Social\TelegramBotException $error){$pollBlocked=true;}
+    $pollMode='ok';
+    check(!$pollBlocked && $rows()['main']['state']==='published','polling failure cannot block scheduled publication');
+    check($store->pollingOffset(98754321)===$cursorBefore,'failed polling does not advance verified bot cursor');
     check($rows()['main']['state']==='published' && $channelCalls()===$sent+1,'approved main publishes once after retry interval');
+    $journalEntries=$journalRows();
+    check((bool)array_filter($journalEntries,static fn($e)=>$e['event']==='delivery_failed' && ($e['revision_id']??0)===(int)$rejected['id'] && ($e['http_status']??0)===429 && $e['reason']==='rate_limit' && $e['next_state']==='approved'),'original rejection remains in journal after successful retry');
+    check((bool)array_filter($journalEntries,static fn($e)=>$e['event']==='poll_failed' && ($e['curl_errno']??0)===28 && $e['uncertain']===false),'polling timeout logged without untrusted response text');
+    check((bool)array_filter($journalEntries,static fn($e)=>$e['event']==='channel_sent' && ($e['revision_id']??0)===(int)$rejected['id'] && ($e['message_id']??0)>0),'successful retry has separate journal entry');
+    check($rows()['main']['last_error']===null && (int)$rows()['main']['attempts']===0,'clearing current error leaves persistent journal intact');
     $worker->tick($thurs+401);check($channelCalls()===$sent+1,'published main never resent');
     $callback($rows()['reminder']);$worker->tick($thurs+402);$updates=[];
     $channelMode='timeout';$worker->tick($satReminder);$ambiguousCalls=$channelCalls();
     check($rows()['reminder']['state']==='uncertain','ambiguous reminder delivery quarantined');
-    $worker->tick($satReminder+1);$worker->tick($satReminder+600);
+    check((bool)array_filter($journalRows(),static fn($e)=>$e['event']==='delivery_failed' && ($e['stage']??'')==='sending' && ($e['uncertain']??false) && $e['next_state']==='uncertain'),'uncertain delivery recorded without weakening quarantine');
+    $pollMode='timeout';$worker->tick($satReminder+1);$worker->tick($satReminder+600);$pollMode='ok';
     check($channelCalls()===$ambiguousCalls,'uncertain delivery never blindly retried');
     $uncertainId=(int)$rows()['reminder']['id'];
     $command=static function (string $text) use (&$updates,&$updateIds,&$nextUpdate,$owner): void {
@@ -145,6 +162,13 @@ try {
     check($store->action((int)$failedMain['id'],$failedMain['nonce'],'both','', $nextWed+1202,true)==='regenerating','failed post can be regenerated from dashboard');
     $worker->tick($nextWed+1202);$worker->tick($nextWed+1203);$worker->tick($nextWed+1204);
     check($rows()['main']['state']==='pending' && $rows()['main']['last_error']===null && $rows()['main']['retry_at']===null && $rows()['main']['approved_at']===null,'successful regeneration clears old errors and awaits fresh approval');
+    $callback($rows()['main']);$worker->tick($nextWed+1205);
+    check($rows()['main']['state']==='approved','next-week post approved before cancellation scenario');
+    $beforeCancellation=$channelCalls();
+    $callback($rows()['main'],'cancel');$worker->tick($thurs+7*86400);$updates=[];
+    check($rows()['main']['state']==='cancelled' && $channelCalls()===$beforeCancellation,'owner cancellation read at publication time takes precedence over delivery');
+    $pollMode='timeout';$worker->tick($thurs+7*86400+1);$pollMode='ok';
+    check($rows()['main']['state']==='cancelled' && $channelCalls()===$beforeCancellation,'later polling failure cannot revive a cancelled post');
 } finally {
     if($eventId) {
         $campaignIds=array_column($db->query('SELECT id FROM telegram_announcement_campaigns WHERE run_id REGEXP "^'.$eventId.'_[0-9]+$"')->fetch_all(MYSQLI_ASSOC),'id');
@@ -163,5 +187,6 @@ try {
         if($old)$store->setOption($key,$old['value']);else $db->query('DELETE FROM site_options WHERE key_name="'.$key.'"');
     }
     unlink($file);if($madeDirectory)rmdir($directory);
+    foreach([$journalPath,$journalPath.'.1',$journalPath.'.lock'] as $logFile)if(is_file($logFile))unlink($logFile);
 }
 it_done();

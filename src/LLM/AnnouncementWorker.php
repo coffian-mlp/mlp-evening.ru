@@ -4,6 +4,7 @@ namespace LLM;
 use Domain\AnnouncementStore;
 use Domain\EventManager;
 use Infra\Database;
+use Infra\AnnouncementLog;
 use Social\TelegramBotClient;
 use Social\TelegramBotException;
 
@@ -14,7 +15,8 @@ final class AnnouncementWorker
     private array $scheduleSettings = [];
     public function __construct(private AnnouncementStore $store, private TelegramBotClient $telegram,
         private AnnouncementContent $content, private int $owner, private string $channel,
-        private int $eventId, private int $initialNumber, private ?string $configurationFingerprint = null) {}
+        private int $eventId, private int $initialNumber, private ?string $configurationFingerprint = null,
+        private AnnouncementLog $journal = new AnnouncementLog()) {}
 
     public static function ownerUpdate(array $update, int $owner): bool
     {
@@ -68,7 +70,14 @@ final class AnnouncementWorker
                 if ($facts) $this->store->ensure($facts,AnnouncementContent::fingerprint($facts),$schedule,$this->initialNumber);
                 break;
             }
-            $updates = $this->telegram->request('getUpdates',['offset'=>$this->store->pollingOffset($botId)]);
+            // Pending owner actions still take precedence over publication when polling succeeds.
+            // A read-only transport failure must not block already approved posts or move the cursor.
+            try {
+                $updates = $this->telegram->request('getUpdates',['offset'=>$this->store->pollingOffset($botId)]);
+            } catch (TelegramBotException $error) {
+                $this->journal->record('poll_failed',[],$error);
+                $updates = [];
+            }
             foreach ($updates as $update) {
                 if (!is_array($update) || !is_int($update['update_id'] ?? null)) continue;
                 $response = null;
@@ -77,6 +86,7 @@ final class AnnouncementWorker
                 },$botId);
                 if ($accepted && $response !== null) $this->respond($update,$response);
             }
+            $now = $explicitNow ?? time();
             // Delivery is checked before potentially slow content generation.
             foreach ($this->store->active() as $row) {
                 $r = $this->store->revision((int)$row['id']);
@@ -176,6 +186,7 @@ final class AnnouncementWorker
                 $this->telegram->request('sendMessage',['chat_id'=>$this->owner,'text'=>$text]);
             }
         } catch (TelegramBotException $e) {
+            $this->journal->record('editor_notification_failed',[],$e);
             error_log('Announcement editor notification unavailable');
         }
     }
@@ -222,6 +233,7 @@ final class AnnouncementWorker
             if (!$this->store->change($id,'preview_pending','preview_sending')) return;
             try {
                 $result = $this->telegram->sendPhoto($this->owner,$r['caption'],$r['image_path'],self::keyboard($r));
+                $this->journal->record('preview_sent',$r,null,['message_id'=>$result['message_id']]);
                 $this->store->change($id,'preview_sending','pending',['preview_photo_id'=>$result['message_id'],'last_error'=>null,'retry_at'=>null,'attempts'=>0]);
                 $due = (new \DateTimeImmutable($r['due_at'],new \DateTimeZone('UTC')))->setTimezone(new \DateTimeZone('Europe/Moscow'))->format('d.m.Y H:i');
                 $reason = (str_starts_with($r['feedback'],'Расписание или плейлист изменились') || str_starts_with($r['feedback'],'Сроки публикации изменились')) ? ' Расписание или плейлист изменились; прежнее одобрение снято.' : '';
@@ -232,6 +244,7 @@ final class AnnouncementWorker
             try {
                 $due = (new \DateTimeImmutable($r['due_at'],new \DateTimeZone('UTC')))->setTimezone(new \DateTimeZone('Europe/Moscow'))->format('d.m.Y H:i');
                 $result = $this->telegram->request('sendMessage',['chat_id'=>$this->owner,'text'=>'Черновик #'.$r['stream_number'].' ('.$r['kind'].'), версия '.$r['version'].'. Публикация: '.$due.' МСК. Одобри пост или ответь на картинку с замечаниями.','reply_parameters'=>['message_id'=>(int)$r['preview_photo_id']]]);
+                $this->journal->record('controls_sent',$r,null,['message_id'=>$result['message_id']]);
                 $this->store->change($id,'controls_sending','pending',['preview_controls_id'=>$result['message_id'],'last_error'=>null,'retry_at'=>null,'attempts'=>0]);
             } catch (TelegramBotException $e) { $this->deliveryFailure($r,'controls_sending','controls_pending',$e); }
         }
@@ -244,6 +257,7 @@ final class AnnouncementWorker
         if (!$this->store->change((int)$r['id'],'approved','sending')) return;
         try {
             $result = $this->telegram->sendPhoto($this->channel,$r['caption'],$r['image_path']);
+            $this->journal->record('channel_sent',$r,null,['message_id'=>$result['message_id']]);
             $this->store->change((int)$r['id'],'sending','published',['channel_message_id'=>$result['message_id'],'last_error'=>null,'retry_at'=>null,'attempts'=>0]);
         } catch (TelegramBotException $e) { $this->deliveryFailure($r,'sending','approved',$e); }
     }
@@ -259,7 +273,9 @@ final class AnnouncementWorker
     {
         $attempts = (int)$r['attempts']+1;
         $state = $e->uncertain ? 'uncertain' : ($attempts>=3?'failed':$retry);
-        $this->store->change((int)$r['id'],$expected,$state,['attempts'=>$attempts,'retry_at'=>gmdate('Y-m-d H:i:s',($this->explicitNow ?? time())+300),'last_error'=>$e->uncertain?'delivery_uncertain':'delivery_rejected']);
+        $retryAt = gmdate('Y-m-d H:i:s',($this->explicitNow ?? time())+300);
+        $this->journal->record('delivery_failed',$r,$e,['stage'=>$expected,'next_state'=>$state,'attempts'=>$attempts,'retry_at'=>$retryAt]);
+        $this->store->change((int)$r['id'],$expected,$state,['attempts'=>$attempts,'retry_at'=>$retryAt,'last_error'=>$e->uncertain?'delivery_uncertain':'delivery_rejected']);
         $this->notify($e->uncertain ? 'Telegram не подтвердил доставку поста ID '.$r['id'].'. Автоматического повтора не будет. Проверь канал и черновики; /help — подсказка.' : 'Telegram отклонил отправку поста ID '.$r['id'].'. Проверь права бота; /status — состояние.');
     }
 
@@ -267,6 +283,9 @@ final class AnnouncementWorker
     {
         $text = $this->content->editorText($text);
         try { $this->telegram->request('sendMessage',['chat_id'=>$this->owner,'text'=>$text]); }
-        catch (TelegramBotException $e) { error_log('Announcement owner notification unavailable'); }
+        catch (TelegramBotException $e) {
+            $this->journal->record('owner_notification_failed',[],$e);
+            error_log('Announcement owner notification unavailable');
+        }
     }
 }
