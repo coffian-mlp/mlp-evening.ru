@@ -103,7 +103,7 @@ final class Privacy
     {
         if (in_array($action, ['get_chat_input','get_messages','search_messages','get_message_context','get_public_events',
             'get_poll','get_pinned','get_command_interaction','get_packs','get_stickers','heartbeat','ux_measure'],true)) return true;
-        if (($account['state'] ?? '') !== 'withdrawn' && in_array($action, ['get_lyra_metrics','get_llm_usage','get_feedback','get_memory',
+        if (($account['state'] ?? '') !== 'withdrawn' && in_array($action, ['get_lyra_metrics','get_llm_usage','get_announcement_log','get_feedback','get_memory',
             'get_users','get_user_options','get_audit_logs','get_user_socials_admin','get_menu_items','db_get_row','db_export'],true)) return true;
         if (($account['state'] ?? '') === 'active' && ($account['policy_version'] ?? '') === self::version()) return true;
         if(($account['state']??'')==='withdrawn' && strtotime($account['delete_after'].' UTC')<=time())return in_array($action,['login','social_login','logout','privacy_status','privacy_choices','privacy_account','privacy_exit','leave'],true);

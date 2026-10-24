@@ -541,6 +541,13 @@ option:checked {
 .announcement-details > summary { cursor: pointer; font-weight: 600; padding: 10px; background: rgba(150,100,220,.14); border-radius: 6px; }
 .announcement-details[open] > summary { margin-bottom: 18px; }
 .announcement-details textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+.announcement-journal-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
+.announcement-journal-controls label { display: flex; align-items: center; gap: 8px; }
+#announcement-journal-entries { list-style: none; padding: 0; margin: 0; max-height: 480px; overflow-y: auto; }
+.announcement-journal-entry { padding: 14px; margin: 10px 0; border: 1px solid var(--border-color, #635079); border-radius: 8px; overflow-wrap: anywhere; }
+.announcement-journal-entry p { margin: 6px 0; }
+.announcement-journal-entry small, .announcement-journal-meta { opacity: .85; }
+.announcement-journal-error { border-left: 3px solid var(--warning-color, #bd8731); }
 .announcement-post { border-top: 1px solid #635079; padding: 18px 0; overflow-wrap: anywhere; }
 .announcement-preview { display: flex; gap: 20px; align-items: flex-start; margin: 14px 0; }
 .announcement-preview img { width: 180px; max-width: 100%; border-radius: 8px; }

@@ -1,0 +1,97 @@
+const {test,expect}=require('@playwright/test');
+const {execFileSync}=require('child_process'),fs=require('fs'),path=require('path');
+const {BASE,login,post}=require('./mlp-360-helpers');
+const root=path.resolve(__dirname,'../..');
+const state=path.join(root,'docs/private/mlp425-local.json');
+const fixture=(name,mode)=>execFileSync('docker',['exec','mlp375-php-1','php','tests/playwright/'+name+'-fixture.php',mode],{cwd:root,encoding:'utf8'});
+const credentials=()=>JSON.parse(fs.readFileSync(state,'utf8')).users;
+const main=page=>page.locator('.announcement-post').filter({hasText:'Основной анонс'}).first();
+test.use({serviceWorkers:'block',launchOptions:{args:['--no-proxy-server'],firefoxUserPrefs:{'network.proxy.type':0}}});
+test.beforeEach(async({page})=>{
+    if(!BASE||!['localhost','127.0.0.1'].includes(new URL(BASE).hostname))throw Error('Isolated localhost required');
+    fixture('mlp-425-reasoning','setup');fixture('mlp-426-announcements','setup');fixture('mlp-433-announcements','setup');
+    await page.route('https://**',r=>r.abort());
+    await login(page.request,credentials().admin);
+    await page.goto(BASE+'/dashboard/#tab-announcements',{waitUntil:'domcontentloaded'});
+    if(await page.locator('#privacy-panel').isVisible())await page.locator('[data-privacy-necessary]').click();
+});
+test.afterEach(()=>{
+    if(fs.existsSync(path.join(root,'docs/private/mlp433-local.json')))fixture('mlp-433-announcements','cleanup');
+    if(fs.existsSync(path.join(root,'docs/private/mlp426-local.json')))fixture('mlp-426-announcements','cleanup');
+    if(fs.existsSync(state))fixture('mlp-425-reasoning','cleanup');
+});
+test('MLP-433 journal shows retained failures, filters successes and refreshes without losing edits',async({page},info)=>{
+    await main(page).locator('.announcement-manual-edit > summary').click();
+    const input=main(page).locator('[name="caption"]');
+    await input.fill((await input.inputValue())+'\nНесохранённая правка.');
+    const journal=page.locator('#announcement-journal');await page.locator('.announcement-go-journal').click();
+    const entries=page.locator('#announcement-journal-entries');
+    await expect(entries.locator('li')).toHaveCount(2);
+    await expect(entries).toContainText('Истекло время ожидания Telegram');
+    await expect(entries).toContainText('Автоматический повтор отключён');
+    await expect(entries).toContainText('ограничил частоту');
+    await expect(entries).not.toContainText('Telegram подтвердил отправку');
+    await page.locator('#announcement-errors-only').uncheck();
+    await expect(entries.locator('li')).toHaveCount(4);
+    await expect(entries).toContainText('Telegram подтвердил отправку');
+    await expect(entries).not.toContainText('private-fixture-secret');
+    await expect(entries.locator('img')).toHaveCount(0);
+    await page.locator('#announcement-journal-refresh').click();
+    await expect(page.locator('#announcement-journal-status')).toContainText('Показано записей: 4');
+    await expect(input).toHaveValue(/Несохранённая правка/);
+    await page.setViewportSize({width:390,height:844});await journal.scrollIntoViewIfNeeded();
+    expect(await entries.evaluate(el=>el.getBoundingClientRect().right<=innerWidth+1)).toBe(true);
+    const dir=path.join(root,'docs/tests/MLP-433');fs.mkdirSync(dir,{recursive:true});
+    await page.screenshot({path:path.join(dir,info.project.name+'-journal.png')});
+    await page.route('**/api.php',async route=>{
+        if(route.request().postData()?.includes('get_announcement_log'))return route.abort();
+        return route.continue();
+    });
+    await page.locator('#announcement-journal-refresh').click();
+    await expect(page.locator('#announcement-journal-status')).toContainText('Не удалось загрузить журнал');
+    await expect(page.locator('#announcement-journal-refresh')).toBeEnabled();
+});
+test('MLP-433 manual edit preserves image, revokes approval and never calls LLM',async({page},info)=>{
+    const before=JSON.parse(fixture('mlp-433-announcements','inspect'));
+    expect(before.state).toBe('approved');
+    const oldId=await main(page).getAttribute('data-revision');
+    const nonce=await main(page).locator('[name="nonce"]').inputValue();
+    const image=await main(page).locator('.announcement-preview img').getAttribute('src');
+    await main(page).locator('.announcement-manual-edit > summary').click();
+    await expect(main(page).locator('.announcement-regenerate')).not.toHaveAttribute('open','');
+    const caption=main(page).locator('[name="caption"]');await caption.fill((await caption.inputValue())+'\nНовый текст вручную.');
+    const dir=path.join(root,'docs/tests/MLP-433');fs.mkdirSync(dir,{recursive:true});
+    await main(page).scrollIntoViewIfNeeded();await page.screenshot({path:path.join(dir,info.project.name+'-manual-edit.png')});
+    await main(page).locator('button[value="edit"]').click();
+    await expect(page.locator('.announcement-post[data-revision="'+oldId+'"]')).toHaveCount(0);
+    await expect(main(page)).toContainText('Новый текст вручную.');
+    await expect(main(page)).toContainText('Готов, ожидает отправки в личку');
+    await expect(main(page).locator('.announcement-preview img')).toHaveAttribute('src',image);
+    await expect(main(page).locator('button[value="approve"]')).toBeVisible();
+    const after=JSON.parse(fixture('mlp-433-announcements','inspect'));
+    expect(after.requests).toBe(before.requests);expect(after.image_path).toBe(before.image_path);
+    expect(after.approved_at).toBeNull();expect(Number(after.version)).toBe(Number(before.version)+1);
+    const csrf=await page.locator('meta[name="csrf-token"]').getAttribute('content');
+    expect((await post(page.request,csrf,{action:'announcement_post_action',operation:'approve',revision_id:oldId,nonce})).success).toBe(false);
+    await main(page).locator('.announcement-manual-edit > summary').click();
+    await main(page).locator('[name="caption"]').fill('Без даты и ссылки');
+    await main(page).locator('button[value="edit"]').click();
+    await expect(page.locator('.flash-message').filter({hasText:'ссылку'})).toBeVisible();
+    expect(JSON.parse(fixture('mlp-433-announcements','inspect')).id).toBe(after.id);
+});
+test('MLP-433 journal requires administrator and CSRF; malformed filter rejected',async({page,browser})=>{
+    const csrf=await page.locator('meta[name="csrf-token"]').getAttribute('content');
+    const result=await post(page.request,csrf,{action:'get_announcement_log'});
+    expect(result.success).toBe(true);expect(result.data.entries.length).toBe(2);
+    expect(JSON.stringify(result)).not.toContain('private-fixture-secret');
+    expect((await post(page.request,csrf,{action:'get_announcement_log',errors_only:'bogus'})).success).toBe(false);
+    const noCsrf=await page.request.post(BASE+'/api.php',{form:{action:'get_announcement_log'}});
+    expect((await noCsrf.json()).success).toBe(false);
+    const ctx=await browser.newContext();
+    try {
+        const guest=await ctx.request.post(BASE+'/api.php',{form:{action:'get_announcement_log'}});
+        expect((await guest.json()).success).toBe(false);
+        const userCsrf=await login(ctx.request,credentials().user);
+        expect((await post(ctx.request,userCsrf,{action:'get_announcement_log'})).message).toBe('Access Denied');
+    } finally {await ctx.close();}
+});

@@ -8,6 +8,48 @@ final class AnnouncementLog
 {
     public function __construct(private ?string $path = null) {}
 
+    /** Newest entries first, including the retained rotation. Reads share the writer's lock. */
+    public function recent(int $limit = 100, bool $errorsOnly = true): array
+    {
+        $limit=max(1,min(100,$limit));
+        $path=$this->path??dirname(__DIR__,2).'/logs/announcements.log';
+        if (!file_exists($path) && !file_exists($path.'.1')) return [];
+        $lock=null;
+        try {
+            if (is_link($path.'.lock')) throw new \RuntimeException('Unsafe log lock');
+            $lock=@fopen($path.'.lock','r');
+            if (!$lock || !flock($lock,LOCK_SH)) throw new \RuntimeException('Log lock unavailable');
+            $entries=[];
+            foreach ([$path,$path.'.1'] as $file) {
+                if (!file_exists($file)) continue;
+                if (is_link($file) || !is_file($file)) throw new \RuntimeException('Unsafe log file');
+                $handle=@fopen($file,'rb');
+                if (!$handle) throw new \RuntimeException('Log unavailable');
+                try {
+                    $size=fstat($handle)['size'];
+                    $offset=max(0,$size-1048576);
+                    if ($offset && fseek($handle,$offset)!==0) throw new \RuntimeException('Log seek failed');
+                    $tail=stream_get_contents($handle,1048576);
+                    if ($tail===false) throw new \RuntimeException('Log read failed');
+                } finally { fclose($handle); }
+                $lines=explode("\n",$tail);
+                if ($offset) array_shift($lines);
+                // Ignore an incomplete final record left by an interrupted write.
+                array_pop($lines);
+                foreach (array_reverse($lines) as $line) {
+                    $row=json_decode($line,true);
+                    if (!is_array($row) || !is_string($row['event']??null)) continue;
+                    if ($errorsOnly && !isset($row['error_type']) && !str_ends_with($row['event'],'_failed')) continue;
+                    $entries[]=$row;
+                    if (count($entries)>=$limit) return $entries;
+                }
+            }
+            return $entries;
+        } finally {
+            if (is_resource($lock)) { flock($lock,LOCK_UN); fclose($lock); }
+        }
+    }
+
     public function record(string $event, array $revision = [], ?\Throwable $error = null, array $outcome = []): bool
     {
         $entry = ['at'=>gmdate('Y-m-d\TH:i:s\Z'),'event'=>preg_match('/\A[a-z_]{1,40}\z/D',$event)?$event:'unknown'];

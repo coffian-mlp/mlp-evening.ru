@@ -26,7 +26,7 @@ $labels=['text_pending'=>'В очереди: текст','text_generating'=>'Г�
     <?php else: ?>
         <p><?= $escape($arResult['scheduleError']??'Выбери активное еженедельное событие с плейлистом в настройках ниже.') ?></p>
     <?php endif; ?>
-    <p><button type="button" class="btn btn-secondary announcement-refresh">Обновить статусы</button> <button type="button" class="btn btn-secondary announcement-go-settings">Настройки</button></p>
+    <p class="announcement-actions"><button type="button" class="btn btn-secondary announcement-refresh">Обновить статусы</button> <button type="button" class="btn btn-secondary announcement-go-journal">Журнал ошибок</button> <button type="button" class="btn btn-secondary announcement-go-settings">Настройки</button></p>
 </section>
 <section class="card" id="announcement-posts">
     <h3 class="dashboard-title">Посты и согласование</h3>
@@ -57,11 +57,15 @@ $labels=['text_pending'=>'В очереди: текст','text_generating'=>'Г�
                         <?php if ($ready): ?><button type="submit" class="btn btn-primary" name="operation" value="approve">Одобрить публикацию</button><?php endif; ?>
                         <?php if ($restorable): ?><button type="submit" class="btn btn-secondary" name="operation" value="both">Создать черновик заново</button><?php else: ?><button type="submit" class="btn btn-secondary" name="operation" value="cancel">Отменить пост</button><?php endif; ?>
                     </div>
-                    <?php if ($editable): ?><details class="announcement-details">
-                        <summary>Редактирование и перегенерация <span aria-hidden="true">▾</span></summary>
+                    <?php if ($editable): ?><details class="announcement-details announcement-manual-edit">
+                        <summary>Изменить текст вручную <span aria-hidden="true">▾</span></summary>
+                        <p>Текст сохранится как есть, без перегенерации. Картинка останется прежней. Новую версию нужно одобрить заново.</p>
                         <label class="form-label">Текст поста<textarea name="caption" class="form-input" rows="8"><?= $escape($r['caption']??'') ?></textarea></label>
-                        <p>Дата и время показа по Москве, ссылка на сайт и лимит подписи Telegram проверяются при сохранении. Номер добавится автоматически.</p>
-                        <button type="submit" class="btn btn-secondary" name="operation" value="edit">Сохранить новую версию текста</button>
+                        <p>Сохрани дату и время показа в формате «дд.мм.гггг чч:мм МСК» и ссылку https://mlp-evening.ru/. Лимит — 1024 символа вместе с номером; некоторые эмодзи занимают два символа. Номер добавится автоматически.</p>
+                        <button type="submit" class="btn btn-secondary" name="operation" value="edit">Сохранить текст без генерации</button>
+                    </details>
+                    <details class="announcement-details announcement-regenerate">
+                        <summary>Попросить Лиру переделать <span aria-hidden="true">▾</span></summary>
                         <label class="form-label">Замечания для модели<textarea name="feedback" class="form-input" rows="3" maxlength="2000" placeholder="Что изменить в следующем варианте"></textarea></label>
                         <div class="announcement-actions">
                             <button type="submit" class="btn btn-secondary" name="operation" value="text">Переделать текст</button>
@@ -73,5 +77,17 @@ $labels=['text_pending'=>'В очереди: текст','text_generating'=>'Г�
             <?php endif; ?>
         </article>
     <?php endforeach; ?>
+</section>
+<section class="card">
+    <details class="announcement-details" id="announcement-journal">
+        <summary>Журнал доставки и ошибок <span aria-hidden="true">▾</span></summary>
+        <p>Последние 100 записей из текущего и предыдущего файла журнала. История сохраняется после успешной отправки; назначенный тогда повтор не означает, что пост всё ещё ждёт отправки. Текущий статус смотри в карточке поста.</p>
+        <div class="announcement-journal-controls">
+            <label><input type="checkbox" id="announcement-errors-only" checked> Только ошибки</label>
+            <button type="button" class="btn btn-secondary" id="announcement-journal-refresh">Обновить журнал</button>
+        </div>
+        <p id="announcement-journal-status" role="status" aria-live="polite">Открой журнал, чтобы загрузить записи.</p>
+        <ol id="announcement-journal-entries" aria-label="Записи журнала анонсов"></ol>
+    </details>
 </section>
 <?php include dirname(__DIR__,3).'/AdminSettings/templates/announcements/template.php'; ?>

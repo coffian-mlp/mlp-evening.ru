@@ -28,5 +28,6 @@ try {
  try {$changed['main_at']+=60;$store->ensure($facts,LLM\AnnouncementContent::fingerprint($facts),$changed,$before);check(false,'uncertain delivery schedule frozen');}catch(RuntimeException $e){check(true,'uncertain delivery schedule frozen');}
  check($store->action((int)$edited['id'],$edited['nonce'],'both','',null,true)==='unavailable','uncertain delivery cannot be blindly regenerated');
  $routes=require __DIR__.'/../src/Api/routes.php';check($routes['announcement_post_action']['role']==='admin','post controls administrator-only');
+ check($routes['get_announcement_log']['role']==='admin','journal administrator-only');
 } finally {$db->rollback();Infra\ConfigManager::getInstance()->flushCache();}
 it_done();

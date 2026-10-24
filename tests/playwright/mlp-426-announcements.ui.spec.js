@@ -39,7 +39,7 @@ test('MLP-426 failed posts explain stage, episode and exhausted retries on deskt
 });
 test('MLP-426 regenerate both recovers failed post without stale error or approval',async({page})=>{
     let main=page.locator('.announcement-post').filter({hasText:'Основной анонс'}).first();
-    const oldId=await main.getAttribute('data-revision');await main.locator('details summary').click();
+    const oldId=await main.getAttribute('data-revision');await main.locator('.announcement-regenerate > summary').click();
     await main.locator('button[value="both"]').click();await expect.poll(()=>received.get(page).length).toBe(1);
     expect(received.get(page)[0].success).toBe(true);
     await expect(page.locator('.announcement-post[data-revision="'+oldId+'"]')).toHaveCount(0);

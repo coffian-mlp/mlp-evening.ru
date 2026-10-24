@@ -97,6 +97,38 @@ $(document).ready(function() {
 
     $('.announcement-refresh').on('click',function(){location.reload();});
     $('.announcement-go-settings').on('click',function(){document.getElementById('announcement-settings-form').scrollIntoView({behavior:'smooth'});});
+    $('.announcement-go-journal').on('click',function(){var journal=document.getElementById('announcement-journal');journal.open=true;journal.scrollIntoView({behavior:'smooth'});});
+    var announcementJournalLoading = false;
+    function loadAnnouncementJournal() {
+        if (announcementJournalLoading) return;
+        announcementJournalLoading = true;
+        var status = $('#announcement-journal-status');
+        var entries = $('#announcement-journal-entries');
+        var controls = $('#announcement-errors-only, #announcement-journal-refresh');
+        controls.prop('disabled',true);
+        status.text('Загрузка журнала…');
+        $.ajax({url:'/api.php',type:'POST',dataType:'json',timeout:15000,data:{action:'get_announcement_log',errors_only:$('#announcement-errors-only').prop('checked')?'1':'0'}})
+            .done(function(response) {
+                entries.empty();
+                if (!response.success) {status.text(response.message);return;}
+                var rows = response.data.entries;
+                rows.forEach(function(row) {
+                    var item = $('<li>').addClass('announcement-journal-entry').toggleClass('announcement-journal-error',row.error);
+                    $('<p>').addClass('announcement-journal-meta').text(row.at + (row.post?' · '+row.post:'')).appendTo(item);
+                    $('<strong>').text(row.stage).appendTo(item);
+                    $('<p>').text(row.reason).appendTo(item);
+                    if (row.outcome) $('<p>').text(row.outcome).appendTo(item);
+                    if (row.details) $('<small>').text(row.details).appendTo(item);
+                    item.appendTo(entries);
+                });
+                status.text((rows.length?'Показано записей: '+rows.length+'.':'Записей с выбранным фильтром пока нет.')+' Часовой пояс: '+response.data.timezone+'.');
+            })
+            .fail(function(){entries.empty();status.text('Не удалось загрузить журнал. Попробуй обновить его ещё раз.');})
+            .always(function(){announcementJournalLoading=false;controls.prop('disabled',false);});
+    }
+    $('#announcement-journal').on('toggle',function(){if(this.open)loadAnnouncementJournal();});
+    $('#announcement-journal-refresh').on('click',loadAnnouncementJournal);
+    $('#announcement-errors-only').on('change',loadAnnouncementJournal);
     $('.announcement-action-form').on('submit', function(e) {
         e.preventDefault();
         var form = this;
