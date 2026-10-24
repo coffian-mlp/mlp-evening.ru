@@ -94,6 +94,7 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
             <button id="chat-search-btn" class="icon-btn" title="Поиск">🔍</button>
             <!-- Кнопка popout удалена для popup-шаблона -->
             <button id="toggle-title-alert" class="icon-btn" title="Моргание вкладки">🔔</button>
+            <?php $app->includeComponent('StreamReactions'); ?>
         </div>
     </div>
     

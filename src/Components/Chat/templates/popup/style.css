@@ -31,6 +31,12 @@ body, html {
 /* Скрываем кнопку разворачивания поп-апа внутри самого поп-апа */
 .popout-btn { display: none !important; }
 
+/* Keep standalone chat controls reachable in narrow windows. */
+.chat-user-menu, .user-controls, .profile-link { min-width:0; }
+.profile-link .username { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.profile-link .avatar-mini { flex-shrink:0; }
+.chat-settings { gap:4px; flex-shrink:0; }
+
 /* === Принудительная ДЕСКТОПНАЯ ВЕРСИЯ === */
 /* Возвращаем стандартное поле ввода */
 .chat-input-area { 

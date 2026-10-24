@@ -1,6 +1,6 @@
 // Версия кеша включает релиз и ревизию статических ассетов. Обновлять при их замене:
 // смена имени заставляет activate-обработчик выбросить старый кеш ассетов на проде.
-const CACHE_VERSION = 'v4.16.0-mlp433';
+const CACHE_VERSION = 'v4.16.0-mlp434';
 const CACHE_NAME = 'mlp-evening-' + CACHE_VERSION;
 const ASSETS_TO_CACHE = [
     '/assets/css/main.css',
@@ -15,7 +15,8 @@ const ASSETS_TO_CACHE = [
     '/src/Components/Chat/assets/chat-core.js',
     '/src/Components/Chat/assets/keyword-alerts.js',
     '/src/Components/Chat/assets/command-interactions.js',
-    '/src/Components/VideoPlayer/assets/reactions.js',
+    '/src/Components/StreamReactions/templates/default/script.js',
+    '/src/Components/StreamReactions/templates/default/style.css',
     '/src/Components/VideoPlayer/templates/default/script.js',
     '/src/Components/VideoPlayer/templates/default/style.css',
     '/src/Components/EveningArchive/templates/default/style.css',
