@@ -17,6 +17,9 @@ class AdminSettingsComponent extends Component {
         $this->result['currentStreamUrl'] = $config->getOption('stream_url', 'https://goodgame.ru/player?161438#autoplay');
         $this->result['currentChatMode'] = $config->getOption('chat_mode', 'local');
         $this->result['currentRateLimit'] = $config->getOption('chat_rate_limit', 0);
+        $this->result['stream']=\Domain\SelfHostedStream::settings();
+        global $app;
+        $app->addJs('/assets/js/self-hosted-settings.js');
 
         $this->includeTemplate();
     }

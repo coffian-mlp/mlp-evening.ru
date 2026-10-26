@@ -1,6 +1,6 @@
 // Версия кеша включает релиз и ревизию статических ассетов. Обновлять при их замене:
 // смена имени заставляет activate-обработчик выбросить старый кеш ассетов на проде.
-const CACHE_VERSION = 'v4.16.0-mlp436';
+const CACHE_VERSION = 'v4.16.0-mlp437';
 const CACHE_NAME = 'mlp-evening-' + CACHE_VERSION;
 const ASSETS_TO_CACHE = [
     '/assets/css/main.css',
@@ -64,12 +64,13 @@ self.addEventListener('activate', (event) => {
 // 3. Fetch Event: Network First for HTML/API, Cache First for Assets
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
+    if (url.pathname.startsWith('/live/')) return;
 
     // API & Dynamic Pages -> Network First, fall back to nothing (or offline page if we had one)
     if (url.pathname.includes('api.php') || 
         url.pathname.endsWith('.php') || 
         url.pathname === '/' || 
-        event.request.headers.get('accept').includes('text/html')) {
+        (event.request.headers.get('accept') || '').includes('text/html')) {
         
         event.respondWith(
             fetch(event.request).catch(() => {

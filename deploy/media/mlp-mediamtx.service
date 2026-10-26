@@ -1,0 +1,39 @@
+[Unit]
+Description=MLP Evening optional live media server
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=mlp-media
+Group=mlp-media
+ExecStart=/usr/local/bin/mlp-mediamtx /etc/mlp-mediamtx/mediamtx.yml
+LoadCredential=server.crt:/var/www/httpd-cert/mlp-evening.ru_2026-09-11-06-44_44.crt
+LoadCredential=server.key:/var/www/httpd-cert/mlp-evening.ru_2026-09-11-06-44_44.key
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+Environment=GOMEMLIMIT=192MiB
+Environment=GOMAXPROCS=1
+MemoryHigh=256M
+MemoryMax=384M
+MemorySwapMax=0
+CPUQuota=75%
+LimitNOFILE=4096
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

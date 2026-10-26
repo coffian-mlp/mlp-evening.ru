@@ -38,6 +38,12 @@ $missing = [];
 $formFields = [];
 foreach ($templates as $tpl) {
     $src = file_get_contents($tpl);
+    // The stream form has a dedicated atomic owner, exercised by its integration/browser tests.
+    if (str_contains($src,'value="save_stream_settings"')) {
+        preg_match('/<form[^>]*>\s*<input[^>]*name="action"[^>]*value="save_stream_settings"[\s\S]*?<\/form>/',$src,$streamForm);
+        ok(isset($streamForm[0])&&str_contains($streamForm[0],'name="stream_source"')&&str_contains($streamForm[0],'name="self_hosted_hls_url"'),'stream form uses its dedicated settings owner');
+        $src=str_replace($streamForm[0]??'','',$src);
+    }
     preg_match_all('/name="([a-z_0-9]+)"/', $src, $m);
     foreach (array_unique($m[1]) as $name) {
         if (in_array($name, $ignored, true)) continue;

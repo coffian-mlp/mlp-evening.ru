@@ -196,7 +196,7 @@ $(document).ready(function() {
                     var action = $form.find("input[name='action']").val();
                     
                     // Не очищаем поля для форм с настройками
-                    if (action !== 'update_settings' && action !== 'update_announcements') {
+                    if (action !== 'update_settings' && action !== 'update_announcements' && action !== 'save_stream_settings') {
                         $form.find("input[type='text'], input[type='number'], input[type='password'], input[type='url'], input[type='file'], textarea").val("");
                         // Reset selects if any
                         $form.find("select").prop('selectedIndex', 0);

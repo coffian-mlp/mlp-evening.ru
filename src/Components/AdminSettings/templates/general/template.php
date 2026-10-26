@@ -191,10 +191,15 @@ $config = $arResult['config']; // Helper
     </form>
 </div>
 
-<div class="card">
+<div class="card" id="stream-settings">
     <h3 class="dashboard-title">📺 Настройки Плеера</h3>
     <form method="post" action="/api.php">
-        <input type="hidden" name="action" value="update_settings">
+        <input type="hidden" name="action" value="save_stream_settings">
+        <label class="form-label" for="stream_source">Источник видео для зрителей</label>
+        <select class="form-input no-custom" id="stream_source" name="stream_source">
+            <option value="external"<?= $arResult['stream']['source']==='external'?' selected':'' ?>>Внешний плеер — Twitch и другие сервисы</option>
+            <option value="self_hosted"<?= $arResult['stream']['source']==='self_hosted'?' selected':'' ?>>Собственный эфир — HLS</option>
+        </select>
         <label for="stream_url" style="display: block; margin-bottom: 8px; font-weight: bold;">Ссылка на стрим (iframe src):</label>
         <div style="display: flex; gap: 10px;">
             <input type="text" id="stream_url" name="stream_url" value="<?= htmlspecialchars($arResult['currentStreamUrl']) ?>" style="flex: 1;" required>
@@ -203,5 +208,21 @@ $config = $arResult['config']; // Helper
         <p style="color: #666; font-size: 0.9em; margin-top: 8px;">
             Например: <code>https://goodgame.ru/player?161438#autoplay</code> или <code>https://player.twitch.tv/?channel=...</code>
         </p>
+        <label class="form-label" for="self_hosted_hls_url">Адрес собственного HLS-потока</label>
+        <input class="form-input" id="self_hosted_hls_url" name="self_hosted_hls_url" maxlength="128" required value="<?= htmlspecialchars($arResult['stream']['url'],ENT_QUOTES,'UTF-8') ?>">
+        <p>Пример: <code>/live/evening/index.m3u8</code>. При внешнем источнике этот адрес не используется. После переключения зрителям нужно обновить страницу.</p>
     </form>
+    <p><a href="/stream-preview.php" target="_blank" rel="noopener">Открыть предпросмотр собственного эфира</a> — выбранный источник для зрителей останется прежним.</p>
+    <button type="button" class="btn-primary" data-self-stream-status>Проверить поток</button>
+    <p data-self-stream-message role="status">Для проверки доступности нажми кнопку.</p>
+    <details><summary>Подключение OBS</summary>
+        <p>В OBS выбери сервис «Настраиваемый» и получи параметры ниже. Для первого теста: H.264, AAC, CBR 6000 Кбит/с, ключевой кадр каждые 2 секунды. Медиасервер раздаёт исходное качество без перекодирования и записи.</p>
+        <button type="button" class="btn-primary" data-self-stream-credentials>Получить параметры OBS</button>
+        <div data-self-stream-secrets hidden>
+            <label class="form-label">Сервер RTMPS<input class="form-input" data-self-stream-server readonly autocomplete="off"></label>
+            <label class="form-label">Ключ потока<input class="form-input" type="password" data-self-stream-key readonly autocomplete="off"></label>
+            <button type="button" data-self-stream-reveal>Показать ключ</button> <button type="button" data-self-stream-copy>Скопировать ключ</button>
+            <p>Ключ разрешает отправку видео. Передавай его только тому, кто ведёт эфир.</p>
+        </div>
+    </details>
 </div>

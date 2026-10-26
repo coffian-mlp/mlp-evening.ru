@@ -1,0 +1,7 @@
+[Unit]
+Description=Refresh renewed TLS certificate for MLP MediaMTX when offline
+After=mlp-mediamtx.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/mlp-media/refresh-certificate.py

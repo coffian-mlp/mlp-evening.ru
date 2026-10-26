@@ -10,7 +10,7 @@
             var key='mlp.stream-emotions',seen=new Map(),cooldown=0,pending=false;
             try{if(checkbox)checkbox.checked=localStorage.getItem(key)!=='off';}catch(error){}
             function clear(){if(overlay)overlay.replaceChildren();}
-            function mediaAllowed(){return tools.dataset.streamReactions==='chat'||!!(window.privacyChoices&&window.privacyChoices.external_media);}
+            function mediaAllowed(){return tools.dataset.streamReactions==='chat'||!!(stage&&stage.querySelector('[data-self-hosted-url]'))||!!(window.privacyChoices&&window.privacyChoices.external_media);}
             function render(event){
                 var data=event.detail;if(!data||!catalog[data.reaction]||typeof data.event_id!=='string'||!/^sr-\d{1,20}$/.test(data.event_id)||!Number.isFinite(data.expires_at))return;
                 var now=Date.now();seen.forEach(function(expires,id){if(expires<=now)seen.delete(id);});

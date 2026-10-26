@@ -6,9 +6,14 @@ use Infra\ConfigManager;
 
 class VideoPlayerComponent extends Component {
     public function executeComponent() {
+        global $app;
         $config = ConfigManager::getInstance();
+        $stream=\Domain\SelfHostedStream::settings();
+        $this->result['self_hosted']=$stream['source']==='self_hosted'||(!empty($this->params['self_hosted_preview'])&&\Domain\Auth::isAdmin());
+        $this->result['hls_url']=$stream['url'];
         $this->result['stream_url'] = $config->getOption('stream_url', 'https://goodgame.ru/player?161438#autoplay');
         $this->result['twitch'] = self::twitchOptions($this->result['stream_url']);
+        if($this->result['self_hosted']){$app->addJs('/assets/vendor/hls/hls.min.js');$app->addJs('/assets/js/self-hosted-player.js');}
         $this->includeTemplate();
     }
 

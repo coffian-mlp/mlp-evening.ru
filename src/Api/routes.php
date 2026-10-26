@@ -8,6 +8,9 @@
  */
 
 return [
+    'save_stream_settings' => ['role'=>'admin','handler'=>[\Api\SelfHostedStreamController::class,'save']],
+    'self_hosted_stream_status' => ['role'=>'admin','handler'=>[\Api\SelfHostedStreamController::class,'status']],
+    'self_hosted_stream_credentials' => ['role'=>'admin','handler'=>[\Api\SelfHostedStreamController::class,'credentials']],
     'send_stream_reaction' => ['role'=>'user','handler'=>[\Api\StreamReactionController::class,'send']],
     'get_llm_usage' => ['role'=>'admin','handler'=>[\Api\UsageController::class,'summary']],
     'save_llm_usage_rates' => ['role'=>'admin','handler'=>[\Api\UsageController::class,'saveRates']],

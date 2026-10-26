@@ -27,6 +27,9 @@ $routes = require __DIR__ . '/../src/Api/routes.php';
 
 // Сверочная таблица «action → роль» (гейт ДО переноса = роль ПОСЛЕ).
 $expected = [
+    'save_stream_settings'=>'admin',
+    'self_hosted_stream_status'=>'admin',
+    'self_hosted_stream_credentials'=>'admin',
     'send_stream_reaction' => 'user',
     'get_llm_usage' => 'admin',
     'save_llm_usage_rates' => 'admin',

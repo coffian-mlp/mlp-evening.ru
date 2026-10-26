@@ -1,0 +1,54 @@
+# MediaMTX v1.21.3. Replace the password marker before installation.
+logLevel: warn
+logDestinations: [stdout]
+readTimeout: 10s
+writeTimeout: 10s
+writeQueueSize: 256
+authMethod: internal
+authInternalUsers:
+  - user: broadcaster
+    pass: __PUBLISH_PASSWORD__
+    permissions:
+      - action: publish
+        path: evening
+  - user: any
+    permissions:
+      - action: read
+        path: evening
+  - user: any
+    ips: [127.0.0.1, '::1']
+    permissions:
+      - action: api
+      - action: metrics
+api: true
+apiAddress: 127.0.0.1:8897
+metrics: true
+metricsAddress: 127.0.0.1:8899
+pprof: false
+playback: false
+rtsp: false
+rtmp: true
+rtmpEncryption: strict
+rtmpsAddress: :1936
+rtmpServerKey: /run/credentials/mlp-mediamtx.service/server.key
+rtmpServerCert: /run/credentials/mlp-mediamtx.service/server.crt
+hls: true
+hlsAddress: 127.0.0.1:8898
+hlsAllowOrigins: [https://mlp-evening.ru, https://www.mlp-evening.ru]
+hlsTrustedProxies: [127.0.0.1]
+hlsAlwaysRemux: false
+hlsVariant: fmp4
+hlsSegmentCount: 5
+hlsSegmentDuration: 2s
+hlsSegmentMaxSize: 8M
+hlsMuxerCloseAfter: 30s
+webrtc: false
+srt: false
+moq: false
+pathDefaults:
+  source: publisher
+  overridePublisher: false
+  record: false
+  maxReaders: 30
+paths:
+  evening:
