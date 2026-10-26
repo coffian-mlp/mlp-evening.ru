@@ -3,6 +3,7 @@
     function mount(root){
         if(root._selfHosted)return;root._selfHosted=true;
         var video=root.querySelector('video'),box=root.querySelector('.self-hosted-state'),status=box.querySelector('[role=status]'),retry=box.querySelector('button');
+        var waitingText=status.textContent;
         var toggle=root.querySelector('[data-stream-play]'),mute=root.querySelector('[data-stream-mute]'),volume=root.querySelector('[data-stream-volume]');
         var hls=null,timer=null,controller=null,generation=0,closed=false,pausedByUser=false,lastVolume=1;
         var key='mlp.self-hosted.volume';
@@ -30,15 +31,20 @@
                 if(video.currentTime<target-.5)video.currentTime=target;
             }
         }
-        function notice(text){status.textContent=text;box.hidden=false;}
-        function cleanup(){generation++;clearTimeout(timer);if(controller)controller.abort();controller=null;if(hls)hls.destroy();hls=null;video.pause();video.removeAttribute('src');video.load();}
-        function reconnect(){if(closed)return;cleanup();notice('Эфир пока недоступен. Подключимся автоматически, когда появится поток.');timer=setTimeout(connect,10000);}
-        function play(){if(pausedByUser)return;var current=generation;video.play().catch(function(){if(!closed&&current===generation&&!pausedByUser)notice('Нажми ▶ на плеере, чтобы начать просмотр.');});}
+        function notice(text){if(status.textContent!==text)status.textContent=text;if(box.hidden)box.hidden=false;}
+        function cleanup(){generation++;clearTimeout(timer);if(controller)controller.abort();controller=null;if(!hls&&!video.hasAttribute('src'))return;if(hls)hls.destroy();hls=null;video.pause();video.removeAttribute('src');video.load();}
+        function schedule(){if(!closed){clearTimeout(timer);timer=setTimeout(connect,10000);}}
+        function reconnect(){if(closed)return;cleanup();notice(waitingText);schedule();}
+        function play(){if(pausedByUser){notice('Эфир доступен. Нажми ▶ на плеере, чтобы продолжить.');return;}var current=generation;video.play().catch(function(){if(!closed&&current===generation&&!pausedByUser)notice('Нажми ▶ на плеере, чтобы начать просмотр.');});}
         async function connect(){
-            cleanup();closed=false;var current=generation;notice('Подключаемся к эфиру…');controller=new AbortController();var timeout=setTimeout(function(){if(controller)controller.abort();},7000);
+            if(closed)return;clearTimeout(timer);if(controller)controller.abort();
+            var current=++generation,request=new AbortController(),attaching=false;controller=request;var timeout=setTimeout(function(){request.abort();},7000);
             try{
-                var response=await fetch(root.dataset.selfHostedUrl,{cache:'no-store',credentials:'same-origin',signal:controller.signal});
-                clearTimeout(timeout);if(current!==generation)return;if(!response.ok){reconnect();return;}
+                var response=await fetch(root.dataset.selfHostedUrl,{cache:'no-store',credentials:'same-origin',signal:request.signal});
+                if(current!==generation)return;if(!response.ok){schedule();return;}
+                var manifest=await response.text();if(current!==generation)return;
+                if(!/^#EXTM3U(?:\r?\n|$)/.test(manifest)){schedule();return;}
+                attaching=true;notice('Подключаемся к эфиру…');
                 if(window.Hls&&Hls.isSupported()){
                     hls=new Hls({lowLatencyMode:false,maxBufferLength:12,maxMaxBufferLength:20,backBufferLength:0,maxBufferSize:12000000});
                     hls.on(Hls.Events.MANIFEST_PARSED,play);
@@ -46,7 +52,8 @@
                     hls.loadSource(root.dataset.selfHostedUrl);hls.attachMedia(video);
                 }else if(video.canPlayType('application/vnd.apple.mpegurl')){video.src=root.dataset.selfHostedUrl;video.load();play();}
                 else{notice('Браузер не поддерживает этот формат эфира. Попробуй обновить браузер.');}
-            }catch(error){clearTimeout(timeout);if(current===generation)reconnect();}
+            }catch(error){if(current===generation){if(attaching)reconnect();else schedule();}}
+            finally{clearTimeout(timeout);if(controller===request)controller=null;}
         }
         video.addEventListener('playing',function(){box.hidden=true;});
         video.addEventListener('error',function(){if(!closed&&(video.currentSrc||hls))reconnect();});
@@ -56,9 +63,9 @@
         toggle.onclick=function(){if(video.paused){pausedByUser=false;resumeLive();play();}else{pausedByUser=true;video.pause();}};
         mute.onclick=function(){if(video.muted||video.volume===0){video.volume=lastVolume;video.muted=false;}else video.muted=true;syncControls();};
         volume.oninput=function(){video.volume=Number(volume.value);video.muted=video.volume===0;syncControls();};
-        retry.onclick=function(){pausedByUser=false;video.muted=false;connect();};
+        retry.onclick=function(){pausedByUser=false;video.muted=false;cleanup();notice(waitingText);connect();};
         window.addEventListener('pagehide',function(){closed=true;cleanup();});
-        window.addEventListener('pageshow',function(event){if(event.persisted)connect();});
+        window.addEventListener('pageshow',function(event){if(event.persisted){closed=false;notice(waitingText);connect();}});
         syncControls();connect();
     }
     function start(){document.querySelectorAll('[data-self-hosted-url]').forEach(mount);}

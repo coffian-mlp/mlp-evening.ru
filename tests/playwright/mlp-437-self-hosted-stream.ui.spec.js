@@ -24,7 +24,7 @@ async function clip(page,{live=false,segments=()=>5}={}){
 }
 test('MLP-437 first-party player is available with necessary privacy and handles offline safely',async({page})=>{
     await page.route('**/live/evening/**',route=>route.fulfill({status:404}));await open(page);
-    await expect(page.locator('[data-self-hosted-url]')).toBeVisible();await expect(page.locator('.self-hosted-state')).toContainText('Эфир пока недоступен');
+    await expect(page.locator('[data-self-hosted-url]')).toBeVisible();await expect(page.locator('.self-hosted-state')).toContainText('Ожидаем эфир');
     await expect(page.locator('.video-content iframe')).toHaveCount(0);expect(await page.evaluate(()=>privacyChoices.external_media)).toBe(false);
     await expect(page.locator('[data-stream-play]')).toBeDisabled();await expect(page.getByRole('slider',{name:'Громкость',exact:true})).toBeVisible();
     const denied=await post(page.request,'',{action:'self_hosted_stream_credentials'});expect(denied.success).toBe(false);
@@ -40,7 +40,7 @@ test('MLP-437 actual HLS decodes video, stores volume, and fits mobile layout',a
     await page.screenshot({path:path.join(root,'docs/tests/MLP-437/'+info.project.name+'-player.png'),fullPage:true});
 });
 test('MLP-437 manual reconnect starts an offline stream without reloading the page',async({page})=>{
-    await page.route('**/live/evening/**',route=>route.fulfill({status:404}));await open(page);await expect(page.locator('.self-hosted-state')).toContainText('Эфир пока недоступен');
+    await page.route('**/live/evening/**',route=>route.fulfill({status:404}));await open(page);await expect(page.locator('.self-hosted-state')).toContainText('Ожидаем эфир');
     await page.unroute('**/live/evening/**');await clip(page);await page.locator('[data-stream-retry]').click();
     await expect.poll(()=>page.locator('video').evaluate(v=>v.readyState),{timeout:15000}).toBeGreaterThanOrEqual(2);
 });
@@ -89,4 +89,37 @@ test('MLP-438 play button recovers when autoplay is blocked',async({page})=>{
     await page.addInitScript(()=>{const play=HTMLMediaElement.prototype.play;let first=true;HTMLMediaElement.prototype.play=function(){if(first){first=false;return Promise.reject(new DOMException('Autoplay blocked','NotAllowedError'));}return play.call(this);};});
     await clip(page);await open(page);await expect(page.locator('.self-hosted-state')).toContainText('Нажми ▶');await expect(page.locator('[data-stream-play]')).toBeEnabled();
     await page.locator('[data-stream-play]').click();await expect.poll(()=>page.locator('video').evaluate(v=>v.currentTime)).toBeGreaterThan(.2);await expect(page.locator('.self-hosted-state')).toBeHidden();
+});
+async function observeWaiting(page){
+    await page.addInitScript(()=>{
+        window.__videoLoads=0;const load=HTMLMediaElement.prototype.load;HTMLMediaElement.prototype.load=function(){window.__videoLoads++;return load.call(this);};
+        document.addEventListener('DOMContentLoaded',()=>{
+            const box=document.querySelector('.self-hosted-state');if(!box)return;
+            const snapshot=()=>({text:box.querySelector('[role=status]').textContent,hidden:box.hidden});window.__streamStates=[snapshot()];
+            new MutationObserver(()=>window.__streamStates.push(snapshot())).observe(box,{childList:true,characterData:true,subtree:true,attributes:true,attributeFilter:['hidden']});
+        });
+    });
+}
+test('MLP-439 offline probes keep the waiting view unchanged without reloading video',async({page},info)=>{
+    await observeWaiting(page);await page.clock.install();let checks=0;
+    await page.route('**/live/evening/**',route=>{
+        checks++;if(checks===3)return route.abort('failed');
+        return route.fulfill({status:checks===1?404:checks===2?503:200,contentType:'text/html',body:'<html>No stream</html>'});
+    });
+    await open(page);await expect.poll(()=>checks).toBe(1);
+    for(let check=2;check<=4;check++){await page.clock.fastForward(10100);await expect.poll(()=>checks).toBe(check);}
+    await page.getByRole('button',{name:'Проверить сейчас',exact:true}).click();await expect.poll(()=>checks).toBe(5);
+    expect(await page.evaluate(()=>window.__videoLoads)).toBe(0);expect(await page.locator('video').evaluate(v=>v.currentSrc)).toBe('');
+    expect(await page.evaluate(()=>window.__streamStates)).toEqual([{text:'Ожидаем эфир. Видео включится автоматически.',hidden:false}]);
+    const dir=path.join(root,'docs/tests/MLP-439');fs.mkdirSync(dir,{recursive:true});await page.screenshot({path:path.join(dir,info.project.name+'-waiting.png')});
+});
+test('MLP-439 background probe starts a new stream and returns to stable waiting when it ends',async({page})=>{
+    await observeWaiting(page);await page.clock.install();await clip(page);let online=false,checks=0;
+    await page.route('**/live/evening/**',route=>{if(online)return route.fallback();checks++;return route.fulfill({status:404});});
+    await open(page);await expect.poll(()=>checks).toBe(1);expect(await page.evaluate(()=>window.__videoLoads)).toBe(0);
+    online=true;await page.clock.fastForward(10100);const video=page.locator('video');
+    await expect.poll(()=>video.evaluate(v=>v.currentTime),{timeout:15000}).toBeGreaterThan(.2);await expect(page.locator('.self-hosted-state')).toBeHidden();
+    online=false;await video.evaluate(v=>{v.playbackRate=8;});await expect(page.locator('.self-hosted-state')).toBeVisible({timeout:15000});await expect(page.locator('.self-hosted-state')).toContainText('Ожидаем эфир');
+    const loads=await page.evaluate(()=>window.__videoLoads);await page.evaluate(()=>{window.__streamStates=[];});
+    await page.clock.fastForward(10100);await expect.poll(()=>checks).toBe(2);expect(await page.evaluate(()=>window.__videoLoads)).toBe(loads);expect(await page.evaluate(()=>window.__streamStates)).toEqual([]);
 });
