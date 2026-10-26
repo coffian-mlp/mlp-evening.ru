@@ -10,11 +10,23 @@ test.beforeEach(async({page})=>{
 });
 test.afterEach(()=>{if(fs.existsSync(privateFile('mlp437')))cli('mlp-437-stream','cleanup');if(fs.existsSync(privateFile('mlp425')))cli('mlp-425-reasoning','cleanup');});
 async function open(page,url='/'){const response=await page.goto(BASE+url,{waitUntil:'domcontentloaded'});if(await page.locator('#privacy-panel').isVisible())await page.locator('[data-privacy-necessary]').click();return response;}
-async function clip(page){await page.route('**/live/evening/**',route=>{const file=new URL(route.request().url()).pathname.split('/').pop();if(!/^(?:(?:index|video_stream|audio_stream)\.m3u8|(?:video|audio)(?:_init\.mp4|\d+\.m4s))$/.test(file))return route.fulfill({status:404});return route.fulfill({path:path.join(root,'tests/fixtures/self-hosted-hls',file),contentType:file.endsWith('.m3u8')?'application/vnd.apple.mpegurl':'video/mp4'});});}
+async function clip(page,{live=false,segments=()=>5}={}){
+    await page.route('**/live/evening/**',route=>{
+        const file=new URL(route.request().url()).pathname.split('/').pop();
+        if(!/^(?:(?:index|video_stream|audio_stream)\.m3u8|(?:video|audio)(?:_init\.mp4|\d+\.m4s))$/.test(file))return route.fulfill({status:404});
+        const fixture=path.join(root,'tests/fixtures/self-hosted-hls',file);
+        if(live&&file.endsWith('_stream.m3u8')){
+            const body=fs.readFileSync(fixture,'utf8').replace(/^#EXT-X-(?:PLAYLIST-TYPE:.*|ENDLIST)\r?\n?/gm,'').replace(/#EXTINF:[^\n]+\n(?:audio|video)(\d+)\.m4s\n/g,(block,index)=>Number(index)<segments()?block:'');
+            return route.fulfill({body,contentType:'application/vnd.apple.mpegurl'});
+        }
+        return route.fulfill({path:fixture,contentType:file.endsWith('.m3u8')?'application/vnd.apple.mpegurl':'video/mp4'});
+    });
+}
 test('MLP-437 first-party player is available with necessary privacy and handles offline safely',async({page})=>{
     await page.route('**/live/evening/**',route=>route.fulfill({status:404}));await open(page);
     await expect(page.locator('[data-self-hosted-url]')).toBeVisible();await expect(page.locator('.self-hosted-state')).toContainText('Эфир пока недоступен');
     await expect(page.locator('.video-content iframe')).toHaveCount(0);expect(await page.evaluate(()=>privacyChoices.external_media)).toBe(false);
+    await expect(page.locator('[data-stream-play]')).toBeDisabled();await expect(page.getByRole('slider',{name:'Громкость',exact:true})).toBeVisible();
     const denied=await post(page.request,'',{action:'self_hosted_stream_credentials'});expect(denied.success).toBe(false);
 });
 test('MLP-437 actual HLS decodes video, stores volume, and fits mobile layout',async({page},info)=>{
@@ -47,4 +59,34 @@ test('MLP-437 preview is admin-only and does not change the public external sour
     expect((await post(page.request,csrf,{action:'self_hosted_stream_credentials'})).success).toBe(false);
     await page.context().clearCookies();await login(page.request,auth().admin);await clip(page);await open(page,'/stream-preview.php');await expect(page.locator('[data-self-hosted-url]')).toBeVisible();
     await open(page,'/?self_hosted_preview=1');await expect(page.locator('[data-twitch-options]')).toBeVisible();await expect(page.locator('[data-self-hosted-url]')).toHaveCount(0);
+});
+test('MLP-438 compact controls replace the native timeline and support keyboard, mute and saved volume',async({page},info)=>{
+    await page.setViewportSize({width:1920,height:1080});await clip(page);await open(page);
+    const player=page.locator('[data-self-hosted-url]'),video=player.locator('video'),play=player.locator('[data-stream-play]'),volume=player.getByRole('slider',{name:'Громкость',exact:true});
+    await expect.poll(()=>video.evaluate(v=>v.currentTime)).toBeGreaterThan(.2);
+    expect(await video.evaluate(v=>v.controls)).toBe(false);await expect(player.getByRole('slider')).toHaveCount(1);await expect(page.locator('.stream-fullscreen')).toHaveCount(1);
+    await expect(play).toHaveAccessibleName('Пауза');await play.focus();await play.press('Space');await expect.poll(()=>video.evaluate(v=>v.paused)).toBe(true);await expect(play).toHaveAccessibleName('Смотреть прямой эфир');
+    await volume.focus();await volume.press('Home');await expect.poll(()=>video.evaluate(v=>v.volume)).toBe(0);await expect(player.locator('[data-stream-mute]')).toHaveAccessibleName('Включить звук');
+    await volume.press('ArrowRight');await expect.poll(()=>video.evaluate(v=>!v.muted&&v.volume===.01)).toBe(true);await expect(volume).toHaveAttribute('aria-valuetext','1%');
+    await player.getByRole('button',{name:'Выключить звук',exact:true}).click();await expect.poll(()=>video.evaluate(v=>v.muted)).toBe(true);
+    await player.getByRole('button',{name:'Включить звук',exact:true}).click();await expect.poll(()=>video.evaluate(v=>!v.muted&&v.volume===.01)).toBe(true);
+    const dir=path.join(root,'docs/tests/MLP-438');fs.mkdirSync(dir,{recursive:true});await page.screenshot({path:path.join(dir,info.project.name+'-fullhd.png')});
+    await play.press('Space');await expect.poll(()=>video.evaluate(v=>v.paused)).toBe(false);
+    await page.reload({waitUntil:'domcontentloaded'});await expect.poll(()=>video.evaluate(v=>v.volume)).toBe(.01);
+    await page.setViewportSize({width:320,height:720});await expect(play).toBeVisible();await expect(volume).toBeVisible();
+    const bounds=await player.locator('.self-hosted-controls').boundingBox(),range=await volume.boundingBox();expect(range.x+range.width).toBeLessThanOrEqual(bounds.x+bounds.width+1);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+    await page.screenshot({path:path.join(dir,info.project.name+'-mobile.png')});
+});
+test('MLP-438 resuming a paused live stream returns to the current broadcast',async({page})=>{
+    let segments=3;await clip(page,{live:true,segments:()=>segments});await open(page);const video=page.locator('[data-self-hosted-url] video'),play=page.locator('[data-stream-play]');
+    await expect.poll(()=>video.evaluate(v=>v.currentTime)).toBeGreaterThan(.1);await play.click();await expect.poll(()=>video.evaluate(v=>v.paused)).toBe(true);
+    segments=4;await expect.poll(()=>video.evaluate(v=>v.seekable.length?v.seekable.end(v.seekable.length-1)>7:v.duration===Infinity),{timeout:12000}).toBe(true);
+    expect(await video.evaluate(v=>v.paused)).toBe(true);expect(await video.evaluate(v=>v.currentTime)).toBeLessThan(1);
+    await video.evaluate(v=>v.addEventListener('playing',()=>{window.__resumedAt=v.currentTime;},{once:true}));
+    await play.click();await expect.poll(()=>page.evaluate(()=>window.__resumedAt)).toBeGreaterThan(1.5);expect(await video.evaluate(v=>v.paused)).toBe(false);
+});
+test('MLP-438 play button recovers when autoplay is blocked',async({page})=>{
+    await page.addInitScript(()=>{const play=HTMLMediaElement.prototype.play;let first=true;HTMLMediaElement.prototype.play=function(){if(first){first=false;return Promise.reject(new DOMException('Autoplay blocked','NotAllowedError'));}return play.call(this);};});
+    await clip(page);await open(page);await expect(page.locator('.self-hosted-state')).toContainText('Нажми ▶');await expect(page.locator('[data-stream-play]')).toBeEnabled();
+    await page.locator('[data-stream-play]').click();await expect.poll(()=>page.locator('video').evaluate(v=>v.currentTime)).toBeGreaterThan(.2);await expect(page.locator('.self-hosted-state')).toBeHidden();
 });

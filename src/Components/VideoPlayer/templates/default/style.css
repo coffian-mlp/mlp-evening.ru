@@ -3,6 +3,11 @@
     height: 100%;
 }
 .self-hosted-player{position:relative;background:#000}.self-hosted-player video{display:block;width:100%;height:100%;object-fit:contain}.self-hosted-state{position:absolute;inset:0 0 42px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:12px;background:#000a;color:#fff;text-align:center}.self-hosted-state[hidden]{display:none}.self-hosted-state p{margin:0}.self-hosted-preview{max-width:1100px;margin:24px auto;padding:16px}.self-hosted-preview .video-stage{margin:16px 0}.self-hosted-preview a{color:var(--text-main)}
+.self-hosted-controls{position:absolute;bottom:0;left:0;right:0;display:flex;align-items:center;gap:8px;min-height:48px;padding:4px 12px;box-sizing:border-box;background:linear-gradient(transparent,#000c);color:#fff}
+.self-hosted-controls button{display:flex;align-items:center;justify-content:center;flex:0 0 40px;width:40px;height:40px;padding:8px;border:0;border-radius:8px;background:transparent;color:inherit;cursor:pointer}
+.self-hosted-controls button:hover{background:#fff2}.self-hosted-controls button:disabled{opacity:.4;cursor:default}.self-hosted-controls svg{width:24px;height:24px;fill:currentColor;pointer-events:none}
+.self-hosted-controls input[type=range]{width:112px;max-width:calc(100% - 100px);height:40px;margin:0;padding:0;accent-color:#fff;cursor:pointer}
+.self-hosted-controls :focus-visible{outline:2px solid #fff;outline-offset:2px}.self-hosted-player .self-hosted-state{bottom:48px}
 .player-privacy-placeholder { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:20px; text-align:center; color:var(--text-main); background:var(--panel); box-sizing:border-box; }
 .player-privacy-placeholder p { margin:0; font-size:18px; }
 .player-privacy-placeholder small { max-width:460px; line-height:1.5; color:var(--text-muted); }
