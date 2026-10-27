@@ -293,7 +293,7 @@ for(const fullscreen of[false,true])test('MLP-449 controls slide within the vide
     await page.clock.install();await page.route('**/live/evening/**',route=>route.fulfill({status:404}));await open(page);
     const player=page.locator('[data-self-hosted-url]'),controls=player.locator('.self-hosted-controls');
     if(fullscreen){await player.locator('.stream-fullscreen').click();await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(true);}
-    const frame=await player.boundingBox();await page.mouse.move(frame.x+frame.width/2,frame.y+10);await page.mouse.move(1,1);
+    const frame=await player.boundingBox();await page.mouse.move(frame.x+frame.width/2,frame.y+10);await page.mouse.move(1,1);const scrollHeight=await page.evaluate(()=>document.documentElement.scrollHeight);
     await controls.evaluate(e=>getComputedStyle(e).transform);await page.clock.fastForward(2501);
     const midway=await controls.evaluate(e=>{
         const animations=e.getAnimations();animations.forEach(a=>{a.pause();a.currentTime=120;});
@@ -305,6 +305,7 @@ for(const fullscreen of[false,true])test('MLP-449 controls slide within the vide
     const dir=path.join(root,'docs/tests/MLP-449');fs.mkdirSync(dir,{recursive:true});await page.screenshot({path:path.join(dir,info.project.name+'-'+(fullscreen?'fullscreen':'normal')+'-sliding.png')});
     await controls.evaluate(e=>e.getAnimations().forEach(a=>a.finish()));
     await expect.poll(()=>controls.evaluate(e=>e.getBoundingClientRect().top>=e.closest('[data-self-hosted-url]').querySelector('.self-hosted-media').getBoundingClientRect().bottom-.5)).toBe(true);
+    expect(await page.evaluate(()=>document.documentElement.scrollHeight)).toBe(scrollHeight);
     await page.mouse.move(frame.x+frame.width/2,frame.y+15);await expect(player).not.toHaveClass(/controls-hidden/);await expect.poll(()=>controls.evaluate(e=>new DOMMatrixReadOnly(getComputedStyle(e).transform).m42)).toBe(0);
     await player.locator('.stream-reaction-toggle').click();await expect(player.locator('.stream-reaction-panel')).toBeVisible();
     for(const choice of await player.locator('[data-stream-reaction]').all())expect(await choice.evaluate(e=>{let r=e.getBoundingClientRect();return e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBe(true);
