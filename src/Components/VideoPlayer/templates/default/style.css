@@ -3,8 +3,8 @@
     height: 100%;
 }
 .self-hosted-player{position:relative;background:#000}.self-hosted-player video{display:block;width:100%;height:100%;object-fit:contain}.self-hosted-state{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:8px;padding:12px 12px calc(var(--player-controls-height,48px) + 12px);box-sizing:border-box;overflow-y:auto;background:#000a;color:#fff;text-align:center}.self-hosted-state[hidden]{display:none}.self-hosted-state p{margin:0;line-height:1.4}.self-hosted-preview{max-width:1100px;margin:24px auto;padding:16px}.self-hosted-preview .video-stage{margin:16px 0}.self-hosted-preview a{color:var(--text-main)}
-.self-hosted-controls{position:absolute;bottom:0;left:0;right:0;display:flex;align-items:center;gap:8px;min-height:48px;padding:4px 12px;box-sizing:border-box;background:linear-gradient(transparent,#000b);color:#fff;opacity:1;transition:opacity .18s ease}
-.self-hosted-controls-hidden .self-hosted-controls{opacity:0;pointer-events:none}
+.self-hosted-controls{position:absolute;bottom:0;left:0;right:0;display:flex;align-items:center;gap:8px;min-height:48px;padding:4px 12px;box-sizing:border-box;background:linear-gradient(transparent,#000b);color:#fff;transform:translateY(0);clip-path:inset(-100vh -20px 0 -20px);transition:transform .24s ease,clip-path .24s ease}
+.self-hosted-controls-hidden .self-hosted-controls{transform:translateY(100%);clip-path:inset(-100vh -20px 100% -20px);pointer-events:none}
 .self-hosted-state [data-stream-retry]{max-width:100%;padding:6px 12px;border:1px solid #ffffff60;border-radius:8px;background:#ffffff18;color:inherit;font:inherit;line-height:1.3;cursor:pointer}
 .self-hosted-state [data-stream-retry]:hover{background:#ffffff30}.self-hosted-state [data-stream-retry]:focus-visible{outline:2px solid #fff;outline-offset:3px}
 .self-hosted-controls > button{display:flex;align-items:center;justify-content:center;flex:0 0 40px;width:40px;height:40px;padding:8px;border:0;border-radius:8px;background:transparent;color:inherit;cursor:pointer}

@@ -225,11 +225,12 @@ test('MLP-448 controls hide after leaving or inactivity and remain available to 
     const player=page.locator('[data-self-hosted-url]'),controls=player.locator('.self-hosted-controls'),bounds=await player.boundingBox();
     await page.mouse.move(bounds.x+bounds.width/2,bounds.y+10);await expect(player).not.toHaveClass(/controls-hidden/);
     await page.mouse.move(1,1);await page.clock.fastForward(2400);await expect(player).not.toHaveClass(/controls-hidden/);
-    await page.clock.fastForward(300);await expect(player).toHaveClass(/controls-hidden/);await expect(controls).toHaveCSS('opacity','0');
+    await page.clock.fastForward(300);await expect(player).toHaveClass(/controls-hidden/);
+    await expect.poll(()=>controls.evaluate(e=>e.getBoundingClientRect().top>=e.closest('[data-self-hosted-url]').querySelector('.self-hosted-media').getBoundingClientRect().bottom-.5)).toBe(true);
     await player.locator('[data-stream-retry]').focus();await page.keyboard.press('Tab');await expect(player.locator('[data-stream-mute]')).toBeFocused();
     await page.clock.fastForward(4000);await expect(player).not.toHaveClass(/controls-hidden/);
     await page.mouse.click(1,1);await page.clock.fastForward(2700);await expect(player).toHaveClass(/controls-hidden/);
-    await page.mouse.move(bounds.x+bounds.width/2,bounds.y+10);await expect(controls).toHaveCSS('opacity','1');
+    await page.mouse.move(bounds.x+bounds.width/2,bounds.y+10);await expect.poll(()=>controls.evaluate(e=>new DOMMatrixReadOnly(getComputedStyle(e).transform).m42)).toBe(0);
     await page.clock.fastForward(2700);await expect(player).toHaveClass(/controls-hidden/);
 });
 
@@ -238,6 +239,7 @@ test('MLP-448 open reactions and an active volume drag keep the controls visible
     const player=page.locator('[data-self-hosted-url]'),toggle=player.locator('.stream-reaction-toggle'),panel=player.locator('.stream-reaction-panel');
     await toggle.click();await page.mouse.move(1,1);await page.clock.fastForward(5000);await expect(panel).toBeVisible();await expect(player).not.toHaveClass(/controls-hidden/);
     await page.keyboard.press('Escape');await page.mouse.click(1,1);await page.clock.fastForward(2700);await expect(player).toHaveClass(/controls-hidden/);
+    const frame=await player.boundingBox();await page.mouse.move(frame.x+frame.width/2,frame.y+10);await expect.poll(()=>player.locator('.self-hosted-controls').evaluate(e=>new DOMMatrixReadOnly(getComputedStyle(e).transform).m42)).toBe(0);
     const volume=player.locator('[data-stream-volume]'),b=await volume.boundingBox();
     await page.mouse.move(b.x+b.width/2,b.y+b.height/2);await page.mouse.down();await page.mouse.move(1,1);
     await page.clock.fastForward(4000);await expect(player).not.toHaveClass(/controls-hidden/);await page.mouse.up();
@@ -285,4 +287,31 @@ test('MLP-448 text enlargement updates toolbar spacing without a gap in the buff
         await expect.poll(()=>player.evaluate(e=>parseFloat(e.style.getPropertyValue('--player-controls-height'))===e.querySelector('.self-hosted-controls').offsetHeight)).toBe(true);
         const state=await player.locator('.self-hosted-state').boundingBox(),media=await player.locator('.self-hosted-media').boundingBox();expect(state.height).toBe(media.height);
     }finally{release();}
+});
+
+for(const fullscreen of[false,true])test('MLP-449 controls slide within the video boundary in '+(fullscreen?'fullscreen':'normal mode'),async({page},info)=>{
+    await page.clock.install();await page.route('**/live/evening/**',route=>route.fulfill({status:404}));await open(page);
+    const player=page.locator('[data-self-hosted-url]'),controls=player.locator('.self-hosted-controls');
+    if(fullscreen){await player.locator('.stream-fullscreen').click();await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(true);}
+    const frame=await player.boundingBox();await page.mouse.move(frame.x+frame.width/2,frame.y+10);await page.mouse.move(1,1);
+    await controls.evaluate(e=>getComputedStyle(e).transform);await page.clock.fastForward(2501);
+    const midway=await controls.evaluate(e=>{
+        const animations=e.getAnimations();animations.forEach(a=>{a.pause();a.currentTime=120;});
+        const style=getComputedStyle(e),r=e.getBoundingClientRect(),media=e.closest('[data-self-hosted-url]').querySelector('.self-hosted-media').getBoundingClientRect();
+        const inset=style.clipPath.slice(6,-1).split(/\s+/)[2];const clipped=parseFloat(inset)*(inset.endsWith('%')?r.height/100:1);
+        return {animations:animations.length,offset:new DOMMatrixReadOnly(style.transform).m42,height:r.height,opacity:style.opacity,bottom:r.bottom-clipped,frameBottom:media.bottom};
+    });
+    expect(midway.animations).toBeGreaterThanOrEqual(2);expect(midway.offset).toBeGreaterThan(0);expect(midway.offset).toBeLessThan(midway.height);expect(midway.opacity).toBe('1');expect(Math.abs(midway.bottom-midway.frameBottom)).toBeLessThan(1);
+    const dir=path.join(root,'docs/tests/MLP-449');fs.mkdirSync(dir,{recursive:true});await page.screenshot({path:path.join(dir,info.project.name+'-'+(fullscreen?'fullscreen':'normal')+'-sliding.png')});
+    await controls.evaluate(e=>e.getAnimations().forEach(a=>a.finish()));
+    await expect.poll(()=>controls.evaluate(e=>e.getBoundingClientRect().top>=e.closest('[data-self-hosted-url]').querySelector('.self-hosted-media').getBoundingClientRect().bottom-.5)).toBe(true);
+    await page.mouse.move(frame.x+frame.width/2,frame.y+15);await expect(player).not.toHaveClass(/controls-hidden/);await expect.poll(()=>controls.evaluate(e=>new DOMMatrixReadOnly(getComputedStyle(e).transform).m42)).toBe(0);
+    await player.locator('.stream-reaction-toggle').click();await expect(player.locator('.stream-reaction-panel')).toBeVisible();
+    for(const choice of await player.locator('[data-stream-reaction]').all())expect(await choice.evaluate(e=>{let r=e.getBoundingClientRect();return e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBe(true);
+});
+
+test('MLP-449 reduced motion moves controls without an animated transition',async({page})=>{
+    await page.emulateMedia({reducedMotion:'reduce'});await page.clock.install();await page.route('**/live/evening/**',route=>route.fulfill({status:404}));await open(page);
+    const player=page.locator('[data-self-hosted-url]'),controls=player.locator('.self-hosted-controls');await page.mouse.move(1,1);await page.clock.fastForward(2700);
+    await expect(player).toHaveClass(/controls-hidden/);await expect(controls).toHaveCSS('transition-duration','0s');expect(await controls.evaluate(e=>new DOMMatrixReadOnly(getComputedStyle(e).transform).m42===e.offsetHeight)).toBe(true);
 });
