@@ -5,7 +5,7 @@
 ?>
 <div class="video-stage">
 <?php if($arResult['self_hosted']): ?>
-<div class="video-content self-hosted-player" data-self-hosted-url="<?= htmlspecialchars($arResult['hls_url'],ENT_QUOTES,'UTF-8') ?>">
+<div class="video-content self-hosted-player self-hosted-offline" data-self-hosted-url="<?= htmlspecialchars($arResult['hls_url'],ENT_QUOTES,'UTF-8') ?>">
     <div class="self-hosted-media">
     <video playsinline preload="none" aria-label="Прямой эфир"></video>
     <div class="self-hosted-state">

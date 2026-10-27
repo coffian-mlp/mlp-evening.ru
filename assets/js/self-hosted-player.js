@@ -73,7 +73,7 @@
             if(closed||pausedByUser||video.paused||video.readyState>=3||(!hls&&!video.currentSrc)||bufferTimer!==null)return;
             bufferTimer=setTimeout(function(){bufferTimer=null;if(!closed&&!pausedByUser&&!video.paused&&video.readyState<3)notice('Буферизация…',true);},200);
         }
-        function cleanup(){generation++;clearTimeout(timer);showBuffering(false);if(controller)controller.abort();controller=null;if(!hls&&!video.hasAttribute('src'))return;if(hls)hls.destroy();hls=null;video.pause();video.removeAttribute('src');video.load();}
+        function cleanup(){generation++;clearTimeout(timer);showBuffering(false);root.classList.add('self-hosted-offline');if(controller)controller.abort();controller=null;if(!hls&&!video.hasAttribute('src'))return;if(hls)hls.destroy();hls=null;video.pause();video.removeAttribute('src');video.load();}
         function schedule(){if(!closed){clearTimeout(timer);timer=setTimeout(connect,10000);}}
         function reconnect(){if(closed)return;cleanup();notice(waitingText);schedule();}
         function play(){if(pausedByUser){notice('Эфир доступен. Нажми ▶ на плеере, чтобы продолжить.');return;}if(video.readyState<3)notice('Подключаемся к эфиру…',true);var current=generation;video.play().catch(function(){if(!closed&&current===generation&&!pausedByUser)notice('Нажми ▶ на плеере, чтобы начать просмотр.');});}
@@ -85,7 +85,7 @@
                 if(current!==generation)return;if(!response.ok){schedule();return;}
                 var manifest=await response.text();if(current!==generation)return;
                 if(!/^#EXTM3U(?:\r?\n|$)/.test(manifest)){schedule();return;}
-                attaching=true;notice('Подключаемся к эфиру…',true);
+                attaching=true;root.classList.remove('self-hosted-offline');notice('Подключаемся к эфиру…',true);
                 if(window.Hls&&Hls.isSupported()){
                     hls=new Hls({lowLatencyMode:false,maxBufferLength:12,maxMaxBufferLength:20,backBufferLength:0,maxBufferSize:12000000});
                     hls.on(Hls.Events.MANIFEST_PARSED,play);

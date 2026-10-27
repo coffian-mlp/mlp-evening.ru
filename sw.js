@@ -1,6 +1,6 @@
 // Версия кеша включает релиз и ревизию статических ассетов. Обновлять при их замене:
 // смена имени заставляет activate-обработчик выбросить старый кеш ассетов на проде.
-const CACHE_VERSION = 'v4.16.0-mlp450';
+const CACHE_VERSION = 'v4.16.0-mlp451';
 const CACHE_NAME = 'mlp-evening-' + CACHE_VERSION;
 const ASSETS_TO_CACHE = [
     '/assets/css/main.css',

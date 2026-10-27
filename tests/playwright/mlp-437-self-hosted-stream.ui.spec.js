@@ -130,6 +130,28 @@ async function holdVideo(page){
     await page.route('**/live/evening/*.m4s',async route=>{await gate;await route.fallback();});
     return release;
 }
+for(const theme of ['luna','celestia'])test('MLP-451 offline transparency follows stream availability in '+theme,async({page},info)=>{
+    await page.clock.install();let probes=0;
+    await page.route('**/live/evening/**',route=>{probes++;return route.fulfill({status:404});});await open(page);
+    await page.evaluate(value=>{document.documentElement.dataset.theme=value;},theme);
+    const player=page.locator('[data-self-hosted-url]'),video=player.locator('video'),state=player.locator('.self-hosted-state');
+    const idle=async()=>{
+        await expect(player).toHaveClass(/self-hosted-offline/);await expect(video).toHaveCSS('visibility','hidden');await expect(state).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
+        const style=await player.evaluate(el=>({background:getComputedStyle(el).backgroundColor,opacity:getComputedStyle(el).opacity}));expect(style.background).toBe(theme==='luna'?'rgba(15, 19, 43, 0.38)':'rgba(255, 250, 246, 0.38)');expect(style.opacity).toBe('1');
+        await expect(state).toHaveCSS('color',theme==='luna'?'rgb(240, 237, 248)':'rgb(53, 35, 63)');await expect(player.locator('[data-stream-retry]')).toHaveCSS('opacity','1');
+    };
+    await idle();const previous=probes;await page.clock.fastForward(10500);await expect.poll(()=>probes).toBeGreaterThan(previous);await idle();await expect(player.locator('[data-stream-buffering]')).toBeHidden();
+    const dir=path.join(root,'docs/tests/MLP-451');fs.mkdirSync(dir,{recursive:true});await page.screenshot({path:path.join(dir,info.project.name+'-'+theme+'-offline.png')});
+    await player.locator('[data-stream-volume]').focus();await player.locator('.stream-fullscreen').click();await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(true);await expect(player).toHaveCSS('background-color','rgb(0, 0, 0)');await expect(state).toHaveCSS('color','rgb(255, 255, 255)');await page.screenshot({path:path.join(dir,info.project.name+'-'+theme+'-fullscreen-offline.png')});await player.locator('.stream-fullscreen').click();await expect.poll(()=>page.evaluate(()=>document.fullscreenElement===null)).toBe(true);await idle();
+    await page.unroute('**/live/evening/**');const release=await holdVideo(page);
+    try{
+        await player.locator('[data-stream-retry]').click();await expect(player.locator('[data-stream-buffering]')).toBeVisible();await expect(player).not.toHaveClass(/self-hosted-offline/);await expect(player).toHaveCSS('background-color','rgb(0, 0, 0)');await expect(video).toHaveCSS('visibility','visible');
+    }finally{release();}
+    await expect.poll(()=>video.evaluate(v=>v.currentTime)).toBeGreaterThan(.2);await expect(state).toBeHidden();await expect(player).not.toHaveClass(/self-hosted-offline/);
+    await player.locator('[data-stream-play]').click();await expect.poll(()=>video.evaluate(v=>v.paused)).toBe(true);await expect(player).not.toHaveClass(/self-hosted-offline/);await expect(video).toHaveCSS('visibility','visible');
+    await page.route('**/live/evening/**',route=>route.fulfill({status:404}));await video.evaluate(v=>v.dispatchEvent(new Event('error')));await idle();await expect(video).not.toHaveAttribute('src',/.+/);await expect.poll(()=>video.evaluate(v=>v.readyState)).toBe(0);
+    await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:path.join(dir,info.project.name+'-'+theme+'-mobile-offline.png')});
+});
 test('MLP-440 loads the illustration only for a connecting stream and removes it on playback',async({page},info)=>{
     let requested=0;page.on('request',request=>{if(request.url().includes('/assets/img/player/'))requested++;});
     await page.route('**/live/evening/**',route=>route.fulfill({status:404}));await open(page);
