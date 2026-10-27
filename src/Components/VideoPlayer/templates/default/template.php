@@ -9,7 +9,7 @@
     <div class="self-hosted-media">
     <video playsinline preload="none" aria-label="Прямой эфир"></video>
     <div class="self-hosted-state">
-        <img class="self-hosted-buffering" data-stream-buffering data-animated-src="/assets/img/player/lyra-buffering-v1.webp" data-static-src="/assets/img/player/lyra-buffering-still-v1.webp" width="420" height="280" alt="" aria-hidden="true" decoding="async" hidden>
+        <img class="self-hosted-buffering" data-stream-buffering data-animated-src="/assets/img/player/lyra-buffering-v2.webp" data-static-src="/assets/img/player/lyra-buffering-still-v2.webp" width="420" height="280" alt="" aria-hidden="true" decoding="async" hidden>
         <p role="status">Ожидаем эфир. Видео включится автоматически.</p><button type="button" data-stream-retry>Проверить сейчас</button>
     </div>
     <noscript>Для просмотра эфира нужен JavaScript.</noscript>

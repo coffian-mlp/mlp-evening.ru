@@ -49,7 +49,7 @@ test('favicon and ordinary PWA icons have real alpha; platform icons and manifes
  },url);}
  const fav=await pixels(favicon);expect(fav.corners).toEqual([0,0,0,0]);expect(fav.visible).toBeGreaterThan(.3);expect(fav.visible).toBeLessThan(.8);
  for(const icon of manifest.icons){
-  expect(icon.src).toContain('?v=mlp419');const p=await pixels(icon.src);expect(`${p.width}x${p.height}`).toBe(icon.sizes);
+  expect(icon.src).toContain('?v=mlp450');const p=await pixels(icon.src);expect(`${p.width}x${p.height}`).toBe(icon.sizes);
   expect(p.corners).toEqual(icon.purpose==='maskable'?[255,255,255,255]:[0,0,0,0]);
  }
  const apple=await pixels(await page.locator('link[rel="apple-touch-icon"]').getAttribute('href'));expect(apple.corners).toEqual([255,255,255,255]);

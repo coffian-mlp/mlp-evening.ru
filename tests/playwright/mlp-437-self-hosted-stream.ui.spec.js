@@ -136,7 +136,7 @@ test('MLP-440 loads the illustration only for a connecting stream and removes it
     const loader=page.locator('[data-stream-buffering]');await expect(loader).toBeHidden();await expect(loader).not.toHaveAttribute('src',/.+/);expect(requested).toBe(0);
     await page.unroute('**/live/evening/**');const release=await holdVideo(page);
     try{
-        await page.locator('[data-stream-retry]').click();await expect(loader).toBeVisible();await expect(loader).toHaveAttribute('src',/lyra-buffering-v1\.webp$/);
+        await page.locator('[data-stream-retry]').click();await expect(loader).toBeVisible();await expect(loader).toHaveAttribute('src',/lyra-buffering-v2\.webp$/);
         await expect.poll(()=>loader.evaluate(img=>img.complete&&img.naturalWidth===420)).toBe(true);
         await expect(page.locator('.self-hosted-state')).toContainText('Подключаемся');
         const dir=path.join(root,'docs/tests/MLP-440');fs.mkdirSync(dir,{recursive:true});await page.screenshot({path:path.join(dir,info.project.name+'-buffering.png')});
@@ -159,26 +159,26 @@ test('MLP-440 pause and an unavailable stream stop the buffering illustration',a
     await expect(page.locator('.self-hosted-state')).toContainText('Ожидаем эфир');await expect(loader).not.toHaveAttribute('src',/.+/);await expect(loader).toBeHidden();
 });
 test('MLP-440 reduced motion uses a still image and the loader fits a small player',async({page},info)=>{
-    await page.emulateMedia({reducedMotion:'reduce'});let animated=0;page.on('request',request=>{if(request.url().endsWith('/lyra-buffering-v1.webp'))animated++;});
+    await page.emulateMedia({reducedMotion:'reduce'});let animated=0;page.on('request',request=>{if(request.url().endsWith('/lyra-buffering-v2.webp'))animated++;});
     const release=await holdVideo(page);
     try{
         await page.setViewportSize({width:320,height:720});await open(page);const loader=page.locator('[data-stream-buffering]');
-        await expect(loader).toBeVisible();await expect(loader).toHaveAttribute('src',/lyra-buffering-still-v1\.webp$/);await expect.poll(()=>loader.evaluate(img=>img.complete&&img.naturalWidth>0)).toBe(true);expect(animated).toBe(0);
+        await expect(loader).toBeVisible();await expect(loader).toHaveAttribute('src',/lyra-buffering-still-v2\.webp$/);await expect.poll(()=>loader.evaluate(img=>img.complete&&img.naturalWidth>0)).toBe(true);expect(animated).toBe(0);
         const image=await loader.boundingBox(),status=await page.locator('.self-hosted-state [role=status]').boundingBox(),retry=await page.locator('[data-stream-retry]').boundingBox(),controls=await page.locator('.self-hosted-controls').boundingBox();
         expect(image.y+image.height).toBeLessThanOrEqual(status.y+1);expect(status.y+status.height).toBeLessThanOrEqual(retry.y+1);expect(retry.y+retry.height).toBeLessThanOrEqual(controls.y+1);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
         const dir=path.join(root,'docs/tests/MLP-440');fs.mkdirSync(dir,{recursive:true});await page.screenshot({path:path.join(dir,info.project.name+'-mobile-still.png')});
-        await page.emulateMedia({reducedMotion:'no-preference'});await expect(loader).toHaveAttribute('src',/lyra-buffering-v1\.webp$/);
-        await page.emulateMedia({reducedMotion:'reduce'});await expect(loader).toHaveAttribute('src',/lyra-buffering-still-v1\.webp$/);
+        await page.emulateMedia({reducedMotion:'no-preference'});await expect(loader).toHaveAttribute('src',/lyra-buffering-v2\.webp$/);
+        await page.emulateMedia({reducedMotion:'reduce'});await expect(loader).toHaveAttribute('src',/lyra-buffering-still-v2\.webp$/);
     }finally{release();}
     await expect.poll(()=>page.locator('video').evaluate(v=>v.currentTime)).toBeGreaterThan(.2);await expect(page.locator('[data-stream-buffering]')).toBeHidden();
 });
 for(const posterFails of[false,true])test('MLP-440 artwork failure preserves playback and controls (poster fails: '+posterFails+')',async({page})=>{
-    await page.route('**/assets/img/player/lyra-buffering-v1.webp',route=>route.fulfill({status:404}));
-    if(posterFails)await page.route('**/assets/img/player/lyra-buffering-still-v1.webp',route=>route.fulfill({status:404}));
+    await page.route('**/assets/img/player/lyra-buffering-v2.webp',route=>route.fulfill({status:404}));
+    if(posterFails)await page.route('**/assets/img/player/lyra-buffering-still-v2.webp',route=>route.fulfill({status:404}));
     const release=await holdVideo(page);
     try{
         await open(page);const loader=page.locator('[data-stream-buffering]');
-        if(posterFails){await expect(loader).toBeHidden();await expect(loader).not.toHaveAttribute('src',/.+/);}else{await expect(loader).toHaveAttribute('src',/lyra-buffering-still-v1\.webp$/);await expect(loader).toBeVisible();}
+        if(posterFails){await expect(loader).toBeHidden();await expect(loader).not.toHaveAttribute('src',/.+/);}else{await expect(loader).toHaveAttribute('src',/lyra-buffering-still-v2\.webp$/);await expect(loader).toBeVisible();}
         await expect(page.locator('.self-hosted-state')).toContainText(/Подключаемся|Буферизация/);await expect(page.locator('[data-stream-volume]')).toBeVisible();await expect(page.locator('[data-stream-retry]')).toBeVisible();
     }finally{release();}
     await expect.poll(()=>page.locator('video').evaluate(v=>v.currentTime)).toBeGreaterThan(.2);await expect(page.locator('.self-hosted-state')).toBeHidden();
