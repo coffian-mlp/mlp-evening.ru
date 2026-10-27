@@ -48,6 +48,8 @@
             var fullscreen=tools.querySelector('.stream-fullscreen');
             if(fullscreen&&stage){
                 if(!stage.requestFullscreen)fullscreen.hidden=true;
+                var fullscreenLabel=fullscreen.getAttribute('aria-label');
+                document.addEventListener('fullscreenchange',function(){var label=document.fullscreenElement===stage?'Выйти из полноэкранного режима':fullscreenLabel;fullscreen.setAttribute('aria-label',label);fullscreen.title=label;});
                 fullscreen.onclick=async function(){try{if(document.fullscreenElement===stage)await document.exitFullscreen();else await stage.requestFullscreen();}catch(error){notice('Полноэкранный режим сейчас недоступен.');}};
             }
         });

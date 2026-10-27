@@ -1,5 +1,12 @@
 .stream-reaction-tools { position:absolute; top:10px; right:10px; z-index:6; display:flex; gap:6px; }
 .stream-reaction-tools > button { width:34px; height:34px; border:1px solid rgba(255,255,255,.35); border-radius:10px; background:rgba(20,20,35,.78); color:#fff; font-size:24px; cursor:pointer; }
+.stream-reaction-tools[data-stream-reactions] > button[hidden] { display:none; }
+.stream-reaction-tools[data-stream-reactions="player"] > button { display:flex; align-items:center; justify-content:center; flex:0 0 auto; width:40px; height:40px; padding:8px; }
+.stream-reaction-tools[data-stream-reactions="player"] > .stream-reaction-toggle { width:auto; gap:8px; padding:8px 12px; border-color:#e5c07780; background:linear-gradient(135deg,#70509f,#45315f); box-shadow:0 2px 8px #0005; font:600 14px/1.2 system-ui,sans-serif; }
+.stream-reaction-tools[data-stream-reactions="player"] > .stream-reaction-toggle:hover,.stream-reaction-tools[data-stream-reactions="player"] > .stream-reaction-toggle[aria-expanded="true"] { background:linear-gradient(135deg,#8b64bd,#584078); border-color:#ffe1a3; }
+.stream-reaction-tools[data-stream-reactions="player"] svg { display:block; flex:0 0 24px; width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; pointer-events:none; }
+.stream-reaction-tools .stream-reaction-spark { fill:#ffdc88; stroke:none; }
+.stream-fullscreen-exit { display:none; }.video-stage:fullscreen .stream-fullscreen-enter { display:none; }.video-stage:fullscreen .stream-fullscreen-exit { display:block; }
 .stream-reaction-tools button:focus-visible { outline:2px solid var(--accent-color,#ba68c8); outline-offset:2px; }
 .stream-reaction-panel { position:absolute; right:0; top:43px; width:240px; max-width:calc(100vw - 30px); padding:14px; border-radius:14px; border:1px solid var(--border-color,rgba(128,128,128,.3)); background:var(--panel,#242330); color:var(--text-main,#fff); box-shadow:0 8px 30px #0006; backdrop-filter:blur(20px); box-sizing:border-box; }
 .stream-reaction-panel[hidden] { display:none; }
@@ -12,7 +19,11 @@
 .stream-reaction-tools[data-stream-reactions="chat"] { position:relative; top:auto; right:auto; flex-shrink:0; }
 .stream-reaction-tools[data-stream-reactions="chat"] > button { background:transparent; color:var(--text-muted); border:none; width:36px; height:36px; border-radius:50%; padding:0; }
 .stream-reaction-tools[data-stream-reactions="chat"] > button:hover { background:var(--panel-raised,rgba(128,128,128,.15)); color:var(--text-main); }
+.stream-reaction-tools.stream-reaction-tools--toolbar { position:relative; inset:auto; margin-left:auto; flex:0 0 auto; align-self:center; }
+.stream-reaction-tools--toolbar .stream-reaction-panel { top:auto; bottom:calc(100% + 10px); max-height:calc(100vh - 72px); overflow-y:auto; }
 @media(max-width:600px) {
     .stream-reaction-tools { top:6px; right:6px; }
     .stream-reaction-panel { width:220px; }
+    .stream-reaction-tools[data-stream-reactions="player"] > .stream-reaction-toggle { width:40px; padding:8px; }
+    .stream-reaction-label { display:none; }
 }

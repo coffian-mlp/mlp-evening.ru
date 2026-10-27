@@ -187,3 +187,35 @@ test('MLP-440 an external player does not load or render the buffering artwork',
     cli('mlp-437-stream','external');let requested=0;page.on('request',request=>{if(request.url().includes('/assets/img/player/'))requested++;});await open(page);
     await expect(page.locator('[data-twitch-options]')).toBeVisible();await expect(page.locator('[data-stream-buffering]')).toHaveCount(0);expect(requested).toBe(0);
 });
+test('MLP-441 player tools share the bottom toolbar and fullscreen toggles its exit action',async({page},info)=>{
+    await page.setViewportSize({width:1920,height:1080});await clip(page);await open(page);
+    const player=page.locator('[data-self-hosted-url]'),controls=player.locator('.self-hosted-controls'),tools=controls.locator('[data-stream-reactions="player"]'),toggle=tools.getByRole('button',{name:'Эмоции к эфиру',exact:true}),fullscreen=tools.locator('.stream-fullscreen');
+    await expect.poll(()=>player.locator('video').evaluate(v=>v.currentTime)).toBeGreaterThan(.2);await expect(page.locator('.stream-fullscreen')).toHaveCount(1);await expect(toggle).toContainText('Эмоции');await expect(toggle.locator('.stream-reaction-label')).toBeVisible();
+    const frame=await player.boundingBox(),button=await fullscreen.boundingBox();expect(frame.x+frame.width-button.x-button.width).toBeLessThanOrEqual(16);expect(frame.y+frame.height-button.y-button.height).toBeLessThanOrEqual(8);
+    await controls.locator('[data-stream-volume]').focus();await page.keyboard.press('Tab');await expect(toggle).toBeFocused();await page.keyboard.press('Tab');await expect(fullscreen).toBeFocused();
+    await toggle.click();const panel=tools.locator('.stream-reaction-panel');await expect(panel).toBeVisible();expect((await panel.boundingBox()).y+(await panel.boundingBox()).height).toBeLessThan((await controls.boundingBox()).y);
+    await page.keyboard.press('Escape');await expect(panel).toBeHidden();await expect(toggle).toBeFocused();
+    const dir=path.join(root,'docs/tests/MLP-441');fs.mkdirSync(dir,{recursive:true});await player.screenshot({path:path.join(dir,info.project.name+'-desktop-controls.png')});
+    await fullscreen.click();await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement?.classList.contains('video-stage'))).toBe(true);await expect(fullscreen).toHaveAccessibleName('Выйти из полноэкранного режима');
+    await toggle.click();await expect(panel).toBeVisible();await page.screenshot({path:path.join(dir,info.project.name+'-fullscreen.png')});await fullscreen.click();await expect.poll(()=>page.evaluate(()=>document.fullscreenElement===null)).toBe(true);await expect(fullscreen).toHaveAccessibleName('На весь экран с эмоциями');
+});
+test('MLP-441 mobile tools and upward picker stay usable without clipping the reactions',async({page},info)=>{
+    await clip(page);await open(page);const player=page.locator('[data-self-hosted-url]'),tools=player.locator('[data-stream-reactions="player"]'),toggle=tools.locator('.stream-reaction-toggle'),panel=tools.locator('.stream-reaction-panel');
+    const dir=path.join(root,'docs/tests/MLP-441');fs.mkdirSync(dir,{recursive:true});
+    for(const width of[320,390]){
+        await page.setViewportSize({width,height:844});await expect(toggle.locator('.stream-reaction-label')).toBeHidden();await toggle.click();await expect(panel).toBeVisible();
+        const bounds=await panel.boundingBox();expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(width);expect(bounds.y).toBeGreaterThanOrEqual(0);
+        for(const choice of await tools.locator('[data-stream-reaction]').all())expect(await choice.evaluate(el=>{const b=el.getBoundingClientRect();return el.contains(document.elementFromPoint(b.x+b.width/2,b.y+b.height/2));})).toBe(true);
+        const volume=await player.locator('[data-stream-volume]').boundingBox(),buttons=await tools.boundingBox();expect(volume.x+volume.width).toBeLessThanOrEqual(buttons.x);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+        await page.screenshot({path:path.join(dir,info.project.name+'-mobile-'+width+'.png')});await page.keyboard.press('Escape');await expect(panel).toBeHidden();
+    }
+});
+test('MLP-441 own-player reactions still send without external-media consent',async({page})=>{
+    await clip(page);await open(page);expect(await page.evaluate(()=>privacyChoices.external_media)).toBe(false);await page.evaluate(()=>window.currentUserId=1);
+    let requests=0;await page.route('**/api.php',async route=>{if(!route.request().postData()?.includes('action=send_stream_reaction'))return route.fallback();requests++;expect(new URLSearchParams(route.request().postData()).get('reaction')).toBe('fire');return route.fulfill({json:{success:true,data:{event:{type:'stream_reaction',event_id:'sr-441',reaction:'fire',expires_at:Date.now()+7000}}}});});
+    const player=page.locator('[data-self-hosted-url]');await player.getByRole('button',{name:'Эмоции к эфиру',exact:true}).click();await player.getByRole('button',{name:'Огонь',exact:true}).click();await expect(page.locator('.stream-emotion')).toHaveText('🔥');expect(requests).toBe(1);
+});
+test('MLP-441 unsupported fullscreen is hidden and the external player keeps overlay tools',async({page})=>{
+    await page.addInitScript(()=>Object.defineProperty(Element.prototype,'requestFullscreen',{value:undefined,configurable:true}));await clip(page);await open(page);await expect(page.locator('.stream-fullscreen')).toBeHidden();
+    cli('mlp-437-stream','external');await open(page);await expect(page.locator('.self-hosted-controls')).toHaveCount(0);const tools=page.locator('[data-stream-reactions="player"]');await expect(tools).not.toHaveClass(/toolbar/);await expect(tools.locator('.stream-reaction-toggle')).toBeVisible();
+});

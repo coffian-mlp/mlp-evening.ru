@@ -9,6 +9,7 @@ class StreamReactionsComponent extends Component
     public function executeComponent()
     {
         $this->result['player_controls']=!empty($this->params['player_controls']);
+        $this->result['toolbar']=$this->result['player_controls']&&!empty($this->params['toolbar']);
         $this->includeTemplate();
     }
 }
