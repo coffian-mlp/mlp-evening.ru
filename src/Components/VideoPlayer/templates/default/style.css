@@ -8,6 +8,8 @@
 .self-hosted-controls button:hover{background:#fff2}.self-hosted-controls button:disabled{opacity:.4;cursor:default}.self-hosted-controls svg{width:24px;height:24px;fill:currentColor;pointer-events:none}
 .self-hosted-controls input[type=range]{width:112px;max-width:calc(100% - 100px);height:40px;margin:0;padding:0;accent-color:#fff;cursor:pointer}
 .self-hosted-controls :focus-visible{outline:2px solid #fff;outline-offset:2px}.self-hosted-player .self-hosted-state{bottom:48px}
+.self-hosted-buffering{display:block;width:min(480px,100%);height:220px;min-height:0;flex:0 1 220px;object-fit:contain;pointer-events:none}
+.self-hosted-buffering[hidden]{display:none}.self-hosted-state p,.self-hosted-state button{flex:0 0 auto}
 .player-privacy-placeholder { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:20px; text-align:center; color:var(--text-main); background:var(--panel); box-sizing:border-box; }
 .player-privacy-placeholder p { margin:0; font-size:18px; }
 .player-privacy-placeholder small { max-width:460px; line-height:1.5; color:var(--text-muted); }
