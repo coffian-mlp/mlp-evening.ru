@@ -8,6 +8,34 @@
         var hls=null,timer=null,controller=null,generation=0,closed=false,pausedByUser=false,lastVolume=1;
         var loader=root.querySelector('[data-stream-buffering]'),reduced=window.matchMedia('(prefers-reduced-motion: reduce)'),buffering=false,bufferTimer=null,animationFailed=false,posterFailed=false;
         var key='mlp.self-hosted.volume';
+        var controls=root.querySelector('.self-hosted-controls'),controlsTimer=null,overControls=false,adjustingControls=false,keyboardInput=false;
+        function keepControls(){return overControls||adjustingControls||(keyboardInput&&controls.contains(document.activeElement))||!!controls.querySelector('[aria-expanded="true"]');}
+        function deferControls(){
+            clearTimeout(controlsTimer);
+            if(!closed&&!keepControls())controlsTimer=setTimeout(function(){if(!closed&&!keepControls())root.classList.add('self-hosted-controls-hidden');},2500);
+        }
+        function revealControls(){if(closed)return;root.classList.remove('self-hosted-controls-hidden');deferControls();}
+        function sizeControls(){root.style.setProperty('--player-controls-height',controls.offsetHeight+'px');}
+        var controlsSize=typeof ResizeObserver==='function'?new ResizeObserver(sizeControls):null;
+        if(controlsSize)controlsSize.observe(controls);sizeControls();
+        root.addEventListener('pointerenter',revealControls);root.addEventListener('pointermove',revealControls);root.addEventListener('pointerdown',revealControls);
+        root.addEventListener('pointerleave',function(){overControls=false;deferControls();});
+        controls.addEventListener('pointerenter',function(event){overControls=event.pointerType!=='touch';revealControls();});
+        controls.addEventListener('pointerleave',function(){overControls=false;deferControls();});
+        controls.addEventListener('pointerdown',function(){adjustingControls=true;revealControls();});
+        document.addEventListener('pointerup',function(event){if(adjustingControls){
+            adjustingControls=false;var bounds=controls.getBoundingClientRect();
+            overControls=event.pointerType!=='touch'&&event.clientX>=bounds.left&&event.clientX<=bounds.right&&event.clientY>=bounds.top&&event.clientY<=bounds.bottom;
+            deferControls();
+        }});
+        document.addEventListener('pointercancel',function(){adjustingControls=false;overControls=false;deferControls();});
+        document.addEventListener('pointerdown',function(){keyboardInput=false;deferControls();},true);
+        document.addEventListener('keydown',function(event){if(event.key==='Tab')keyboardInput=true;},true);
+        root.addEventListener('keydown',function(){keyboardInput=true;revealControls();});
+        controls.addEventListener('focusin',revealControls);controls.addEventListener('focusout',function(){setTimeout(deferControls,0);});
+        var controlsMenu=new MutationObserver(function(){if(keepControls())revealControls();else deferControls();});
+        controlsMenu.observe(controls,{subtree:true,attributes:true,attributeFilter:['aria-expanded']});
+        document.addEventListener('fullscreenchange',revealControls);
         video.muted=true;
         try{var saved=localStorage.getItem(key);if(saved!==null&&saved.trim()!==''&&Number.isFinite(Number(saved))&&Number(saved)>=0&&Number(saved)<=1){video.volume=Number(saved);}}catch(error){}
         function syncControls(){
@@ -81,9 +109,9 @@
         retry.onclick=function(){pausedByUser=false;video.muted=false;cleanup();notice(waitingText);connect();};
         if(loader)loader.onerror=function(){if(!buffering)return;if(loader.getAttribute('src')===loader.dataset.staticSrc)posterFailed=true;else animationFailed=true;showBuffering(true);};
         var motionChanged=function(){if(buffering)showBuffering(true);};if(reduced.addEventListener)reduced.addEventListener('change',motionChanged);else reduced.addListener(motionChanged);
-        window.addEventListener('pagehide',function(){closed=true;cleanup();});
-        window.addEventListener('pageshow',function(event){if(event.persisted){closed=false;notice(waitingText);connect();}});
-        syncControls();connect();
+        window.addEventListener('pagehide',function(){closed=true;clearTimeout(controlsTimer);cleanup();});
+        window.addEventListener('pageshow',function(event){if(event.persisted){closed=false;overControls=false;adjustingControls=false;sizeControls();revealControls();notice(waitingText);connect();}});
+        syncControls();revealControls();connect();
     }
     function start(){document.querySelectorAll('[data-self-hosted-url]').forEach(mount);}
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();

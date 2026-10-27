@@ -3,13 +3,13 @@ const {BASE,login,post}=require('./mlp-360-helpers');const root=path.resolve(__d
 const cli=(name,...args)=>execFileSync('docker',['exec','mlp375-php-1','php','tests/playwright/'+name+'-fixture.php',...args],{cwd:root,encoding:'utf8'});
 const privateFile=name=>path.join(root,'docs/private/'+name+'-local.json');
 const auth=()=>JSON.parse(fs.readFileSync(privateFile('mlp425'),'utf8')).users;
-test.use({serviceWorkers:'block',viewport:{width:1366,height:900},launchOptions:{args:['--no-proxy-server'],firefoxUserPrefs:{'network.proxy.type':0}}});
+test.use({serviceWorkers:'block',viewport:{width:1366,height:900},launchOptions:{args:['--no-proxy-server'],firefoxUserPrefs:{'network.proxy.type':0,'media.volume_scale':'0.0'}}});
 test.beforeEach(async({page})=>{
     if(!BASE||!['localhost','127.0.0.1'].includes(new URL(BASE).hostname))throw Error('Isolated localhost required');
     cli('mlp-425-reasoning','setup');cli('mlp-437-stream','setup');await page.route('https://**',route=>route.abort());
 });
 test.afterEach(()=>{if(fs.existsSync(privateFile('mlp437')))cli('mlp-437-stream','cleanup');if(fs.existsSync(privateFile('mlp425')))cli('mlp-425-reasoning','cleanup');});
-async function open(page,url='/'){const response=await page.goto(BASE+url,{waitUntil:'domcontentloaded'});if(await page.locator('#privacy-panel').isVisible())await page.locator('[data-privacy-necessary]').click();return response;}
+async function open(page,url='/'){const response=await page.goto(BASE+url,{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>typeof privacyChoices==='object');if(await page.locator('[data-privacy-necessary]').isVisible())await page.locator('[data-privacy-necessary]').click();return response;}
 async function clip(page,{live=false,segments=()=>5}={}){
     await page.route('**/live/evening/**',route=>{
         const file=new URL(route.request().url()).pathname.split('/').pop();
@@ -218,4 +218,71 @@ test('MLP-441 own-player reactions still send without external-media consent',as
 test('MLP-441 unsupported fullscreen is hidden and the external player keeps overlay tools',async({page})=>{
     await page.addInitScript(()=>Object.defineProperty(Element.prototype,'requestFullscreen',{value:undefined,configurable:true}));await clip(page);await open(page);await expect(page.locator('.stream-fullscreen')).toBeHidden();
     cli('mlp-437-stream','external');await open(page);await expect(page.locator('.self-hosted-controls')).toHaveCount(0);const tools=page.locator('[data-stream-reactions="player"]');await expect(tools).not.toHaveClass(/toolbar/);await expect(tools.locator('.stream-reaction-toggle')).toBeVisible();
+});
+
+test('MLP-448 controls hide after leaving or inactivity and remain available to the keyboard',async({page})=>{
+    await page.clock.install();await page.route('**/live/evening/**',route=>route.fulfill({status:404}));await open(page);
+    const player=page.locator('[data-self-hosted-url]'),controls=player.locator('.self-hosted-controls'),bounds=await player.boundingBox();
+    await page.mouse.move(bounds.x+bounds.width/2,bounds.y+10);await expect(player).not.toHaveClass(/controls-hidden/);
+    await page.mouse.move(1,1);await page.clock.fastForward(2400);await expect(player).not.toHaveClass(/controls-hidden/);
+    await page.clock.fastForward(300);await expect(player).toHaveClass(/controls-hidden/);await expect(controls).toHaveCSS('opacity','0');
+    await player.locator('[data-stream-retry]').focus();await page.keyboard.press('Tab');await expect(player.locator('[data-stream-mute]')).toBeFocused();
+    await page.clock.fastForward(4000);await expect(player).not.toHaveClass(/controls-hidden/);
+    await page.mouse.click(1,1);await page.clock.fastForward(2700);await expect(player).toHaveClass(/controls-hidden/);
+    await page.mouse.move(bounds.x+bounds.width/2,bounds.y+10);await expect(controls).toHaveCSS('opacity','1');
+    await page.clock.fastForward(2700);await expect(player).toHaveClass(/controls-hidden/);
+});
+
+test('MLP-448 open reactions and an active volume drag keep the controls visible',async({page})=>{
+    await page.clock.install();await page.route('**/live/evening/**',route=>route.fulfill({status:404}));await open(page);
+    const player=page.locator('[data-self-hosted-url]'),toggle=player.locator('.stream-reaction-toggle'),panel=player.locator('.stream-reaction-panel');
+    await toggle.click();await page.mouse.move(1,1);await page.clock.fastForward(5000);await expect(panel).toBeVisible();await expect(player).not.toHaveClass(/controls-hidden/);
+    await page.keyboard.press('Escape');await page.mouse.click(1,1);await page.clock.fastForward(2700);await expect(player).toHaveClass(/controls-hidden/);
+    const volume=player.locator('[data-stream-volume]'),b=await volume.boundingBox();
+    await page.mouse.move(b.x+b.width/2,b.y+b.height/2);await page.mouse.down();await page.mouse.move(1,1);
+    await page.clock.fastForward(4000);await expect(player).not.toHaveClass(/controls-hidden/);await page.mouse.up();
+    await page.clock.fastForward(2700);await expect(player).toHaveClass(/controls-hidden/);
+});
+
+test.describe('MLP-448 touch controls',()=>{
+    test.use({hasTouch:true,viewport:{width:390,height:844}});
+    test('MLP-448 a touch restores hidden controls without losing access to reactions',async({page})=>{
+        await page.clock.install();await page.route('**/live/evening/**',route=>route.fulfill({status:404}));await open(page);
+        const player=page.locator('[data-self-hosted-url]'),b=await player.boundingBox();await page.clock.fastForward(2700);await expect(player).toHaveClass(/controls-hidden/);
+        await page.touchscreen.tap(b.x+b.width/2,b.y+10);await expect(player).not.toHaveClass(/controls-hidden/);
+        await player.locator('.stream-reaction-toggle').tap();await page.clock.fastForward(4000);await expect(player.locator('.stream-reaction-panel')).toBeVisible();await expect(player).not.toHaveClass(/controls-hidden/);
+        await player.locator('.stream-reaction-toggle').tap();await page.clock.fastForward(2700);await expect(player).toHaveClass(/controls-hidden/);
+    });
+});
+
+for(const scale of[1,1.5,2])test.describe('MLP-448 screen scale '+scale,()=>{
+    test.use({deviceScaleFactor:scale,viewport:{width:Math.round(1280/scale),height:Math.round(800/scale)}});
+    test('MLP-448 buffering covers the full video at '+Math.round(scale*100)+'% scaling in normal and fullscreen modes',async({page},info)=>{
+        test.setTimeout(45000);await clip(page,{live:true,segments:()=>3});await open(page);const player=page.locator('[data-self-hosted-url]'),video=player.locator('video');
+        await expect.poll(()=>video.evaluate(v=>v.currentTime)).toBeGreaterThan(.2);await video.evaluate(v=>{v.currentTime=v.buffered.end(v.buffered.length-1)-.1;});
+        await expect(player.locator('[data-stream-buffering]')).toBeVisible({timeout:10000});
+        const dir=path.join(root,'docs/tests/MLP-448');fs.mkdirSync(dir,{recursive:true});
+        async function geometry(mode){
+            const state=player.locator('.self-hosted-state'),media=player.locator('.self-hosted-media');await expect(state).toBeVisible();
+            const s=await state.boundingBox(),m=await media.boundingBox();
+            expect(Math.abs(s.x-m.x)).toBeLessThan(1);expect(Math.abs(s.y-m.y)).toBeLessThan(1);expect(Math.abs(s.width-m.width)).toBeLessThan(1);expect(Math.abs(s.height-m.height)).toBeLessThan(1);
+            const retry=await player.locator('[data-stream-retry]').boundingBox(),toolbar=await player.locator('.self-hosted-controls').boundingBox(),status=await player.locator('.self-hosted-state [role=status]').boundingBox();
+            expect(status.y).toBeGreaterThanOrEqual(m.y);expect(retry.y+retry.height).toBeLessThanOrEqual(toolbar.y+1);
+            expect(await player.evaluate(e=>Math.abs(parseFloat(e.style.getPropertyValue('--player-controls-height'))-e.querySelector('.self-hosted-controls').offsetHeight))).toBeLessThanOrEqual(1);
+            await page.screenshot({path:path.join(dir,info.project.name+'-scale-'+Math.round(scale*100)+'-'+mode+'.png')});
+        }
+        await geometry('normal');await player.locator('.stream-fullscreen').click();await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(true);await geometry('fullscreen');
+        await player.locator('.stream-fullscreen').click();await expect.poll(()=>page.evaluate(()=>document.fullscreenElement===null)).toBe(true);
+    });
+});
+
+test('MLP-448 text enlargement updates toolbar spacing without a gap in the buffering overlay',async({page})=>{
+    const release=await holdVideo(page);
+    try{
+        await open(page);const player=page.locator('[data-self-hosted-url]');await expect(player.locator('[data-stream-buffering]')).toBeVisible();
+        await page.addStyleTag({content:'.self-hosted-state{font-size:28px}.self-hosted-controls .stream-reaction-label{font-size:28px}'});
+        await expect.poll(()=>player.locator('.self-hosted-controls').evaluate(e=>e.offsetHeight)).toBeGreaterThan(48);
+        await expect.poll(()=>player.evaluate(e=>parseFloat(e.style.getPropertyValue('--player-controls-height'))===e.querySelector('.self-hosted-controls').offsetHeight)).toBe(true);
+        const state=await player.locator('.self-hosted-state').boundingBox(),media=await player.locator('.self-hosted-media').boundingBox();expect(state.height).toBe(media.height);
+    }finally{release();}
 });
