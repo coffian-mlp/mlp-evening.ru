@@ -23,8 +23,23 @@
 .video-stage:fullscreen { height:100%; width:100%; aspect-ratio:auto; background:#000; }
 .video-stage:fullscreen > .video-content { height:100%; border-radius:0; }
 @keyframes stream-emotion-wind {
-    0% { opacity:0; transform:translate(0,0) scale(.85) rotate(-5deg); animation-timing-function:ease-out; }
-    12% { opacity:1; transform:translate(calc(var(--emotion-drift)*.06),calc(var(--emotion-rise)*-.18)) scale(1.04) rotate(0deg); }
+    /* Quadratic Bezier flight: (0,0), (.1,-1), (.78,-1), sampled for transform-only rendering. */
+    0% { opacity:0; transform:translate(0,0) scale(.85) rotate(-5deg); }
+    4.25% { opacity:.65; transform:translate(calc(var(--emotion-drift)*.01477),calc(var(--emotion-rise)*-.12109)) scale(.97) rotate(-2.5deg); }
+    8.5% { opacity:1; transform:translate(calc(var(--emotion-drift)*.03406),calc(var(--emotion-rise)*-.23438)) scale(1.04) rotate(0deg); }
+    12.75% { transform:translate(calc(var(--emotion-drift)*.05789),calc(var(--emotion-rise)*-.33984)) scale(1.04) rotate(.4deg); }
+    17% { transform:translate(calc(var(--emotion-drift)*.08625),calc(var(--emotion-rise)*-.4375)) scale(1.04) rotate(.9deg); }
+    21.25% { transform:translate(calc(var(--emotion-drift)*.11914),calc(var(--emotion-rise)*-.52734)) scale(1.04) rotate(1.3deg); }
+    25.5% { transform:translate(calc(var(--emotion-drift)*.15656),calc(var(--emotion-rise)*-.60938)) scale(1.04) rotate(1.7deg); }
+    29.75% { transform:translate(calc(var(--emotion-drift)*.19852),calc(var(--emotion-rise)*-.68359)) scale(1.04) rotate(2.1deg); }
+    34% { transform:translate(calc(var(--emotion-drift)*.245),calc(var(--emotion-rise)*-.75)) scale(1.04) rotate(2.6deg); }
+    38.25% { transform:translate(calc(var(--emotion-drift)*.29602),calc(var(--emotion-rise)*-.80859)) scale(1.04) rotate(3deg); }
+    42.5% { transform:translate(calc(var(--emotion-drift)*.35156),calc(var(--emotion-rise)*-.85938)) scale(1.04) rotate(3.4deg); }
+    46.75% { transform:translate(calc(var(--emotion-drift)*.41164),calc(var(--emotion-rise)*-.90234)) scale(1.04) rotate(3.9deg); }
+    51% { transform:translate(calc(var(--emotion-drift)*.47625),calc(var(--emotion-rise)*-.9375)) scale(1.04) rotate(4.3deg); }
+    55.25% { transform:translate(calc(var(--emotion-drift)*.54539),calc(var(--emotion-rise)*-.96484)) scale(1.04) rotate(4.7deg); }
+    59.5% { transform:translate(calc(var(--emotion-drift)*.61906),calc(var(--emotion-rise)*-.98438)) scale(1.04) rotate(5.1deg); }
+    63.75% { transform:translate(calc(var(--emotion-drift)*.69727),calc(var(--emotion-rise)*-.99609)) scale(1.04) rotate(5.6deg); }
     68% { opacity:1; transform:translate(calc(var(--emotion-drift)*.78),calc(var(--emotion-rise)*-1)) scale(1.04) rotate(6deg); animation-timing-function:ease-out; }
     82% { opacity:.75; transform:translate(calc(var(--emotion-drift)*.92),calc(var(--emotion-rise)*-1 + var(--emotion-bounce)*.7)) scale(1) rotate(2deg); }
     100% { opacity:0; transform:translate(var(--emotion-drift),calc(var(--emotion-rise)*-1 + var(--emotion-bounce))) scale(.94) rotate(0deg); }

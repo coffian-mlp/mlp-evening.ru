@@ -125,3 +125,15 @@ test('MLP-442 reduced motion only fades and active flights adapt to resizing and
  const large=await particleFrame(particle,.68);expect(large.y).toBeGreaterThanOrEqual(0);expect(large.right).toBeLessThanOrEqual(large.width);
  const fullscreen=page.locator('.stream-fullscreen');if(await fullscreen.isVisible()){await fullscreen.click();await page.clock.runFor(100);await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(true);const frame=await particleFrame(particle,.68);expect(frame.y).toBeGreaterThanOrEqual(0);expect(frame.right).toBeLessThanOrEqual(frame.width);await fullscreen.click();}
 });
+test('MLP-443 initial flight follows a pronounced arc instead of a straight diagonal',async({page})=>{
+ await page.clock.install();await openEmotionPlayer(page);await page.clock.pauseAt(await page.evaluate(()=>Date.now()+100));
+ for(const [index,width]of[1280,320].entries()){
+  await page.setViewportSize({width,height:850});await windEvent(page,443000+index);const particle=page.locator('.stream-emotion').last();
+  const start=await particleFrame(particle,0),early=await particleFrame(particle,.17),middle=await particleFrame(particle,.34),late=await particleFrame(particle,.51),top=await particleFrame(particle,.68);
+  const horizontal=(middle.x-start.x)/(top.x-start.x),vertical=(start.y-middle.y)/(start.y-top.y);
+  expect(vertical-horizontal).toBeGreaterThan(.25);
+  const initialSlope=(start.y-early.y)/(early.x-start.x),finalSlope=(late.y-top.y)/(top.x-late.x);expect(initialSlope).toBeGreaterThan(finalSlope*3);
+  let previous=start;for(let i=1;i<=32;i++){const frame=await particleFrame(particle,.68*i/32);expect(frame.x).toBeGreaterThan(previous.x);expect(frame.y).toBeLessThan(previous.y);expect(frame.x).toBeGreaterThanOrEqual(0);expect(frame.y).toBeGreaterThanOrEqual(0);expect(frame.right).toBeLessThanOrEqual(frame.width);previous=frame;}
+  await page.evaluate(()=>document.querySelector('.stream-emotions').replaceChildren());
+ }
+});
