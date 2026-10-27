@@ -137,7 +137,7 @@ for(const theme of ['luna','celestia'])test('MLP-451 offline transparency follow
     const player=page.locator('[data-self-hosted-url]'),video=player.locator('video'),state=player.locator('.self-hosted-state');
     const idle=async()=>{
         await expect(player).toHaveClass(/self-hosted-offline/);await expect(video).toHaveCSS('visibility','hidden');await expect(state).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
-        const style=await player.evaluate(el=>({background:getComputedStyle(el).backgroundColor,opacity:getComputedStyle(el).opacity}));expect(style.background).toBe(theme==='luna'?'rgba(15, 19, 43, 0.38)':'rgba(255, 250, 246, 0.38)');expect(style.opacity).toBe('1');
+        const style=await player.evaluate(el=>({background:getComputedStyle(el).backgroundColor,opacity:getComputedStyle(el).opacity}));expect(style.background).toBe(theme==='luna'?'rgba(15, 19, 43, 0.46)':'rgba(255, 250, 246, 0.46)');expect(style.opacity).toBe('1');
         await expect(state).toHaveCSS('color',theme==='luna'?'rgb(240, 237, 248)':'rgb(53, 35, 63)');await expect(player.locator('[data-stream-retry]')).toHaveCSS('opacity','1');
     };
     await idle();const previous=probes;await page.clock.fastForward(10500);await expect.poll(()=>probes).toBeGreaterThan(previous);await idle();await expect(player.locator('[data-stream-buffering]')).toBeHidden();
