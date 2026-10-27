@@ -130,6 +130,14 @@
             <div id="profile-error" class="error-msg" style="display:none; color: red; margin-top: 10px; text-align: center;"></div>
         </form>
 
+        <section class="form-group" id="lyra-notifications" style="margin-top:20px;padding-top:15px;border-top:1px solid var(--border-color,#ccc)">
+            <h3>Лира в Telegram</h3>
+            <p>Личные уведомления от Лиры, в том числе о сбоях эфира, если ты назначен стримером события. Вход через Telegram подключается отдельно в блоке соцсетей выше.</p>
+            <p id="lyra-notifications-status" role="status">Проверяем подключение…</p>
+            <button type="button" class="btn-primary" id="lyra-notifications-connect" hidden>Подключить уведомления Лиры</button>
+            <a id="lyra-notifications-link" class="btn-primary" target="_blank" rel="noopener noreferrer" hidden>Открыть бота Лиры</a>
+            <button type="button" class="btn btn-outline-danger" id="lyra-notifications-disconnect" hidden>Отключить уведомления</button>
+        </section>
         <?php require __DIR__ . '/privacy.php'; ?>
         <!-- Profile Actions Footer -->
         <div class="profile-actions-footer">

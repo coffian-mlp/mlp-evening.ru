@@ -1,0 +1,19 @@
+[Unit]
+Description=MLP Lyra private Telegram updates
+After=network-online.target mysql.service
+
+[Service]
+Type=simple
+User=fastuser
+Group=fastuser
+WorkingDirectory=/var/www/fastuser/data/www/mlp-evening.ru
+ExecStart=/usr/bin/php lyra_bot_worker.php --loop
+Restart=always
+RestartSec=5
+MemoryMax=128M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

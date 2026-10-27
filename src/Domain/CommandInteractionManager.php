@@ -82,6 +82,7 @@ final class CommandInteractionManager
     public function readPublic(int $interactionId, ?int $viewerId = null, ?int $messageId = null): array
     {
         $row = $this->row($interactionId);
+        if (($row['origin'] ?? '') === 'system') return $this->readSystem($row,$viewerId,$messageId);
         $handler = $this->handler($row['type']);
         $owner = $viewerId !== null && $viewerId === (int)$row['owner_id'];
         $state = $row['state'];
@@ -109,6 +110,12 @@ final class CommandInteractionManager
     public function consume(int $interactionId, string $optionKey, int $actorId, ?int $now = null): array
     {
         $initial = $this->row($interactionId);
+        if (($initial['origin'] ?? '') === 'system') {
+            if (!$this->validBinding($initial)) throw new UserError('Это действие уже недоступно.');
+            $handler=$this->handler($initial['type']);
+            if (!is_callable($handler['system_consume']??null)) throw new UserError('Действие недоступно.');
+            return ($handler['system_consume'])($initial,$actorId,$optionKey);
+        }
         if (($initial['context_json'] ?? null) !== null) {
             if ($optionKey === 'refine') return $this->requestRefinement($interactionId, $actorId);
             if ($optionKey === 'cancel') return $this->cancelActive($interactionId, $actorId);
@@ -213,6 +220,11 @@ final class CommandInteractionManager
 
     private function validBinding(array $row): bool
     {
+        if (($row['origin'] ?? '') === 'system') {
+            $message=$row['bot_message_id']?(new ChatManager())->getMessageById((int)$row['bot_message_id']):null;
+            return $message && empty($message['deleted']) && (int)$message['user_id']===(int)$row['bot_user_id']
+                && str_contains($message['raw_message']??'','[[command:'.$row['id'].']]');
+        }
         if (($row['context_json'] ?? null) !== null) {
             try { $this->guard($row, (int)$row['owner_id'], false, false); return $row['bot_message_id'] !== null && !$this->requireContext($row)['staged']; }
             catch (UserError $error) { return false; }
@@ -231,6 +243,38 @@ final class CommandInteractionManager
     {
         if ($userId < 1 || !(new UserManager())->getUserById($userId)) throw new UserError('Нужна авторизация.');
         (new ChatManager())->assertCanSend($userId);
+    }
+
+    /** System-origin actions reuse the widget without manufacturing a user command. */
+    public function createSystem(string $type,int $owner,string $key,array $options,string $expiry): int
+    {
+        $handler=$this->handler($type);
+        if(!is_callable($handler['system_consume']??null) || $owner<1 || strlen($key)>100 || count($options)<1 || count($options)>8)throw new RuntimeException('Invalid system interaction');
+        $keys=[];
+        foreach($options as $o){
+            if(!is_string($o['key']??null)||!preg_match('/^[a-zA-Z0-9_-]{1,64}$/D',$o['key'])||isset($keys[$o['key']])
+                ||!is_string($o['label']??null)||trim($o['label'])===''||mb_strlen($o['label'])>160||!is_array($o['payload']??null))throw new RuntimeException('Invalid system option');
+            $keys[$o['key']]=true;
+        }
+        $json=json_encode($options,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE);$version=str_repeat('0',64);
+        $date=\DateTimeImmutable::createFromFormat('!Y-m-d H:i:s',$expiry,new \DateTimeZone('UTC'));
+        if(strlen($json)>32768||!$date||$date->format('Y-m-d H:i:s')!==$expiry)throw new RuntimeException('Invalid system interaction expiry or payload');
+        $s=$this->db->prepare("INSERT INTO command_interactions(type,owner_id,source_message_id,source_version,options_json,expires_at,origin,system_key) VALUES(?,?,NULL,?,?,?,'system',?) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)");
+        $s->bind_param('sissss',$type,$owner,$version,$json,$expiry,$key);$s->execute();return (int)$s->insert_id;
+    }
+
+    private function readSystem(array $row,?int $viewer,?int $message): array
+    {
+        $valid=$message!==null && $message===(int)$row['bot_message_id'] && $this->validBinding($row);
+        $state=$valid?$row['state']:'unavailable';
+        if($state==='pending'&&strtotime($row['expires_at'].' UTC')<=time())$state='expired';
+        $handler=$this->handler($row['type']);$options=json_decode($row['options_json'],true,512,JSON_THROW_ON_ERROR);
+        $allowed=$valid&&$state==='pending'&&$viewer!==null&&($handler['permission'])($viewer,$options[0]['payload']);
+        $visible=$valid&&(($handler['visibility']??'owner')==='public'||$viewer===(int)$row['owner_id']||$allowed);
+        return ['id'=>(int)$row['id'],'message_id'=>(int)$row['bot_message_id'],'state'=>$state,'can_act'=>(bool)$allowed,
+            'status_text'=>$state==='pending'?($allowed?($handler['action_label']??'Выбери действие:'):($handler['pending_label']??'Ожидаем ответа')):null,
+            'expires_at'=>gmdate('Y-m-d\TH:i:s\Z',strtotime($row['expires_at'].' UTC')),
+            'options'=>$visible?array_map(static fn($o)=>['key'=>$o['key'],'label'=>$o['label']],$options):[]];
     }
     /** Optional capability; no command-specific interpretation belongs in this owner. */
     public function continuationHandler(string $type): array

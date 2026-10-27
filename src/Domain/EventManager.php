@@ -24,8 +24,8 @@ class EventManager {
     }
 
     /** Все события как есть (для recurrence-раскрытия в BotWorker/LLMManager). */
-    public function getAllRaw(): array {
-        return $this->fetch('*', false);
+    public function getAllRaw(bool $lock = false): array {
+        return $this->fetch('*', false, $lock);
     }
 
     /** Все события, отсортированные по времени начала (админка). */
@@ -39,9 +39,9 @@ class EventManager {
     }
 
     /** Единая выборка событий (AR3-4). $columns — внутренняя константа, не пользовательский ввод. */
-    private function fetch(string $columns, bool $ordered): array {
+    private function fetch(string $columns, bool $ordered, bool $lock = false): array {
         $rows = [];
-        $sql = "SELECT $columns FROM events" . ($ordered ? " ORDER BY start_time ASC" : "");
+        $sql = "SELECT $columns FROM events" . ($ordered ? " ORDER BY start_time ASC" : "") . ($lock ? ' FOR UPDATE' : '');
         $res = $this->db->query($sql);
         while ($res && $row = $res->fetch_assoc()) {
             $rows[] = $row;
@@ -96,21 +96,26 @@ class EventManager {
     }
 
     public function create(array $d): bool {
-        $stmt = $this->db->prepare("INSERT INTO events (title, description, start_time, duration_minutes, is_recurring, recurrence_rule, use_playlist, generate_new_playlist, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $d=$this->withMonitoring($d);
+        $stmt = $this->db->prepare("INSERT INTO events (title, description, start_time, duration_minutes, is_recurring, recurrence_rule, use_playlist, generate_new_playlist, color, monitor_stream, streamer_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->bind_param(
-            "sssiisiis",
+            "sssiisiisii",
             $d['title'], $d['description'], $d['start_time'], $d['duration_minutes'],
-            $d['is_recurring'], $d['recurrence_rule'], $d['use_playlist'], $d['generate_new_playlist'], $d['color']
+            $d['is_recurring'], $d['recurrence_rule'], $d['use_playlist'], $d['generate_new_playlist'], $d['color'], $d['monitor_stream'], $d['streamer_user_id']
         );
         return $stmt->execute();
     }
 
     public function update(int $id, array $d): bool {
-        $stmt = $this->db->prepare("UPDATE events SET title=?, description=?, start_time=?, duration_minutes=?, is_recurring=?, recurrence_rule=?, use_playlist=?, generate_new_playlist=?, color=? WHERE id=?");
+        $existing=$this->db->prepare('SELECT monitor_stream,streamer_user_id FROM events WHERE id=?');
+        $existing->bind_param('i',$id);$existing->execute();
+        foreach($existing->get_result()->fetch_assoc()?:[] as $key=>$value)if(!array_key_exists($key,$d))$d[$key]=$value;
+        $d=$this->withMonitoring($d);
+        $stmt = $this->db->prepare("UPDATE events SET title=?, description=?, start_time=?, duration_minutes=?, is_recurring=?, recurrence_rule=?, use_playlist=?, generate_new_playlist=?, color=?, monitor_stream=?, streamer_user_id=? WHERE id=?");
         $stmt->bind_param(
-            "sssiisiisi",
+            "sssiisiisiii",
             $d['title'], $d['description'], $d['start_time'], $d['duration_minutes'],
-            $d['is_recurring'], $d['recurrence_rule'], $d['use_playlist'], $d['generate_new_playlist'], $d['color'], $id
+            $d['is_recurring'], $d['recurrence_rule'], $d['use_playlist'], $d['generate_new_playlist'], $d['color'], $d['monitor_stream'], $d['streamer_user_id'], $id
         );
         return $stmt->execute();
     }
@@ -119,5 +124,15 @@ class EventManager {
         $stmt = $this->db->prepare("DELETE FROM events WHERE id=?");
         $stmt->bind_param('i', $id);
         return $stmt->execute();
+    }
+
+    private function withMonitoring(array $d): array
+    {
+        $d['monitor_stream']=(int)($d['monitor_stream']??0);
+        $d['streamer_user_id']=(int)($d['streamer_user_id']??0)?:null;
+        if(!in_array($d['monitor_stream'],[0,1],true))throw new \Core\UserError('Некорректная настройка наблюдения за эфиром.');
+        $id=$d['streamer_user_id']??(int)\Infra\ConfigManager::getInstance()->getOption('stream_monitor_default_streamer','0');
+        if(($d['monitor_stream']||$d['streamer_user_id'])&&($id<1||!(new UserManager())->getUserById($id)||Privacy::isWithdrawn($id)))throw new \Core\UserError('Выбери действующего стримера события или задай стримера по умолчанию.');
+        return $d;
     }
 }

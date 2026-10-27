@@ -33,7 +33,7 @@
         widget._commandState = data.state;
         const status = document.createElement('span');
         status.className = 'command-interaction-status';
-        status.textContent = states[data.state] || (data.can_act ? 'Выбери вариант:' : 'Выбор доступен автору команды');
+        status.textContent = data.status_text || states[data.state] || (data.can_act ? 'Выбери вариант:' : 'Выбор доступен автору команды');
         widget.append(status);
         if (!activeStates.has(data.state)) return;
         const controls = document.createElement('div');

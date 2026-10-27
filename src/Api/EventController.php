@@ -45,6 +45,7 @@ class EventController {
             'generate_new_playlist' => (int)($_POST['generate_new_playlist'] ?? 0),
             'color'                 => trim($_POST['color'] ?? '#6d2f8e'),
         ];
+        foreach(['monitor_stream','streamer_user_id'] as $key)if(array_key_exists($key,$_POST))$data[$key]=(int)$_POST[$key];
 
         $events = new EventManager();
 
@@ -56,10 +57,10 @@ class EventController {
         }
 
         if ($id > 0) {
-            $ok = $events->update($id, $data);
+            try { $ok = $events->update($id, $data); } catch(\Throwable $e){Response::caught($e);}
             Response::json($ok, $ok ? "Событие обновлено!" : "Ошибка обновления события", $ok ? 'success' : 'error');
         } else {
-            $ok = $events->create($data);
+            try { $ok = $events->create($data); } catch(\Throwable $e){Response::caught($e);}
             Response::json($ok, $ok ? "Событие добавлено!" : "Ошибка создания события", $ok ? 'success' : 'error');
         }
     }
@@ -71,5 +72,13 @@ class EventController {
 
         $ok = (new EventManager())->delete($id);
         Response::json($ok, $ok ? "Событие удалено!" : "Ошибка удаления события", $ok ? 'success' : 'error');
+    }
+
+    public static function saveMonitoring(): void
+    {
+        $id=(int)($_POST['default_streamer']??0);
+        if($id>0&&(!(new \Domain\UserManager())->getUserById($id)||\Domain\Privacy::isWithdrawn($id)))Response::fail('Выбери действующего пользователя.');
+        \Infra\ConfigManager::getInstance()->setOption('stream_monitor_default_streamer',(string)$id);
+        Response::ok('Стример по умолчанию сохранён.');
     }
 }

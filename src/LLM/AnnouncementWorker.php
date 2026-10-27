@@ -51,14 +51,6 @@ final class AnnouncementWorker
                 $settings = \Domain\AnnouncementSettings::values();
                 if ($settings['announcements_enabled'] !== '1' || !hash_equals($this->configurationFingerprint, \Domain\AnnouncementSettings::fingerprint($settings))) return;
             }
-            $credentialHash = $this->telegram->credentialFingerprint();
-            $botId = $this->store->pollingBotId($credentialHash);
-            if ($botId === null) {
-                $me = $this->telegram->request('getMe');
-                if (empty($me['is_bot']) || !is_int($me['id'] ?? null) || $me['id'] <= 0) throw new \RuntimeException('Telegram did not verify bot identity');
-                $botId = $me['id'];
-                $this->store->activatePollingBot($botId,$credentialHash);
-            }
             $this->scheduleSettings=\Domain\AnnouncementSettings::values();
             $this->store->recover();
             $events = EventManager::expandOccurrences((new EventManager())->getAllRaw(),14,$now);
@@ -70,21 +62,9 @@ final class AnnouncementWorker
                 if ($facts) $this->store->ensure($facts,AnnouncementContent::fingerprint($facts),$schedule,$this->initialNumber);
                 break;
             }
-            // Pending owner actions still take precedence over publication when polling succeeds.
-            // A read-only transport failure must not block already approved posts or move the cursor.
-            try {
-                $updates = $this->telegram->request('getUpdates',['offset'=>$this->store->pollingOffset($botId)]);
-            } catch (TelegramBotException $error) {
-                $this->journal->record('poll_failed',[],$error);
-                $updates = [];
-            }
-            foreach ($updates as $update) {
-                if (!is_array($update) || !is_int($update['update_id'] ?? null)) continue;
-                $response = null;
-                $accepted = $this->store->consume($update['update_id'],function () use ($update,$now,&$response) {
-                    if (self::ownerUpdate($update,$this->owner)) $response = $this->handle($update,$now);
-                },$botId);
-                if ($accepted && $response !== null) $this->respond($update,$response);
+            if ((string)$this->store->option('lyra_bot_polling_external','0') !== '1') {
+                try { (new LyraBotPoller($this->store,$this->telegram,$this))->tick($now); }
+                catch (\Social\TelegramBotException $error) { $this->journal->record('poll_failed',[],$error); }
             }
             $now = $explicitNow ?? time();
             // Delivery is checked before potentially slow content generation.
@@ -163,6 +143,20 @@ final class AnnouncementWorker
         $status = $this->store->action((int)$r['id'],$r['nonce'],$action,$text==='заново'?'':$text,$now);
         return $this->statusText($status,$r);
     }
+
+    public function handleIncoming(array $update,int $now): ?string
+    {
+        if(!self::ownerUpdate($update,$this->owner))return null;
+        $db=Database::getInstance()->getConnection();
+        if(!(int)$db->query("SELECT GET_LOCK('telegram_announcements',0) AS ok")->fetch_assoc()['ok'])throw new BotPollBusy();
+        try {
+            $this->explicitNow=$now;
+            $this->scheduleSettings=\Domain\AnnouncementSettings::values();
+            return $this->handle($update,$now);
+        }finally{$db->query("DO RELEASE_LOCK('telegram_announcements')");}
+    }
+
+    public function respondIncoming(array $update,string $text): void { $this->respond($update,$text); }
 
     private function statusText(string $status, array $r): string
     {

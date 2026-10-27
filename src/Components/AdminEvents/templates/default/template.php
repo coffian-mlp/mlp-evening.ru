@@ -3,6 +3,30 @@
  * @var array $arResult 
  */
 ?>
+<div class="card" id="stream-monitor-settings">
+    <h3>Контроль эфира</h3>
+    <p>Работает с собственным HLS-плеером во время отмеченных событий, после минуты устойчивого эфира. Обрыв: сообщение в чат через 45 секунд, личное уведомление в Telegram через 3 минуты, сообщение о приостановке в чат и канал через 10 минут без ответа стримера. После восстановления ждём 30 секунд устойчивого сигнала.</p>
+    <form onsubmit="saveStreamMonitorSettings(event)">
+        <label class="form-label" for="default-streamer">Стример по умолчанию</label>
+        <select class="form-input no-custom" id="default-streamer" name="default_streamer">
+            <option value="0">Не выбран</option>
+            <?php foreach($arResult['streamers'] as $user): ?>
+            <option value="<?= (int)$user['id'] ?>" <?= (int)$user['id']===$arResult['default_streamer']?'selected':'' ?>><?= htmlspecialchars(($user['nickname']?:$user['login']).($user['telegram_ready']?' — Telegram подключён':' — Telegram не подключён'),ENT_QUOTES,'UTF-8') ?></option>
+            <?php endforeach; ?>
+        </select>
+        <button type="submit" class="btn-primary" style="margin-top:10px">Сохранить стримера</button>
+    </form>
+    <small>Последняя проверка эфира: <?= htmlspecialchars($arResult['monitor_heartbeat'],ENT_QUOTES,'UTF-8') ?> UTC. Проверка Telegram: <?= htmlspecialchars($arResult['bot_heartbeat'],ENT_QUOTES,'UTF-8') ?> UTC.</small>
+    <details style="margin-top:15px"><summary>Журнал сбоев эфира и доставки уведомлений</summary>
+        <div class="table-responsive"><table class="dashboard-table"><thead><tr><th>Время (UTC)</th><th>Событие</th><th>Этап</th><th>Состояние</th><th>Причина</th></tr></thead><tbody>
+        <?php foreach($arResult['monitor_journal'] as $entry): ?>
+            <tr><?php foreach(['updated_at','title','stage','delivery_state','reason'] as $field): ?><td><?= htmlspecialchars((string)($entry[$field]??'—'),ENT_QUOTES,'UTF-8') ?></td><?php endforeach; ?></tr>
+        <?php endforeach; ?>
+        <?php if(!$arResult['monitor_journal']): ?><tr><td colspan="5">Сбоев пока не зафиксировано.</td></tr><?php endif; ?>
+        </tbody></table></div>
+        <p>Если доставка не подтверждена (uncertain), автоматического повтора нет: сообщение могло дойти. Проверь личку или канал.</p>
+    </details>
+</div>
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h3 class="dashboard-title">📅 Расписание Событий</h3>
@@ -30,7 +54,7 @@
                         <td style="text-align: center;">
                             <div class="color-swatch" style="background-color: <?= htmlspecialchars($event['color']) ?>" title="<?= htmlspecialchars($event['color']) ?>"></div>
                         </td>
-                        <td><?= htmlspecialchars($event['title']) ?></td>
+                        <td><?= htmlspecialchars($event['title']) ?><?= !empty($event['monitor_stream'])?' · контроль эфира':'' ?></td>
                         <td><?= htmlspecialchars($event['start_time_msk']) ?> (МСК)</td>
                         <td><?= (int)$event['duration_minutes'] ?> мин</td>
                         <td>
@@ -129,6 +153,17 @@
                 </small>
             </div>
             
+            <div class="form-group mb-3">
+                <label class="checkbox-label"><input type="checkbox" id="event_monitor_stream" name="monitor_stream"> Следить за эфиром во время события</label>
+                <label class="form-label" for="event_streamer_user_id">Стример события</label>
+                <select class="form-input no-custom" id="event_streamer_user_id" name="streamer_user_id">
+                    <option value="0">Стример по умолчанию</option>
+                    <?php foreach($arResult['streamers'] as $user): ?>
+                    <option value="<?= (int)$user['id'] ?>"><?= htmlspecialchars(($user['nickname']?:$user['login']).($user['telegram_ready']?' — Telegram подключён':' — Telegram не подключён'),ENT_QUOTES,'UTF-8') ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <small>Для личных уведомлений стример подключает бота Лиры в своём профиле. При пересечении событий ответственность переходит к начавшемуся позже.</small>
+            </div>
             <div class="form-actions mt-3">
                 <button type="submit" class="btn-primary">💾 Сохранить</button>
                 <button type="button" class="btn-danger" onclick="closeEventModal()">Отмена</button>

@@ -1,0 +1,27 @@
+<?php
+require_once __DIR__.'/../autoload.php';
+use Domain\StreamHealthPolicy as P;
+$fail=0;$check=static function($v,$m)use(&$fail){echo($v?'[OK] ':'[FAIL] ').$m."\n";if(!$v)$fail++;};
+$base=['last_checked'=>null,'healthy_since'=>null,'progress_key'=>null,'progress_at'=>null,'recovered_since'=>null,'lost_at'=>null,'health'=>'unknown','armed'=>0,'ended'=>0];
+$now=1800000000;$r=$base;
+foreach([0,10,20,30,40,50,60] as $n)$r=P::observe($r,['state'=>'live','progress'=>(string)$n],$now+$n);
+$check((int)$r['armed']===1,'one continuous minute arms monitoring');
+$r=P::observe($r,['state'=>'down'],$now+70);$check(P::stamp($r['lost_at'])===$now+70,'loss begins at first failed observation');
+$i=['state'=>'open','lost_at'=>P::date($now+70),'acknowledged_at'=>null];
+$check(P::stages($r,$i,$now+114)===[],'no warning before 45 seconds');
+$check(P::stages($r,$i,$now+115)===['site_warning'],'45 seconds: website only');
+$check(P::stages($r,$i,$now+250)===['site_warning','private_warning'],'3 minutes: private escalation');
+$check(P::stages($r,$i,$now+670)===['site_warning','private_warning','site_pause','channel_pause'],'10 minutes: public escalation');
+$i['state']='acknowledged';$i['acknowledged_at']=P::date($now+300);
+$check(P::stages($r,$i,$now+899)===[],'acknowledgement suppresses the asleep/public escalation');
+$check(P::stages($r,$i,$now+900)===['private_reminder'],'one private follow-up after 10 minutes');
+$i['state']='intentional';$check(P::stages($r,$i,$now+5000)===[],'intentional stop suppresses all escalation');
+$r=P::observe($r,['state'=>'live','progress'=>'returned'],$now+80);
+$check(P::stages($r,['state'=>'open','lost_at'=>P::date($now+70)],$now+700)===[],'recovering video suppresses outage messages immediately');
+$r=P::observe($r,['state'=>'down'],$now+90);$check($r['recovered_since']===null,'another failure resets recovery debounce');
+$never=P::observe($base,['state'=>'down'],$now);$check($never['lost_at']===null,'a stream which never started is not a midstream outage');
+$stale=$base;foreach([0,10,20,30] as $n)$stale=P::observe($stale,['state'=>'live','progress'=>'same'],$now+$n);
+$check($stale['health']==='down','unchanging HLS playlist is not live after 30 seconds');
+$gap=P::observe($base,['state'=>'live','progress'=>'first'],$now);$gap=P::observe($gap,['state'=>'live','progress'=>'next'],$now+100);
+$check(!$gap['armed']&&P::stamp($gap['healthy_since'])===$now+100,'a worker gap cannot count as observed healthy time');
+echo $fail?"FAIL: $fail\n":"ALL PASS\n";exit($fail?1:0);

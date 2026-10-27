@@ -10,6 +10,7 @@ class ProfileComponent extends Component {
     public function executeComponent() {
         global $app;
         $app->addJs('/src/Components/Chat/assets/keyword-alerts.js');
+        $app->addJs('/assets/js/lyra-notifications.js');
         if (Auth::check()) {
             $userId = $_SESSION['user_id'];
             $userManager = new UserManager();

@@ -108,7 +108,8 @@ final class Privacy
         if (($account['state'] ?? '') === 'active' && ($account['policy_version'] ?? '') === self::version()) return true;
         if(($account['state']??'')==='withdrawn' && strtotime($account['delete_after'].' UTC')<=time())return in_array($action,['login','social_login','logout','privacy_status','privacy_choices','privacy_account','privacy_exit','leave'],true);
         return in_array($action, ['login','social_login','logout','update_profile','save_user_option','get_user_socials',
-            'unlink_social','bind_social','privacy_account','privacy_choices','privacy_status','privacy_exit','leave'], true);
+            'unlink_social','bind_social','privacy_account','privacy_choices','privacy_status','privacy_exit','leave',
+            'lyra_notifications_status','lyra_notifications_disconnect'], true);
     }
 
     public static function tokenHash(): ?string
@@ -220,6 +221,7 @@ final class Privacy
             (new ChatManager())->touchPrivacy($userId);
             (new EpisodeManager())->suspendPrivacy($userId,!$accept);
             if (!$accept) {
+                (new LyraNotifications())->disconnect($userId);
                 $identity=(new UserManager())->privacyIdentity($userId);
                 if(!empty($identity['email'])){
                     $email=$identity['email'];$mail=$db->prepare('INSERT IGNORE INTO privacy_mail_cleanup(user_id,email,created_at) VALUES (?,?,UTC_TIMESTAMP())');$mail->bind_param('is',$userId,$email);$mail->execute();

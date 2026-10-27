@@ -20,7 +20,7 @@ $client = new TelegramBotClient($token, static function ($method, $params) use (
 verifyTelegram($client->request('sendMessage', ['chat_id' => 1, 'text' => 'Hello'])['message_id'] === 42, 'result returned without API envelope');
 $reply['body'] = '{"ok":true,"result":[]}';
 $client->request('getUpdates', ['offset' => 12, 'timeout' => 50, 'limit' => 100, 'allowed_updates' => ['all']]);
-verifyTelegram($calls[1][1] === ['offset' => 12, 'timeout' => 0, 'limit' => 20, 'allowed_updates' => ['message', 'callback_query']], 'polling bounded and restricted');
+verifyTelegram($calls[1][1] === ['offset' => 12, 'timeout' => 20, 'limit' => 20, 'allowed_updates' => ['message', 'callback_query']], 'long polling bounded to 20 seconds and restricted');
 $expectError = static function (callable $action, bool $uncertain, string $label) use ($token): void {
     try {
         $action();

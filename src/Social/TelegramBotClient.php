@@ -22,6 +22,12 @@ class TelegramBotClient
     /** Credential binding only; callers never need the token itself. */
     public function credentialFingerprint(): string { return hash('sha256', $this->token); }
 
+    private int $requestTimeout=15;
+    public function withRequestTimeout(int $seconds): self
+    {
+        $copy=clone $this;$copy->requestTimeout=max(1,min(15,$seconds));return $copy;
+    }
+
     /** Fake transport receives (method, params) and returns status/body/errno. */
     public function request(string $method, array $params = []): array
     {
@@ -32,7 +38,7 @@ class TelegramBotClient
         $photoPath = null;
         if ($method === 'getUpdates') {
             $params['offset'] = max(0, (int)($params['offset'] ?? 0));
-            $params['timeout'] = 0;
+            $params['timeout'] = max(0,min(20,(int)($params['timeout']??0)));
             $params['limit'] = 20;
             $params['allowed_updates'] = ['message', 'callback_query'];
         }
@@ -116,7 +122,7 @@ class TelegramBotClient
         $proxy = $this->proxy->resolve();
         $curl = curl_init('https://api.telegram.org/bot' . $this->token . '/' . $method);
         $options = [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_TIMEOUT => $photoPath !== null ? 90 : 15, CURLOPT_FOLLOWLOCATION => false, CURLOPT_PROTOCOLS => CURLPROTO_HTTPS];
+            CURLOPT_TIMEOUT => $photoPath !== null ? 90 : ($method==='getUpdates'?max(15,(int)$params['timeout']+5):$this->requestTimeout), CURLOPT_FOLLOWLOCATION => false, CURLOPT_PROTOCOLS => CURLPROTO_HTTPS];
         // Empty string disables inherited process proxies; this transport has its own configuration.
         $options[CURLOPT_PROXY] = $proxy;
         $options[CURLOPT_NOPROXY] = '';
@@ -124,6 +130,7 @@ class TelegramBotClient
             $options[CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V6;
             $options[CURLOPT_CONNECTTIMEOUT] = 10;
         }
+        $options[CURLOPT_CONNECTTIMEOUT]=min($options[CURLOPT_CONNECTTIMEOUT],$options[CURLOPT_TIMEOUT]);
         if ($photoPath !== null) {
             $params['photo'] = new \CURLFile($photoPath, 'image/jpeg', basename($photoPath));
             foreach ($params as $key => $value) {

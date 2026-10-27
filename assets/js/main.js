@@ -964,6 +964,7 @@ window.openProfileModal = function(e) {
 };
 
 function loadUserSocials() {
+    document.dispatchEvent(new Event('lyra-social-changed'));
     // Контейнеры
     var $statusContainer = $('#telegram-status-container');
     var $widgetContainer = $('#telegram-widget-container');

@@ -31,4 +31,21 @@
     background-color: #f39c12;
 }
 
+#event-modal .modal-content {
+    background: var(--panel-solid);
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    width: calc(100% - 32px);
+    box-sizing: border-box;
+}
+
+#tab-events .table-responsive {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+@media (max-width: 600px) {
+    #event-modal .grid-2col { grid-template-columns: 1fr !important; }
+}
+
 

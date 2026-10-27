@@ -952,3 +952,5 @@ body.dashboard-layout {
 .main-header .logo { height: 60px; width: auto; display: block; }
 .main-header .site-nav { flex: 1; justify-content: flex-start; }
 .main-header .user-area { margin-left: auto; flex-shrink: 0; }
+/* Hidden profile controls must remain hidden despite button display rules. */
+#lyra-notifications [hidden] { display: none !important; }

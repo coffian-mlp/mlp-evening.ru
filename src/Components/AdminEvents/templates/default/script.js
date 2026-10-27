@@ -32,6 +32,8 @@ function editEvent(eventData) {
     document.getElementById('event_use_playlist').checked = eventData.use_playlist == 1;
     document.getElementById('event_generate_new_playlist').checked = eventData.generate_new_playlist == 1;
     document.getElementById('event_color').value = eventData.color || '#6d2f8e';
+    document.getElementById('event_monitor_stream').checked = eventData.monitor_stream == 1;
+    document.getElementById('event_streamer_user_id').value = eventData.streamer_user_id || '0';
     
     document.getElementById('event-modal-title').textContent = 'Редактировать событие (Время МСК)';
     toggleRecurrence();
@@ -83,6 +85,8 @@ function saveEvent(e) {
     formData.append('use_playlist', document.getElementById('event_use_playlist').checked ? '1' : '0');
     formData.append('generate_new_playlist', document.getElementById('event_generate_new_playlist').checked ? '1' : '0');
     formData.append('color', document.getElementById('event_color').value);
+    formData.append('monitor_stream', document.getElementById('event_monitor_stream').checked ? '1' : '0');
+    formData.append('streamer_user_id', document.getElementById('event_streamer_user_id').value);
     
     fetch('/api.php', {
         method: 'POST',
@@ -101,6 +105,17 @@ function saveEvent(e) {
         console.error(err);
         alert('Сетевая ошибка');
     });
+}
+
+function saveStreamMonitorSettings(event) {
+    event.preventDefault();
+    const button=event.target.querySelector('button');button.disabled=true;
+    fetch('/api.php',{method:'POST',body:new URLSearchParams({action:'save_stream_monitor_settings',csrf_token:window.csrfToken||'',default_streamer:document.getElementById('default-streamer').value})})
+        .then(response=>response.json()).then(data=>{
+            if(typeof showFlashMessage==='function')showFlashMessage(data.message,data.success?'success':'error');
+            else window.alert(data.message);
+        }).catch(()=>{if(typeof showFlashMessage==='function')showFlashMessage('Не удалось сохранить стримера.','error');})
+        .finally(()=>{button.disabled=false;});
 }
 
 function deleteEvent(id) {

@@ -419,6 +419,8 @@ class UserManager {
     }
 
     public function unlinkSocial($userId, $provider) {
+        Privacy::lockAccount((int)$userId);
+        if ($provider === 'telegram') (new LyraNotifications())->disconnect((int)$userId);
         $stmt = $this->db->prepare("DELETE FROM user_socials WHERE user_id = ? AND provider = ?");
         $stmt->bind_param("is", $userId, $provider);
         $stmt->execute();
@@ -427,6 +429,11 @@ class UserManager {
             return true;
         }
         return false;
+    }
+
+    public function streamerDirectory(): array
+    {
+        return $this->db->query("SELECT u.id,u.login,u.nickname FROM users u LEFT JOIN account_privacy p ON p.user_id=u.id WHERE p.state IS NULL OR p.state NOT IN ('withdrawn','deleted') ORDER BY u.nickname,u.login")->fetch_all(MYSQLI_ASSOC);
     }
     
     // For SocialAuthService usage mostly

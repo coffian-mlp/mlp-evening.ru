@@ -8,6 +8,10 @@
  */
 
 return [
+    'save_stream_monitor_settings'=>['role'=>'admin','handler'=>[\Api\EventController::class,'saveMonitoring']],
+    'lyra_notifications_status'=>['role'=>'user','handler'=>[\Api\LyraNotificationsController::class,'status']],
+    'lyra_notifications_connect'=>['role'=>'user','handler'=>[\Api\LyraNotificationsController::class,'connect']],
+    'lyra_notifications_disconnect'=>['role'=>'user','handler'=>[\Api\LyraNotificationsController::class,'disconnect']],
     'save_stream_settings' => ['role'=>'admin','handler'=>[\Api\SelfHostedStreamController::class,'save']],
     'self_hosted_stream_status' => ['role'=>'admin','handler'=>[\Api\SelfHostedStreamController::class,'status']],
     'self_hosted_stream_credentials' => ['role'=>'admin','handler'=>[\Api\SelfHostedStreamController::class,'credentials']],
