@@ -48,15 +48,15 @@ test('broadcast emotions send once, consume SSE events, suppress replay, expire 
  await page.clock.pauseAt(await page.evaluate(()=>Date.now()+1000));
  const sent=page.waitForResponse(r=>r.url().endsWith('/api.php')&&r.request().postData()?.includes('action=send_stream_reaction'));await stage.getByRole('button',{name:'Огонь',exact:true}).click();const out=await(await sent).json();expect(out.success).toBe(true);await expect(stage.locator('.stream-emotion')).toHaveCount(1);
  expect((await post(page,'send_stream_reaction',{reaction:'heart'})).success).toBe(false);await page.evaluate(data=>window.fixtureStreamEvent(data),out.data.event);await expect(stage.locator('.stream-emotion')).toHaveCount(1);
- expect(await stage.locator('.stream-emotion').evaluate(el=>getComputedStyle(el).animationDuration)).toBe('3s');
+ const duration=await stage.locator('.stream-emotion').evaluate(el=>parseFloat(getComputedStyle(el).animationDuration));expect(duration).toBeGreaterThanOrEqual(5);expect(duration).toBeLessThanOrEqual(7);
  const opacity=await stage.locator('.stream-emotion').evaluate(el=>{el.getAnimations().forEach(animation=>{animation.pause();animation.currentTime=1500;});return Number(getComputedStyle(el).opacity);});expect(opacity).toBeGreaterThan(0.95);
  const reactionDir=path.join(root,'docs/tests/MLP-429');fs.mkdirSync(reactionDir,{recursive:true});await stage.screenshot({path:path.join(reactionDir,info.project.name+'-reaction.png')});
  await page.clock.runFor(2100);await expect(stage.locator('.stream-emotion')).toHaveCount(1);await expect(stage.getByRole('button',{name:'Огонь',exact:true})).toBeDisabled();
  await page.clock.runFor(900);await expect(stage.locator('.stream-emotion')).toHaveCount(1);
  await page.clock.runFor(500);await expect(stage.getByRole('button',{name:'Огонь',exact:true})).toBeEnabled();await expect(stage.locator('.stream-reaction-hint')).toHaveText('Одна эмоция раз в 3 секунды');
- await expect(stage.locator('.stream-emotion')).toHaveCount(0);
+ await expect(stage.locator('.stream-emotion')).toHaveCount(1);await page.clock.runFor(3700);await expect(stage.locator('.stream-emotion')).toHaveCount(0);
  await page.emulateMedia({reducedMotion:'reduce'});await page.evaluate(()=>window.fixtureStreamEvent({type:'stream_reaction',event_id:'sr-90001',reaction:'heart',expires_at:Date.now()+7000}));await expect(stage.locator('.stream-emotion')).toHaveClass(/reduced-motion/);
- expect(await stage.locator('.stream-emotion').evaluate(el=>getComputedStyle(el).animationDuration)).toBe('3s');
+ const reducedDuration=await stage.locator('.stream-emotion').evaluate(el=>parseFloat(getComputedStyle(el).animationDuration));expect(reducedDuration).toBeGreaterThanOrEqual(5);expect(reducedDuration).toBeLessThanOrEqual(7);
  await stage.locator('.stream-emotions-enabled').uncheck();await expect(stage.locator('.stream-emotion')).toHaveCount(0);await page.evaluate(()=>window.fixtureStreamEvent({type:'stream_reaction',event_id:'sr-90002',reaction:'heart',expires_at:Date.now()+7000}));await expect(stage.locator('.stream-emotion')).toHaveCount(0);
  await page.clock.resume();await page.reload();await stage.getByRole('button',{name:'Эмоции к эфиру',exact:true}).click();await expect(stage.locator('.stream-emotions-enabled')).not.toBeChecked();await stage.locator('.stream-emotions-enabled').check();
  await page.evaluate(()=>window.fixtureStreamEvent({type:'stream_reaction',event_id:'sr-90003',reaction:'heart',expires_at:Date.now()-1000}));await expect(stage.locator('.stream-emotion')).toHaveCount(0);
@@ -85,4 +85,43 @@ test('actual SSE delivers a newly accepted reaction without chat history replay'
   let text='';while(!text.includes('event: stream_reaction')){const part=await reader.read();if(part.done)break;text+=new TextDecoder().decode(part.value);}
   expect(text).toContain('event: stream_reaction');expect(text).toContain(out.data.event.event_id);
  }finally{clearTimeout(timer);controller.abort();try{await reader?.cancel();}catch(error){}}
+});
+
+async function openEmotionPlayer(page){
+ await page.goto(base+'/',{waitUntil:'domcontentloaded'});await necessary(page);await page.locator('[data-privacy-media]').click();await expect(page.locator('.video-content iframe')).toBeVisible();
+}
+async function windEvent(page,id,random=.5){
+ await page.evaluate(({id,random})=>{const original=Math.random;Math.random=()=>random;try{window.fixtureStreamEvent({type:'stream_reaction',event_id:'sr-'+id,reaction:'heart',expires_at:Date.now()+8000});}finally{Math.random=original;}},{id,random});
+}
+async function particleFrame(particle,progress){
+ return particle.evaluate((el,p)=>{const animation=el.getAnimations()[0];animation.pause();animation.currentTime=animation.effect.getTiming().duration*p;const b=el.getBoundingClientRect(),parent=el.parentElement.getBoundingClientRect();return{x:b.x-parent.x,y:b.y-parent.y,right:b.right-parent.x,bottom:b.bottom-parent.y,width:parent.width,height:parent.height,opacity:Number(getComputedStyle(el).opacity),duration:animation.effect.getTiming().duration};},progress);
+}
+test('MLP-442 emotions start in the left third, drift right and bounce down while fading',async({page},info)=>{
+ await page.clock.install();await openEmotionPlayer(page);await page.clock.pauseAt(await page.evaluate(()=>Date.now()+100));
+ const dir=path.join(root,'docs/tests/MLP-442');fs.mkdirSync(dir,{recursive:true});
+ for(const [index,width]of[1280,390,320].entries()){
+  await page.setViewportSize({width,height:850});await windEvent(page,442000+index);const particle=page.locator('.stream-emotion').last();
+  const start=await particleFrame(particle,0),rising=await particleFrame(particle,.35),top=await particleFrame(particle,.68),bounce=await particleFrame(particle,.82),end=await particleFrame(particle,.98);
+  expect(start.x).toBeGreaterThanOrEqual(0);expect(start.right).toBeLessThanOrEqual(start.width/3);expect(start.duration).toBe(6000);
+  expect(rising.x).toBeGreaterThan(start.x);expect(rising.y).toBeLessThan(start.y);expect(top.x).toBeGreaterThan(rising.x);expect(top.y).toBeLessThan(rising.y);expect(top.y).toBeGreaterThanOrEqual(0);expect(top.y).toBeLessThan(36);
+  expect(bounce.y).toBeGreaterThan(top.y+2);expect(end.y).toBeGreaterThan(bounce.y);expect(end.x).toBeGreaterThan(start.width*2/3);expect(end.right).toBeLessThanOrEqual(end.width);expect(end.opacity).toBeLessThan(.2);
+  for(const frame of[start,rising,top,bounce,end]){expect(frame.y).toBeGreaterThanOrEqual(0);expect(frame.bottom).toBeLessThanOrEqual(frame.height);}
+  await particleFrame(particle,.68);await page.locator('.video-stage').screenshot({path:path.join(dir,info.project.name+'-top-'+width+'.png')});await page.evaluate(()=>document.querySelector('.stream-emotions').replaceChildren());
+ }
+});
+test('MLP-442 each emotion has its own five-to-seven-second lifetime and the crowd cap remains twelve',async({page})=>{
+ await page.clock.install();await openEmotionPlayer(page);await page.clock.pauseAt(await page.evaluate(()=>Date.now()+100));await windEvent(page,442100,0);await windEvent(page,442101,1);
+ expect(await page.locator('.stream-emotion').evaluateAll(nodes=>nodes.map(el=>parseFloat(getComputedStyle(el).animationDuration)))).toEqual([5,7]);
+ await page.clock.runFor(4990);await expect(page.locator('.stream-emotion')).toHaveCount(2);await page.clock.runFor(250);await expect(page.locator('.stream-emotion')).toHaveCount(1);expect(await page.locator('.stream-emotion').evaluate(el=>getComputedStyle(el).animationDuration)).toBe('7s');
+ await page.clock.runFor(2000);await expect(page.locator('.stream-emotion')).toHaveCount(0);
+ for(let i=0;i<20;i++)await windEvent(page,442200+i);await expect(page.locator('.stream-emotion')).toHaveCount(12);
+ await page.getByRole('button',{name:'Эмоции к эфиру',exact:true}).click();await page.locator('.stream-emotions-enabled').uncheck();await expect(page.locator('.stream-emotion')).toHaveCount(0);
+});
+test('MLP-442 reduced motion only fades and active flights adapt to resizing and fullscreen',async({page})=>{
+ await page.clock.install();await page.emulateMedia({reducedMotion:'reduce'});await openEmotionPlayer(page);await page.clock.pauseAt(await page.evaluate(()=>Date.now()+100));await windEvent(page,442300);
+ const still=page.locator('.stream-emotion');await expect(still).toHaveClass(/reduced-motion/);const first=await particleFrame(still,.2),last=await particleFrame(still,.9);expect(first.duration).toBe(6000);expect(last.x).toBeCloseTo(first.x,1);expect(last.y).toBeCloseTo(first.y,1);expect(last.opacity).toBeLessThan(first.opacity);
+ await page.evaluate(()=>document.querySelector('.stream-emotions').replaceChildren());await page.emulateMedia({reducedMotion:'no-preference'});await page.setViewportSize({width:320,height:850});await windEvent(page,442301);
+ const particle=page.locator('.stream-emotion');const small=await particleFrame(particle,.68);await page.setViewportSize({width:1280,height:850});await page.clock.runFor(100);await expect.poll(async()=>Number((await particleFrame(particle,.68)).height)).toBeGreaterThan(small.height);
+ const large=await particleFrame(particle,.68);expect(large.y).toBeGreaterThanOrEqual(0);expect(large.right).toBeLessThanOrEqual(large.width);
+ const fullscreen=page.locator('.stream-fullscreen');if(await fullscreen.isVisible()){await fullscreen.click();await page.clock.runFor(100);await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(true);const frame=await particleFrame(particle,.68);expect(frame.y).toBeGreaterThanOrEqual(0);expect(frame.right).toBeLessThanOrEqual(frame.width);await fullscreen.click();}
 });

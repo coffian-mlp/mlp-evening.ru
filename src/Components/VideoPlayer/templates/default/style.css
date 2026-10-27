@@ -18,11 +18,17 @@
 .video-stage { position:relative; width:100%; aspect-ratio:16/9; flex:0 0 auto; margin-top:auto; min-width:0; }
 .video-stage > .video-content { width:100%; height:100%; aspect-ratio:auto; margin:0; }
 .stream-emotions { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:5; border-radius:16px; }
-.stream-emotion { position:absolute; bottom:12%; font-size:clamp(32px,4vw,54px); text-shadow:0 2px 6px #0006; animation:stream-emotion-rise 3s ease-out forwards; }
-.stream-emotion.reduced-motion { animation:stream-emotion-fade 3s ease-out forwards; bottom:28%; }
+.stream-emotion { position:absolute; bottom:12%; width:max-content; line-height:1; font-size:clamp(32px,4vw,54px); text-shadow:0 2px 6px #0006; will-change:transform,opacity; animation:stream-emotion-wind 6s linear forwards; }
+.stream-emotion.reduced-motion { animation-name:stream-emotion-fade; }
 .video-stage:fullscreen { height:100%; width:100%; aspect-ratio:auto; background:#000; }
 .video-stage:fullscreen > .video-content { height:100%; border-radius:0; }
-@keyframes stream-emotion-rise { 0% { opacity:0; transform:translateY(12px) scale(.8); } 15%,65% { opacity:1; } 100% { opacity:0; transform:translateY(-160px) scale(1.15); } }
+@keyframes stream-emotion-wind {
+    0% { opacity:0; transform:translate(0,0) scale(.85) rotate(-5deg); animation-timing-function:ease-out; }
+    12% { opacity:1; transform:translate(calc(var(--emotion-drift)*.06),calc(var(--emotion-rise)*-.18)) scale(1.04) rotate(0deg); }
+    68% { opacity:1; transform:translate(calc(var(--emotion-drift)*.78),calc(var(--emotion-rise)*-1)) scale(1.04) rotate(6deg); animation-timing-function:ease-out; }
+    82% { opacity:.75; transform:translate(calc(var(--emotion-drift)*.92),calc(var(--emotion-rise)*-1 + var(--emotion-bounce)*.7)) scale(1) rotate(2deg); }
+    100% { opacity:0; transform:translate(var(--emotion-drift),calc(var(--emotion-rise)*-1 + var(--emotion-bounce))) scale(.94) rotate(0deg); }
+}
 @keyframes stream-emotion-fade { 0%,100% { opacity:0; } 20%,70% { opacity:1; } }
-@media(prefers-reduced-motion:reduce) { .stream-emotion { animation:stream-emotion-fade 3s ease-out forwards; bottom:28%; } }
+@media(prefers-reduced-motion:reduce) { .stream-emotion { animation-name:stream-emotion-fade; } }
 @media(max-width:600px) { .stream-emotion { font-size:32px; } }
