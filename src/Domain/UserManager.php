@@ -47,11 +47,11 @@ class UserManager {
 
     public function getAllUsers() {
         $cached = $this->getCache('all_users', 300); // 5 minutes TTL for list
-        if ($cached) return self::withActiveBans($cached); // MLP-352: бан мог истечь, пока жил кеш
+        if ($cached) return self::withActiveBans(array_map([UserRoles::class,'decorate'],$cached)); // MLP-352: бан мог истечь, пока жил кеш
 
         // Fetch users with options via JOINs
         // MLP-352: is_banned — действующий бан: истёкший временный (ban_until в прошлом) не считается.
-        $sql = "SELECT u.id, u.login, u.nickname, u.email, u.role, u.created_at, (u.is_banned = 1 AND (u.ban_until IS NULL OR u.ban_until > UTC_TIMESTAMP())) AS is_banned, u.ban_until, u.muted_until, u.ban_reason,
+        $sql = "SELECT u.id, u.login, u.nickname, u.email, u.role, u.roles_json, u.created_at, (u.is_banned = 1 AND (u.ban_until IS NULL OR u.ban_until > UTC_TIMESTAMP())) AS is_banned, u.ban_until, u.muted_until, u.ban_reason,
                        uo_color.option_value as chat_color,
                        uo_avatar.option_value as avatar_url
                 FROM users u
@@ -74,7 +74,7 @@ class UserManager {
                 // Set defaults if null
                 if (empty($row['chat_color'])) $row['chat_color'] = '#6d2f8e';
                 
-                $users[] = $row;
+                $users[] = UserRoles::decorate($row);
             }
         }
 
@@ -86,7 +86,7 @@ class UserManager {
         // Keeping live DB call for critical auth/session checks
         // But we could add short cache here if needed.
         $stmt = $this->db->prepare("
-            SELECT u.id, u.login, u.nickname, u.email, u.role, (u.is_banned = 1 AND (u.ban_until IS NULL OR u.ban_until > UTC_TIMESTAMP())) AS is_banned, u.ban_until, u.ban_reason,
+            SELECT u.id, u.login, u.nickname, u.email, u.role, u.roles_json, (u.is_banned = 1 AND (u.ban_until IS NULL OR u.ban_until > UTC_TIMESTAMP())) AS is_banned, u.ban_until, u.ban_reason,
                    uo_color.option_value as chat_color,
                    uo_avatar.option_value as avatar_url
             FROM users u
@@ -103,27 +103,55 @@ class UserManager {
             $user['chat_color'] = '#6d2f8e';
         }
         
-        return $user;
+        return UserRoles::decorate($user);
     }
 
     public function getUserByLogin($login) {
-        $stmt = $this->db->prepare("SELECT id, login, nickname, email, role, password_hash, (is_banned = 1 AND (ban_until IS NULL OR ban_until > UTC_TIMESTAMP())) AS is_banned, ban_until, ban_reason FROM users WHERE login = ?"); // MLP-352
+        $stmt = $this->db->prepare("SELECT id, login, nickname, email, role, roles_json, password_hash, (is_banned = 1 AND (ban_until IS NULL OR ban_until > UTC_TIMESTAMP())) AS is_banned, ban_until, ban_reason FROM users WHERE login = ?"); // MLP-352
         $stmt->bind_param("s", $login);
         $stmt->execute();
         $res = $stmt->get_result();
-        return $res ? $res->fetch_assoc() : null;
+        return UserRoles::decorate($res ? ($res->fetch_assoc() ?: null) : null);
     }
 
     public function getUserByEmail($email) {
-        $stmt = $this->db->prepare("SELECT id, login, nickname, email, role FROM users WHERE email = ?");
+        $stmt = $this->db->prepare("SELECT id, login, nickname, email, role, roles_json FROM users WHERE email = ?");
         $stmt->bind_param("s", $email);
         $stmt->execute();
         $res = $stmt->get_result();
-        return $res ? $res->fetch_assoc() : null;
+        return UserRoles::decorate($res ? ($res->fetch_assoc() ?: null) : null);
+    }
+
+    /** Role changes preserve the mandatory baseline and synchronize the old scalar atomically. */
+    public function updateUser($id, $data, ?int $adminActor = null) {
+        if(array_key_exists('roles_json',$data)||array_key_exists('_roles_json',$data))throw new UserError('Используй список ролей пользователя.');
+        $hasRoles=array_key_exists('roles',$data)||array_key_exists('role',$data);
+        if(array_key_exists('roles',$data)&&!is_array($data['roles']))throw new UserError('Передай роли списком.');
+        if(!$hasRoles&&$adminActor===null)return $this->updateUserFields($id,$data);
+        Privacy::lockAccount((int)$id);
+        return (new StreamMonitorStore())->locked(fn()=>Transaction::run($this->db,function()use($id,$data,$adminActor,$hasRoles){
+            if($adminActor!==null)$this->assertCurrentAdministrator($adminActor);
+            if(!$hasRoles)return $this->updateUserFields($id,$data);
+            $s=$this->db->prepare('SELECT id,role,roles_json FROM users WHERE id=? FOR UPDATE');$s->bind_param('i',$id);$s->execute();$old=$s->get_result()->fetch_assoc();
+            if(!$old)throw new UserError('Пользователь не найден.');
+            if(array_key_exists('roles',$data))$roles=UserRoles::normalize($data['roles']);
+            else {
+                $legacy=UserRoles::normalize($data['role']);
+                $extras=array_values(array_intersect(UserRoles::fromUser($old),['streamer']));
+                $roles=$data['role']===UserRoles::primary(UserRoles::fromUser($old))?UserRoles::fromUser($old):UserRoles::normalize(array_values(array_unique(array_merge($legacy,$extras))));
+            }
+            $data['role']=UserRoles::primary($roles);$data['_roles_json']=json_encode($roles,JSON_THROW_ON_ERROR);unset($data['roles']);
+            $ok=$this->updateUserFields($id,$data);
+            if(UserRoles::has($old,'streamer')&&!in_array('streamer',$roles,true)){
+                (new LyraNotifications())->disconnect((int)$id);
+                (new StreamMonitorStore())->suspendStreamer((int)$id);
+            }
+            return $ok;
+        }),8);
     }
 
     // Универсальный метод обновления
-    public function updateUser($id, $data) {
+    private function updateUserFields($id, $data) {
         $updates = [];
         $types = "";
         $params = [];
@@ -173,6 +201,9 @@ class UserManager {
             $types .= "s";
             $params[] = $data['role'];
         }
+        if(isset($data['_roles_json'])){
+            $updates[]='roles_json = ?';$types.='s';$params[]=$data['_roles_json'];
+        }
 
         if (isset($data['login'])) {
             // Check uniqueness
@@ -219,13 +250,18 @@ class UserManager {
 
     // Алиас для профиля
     public function updateProfile($userId, $data) {
-        unset($data['role']); 
+        unset($data['role'], $data['roles'], $data['roles_json'], $data['_roles_json']);
         $result=$this->updateUser($userId, $data);
         if(Privacy::isWithdrawn((int)$userId))Privacy::reviewLegacyFiles((int)$userId);
         return $result;
     }
 
-    public function createUser($login, $password, $role = 'user', $nickname = null, $email = null) {
+    public function createUser($login, $password, $role = 'user', $nickname = null, $email = null, ?int $adminActor = null) {
+        if($adminActor!==null)return (new StreamMonitorStore())->locked(fn()=>Transaction::run($this->db,function()use($login,$password,$role,$nickname,$email,$adminActor){
+            $this->assertCurrentAdministrator($adminActor);
+            return $this->createUser($login,$password,$role,$nickname,$email);
+        }),8);
+        $roles=UserRoles::normalize($role);$role=UserRoles::primary($roles);$rolesJson=json_encode($roles,JSON_THROW_ON_ERROR);
         if (empty($nickname)) $nickname = $login; 
         if ($email === '') $email = null; // Fix for unique constraint on empty emails
         
@@ -250,9 +286,9 @@ class UserManager {
 
         $hash = password_hash($password, PASSWORD_DEFAULT);
         
-        $sql = "INSERT INTO users (login, nickname, password_hash, role, email) VALUES (?, ?, ?, ?, ?)";
+        $sql = "INSERT INTO users (login, nickname, password_hash, role, email, roles_json) VALUES (?, ?, ?, ?, ?, ?)";
         $stmt = $this->db->prepare($sql);
-        $stmt->bind_param("sssss", $login, $nickname, $hash, $role, $email);
+        $stmt->bind_param("ssssss", $login, $nickname, $hash, $role, $email, $rolesJson);
         
         if ($stmt->execute()) {
             $newUserId = $stmt->insert_id;
@@ -433,7 +469,15 @@ class UserManager {
 
     public function streamerDirectory(): array
     {
-        return $this->db->query("SELECT u.id,u.login,u.nickname FROM users u LEFT JOIN account_privacy p ON p.user_id=u.id WHERE p.state IS NULL OR p.state NOT IN ('withdrawn','deleted') ORDER BY u.nickname,u.login")->fetch_all(MYSQLI_ASSOC);
+        $rows=$this->db->query("SELECT u.id,u.login,u.nickname,u.role,u.roles_json FROM users u LEFT JOIN account_privacy p ON p.user_id=u.id WHERE p.state IS NULL OR p.state NOT IN ('withdrawn','deleted') ORDER BY u.nickname,u.login")->fetch_all(MYSQLI_ASSOC);
+        return array_values(array_map([UserRoles::class,'decorate'],array_filter($rows,static fn($row)=>UserRoles::has($row,'streamer'))));
+    }
+
+    private function assertCurrentAdministrator(int $actor): void
+    {
+        $s=$this->db->prepare('SELECT u.role,u.roles_json,p.state FROM users u LEFT JOIN account_privacy p ON p.user_id=u.id WHERE u.id=? FOR UPDATE');
+        $s->bind_param('i',$actor);$s->execute();$row=$s->get_result()->fetch_assoc();
+        if(!$row||!UserRoles::has($row,'admin')||in_array($row['state'],['withdrawn','deleted'],true))throw new UserError('Недостаточно прав для изменения ролей.');
     }
     
     // For SocialAuthService usage mostly
@@ -479,11 +523,11 @@ class UserManager {
             throw new \InvalidArgumentException('Unknown moderation action');
         }
         return Transaction::run($this->db, function () use ($actorId, $targetId, $action, $minutes, $reason): array {
-            $stmt = $this->db->prepare('SELECT id, role, (is_banned = 1 AND (ban_until IS NULL OR ban_until > UTC_TIMESTAMP())) AS is_banned, (muted_until > UTC_TIMESTAMP()) AS is_muted FROM users WHERE id IN (?, ?) ORDER BY id FOR UPDATE');
+            $stmt = $this->db->prepare('SELECT id, role, roles_json, (is_banned = 1 AND (ban_until IS NULL OR ban_until > UTC_TIMESTAMP())) AS is_banned, (muted_until > UTC_TIMESTAMP()) AS is_muted FROM users WHERE id IN (?, ?) ORDER BY id FOR UPDATE');
             $stmt->bind_param('ii', $actorId, $targetId);
             $stmt->execute();
             $rows = [];
-            foreach ($stmt->get_result() as $row) $rows[(int)$row['id']] = $row;
+            foreach ($stmt->get_result() as $row) $rows[(int)$row['id']] = UserRoles::decorate($row);
             $actor = $rows[$actorId] ?? null;
             $target = $rows[$targetId] ?? null;
             $check = !$actor || !empty($actor['is_banned']) || !empty($actor['is_muted'])
@@ -662,7 +706,7 @@ class UserManager {
         if ($byLogin) {
             return $byLogin;
         }
-        $stmt = $this->db->prepare("SELECT id, login, nickname, role FROM users WHERE nickname = ? LIMIT 2");
+        $stmt = $this->db->prepare("SELECT id, login, nickname, role, roles_json FROM users WHERE nickname = ? LIMIT 2");
         $stmt->bind_param("s", $name);
         $stmt->execute();
         $res = $stmt->get_result();
@@ -670,7 +714,7 @@ class UserManager {
         while ($row = $res->fetch_assoc()) {
             $rows[] = $row;
         }
-        return count($rows) === 1 ? $rows[0] : null;
+        return count($rows) === 1 ? UserRoles::decorate($rows[0]) : null;
     }
 
     /**

@@ -66,6 +66,7 @@ class SocialAuthService {
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['login'];
                 $_SESSION['role'] = $user['role'];
+                $_SESSION['roles'] = \Domain\UserRoles::fromUser($user);
                 \Domain\Privacy::rememberSession((int)$user['id']);
                 Auth::issueRememberToken($user['id']); // соц-вход = «запомнить меня» включён (MLP-223)
             }
@@ -105,6 +106,7 @@ class SocialAuthService {
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['username'] = $user['login'];
             $_SESSION['role'] = $user['role'];
+            $_SESSION['roles'] = \Domain\UserRoles::fromUser($user);
             \Domain\Privacy::rememberSession((int)$user['id']);
             Auth::issueRememberToken($user['id']); // соц-вход = «запомнить меня» включён (MLP-223)
             

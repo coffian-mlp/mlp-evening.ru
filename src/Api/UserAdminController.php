@@ -51,7 +51,16 @@ class UserAdminController {
         $id = $_POST['user_id'] ?? '';
         $login = trim($_POST['login'] ?? '');
         $nickname = trim($_POST['nickname'] ?? '');
-        $role = $_POST['role'] ?? 'user';
+        $roleData=[];
+        try {
+            if(array_key_exists('roles',$_POST)){
+                if(!is_array($_POST['roles']))throw new \Core\UserError('Передай роли списком.');
+                $roleData['roles']=\Domain\UserRoles::normalize($_POST['roles']);
+            }elseif(array_key_exists('role',$_POST)){
+                if(!is_string($_POST['role']))throw new \Core\UserError('Некорректная роль.');
+                \Domain\UserRoles::normalize($_POST['role']);$roleData['role']=$_POST['role'];
+            }
+        }catch(\Throwable $e){Response::caught($e);}
         $password = $_POST['password'] ?? '';
         // MLP-258: email из карточки ('' = снять email; уникальность проверяет updateUser)
         $email = isset($_POST['email']) ? trim($_POST['email']) : null;
@@ -77,7 +86,6 @@ class UserAdminController {
             $data = [
                 'login' => $login,
                 'nickname' => $nickname,
-                'role' => $role,
                 'avatar_url' => $avatar_url,
                 'chat_color' => $chat_color,
                 'font_preference' => $font_preference,
@@ -86,6 +94,7 @@ class UserAdminController {
             if ($email !== null) {
                 $data['email'] = $email;
             }
+            $data+=$roleData;
 
             if (!empty($id)) {
                 // Update
@@ -95,7 +104,7 @@ class UserAdminController {
                 }
 
                 // UserManager::updateUser сам раскладывает поля users/user_options
-                $userManager->updateUser($id, $data);
+                $userManager->updateUser($id, $data, \Domain\Auth::userId());
                 Response::json(true, "Пользователь обновлен");
             } else {
                 // Create
@@ -103,7 +112,7 @@ class UserAdminController {
                 if ($pwErr = Auth::validatePasswordPolicy($password)) Response::json(false, $pwErr, 'error');
 
                 // MLP-258 (ревью): email из карточки участвует и в создании
-                $newId = $userManager->createUser($login, $password, $role, $nickname, $email ?? '');
+                $newId = $userManager->createUser($login, $password, $roleData['roles']??$roleData['role']??'user', $nickname, $email ?? '', \Domain\Auth::userId());
 
                 // Доп. поля (опции) — отдельным updateUser, как и раньше
                 $userManager->updateUser($newId, [

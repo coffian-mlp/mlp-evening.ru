@@ -21,21 +21,21 @@ try {
     foreach (['ban', 'mute', 'unban'] as $type) {
         $command = ['id' => 392, 'handler_type' => $type, 'command_prefix' => '/x'];
         $payload = ['username' => 'actor', 'user_id' => $actor, 'moderator_role' => 'admin', 'message' => '/x @' . $nick . ' 15 причина'];
-        $db->query("UPDATE users SET role = 'user' WHERE id = $actor");
+        $users->updateUser($actor, ['roles'=>['user','user']]);
         $handler->handle($command, $payload);
         check(!empty($llm->replies) && str_contains(end($llm->replies), 'прав'), "$type refuses revoked queued authority");
-        $db->query("UPDATE users SET role = 'moderator' WHERE id = $actor");
+        $users->updateUser($actor, ['roles'=>['user','moderator']]);
         $handler->handle($command, $payload);
         check(str_contains(end($llm->replies), 'коллег'), "$type rechecks admin-to-moderator downgrade");
     }
-    $db->query("UPDATE users SET role = 'admin' WHERE id = $actor");
-    $db->query("UPDATE users SET role = 'user' WHERE id = $target");
+    $users->updateUser($actor, ['roles'=>['user','admin']]);
+    $users->updateUser($target, ['roles'=>['user','user']]);
     check($users->applyModeration($actor, $target, 'ban', 30, 'test')['error'] === null, 'current admin can ban');
     check(!empty($users->getBanStatus($target)['is_banned']), 'sanction persisted');
-    $db->query("UPDATE users SET role = 'admin' WHERE id = $target");
+    $users->updateUser($target, ['roles'=>['user','admin']]);
     check($users->applyModeration($actor, $target, 'lift')['error'] !== null, 'target promotion prevents lifting');
     check(!empty($users->getBanStatus($target)['is_banned']), 'refused lift preserves ban');
-    $db->query("UPDATE users SET role = 'user' WHERE id = $target");
+    $users->updateUser($target, ['roles'=>['user','user']]);
     $db->query("UPDATE users SET muted_until = DATE_ADD(UTC_TIMESTAMP(), INTERVAL 30 MINUTE) WHERE id = $target");
     $result = $users->applyModeration($actor, $target, 'lift');
     check($result['error'] === null && $result['banned'] && $result['muted'], 'one transaction lifts both sanctions');

@@ -35,16 +35,24 @@ final class LyraNotifications
 
     public function status(int $user): array
     {
+        $eligible=$this->eligible($user);
         $uid = $this->social($user);
         $r = $this->sql('SELECT * FROM lyra_notification_links WHERE user_id=?', [$user])->get_result()->fetch_assoc();
-        $ready = $uid !== null && $r && $r['chat_id'] !== null && $r['disabled_reason'] === null
+        $ready = $eligible && $uid !== null && $r && $r['chat_id'] !== null && $r['disabled_reason'] === null
             && $r['telegram_uid'] === $uid && hash_equals($r['bot_fingerprint'], self::fingerprint());
-        return ['telegram_linked'=>$uid !== null, 'configured'=>self::fingerprint() !== '', 'connected'=>(bool)$ready];
+        return ['eligible'=>$eligible,'telegram_linked'=>$uid !== null, 'configured'=>self::fingerprint() !== '', 'connected'=>(bool)$ready];
+    }
+
+    public function eligible(int $user): bool
+    {
+        $row=(new UserManager())->getUserById($user);
+        return $row!==null&&UserRoles::has($row,'streamer');
     }
 
     public function begin(int $user, ?array $identity = null, ?int $now = null): string
     {
         $now ??= time();
+        if(!$this->eligible($user))throw new UserError('Уведомления эфира доступны пользователям с ролью стримера.');
         if (Privacy::isWithdrawn($user)) throw new UserError('Сначала восстанови согласие на обработку данных.');
         $uid = $this->social($user);
         if ($uid === null) throw new UserError('Сначала привяжи Telegram в профиле.');
@@ -71,7 +79,7 @@ final class LyraNotifications
             $r = $this->sql('SELECT * FROM lyra_notification_links WHERE token_hash=? FOR UPDATE', [hash('sha256',$token)])->get_result()->fetch_assoc();
             if (!$r || strtotime($r['token_expires'].' UTC') <= $now || $r['telegram_uid'] !== $sender
                 || !hash_equals($r['bot_fingerprint'],$fingerprint) || $this->social((int)$r['user_id']) !== $sender
-                || Privacy::isWithdrawn((int)$r['user_id'])) return false;
+                || Privacy::isWithdrawn((int)$r['user_id']) || !$this->eligible((int)$r['user_id'])) return false;
             $this->sql('UPDATE lyra_notification_links SET chat_id=?,connected_at=?,token_hash=NULL,token_expires=NULL,disabled_reason=NULL WHERE user_id=?', [$chat,gmdate('Y-m-d H:i:s',$now),$r['user_id']]);
             return true;
         });
@@ -103,8 +111,9 @@ final class LyraNotifications
         if($sender!==$chat)return null;
         $token=$this->sql("SELECT value FROM site_options WHERE key_name='announcements_token' FOR UPDATE")->get_result()->fetch_assoc()['value']??\Infra\Env::get('TELEGRAM_ANNOUNCEMENTS_TOKEN','');
         if($token===''||!hash_equals(hash('sha256',$token),$fingerprint))return null;
-        $rows=$this->sql("SELECT l.user_id FROM lyra_notification_links l JOIN user_socials s ON s.user_id=l.user_id AND s.provider='telegram' AND s.provider_uid=BINARY l.telegram_uid JOIN users u ON u.id=l.user_id LEFT JOIN account_privacy p ON p.user_id=l.user_id WHERE l.telegram_uid=? AND l.chat_id=? AND l.bot_fingerprint=? AND l.disabled_reason IS NULL AND (p.state IS NULL OR p.state NOT IN ('withdrawn','deleted')) FOR UPDATE",[$sender,$chat,$fingerprint])->get_result();
-        return $rows->num_rows===1?(int)$rows->fetch_assoc()['user_id']:null;
+        $rows=$this->sql("SELECT l.user_id,u.role,u.roles_json FROM lyra_notification_links l JOIN user_socials s ON s.user_id=l.user_id AND s.provider='telegram' AND s.provider_uid=BINARY l.telegram_uid JOIN users u ON u.id=l.user_id LEFT JOIN account_privacy p ON p.user_id=l.user_id WHERE l.telegram_uid=? AND l.chat_id=? AND l.bot_fingerprint=? AND l.disabled_reason IS NULL AND (p.state IS NULL OR p.state NOT IN ('withdrawn','deleted')) FOR UPDATE",[$sender,$chat,$fingerprint])->get_result();
+        if($rows->num_rows!==1)return null;
+        $row=$rows->fetch_assoc();return UserRoles::has($row,'streamer')?(int)$row['user_id']:null;
     }
 
     public function eraseUserData(int $user): void { $this->sql('DELETE FROM lyra_notification_links WHERE user_id=?',[$user]); }

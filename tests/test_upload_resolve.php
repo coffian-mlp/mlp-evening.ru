@@ -34,6 +34,13 @@ $_FILES['avatar_file'] = ['error' => UPLOAD_ERR_NO_FILE];
 ok($um->resolveFromRequest('avatar_file', '/upload/avatars/av_2.png', '/upload/avatars/') === '/upload/avatars/av_2.png', 'UPLOAD_ERR_NO_FILE = «файла нет», работает URL-ветка');
 unset($_FILES['avatar_file']);
 
+$_POST['avatar_url']='/assets/img/default-avatar.png';
+ok($um->resolveAvatar()==='/assets/img/default-avatar.png','default avatar remains valid while editing roles');
+$stub=new class extends UploadManager {public function uploadFromPost($file): string{return '/upload/avatars/fixture.png';}};
+$_FILES['avatar_file']=['error'=>UPLOAD_ERR_OK];
+ok($stub->resolveAvatar()==='/upload/avatars/fixture.png','uploaded file still takes priority over default avatar');
+unset($_FILES['avatar_file'],$_POST['avatar_url']);
+
 echo "\n";
 if ($fail > 0) { echo "FAIL: $fail\n"; exit(1); }
 echo "ALL PASS\n";

@@ -18,6 +18,7 @@ class ProfileComponent extends Component {
             $this->result['options'] = $userManager->getUserOptions($userId);
             $this->result['csrf_token'] = Auth::generateCsrfToken();
             $this->result['is_admin'] = Auth::isAdmin();
+            $this->result['is_streamer']=\Domain\UserRoles::has($this->result['user']??[],'streamer');
             
             $config = ConfigManager::getInstance();
             $this->result['telegram_auth_enabled'] = (bool)$config->getOption('telegram_auth_enabled', 0);

@@ -35,6 +35,7 @@ try {
     // But wait, the original logic required login. Let's make it flexible.
     
     $isLoggedIn = Auth::check();
+    if($isLoggedIn)Auth::refreshRoles();
     
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Check header OR post field

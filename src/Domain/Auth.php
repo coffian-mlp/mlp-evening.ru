@@ -64,8 +64,22 @@ class Auth {
     }
 
     public static function role(): string {
+        return UserRoles::primary(self::roles());
+    }
+
+    public static function roles(): array {
         self::ensureSession();
-        return (string)($_SESSION['role'] ?? 'user');
+        return UserRoles::fromUser($_SESSION);
+    }
+
+    public static function hasRole(string $role): bool { return self::check()&&in_array($role,self::roles(),true); }
+
+    /** HTTP boundaries refresh memberships so revocation applies without another login. */
+    public static function refreshRoles(): void {
+        if(!self::check())return;
+        $user=(new UserManager())->getUserById(self::userId());
+        $_SESSION['roles']=$user?UserRoles::fromUser($user):['user'];
+        $_SESSION['role']=UserRoles::primary($_SESSION['roles']);
     }
 
     public static function requireLogin() {
@@ -93,13 +107,12 @@ class Auth {
 
     public static function isAdmin() {
         if (!self::check()) return false;
-        return isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
+        return self::hasRole('admin');
     }
 
     public static function isModerator() {
         if (!self::check()) return false;
-        $role = $_SESSION['role'] ?? '';
-        return $role === 'admin' || $role === 'moderator';
+        return self::hasRole('admin') || self::hasRole('moderator');
     }
 
     public static function requireAdmin() {
@@ -144,6 +157,7 @@ class Auth {
                 // Теперь используем nickname для отображения!
                 $_SESSION['username'] = !empty($row['nickname']) ? $row['nickname'] : $row['login'];
                 $_SESSION['role'] = $row['role'];
+                $_SESSION['roles'] = UserRoles::fromUser($row);
                 Privacy::rememberSession((int)$row['id']);
                 
                 self::generateCsrfToken();
@@ -226,6 +240,7 @@ class Auth {
         $_SESSION['user_id']  = $user['id'];
         $_SESSION['username'] = !empty($user['nickname']) ? $user['nickname'] : $user['login'];
         $_SESSION['role']     = $user['role'];
+        $_SESSION['roles']    = UserRoles::fromUser($user);
         Privacy::rememberSession((int)$user['id']);
         self::generateCsrfToken();
 

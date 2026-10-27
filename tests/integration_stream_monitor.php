@@ -9,7 +9,7 @@ $denied=static function($call) {try{$call();return false;}catch(Core\UserError $
 $saved=[];$ids=[];$eventIds=[];$suffix=bin2hex(random_bytes(5));$now=time()+100;$state='live';$seq=0;$sent=[];$writes=0;
 foreach(['ai_bot_user_id','stream_source','self_hosted_hls_url','stream_monitor_default_streamer','announcements_token','announcements_channel','stream_monitor_heartbeat'] as $key)$saved[$key]=$cfg->getOption($key,null);
 try{
-    foreach(['host'=>'user','other'=>'user','admin'=>'admin','bot'=>'user'] as $name=>$role)$ids[$name]=$users->createUser('it_mlp444_'.$name.'_'.$suffix,bin2hex(random_bytes(20)),$role,'Monitor '.$name);
+    foreach(['host'=>'streamer','other'=>'user','admin'=>'admin','bot'=>'user'] as $name=>$role)$ids[$name]=$users->createUser('it_mlp444_'.$name.'_'.$suffix,bin2hex(random_bytes(20)),$role,'Monitor '.$name);
     $cfg->setOption('ai_bot_user_id',(string)$ids['bot']);$cfg->setOption('stream_source','self_hosted');$cfg->setOption('self_hosted_hls_url','/live/evening/index.m3u8');
     $cfg->setOption('stream_monitor_default_streamer',(string)$ids['host']);$cfg->setOption('announcements_token','123456:'.str_repeat('a',35));$cfg->setOption('announcements_channel','@test_channel');
     $uid=(string)(700000000+$ids['host']);

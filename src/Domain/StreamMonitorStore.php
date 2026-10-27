@@ -59,4 +59,15 @@ final class StreamMonitorStore
         $config=\Infra\ConfigManager::getInstance();
         if((int)$config->getOption('stream_monitor_default_streamer','0')===$user)$config->setOption('stream_monitor_default_streamer','0');
     }
+
+    public function suspendStreamer(int $user): void
+    {
+        foreach($this->rows('SELECT * FROM stream_monitor_runs WHERE streamer_user_id=? AND ended=0',[$user]) as $run)$this->finish($run);
+        $this->sql('UPDATE events SET streamer_user_id=NULL,monitor_stream=0 WHERE streamer_user_id=?',[$user]);
+        $config=\Infra\ConfigManager::getInstance();
+        if((int)$config->getOption('stream_monitor_default_streamer','0')===$user){
+            $config->setOption('stream_monitor_default_streamer','0');
+            $this->sql('UPDATE events SET monitor_stream=0 WHERE streamer_user_id IS NULL AND monitor_stream=1');
+        }
+    }
 }

@@ -109,7 +109,9 @@ class UploadManager {
      * (ключ файла + каталог) — раньше дублировалась в Profile/UserAdmin.
      */
     public function resolveAvatar(): string {
-        return $this->resolveFromRequest('avatar_file', trim($_POST['avatar_url'] ?? ''), '/upload/avatars/');
+        $url=trim($_POST['avatar_url']??'');
+        if($url==='/assets/img/default-avatar.png'&&(!isset($_FILES['avatar_file'])||$_FILES['avatar_file']['error']===UPLOAD_ERR_NO_FILE))return $url;
+        return $this->resolveFromRequest('avatar_file', $url, '/upload/avatars/');
     }
 
     /**

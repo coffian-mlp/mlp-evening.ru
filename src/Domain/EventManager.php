@@ -132,7 +132,8 @@ class EventManager {
         $d['streamer_user_id']=(int)($d['streamer_user_id']??0)?:null;
         if(!in_array($d['monitor_stream'],[0,1],true))throw new \Core\UserError('Некорректная настройка наблюдения за эфиром.');
         $id=$d['streamer_user_id']??(int)\Infra\ConfigManager::getInstance()->getOption('stream_monitor_default_streamer','0');
-        if(($d['monitor_stream']||$d['streamer_user_id'])&&($id<1||!(new UserManager())->getUserById($id)||Privacy::isWithdrawn($id)))throw new \Core\UserError('Выбери действующего стримера события или задай стримера по умолчанию.');
+        $user=$id>0?(new UserManager())->getUserById($id):null;
+        if(($d['monitor_stream']||$d['streamer_user_id'])&&(!$user||!UserRoles::has($user,'streamer')||Privacy::isWithdrawn($id)))throw new \Core\UserError('Выбери пользователя с ролью стримера или задай стримера по умолчанию.');
         return $d;
     }
 }

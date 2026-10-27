@@ -5,7 +5,7 @@ it_require_db();$db=Infra\Database::getInstance()->getConnection();$cfg=Infra\Co
 $saved=[];$keys=['announcements_token','announcements_verified_token_hash','announcements_verified_bot_id','lyra_bot_verified_username','lyra_bot_verified_username_hash'];
 foreach($keys as $k)$saved[$k]=$cfg->getOption($k,null);
 $fail=0;$check=static function($v,$m)use(&$fail){echo($v?'[OK] ':'[FAIL] ').$m."\n";if(!$v)$fail++;};
-$suffix=bin2hex(random_bytes(6));$id=$users->createUser('it_mlp444_poller_'.$suffix,bin2hex(random_bytes(20)),'user');$bot=987111222;
+$suffix=bin2hex(random_bytes(6));$id=$users->createUser('it_mlp444_poller_'.$suffix,bin2hex(random_bytes(20)),'streamer');$bot=987111222;
 $oldCursor=$db->query('SELECT update_offset FROM telegram_announcement_bot_cursors WHERE bot_id='.$bot)->fetch_assoc();$updateId=1900000000+random_int(10000,1000000);
 $updates=[];$calls=[];$uid=(string)(900000000+$id);
 try{

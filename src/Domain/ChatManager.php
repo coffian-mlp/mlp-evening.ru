@@ -203,7 +203,7 @@ class ChatManager {
     public function deleteMessage($messageId, $userId, $actorRole = null) {
         // Fetch message AND user role to check hierarchy
         $stmt = $this->db->prepare("
-            SELECT cm.user_id, u.role as owner_role 
+            SELECT cm.user_id, u.role as owner_role, u.roles_json as owner_roles_json
             FROM chat_messages cm
             LEFT JOIN users u ON cm.user_id = u.id
             WHERE cm.id = ?
@@ -217,7 +217,7 @@ class ChatManager {
         }
 
         $isOwner = ($row['user_id'] == $userId);
-        $ownerRole = $row['owner_role'] ?? 'user';
+        $ownerRole = UserRoles::primary(UserRoles::fromUser(['role'=>$row['owner_role']??'user','roles_json'=>$row['owner_roles_json']??null]));
 
         if (!$isOwner) {
             // Not owner -> Check moderation rights
@@ -252,7 +252,7 @@ class ChatManager {
 
     public function restoreMessage($messageId, $userId, $actorRole = null) {
         $stmt = $this->db->prepare("
-            SELECT cm.user_id, cm.deleted_at, u.role as owner_role
+            SELECT cm.user_id, cm.deleted_at, u.role as owner_role, u.roles_json as owner_roles_json
             FROM chat_messages cm
             LEFT JOIN users u ON cm.user_id = u.id
             WHERE cm.id = ?
@@ -266,7 +266,7 @@ class ChatManager {
         }
 
         $isOwner = ($row['user_id'] == $userId);
-        $ownerRole = $row['owner_role'] ?? 'user';
+        $ownerRole = UserRoles::primary(UserRoles::fromUser(['role'=>$row['owner_role']??'user','roles_json'=>$row['owner_roles_json']??null]));
 
         if (!$actorRole) {
             // Not a moderator, must be owner

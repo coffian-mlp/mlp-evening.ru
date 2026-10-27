@@ -7,7 +7,7 @@ $save=static function($s)use($file){$mask=umask(0077);file_put_contents($file,js
 if($mode==='setup'){
     if(is_file($file))throw new RuntimeException('Cleanup previous fixture');
     $s=['users'=>[],'options'=>$db->query('SELECT * FROM site_options')->fetch_all(MYSQLI_ASSOC),'event'=>null,'bot_cursor'=>$db->query('SELECT * FROM telegram_announcement_bot_cursors WHERE bot_id=987333222')->fetch_assoc()];$save($s);
-    foreach(['admin'=>'admin','host'=>'user','viewer'=>'user','bot'=>'user'] as $name=>$role){
+    foreach(['admin'=>['user','admin','streamer'],'host'=>'streamer','viewer'=>'streamer','bot'=>'user'] as $name=>$role){
         $login='it_mlp444_ui_'.$name.'_'.bin2hex(random_bytes(4));$password=bin2hex(random_bytes(20));$id=$users->createUser($login,$password,$role,'Monitor '.$name);
         $s['users'][$name]=compact('login','password','id');$save($s);Domain\Privacy::setAccountConsent($id,true);
     }
@@ -23,6 +23,12 @@ if($mode==='setup'){
     $monitor->tick();$r=$store->rows('SELECT * FROM stream_monitor_runs WHERE event_id=?',[$s['event']])[0];
     $store->sql('UPDATE stream_monitor_runs SET armed=1,lost_at=? WHERE run_id=?',[gmdate('Y-m-d H:i:s',time()-60),$r['run_id']]);$monitor->tick();
     $i=$store->incident((int)$store->run($r['run_id'])['incident_id']);$s['incident']=(int)$i['id'];$s['interaction']=(int)$i['interaction_id'];$s['run']=$r['run_id'];$save($s);
+}elseif($mode==='roles_set'||$mode==='roles_get'){
+    $s=json_decode(file_get_contents($file),true,512,JSON_THROW_ON_ERROR);$name=$argv[2]??'';
+    if(!isset($s['users'][$name]))throw new RuntimeException('Unknown fixture user');
+    $id=(int)$s['users'][$name]['id'];
+    if($mode==='roles_get'){echo json_encode($users->getUserById($id)['roles'],JSON_THROW_ON_ERROR);exit;}
+    $users->updateUser($id,['roles'=>array_slice($argv,3)]);
 }elseif($mode==='accept'){
     $s=json_decode(file_get_contents($file),true,512,JSON_THROW_ON_ERROR);
     if(!(new Domain\LyraNotifications())->accept($argv[2]??'',$s['uid'],$s['uid'],Domain\LyraNotifications::fingerprint()))throw new RuntimeException('Connection failed');

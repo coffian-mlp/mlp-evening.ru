@@ -11,6 +11,7 @@ require_once __DIR__ . '/autoload.php';
 // 2. Инициализация сессии
 Auth::check();
 Auth::tryRememberLogin(); // remember-me: авто-вход по cookie, если сессии нет (MLP-223)
+Auth::refreshRoles();
 
 if (Auth::userId()) {
     \Domain\Privacy::lockAccount(Auth::userId());

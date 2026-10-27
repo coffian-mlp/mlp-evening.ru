@@ -74,12 +74,15 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Роль</label>
-                    <select name="role" id="user_role" class="form-input">
-                        <option value="user">Пользователь</option>
-                        <option value="moderator">Модератор</option>
-                        <option value="admin">Администратор</option>
-                    </select>
+                    <fieldset id="user_roles" style="border:1px solid var(--border-color);border-radius:8px;padding:12px">
+                        <legend>Роли</legend>
+                        <input type="hidden" name="roles[]" value="user">
+                        <label style="display:block"><input type="checkbox" value="user" checked disabled> Пользователь — обязательная роль</label>
+                        <label style="display:block"><input type="checkbox" name="roles[]" value="moderator"> Модератор</label>
+                        <label style="display:block"><input type="checkbox" name="roles[]" value="admin"> Администратор</label>
+                        <label style="display:block"><input type="checkbox" name="roles[]" value="streamer"> Стример</label>
+                        <small>Можно выбрать несколько ролей. Стримеру доступны уведомления Лиры в профиле. Снятие этой роли отключает его уведомления и наблюдение за назначенными ему событиями.</small>
+                    </fieldset>
                 </div>
 
                 <div class="form-group">

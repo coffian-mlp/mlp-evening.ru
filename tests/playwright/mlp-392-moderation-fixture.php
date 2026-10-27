@@ -18,8 +18,8 @@ if ($action === 'setup') {
         if (!str_starts_with($users->getUserById($s[$key])['login'] ?? '', 'it_mlp392_')) throw new RuntimeException('Unexpected fixture owner');
     }
     $actor = (int)$s['actor']; $target = (int)$s['target'];
-    if ($action === 'downgrade') $db->query("UPDATE users SET role = 'moderator' WHERE id = $actor");
-    elseif ($action === 'revoke') $db->query("UPDATE users SET role = 'user' WHERE id = $actor");
+    if ($action === 'downgrade') $users->updateUser($actor,['roles'=>['user','moderator']]);
+    elseif ($action === 'revoke') $users->updateUser($actor,['roles'=>['user']]);
     elseif ($action === 'cleanup') {
         $db->query("DELETE FROM audit_logs WHERE user_id = $actor AND target_id = $target");
         $users->deleteUser($target); $users->deleteUser($actor); unlink($path);

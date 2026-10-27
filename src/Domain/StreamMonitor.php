@@ -52,7 +52,7 @@ final class StreamMonitor
             if (empty($e['monitor_stream']) || $start>$now || $end<=$now) continue;
             $streamer=(int)($e['streamer_user_id']?:$default);
             $user=$streamer>0?(new UserManager())->getUserById($streamer):null;
-            if (!$user || Privacy::isWithdrawn($streamer)) continue;
+            if (!$user || !UserRoles::has($user,'streamer') || Privacy::isWithdrawn($streamer)) continue;
             $e['streamer']=$streamer;$e['ends_at']=StreamHealthPolicy::date($end);
             $e['run_id'].='_u'.$streamer.'_'.substr(hash('sha256',$settings['url']),0,8);
             $active=$e; // One stream path: the latest started monitored event takes responsibility.
@@ -116,8 +116,8 @@ final class StreamMonitor
         $run=$this->store->run($i['run_id'],$current);$active=$this->active($now,$current);
         if (!$run || $run['ended'] || !$active || $active['run_id']!==$run['run_id'] || $active['streamer']!==(int)$run['streamer_user_id']) return false;
         if($current){
-            $user=$this->store->rows('SELECT u.role,p.state FROM users u LEFT JOIN account_privacy p ON p.user_id=u.id WHERE u.id=? FOR UPDATE',[$actor])[0]??null;
-            return $user && !in_array($user['state'],['withdrawn','deleted'],true) && ($actor===(int)$run['streamer_user_id']||$user['role']==='admin');
+            $user=$this->store->rows('SELECT u.role,u.roles_json,p.state FROM users u LEFT JOIN account_privacy p ON p.user_id=u.id WHERE u.id=? FOR UPDATE',[$actor])[0]??null;
+            return $user && !in_array($user['state'],['withdrawn','deleted'],true) && ($actor===(int)$run['streamer_user_id']||UserRoles::has($user,'admin'));
         }
         $user=(new UserManager())->getUserById($actor);
         return $user && !Privacy::isWithdrawn($actor) && ($actor===(int)$run['streamer_user_id'] || $user['role']==='admin');

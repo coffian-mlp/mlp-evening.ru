@@ -77,7 +77,8 @@ class EventController {
     public static function saveMonitoring(): void
     {
         $id=(int)($_POST['default_streamer']??0);
-        if($id>0&&(!(new \Domain\UserManager())->getUserById($id)||\Domain\Privacy::isWithdrawn($id)))Response::fail('Выбери действующего пользователя.');
+        $user=$id>0?(new \Domain\UserManager())->getUserById($id):null;
+        if($id>0&&(!$user||!\Domain\UserRoles::has($user,'streamer')||\Domain\Privacy::isWithdrawn($id)))Response::fail('Выбери пользователя с ролью стримера.');
         \Infra\ConfigManager::getInstance()->setOption('stream_monitor_default_streamer',(string)$id);
         Response::ok('Стример по умолчанию сохранён.');
     }

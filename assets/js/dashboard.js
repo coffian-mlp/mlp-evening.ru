@@ -426,7 +426,7 @@ function loadUsers() {
                             <td>${u.id}</td>
                             <td>${escapeHtml(u.login)}</td>
                             <td>${avatar}${nameDisplay}</td>
-                            <td><span class="status-badge ${u.role === 'admin' ? 'old' : 'fresh'}">${u.role}</span></td>
+                            <td><span class="status-badge ${u.role === 'admin' ? 'old' : 'fresh'}">${escapeHtml((u.roles||[u.role]).map(r=>({user:'Пользователь',moderator:'Модератор',admin:'Администратор',streamer:'Стример'}[r]||r)).join(', '))}</span></td>
                             <td>${status}</td>
                             <td>${u.created_at ? u.created_at : '-'}</td>
                             <td style="text-align: right;">
@@ -564,7 +564,7 @@ function openUserModal() {
     $('#user_avatar_url').val('');
     $('#user_chat_color').val('#6d2f8e');
     $('#user_password').val('');
-    $('#user_role').val('user');
+    $('#user_roles input[type=checkbox]').prop('checked',false).filter('[value=user]').prop('checked',true);
     $('#user_font_preference').val('open_sans'); // Default font
     $('#user_font_scale').val(100);
     $('#user_font_scale_value').text('100%');
@@ -612,8 +612,8 @@ function editUser(user) {
     $('#user_avatar_url').val(user.avatar_url || '');
     $('#user_chat_color').val(user.chat_color || '#6d2f8e');
     $('#user_password').val('');
-    $('#user_role').val(user.role);
-    if (window.syncCustomSelectLabel) window.syncCustomSelectLabel(document.getElementById('user_role'));
+    var roles=user.roles||['user',user.role];
+    $('#user_roles input[type=checkbox]').each(function(){this.checked=this.value==='user'||roles.includes(this.value);});
     $('#user-modal-title').text('Редактировать пони');
 
     // MLP-258: дата регистрации + статусы (read-only)
