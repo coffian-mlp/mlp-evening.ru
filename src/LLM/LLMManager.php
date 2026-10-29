@@ -21,6 +21,7 @@ class LLMManager {
     private $fastProviders = [];
     private $botUserId;
     private $systemPrompt;
+    private string $additionalInstructions = '';
     /** MLP-349: промпт персоны + знания о чате (правила, роли); собирается лениво, см. personaPrompt(). */
     private ?string $personaPromptCache = null;
     private $chatManager;
@@ -43,6 +44,7 @@ class LLMManager {
         $config = ConfigManager::getInstance();
         $this->botUserId = (int)$config->getOption('ai_bot_user_id', 0);
         $this->systemPrompt = $config->getOption('ai_system_prompt', ''); // Промпт теперь берем только из админки (БД), без длинного дефолта в коде
+        $this->additionalInstructions = trim((string)$config->getOption('ai_additional_instructions', ''));
         $this->chatManager = new ChatManager();
 
         $this->proxyUrl = $config->getOption('ai_proxy_url', null); // Может быть как socks5://..., так и vless://...
@@ -1304,6 +1306,9 @@ class LLMManager {
     private function personaPrompt(): string {
         if ($this->personaPromptCache === null) {
             $prompt = (string)$this->systemPrompt;
+            if ($this->additionalInstructions !== '') {
+                $prompt .= "\n\n[Дополнительные инструкции Лире]:\n" . $this->additionalInstructions;
+            }
             try {
                 $knowledge = ChatKnowledge::forPersona($this->botUserId);
                 if ($knowledge !== null) {

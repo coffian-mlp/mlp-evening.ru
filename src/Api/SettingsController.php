@@ -40,6 +40,7 @@ class SettingsController {
         'ai_bot_user_id'     => 'int',
         'ai_enabled'         => 'int',
         'ai_system_prompt'   => 'string',
+        'ai_additional_instructions' => 'string',
         'ai_aliases'         => 'string',
         'ai_proxy_url'       => 'string',
         'ai_primary_provider' => 'string',

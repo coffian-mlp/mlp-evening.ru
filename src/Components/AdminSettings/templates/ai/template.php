@@ -24,6 +24,12 @@ $config = $arResult['config']; // Helper
         </div>
 
         <div class="form-group">
+            <label class="form-label" for="ai_additional_instructions">Дополнительные инструкции Лире</label>
+            <textarea id="ai_additional_instructions" name="ai_additional_instructions" class="form-input" rows="4" aria-describedby="ai_additional_instructions_hint"><?= htmlspecialchars($config->getOption('ai_additional_instructions', ''), ENT_QUOTES, 'UTF-8') ?></textarea>
+            <p id="ai_additional_instructions_hint" style="font-size: 0.85em; color: #666; margin-top: 4px;">Дополняют системный промпт в репликах Лиры, включая анонсы. Например, задают тему вечерка. Действуют до очистки поля. Изменения применятся в течение минуты после сохранения.</p>
+        </div>
+
+        <div class="form-group">
             <label class="form-label">Правила чата</label>
             <textarea name="ai_chat_rules" class="form-input" rows="5" placeholder="1. …&#10;2. …"><?= htmlspecialchars($config->getOption('ai_chat_rules', '')) ?></textarea>
             <p style="font-size: 0.85em; color: #666; margin-top: 4px;">Лира знает эти правила во всех репликах и вспоминает их к месту, но не обвиняет участников в нарушениях. Команда <code>/правила</code> берёт текст отсюда же через плейсхолдер <code>{rules}</code> в своём промпте. Пусто — Лира правил не знает.</p>
