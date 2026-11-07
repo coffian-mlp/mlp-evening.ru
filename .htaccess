@@ -25,13 +25,13 @@ Options -Indexes
 #    исполнялись через веб. Ассеты компонентов (/src/.../*.js|*.css) остаются доступны.
 
 # 4.1 Служебные каталоги без публичных ресурсов — целиком 403.
-RedirectMatch 403 (?i)^/(migrations|tests|scripts|dev_knowledge|docs|logs|cache)(/|$)
+RedirectMatch 403 (?i)^/(migrations|database|tests|scripts|dev_knowledge|docs|logs|cache)(/|$)
 
 # 4.2 В /src/ наружу нужны только ассеты компонентов; исходники PHP — закрыть.
 RedirectMatch 403 (?i)^/src/.*\.(php|inc|sql|md)$
 
 # 4.3 CLI-скрипты в корне запускаются только из командной строки.
-<FilesMatch "^(migrate|bot_worker|cron_llm)\.php$">
+<FilesMatch "^(migrate|bootstrap|bot_worker|cron_llm)\.php$">
     Order allow,deny
     Deny from all
 </FilesMatch>

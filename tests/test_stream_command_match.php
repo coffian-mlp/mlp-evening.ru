@@ -1,4 +1,13 @@
 <?php
+namespace Infra {
+    class ConfigManager {
+        public static function getInstance(): self { return new self(); }
+        public function getOption($key, $default = null) {
+            return $key === 'ai_aliases' ? 'лира, lyra, хартстрингс, lyra heartstrings, лирочка' : $default;
+        }
+    }
+}
+namespace {
 use LLM\StreamCommand;
 /**
  * Юнит-тест матчеров StreamCommand — MLP-307.
@@ -7,11 +16,6 @@ use LLM\StreamCommand;
  *
  * Запуск: php tests/test_stream_command_match.php
  */
-
-if (!file_exists(__DIR__ . '/../.env') && !file_exists(__DIR__ . '/../config.php')) {
-    echo "SKIP: нет .env/config.php (ConfigManager нужен для алиасов)\n";
-    exit(0);
-}
 
 require_once __DIR__ . '/../autoload.php';
 
@@ -63,3 +67,4 @@ ok(!StreamCommand::looksLikeCommand('классное кино мы сегодн
 
 echo $fail ? "\nFAIL ($fail)\n" : "\nALL PASS\n";
 exit($fail ? 1 : 0);
+}

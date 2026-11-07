@@ -48,7 +48,14 @@ function it_db(int $waitSec = 0): ?mysqli {
             $conn = @mysqli_connect($d['host'], $d['user'], $d['pass'], $d['name']);
             if ($conn) {
                 $conn->set_charset($d['charset'] ?? 'utf8mb4');
-                return $conn;
+                $tables = array_column($conn->query('SHOW TABLES')->fetch_all(MYSQLI_NUM), 0);
+                $ready = in_array('users', $tables, true);
+                if (in_array('schema_bootstrap', $tables, true)) {
+                    $state = $conn->query('SELECT state FROM schema_bootstrap WHERE id=1')->fetch_assoc();
+                    $ready = ($state['state'] ?? '') === 'complete';
+                }
+                if ($ready) return $conn;
+                $conn->close();
             }
             if (time() >= $deadline) {
                 return null;
@@ -81,6 +88,9 @@ function it_env_guard(): ?string {
     if ($host !== 'db') {
         return "config.php указывает на host '{$host}' (.env/config) — не Docker-контур; интеграционные тесты пишут в БД"
             . ' и запрещены вне тестовой среды (обход: IT_ALLOW_DB=1, только если уверен)';
+    }
+    if (!is_file('/.dockerenv')) {
+        return 'DB_HOST=db requires the Docker test container';
     }
     return null;
 }

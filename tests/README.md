@@ -14,8 +14,8 @@
 
 ```bash
 docker compose up -d db php       # только БД и PHP: nginx/centrifugo не нужны
-docker compose exec php php migrate.php --status # проверить журнал; не переигрывать старый SQL на fresh sample
-docker compose exec php php tests/run_all.php  # все тесты
+docker compose exec -e IT_DB_WAIT=90 php php tests/run_all.php
+docker compose exec php php migrate.php --status # 43 applied, 0 pending для snapshot MLP-455
 ```
 
 Первый запуск после `up -d`: MySQL может ещё инициализироваться — добавь
@@ -35,7 +35,7 @@ docker compose exec php php tests/run_all.php  # все тесты
 (`RUN_ALL_TIMEOUT`, дефолт 120 с) → FAIL.
 
 **Guard боевой БД:** интеграционные тесты пишут в БД, поэтому запускаются
-только когда `DB_HOST=db` (Docker-контур). На любом
+только когда `DB_HOST=db` и присутствует `/.dockerenv`. На Mac и любом
 другом хосте (в т.ч. на проде, куда тесты попадают через git pull) — SKIP.
 Осознанный обход: `IT_ALLOW_DB=1`.
 
@@ -60,17 +60,54 @@ docker compose exec php php tests/run_all.php  # все тесты
   SQL — только фикстурная уборка или проверка состояния.
 - Боевая БД не участвует никогда.
 
-## Чистый прогон (эталон «как на новом клоне»)
+## Bootstrap и чистый прогон
+
+Для нового Compose-тома PHP entrypoint вызывает `php bootstrap.php --if-empty --demo --wait=90`
+до запуска PHP-FPM. База MySQL при этом изначально пуста. `IT_DB_WAIT=90` также ждёт
+завершения bootstrap перед интеграционными тестами.
 
 ```bash
-docker compose down -v            # сброс тома БД (том пересоздастся из database.sample.sql)
-docker compose up -d db php
-docker compose exec -e IT_DB_WAIT=90 php php tests/run_all.php
-docker compose exec php php migrate.php --status   # ожидающих быть не должно после migrate.php
+docker compose -p mlp-test up -d db php
+docker compose -p mlp-test exec -e IT_DB_WAIT=90 php php tests/run_all.php
+docker compose -p mlp-test exec php php migrate.php --status
+docker compose -p mlp-test exec -e IT_FEEDBACK_SCRATCH=1 php php tests/integration_feedback_dedup.php
+docker compose -p mlp-test down -v
 ```
 
-Схема тома создаётся из `database.sample.sql` **только при первом старте
-тома** — обновил сэмпл → нужен `down -v`.
+Команда `down -v` удаляет только одноразовые данные выбранного тестового проекта.
+Для существующей установки применяется обычный `php migrate.php`, который выполняет
+только непринятые SQL-файлы по `schema_migrations`.
+
+CLI для пустой MySQL 8.0 с конфигурацией из `.env` использует тот же entry point.
+
+```bash
+php bootstrap.php                 # схема и обязательные defaults
+php migrate.php --status          # snapshot MLP-455 даёт 43 applied, 0 pending
+```
+
+Эквивалентная команда — `php migrate.php --bootstrap`. Флаг `--demo` при первом
+запуске добавляет демонстрационный каталог и аккаунт admin с паролем password.
+Основная установка создаёт только системного бота с отключённым паролем.
+Повтор bootstrap сохраняет пользовательские данные и журнал, demo на повторе не добавляется.
+
+`database.sample.sql` содержит структуру, `database.seed.sql` — обязательный seed,
+`database.demo.sql` — необязательные dev fixtures. Импортировать отдельно sample
+поверх существующей БД нельзя. `database/bootstrap-manifest.php` фиксирует SQL-хеши,
+структурный контракт, seed и конкретные 43 исторических имени миграций. Новые файлы
+применяются обычным upgrade и не включаются в baseline автоматически.
+
+На fresh install до DDL записывается durable marker `schema_bootstrap`. Структура и
+обязательный seed проверяются до атомарной регистрации manifest. При частичном DDL
+bootstrap и migrate отказывают с диагностикой incomplete bootstrap. Сначала требуется
+исследовать эту установку. Для одноразового тестового тома допустимо его пересоздание.
+Восстановление существующей установки выполняется отдельно, автоматической очистки нет.
+
+Для изменения snapshot нужен новый осознанный manifest с проверенными хешами и
+регрессионными проверками fresh/upgrade. Опубликованные SQL-миграции остаются неизменными.
+`integration_schema_bootstrap.php` проверяет оба режима sql_mode, повтор, drift и
+частичный старт. `integration_schema_upgrade.php` проверяет текущую схему с 43 applied
+и предыдущую схему с 41 applied, до миграций ролей и stream monitor от 27.10.2026.
+Все строки этих проверок синтетические, БД создаются и удаляются внутри Docker.
 
 ## Playwright (UI, отдельно)
 
@@ -108,7 +145,7 @@ mlp_test_compose up -d --build db php
 mlp_test_compose exec -T -e IT_DB_WAIT=90 php php tests/run_all.php
 ```
 
-Этот fresh-контур использует актуальный `database.sample.sql`, покрывающий проверенные 81 PHP-тест. Исторические миграции поверх текущего sample не replayятся: старый ENUM в миграции команды рисования несовместим с текущим набором значений. Полный PHP suite и браузерные тесты выполняются **последовательно**: общий suite временно меняет настройки и создаёт/удаляет данные, поэтому одновременный запуск делает результаты недостоверными. Для MySQL 8 проверка AUTO_INCREMENT в `integration_live_confirm` отключает кеш статистики только для своей тестовой session; server-global настройки не меняются.
+Этот fresh-контур использует штатный bootstrap с актуальной схемой и seed. Исторические миграции поверх текущего sample не replayятся: старый ENUM в миграции команды рисования несовместим с текущим набором значений. Полный PHP suite и браузерные тесты выполняются **последовательно**: общий suite временно меняет настройки и создаёт/удаляет данные, поэтому одновременный запуск делает результаты недостоверными. Для MySQL 8 проверка AUTO_INCREMENT в `integration_live_confirm` отключает кеш статистики только для своей тестовой session; server-global настройки не меняются.
 
 Перед браузерными проверками сохрани и отключи `ai_enabled` в этой тестовой БД, чтобы вход не запускал внешнюю LLM:
 
@@ -190,7 +227,7 @@ mlp_test_compose() {
 mlp_test_compose up -d --build db php
 ```
 
-Override хранится локально вне Git; путь совпадает с CLI fixture/spec. Для новой БД Compose импортирует актуальный `database.sample.sql`. Не импортировать sample поверх существующей БД. Три миграции MLP-361 можно применить выборочно командой ниже, не повторяя всю историческую цепочку. На старой БД сначала сверить схему/журнал и предварительно применённые версии; исторические ENUM-миграции могут сузить современные значения даже при пустом sql_mode.
+Override хранится локально вне Git; путь совпадает с CLI fixture/spec. Для новой БД Compose вызывает штатный bootstrap. Не импортировать sample поверх существующей БД. Три миграции MLP-361 можно применить выборочно командой ниже, не повторяя всю историческую цепочку. На старой БД сначала сверить схему/журнал и предварительно применённые версии; исторические ENUM-миграции могут сузить современные значения даже при пустом sql_mode.
 
 ```bash
 mlp_test_compose exec -T php php <<'PHP'

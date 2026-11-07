@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__.'/integration_helpers.php';
 if ((it_config()['db']['host']??'')!=='db') it_skip('isolated Docker required');
+it_require_db()->close();
 $db=Infra\Database::getInstance()->getConnection();$db->begin_transaction();$store=new Domain\AnnouncementStore($db);
 try {
  $start=time()+7*86400;

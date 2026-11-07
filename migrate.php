@@ -11,6 +11,7 @@
  *
  * Использование:
  *   php migrate.php            — применить все непринятые миграции
+ *   php migrate.php --bootstrap [--demo] — fresh install (empty database only)
  *   php migrate.php --status   — показать применённые / ожидающие
  *   php migrate.php --baseline — пометить ВСЕ текущие файлы применёнными
  *                                (без выполнения) — для первого запуска на
@@ -103,9 +104,25 @@ function migrate_apply_file($db, string $path): void {
 
 function migrate_main(array $argv): void {
     $mode = $argv[1] ?? 'apply';
+    if ($mode === '--bootstrap') {
+        require_once __DIR__ . '/bootstrap.php';
+        bootstrap_main(array_slice($argv, 2));
+        return;
+    }
     $dir  = __DIR__ . '/migrations';
 
     $db = migrate_connect();
+    migrate_database($db, $dir, $mode);
+}
+
+/** The same upgrade path is used by CLI and isolated schema regression tests. */
+function migrate_database(mysqli $db, string $dir, string $mode = 'apply'): void {
+    if ($db->query("SHOW TABLES LIKE 'schema_bootstrap'")->num_rows) {
+        $state = $db->query('SELECT state FROM schema_bootstrap WHERE id=1')->fetch_assoc();
+        if (!$state || $state['state'] !== 'complete') {
+            throw new RuntimeException('Detected incomplete bootstrap; refusing migration or baseline');
+        }
+    }
     migrate_ensure_table($db);
 
     $all     = migrate_all_files($dir);

@@ -6,7 +6,13 @@ namespace Infra {
         public function getOption($key,$default=null) { return self::$options[$key] ?? $default; }
     }
 }
-namespace Domain { class StickerManager { public function getVisionMap(): array { return []; } } }
+namespace Domain {
+    // Provider transport fixtures do not persist production telemetry.
+    class LlmUsage {
+        public static function record(array $row): void {}
+    }
+    class StickerManager { public function getVisionMap(): array { return []; } }
+}
 namespace LLM {
     class LlmDebugLog { public static function log(...$arguments): void {} }
     function curl_init($url) { return (object)['url'=>$url,'options'=>[]]; }

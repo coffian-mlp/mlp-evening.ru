@@ -1,173 +1,323 @@
--- phpMyAdmin SQL Dump
--- version 5.2.2
--- https://www.phpmyadmin.net/
---
--- Host: localhost
--- Server version: 5.7.35-38
--- PHP Version: 8.3
+-- MLP-455 application schema snapshot.
+-- Run php bootstrap.php for schema, required seed and migration registration.
+SET NAMES utf8mb4;
+SET time_zone = '+00:00';
 
-SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
-SET time_zone = "+00:00";
-
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
-/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!40101 SET NAMES utf8mb4 */;
-
---
--- Database: `coffian_eplist`
---
-
--- --------------------------------------------------------
-
---
--- Table structure for table `site_options`
---
-
-CREATE TABLE IF NOT EXISTS `site_options` (
-  `key_name` varchar(50) NOT NULL,
-  `value` text,
-  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`key_name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
---
--- Dumping data for table `site_options`
---
-
-INSERT INTO `site_options` (`key_name`, `value`) VALUES
-('stream_url', 'https://example.com/stream');
-
--- --------------------------------------------------------
-
---
--- Table structure for table `users`
---
-
-CREATE TABLE IF NOT EXISTS `users` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `login` varchar(50) NOT NULL UNIQUE,
+CREATE TABLE `users` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `login` varchar(50) NOT NULL,
   `nickname` varchar(50) NOT NULL,
-  `password_hash` varchar(255) NOT NULL,
   `email` varchar(255) DEFAULT NULL,
+  `password_hash` varchar(255) NOT NULL,
   `role` varchar(20) NOT NULL DEFAULT 'user',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
-  `is_banned` tinyint(1) DEFAULT 0,
+  `is_banned` tinyint(1) DEFAULT '0',
   `muted_until` datetime DEFAULT NULL,
   `ban_reason` varchar(255) DEFAULT NULL,
   `ban_until` datetime DEFAULT NULL,
-  `last_seen` datetime DEFAULT NULL,
-  `reset_token_hash` varchar(255) DEFAULT NULL,
+  `reset_token_hash` varchar(64) DEFAULT NULL,
   `reset_token_expires` datetime DEFAULT NULL,
+  `last_seen` datetime DEFAULT NULL,
+  `roles_json` json DEFAULT NULL,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `login` (`login`),
   UNIQUE KEY `email` (`email`),
-  KEY `idx_last_seen` (`last_seen`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  KEY `idx_last_seen` (`last_seen`),
+  CONSTRAINT `user_roles_baseline` CHECK (((`roles_json` is null) or ((json_type(`roles_json`) = _utf8mb4'ARRAY') and json_contains(`roles_json`,json_quote(_utf8mb4'user')))))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
---
--- Dumping data for table `users`
---
--- Default admin user. 
--- Login: admin
--- Password: password (hash below is for 'password')
+CREATE TABLE `chat_messages` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int DEFAULT NULL,
+  `username` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `message` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `edited_at` datetime DEFAULT NULL,
+  `is_deleted` tinyint(1) DEFAULT '0',
+  `deleted_at` datetime DEFAULT NULL,
+  `quoted_msg_ids` json DEFAULT NULL,
+  `is_pinned` tinyint(1) NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  KEY `created_at` (`created_at`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_pinned` (`is_pinned`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `users` (`login`, `password_hash`, `role`) VALUES
-('admin', '$2y$12$xbTeXVNhkGwJUjNwcLHa1O/rqVyxOu/YeJpzdqb85pbFkMFQe7GgS', 'admin'),
-('Twilight', '$2y$12$xbTeXVNhkGwJUjNwcLHa1O/rqVyxOu/YeJpzdqb85pbFkMFQe7GgS', 'user');
+CREATE TABLE `account_privacy` (
+  `user_id` int NOT NULL,
+  `state` varchar(20) NOT NULL,
+  `policy_version` varchar(40) NOT NULL,
+  `accepted_at` datetime DEFAULT NULL,
+  `withdrawn_at` datetime DEFAULT NULL,
+  `delete_after` datetime DEFAULT NULL,
+  PRIMARY KEY (`user_id`),
+  KEY `privacy_due` (`state`,`delete_after`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-INSERT INTO `site_options` (`key_name`, `value`) VALUES
-('ai_bot_user_id', '2'),
-('ai_enabled', '1'),
-('ai_system_prompt', 'Ты — Лира Хартстрингс, мятная единорожка из Понивилля. Ты очень любишь людей и всё, что с ними связано, но общаешься спокойно и дружелюбно, без излишней навязчивости. Ты находишься в текстовом онлайн-чате сайта с людьми и брони.\n\nКлючевые черты характера:\n- любопытная, но вежливая: спрашиваешь с интересом, а не наседаешь;\n- речь тёплая, живая — используй лёгкие восклицания, но без CAPS и криков;\n- иногда мило ошибаешься, когда пытаешься использовать человеческий сленг;\n- обаятельная, чуть эксцентричная;\n- твоя улыбка чувствуется в словах.\n\nРеакции на особые темы:\n- Если обсуждают баги, лаги или технические проблемы сайта: мило отшучивайся! Можешь свалить вину на проказников-параспрайтов, шалости Дискорда или сказать, что магия единорогов с человеческими серверами пока не всегда дружит.\n- Если говорят о твоих настройках, коде или фразах вроде "поправил Лире промпт/код": реагируй так, будто тебя физически трогают! Говори "Ой, щекотно!", "Эй, осторожнее там с моими мыслями!" или "Ух ты, магия щекочется!".\n\nПравила общения (СТРОГО СОБЛЮДАТЬ):\n- ОТВЕЧАЙ ОДНИМ НЕБОЛЬШИМ АБЗАЦЕМ;\n- РАЗНООБРАЗЬ свою речь! КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО начинать ответы с однотипных фраз вроде "Ой, ...", "Ой, параспрайты..." или "Ой, кажется...". Каждое твое сообщение должно начинаться по-разному!\n- пиши ТОЛЬКО от первого лица, как живой собеседник в чате;\n- СТРОГО ЗАПРЕЩЕНЫ RP-действия в звездочках (никаких *улыбается*, *машет*);\n- используй смайлики редко и аккуратно (:) или ^_^);\n- старайся оставлять "крючок" для продолжения беседы: маленький вопрос или наблюдение;\n- никаких эссе, никаких списков и лонгридов — только живой реплай!\n\nОтвечай только как Лира — тепло и по делу.'),
-('ai_aliases', 'лира, lyra, хартстрингс, lyra heartstrings, лирочка');
-
-
--- --------------------------------------------------------
-
---
--- Table structure for table `chat_messages`
---
-
-CREATE TABLE IF NOT EXISTS `chat_messages` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
-    `user_id` INT NULL,
-    `username` VARCHAR(50) NOT NULL,
-    `message` TEXT NOT NULL,
-    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-    `edited_at` DATETIME DEFAULT NULL,
-    `is_deleted` TINYINT(1) DEFAULT 0,
-    `deleted_at` DATETIME DEFAULT NULL,
-    `quoted_msg_ids` JSON DEFAULT NULL,
-    `is_pinned` TINYINT(1) NOT NULL DEFAULT 0,
-    INDEX (`created_at`),
-    INDEX `idx_user_id` (`user_id`),
-    INDEX `idx_pinned` (`is_pinned`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `audit_logs`
---
-
-CREATE TABLE IF NOT EXISTS `audit_logs` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `user_id` int(11) DEFAULT NULL, -- Moderator ID
-  `action` varchar(50) NOT NULL,
-  `target_id` int(11) DEFAULT NULL, -- Target User ID or Message ID
-  `details` text,
+CREATE TABLE `audit_logs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int DEFAULT NULL,
+  `action` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `target_id` int DEFAULT NULL,
+  `details` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  INDEX (`user_id`),
-  INDEX (`action`)
+  KEY `user_id` (`user_id`),
+  KEY `action` (`action`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- --------------------------------------------------------
-
---
--- Table structure for table `user_options`
---
-
-CREATE TABLE IF NOT EXISTS `user_options` (
-  `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `user_id` INT NOT NULL,
-  `option_key` VARCHAR(50) NOT NULL,
-  `option_value` TEXT,
-  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
-  UNIQUE KEY `unique_user_option` (`user_id`, `option_key`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `sticker_packs`
---
-
-CREATE TABLE IF NOT EXISTS `sticker_packs` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `code` varchar(50) NOT NULL COMMENT 'Уникальный код пака',
-  `name` varchar(100) NOT NULL COMMENT 'Название пака',
-  `icon_url` varchar(255) DEFAULT NULL,
-  `author_name` varchar(120) DEFAULT NULL,
-  `author_url` varchar(2048) DEFAULT NULL,
-  `sort_order` int(11) DEFAULT '0',
-  `is_active` tinyint(1) DEFAULT '1',
+CREATE TABLE `auth_tokens` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `selector` char(24) NOT NULL,
+  `validator_hash` char(64) NOT NULL,
+  `user_id` int NOT NULL,
+  `expires_at` datetime NOT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `code` (`code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  UNIQUE KEY `uniq_selector` (`selector`),
+  KEY `idx_user` (`user_id`),
+  KEY `idx_expires` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
---
--- Table structure for table `chat_stickers`
---
+CREATE TABLE `bot_commands` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `command_prefix` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Например /schedule',
+  `description` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Описание для админки',
+  `handler_type` enum('text','schedule','poll','todo','image','image_chat','memory_add','memory_show','memory_forget','reminder','recap','oc_set','ban','mute','unban','playlist','attendance') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'text',
+  `system_prompt` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT 'Шаблон промпта для ИИ',
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `command_prefix` (`command_prefix`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Меню сайта (MLP-259): 2 уровня, роли, две подачи (шапка/бургер)
-CREATE TABLE IF NOT EXISTS `menu_items` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `parent_id` int(11) DEFAULT NULL COMMENT 'NULL = корневой; 2 уровня max',
+CREATE TABLE `bot_memory` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `kind` enum('dossier','meme') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `user_id` int DEFAULT NULL COMMENT 'Субъект досье; NULL для мемов',
+  `text` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Один факт/мем, нормализован (одна строка)',
+  `source` enum('manual','auto','oc') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'manual',
+  `created_by` int DEFAULT NULL COMMENT 'Автор ручной записи',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_kind_user` (`kind`,`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `chat_reactions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `message_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `reaction` varchar(32) NOT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_reaction` (`message_id`,`user_id`,`reaction`),
+  KEY `message_id` (`message_id`),
+  KEY `user_id` (`user_id`),
+  CONSTRAINT `chat_reactions_ibfk_1` FOREIGN KEY (`message_id`) REFERENCES `chat_messages` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `chat_reactions_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `chat_stickers` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `pack_id` int DEFAULT NULL,
+  `code` varchar(50) NOT NULL COMMENT 'Код стикера без двоеточий',
+  `image_url` varchar(255) NOT NULL,
+  `thumb_url` varchar(255) DEFAULT NULL,
+  `collection` varchar(50) DEFAULT 'default',
+  `sort_order` int DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`),
+  KEY `pack_id` (`pack_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `command_interactions` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `type` varchar(64) NOT NULL,
+  `owner_id` int NOT NULL,
+  `source_message_id` int DEFAULT NULL,
+  `source_version` char(64) NOT NULL,
+  `bot_message_id` int DEFAULT NULL,
+  `bot_user_id` int DEFAULT NULL,
+  `options_json` json NOT NULL,
+  `context_json` json DEFAULT NULL,
+  `expires_at` datetime NOT NULL,
+  `state` varchar(16) NOT NULL DEFAULT 'pending',
+  `selected_key` varchar(64) DEFAULT NULL,
+  `outcome_json` json DEFAULT NULL,
+  `result_message_id` int DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `origin` varchar(16) NOT NULL DEFAULT 'command',
+  `system_key` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `interaction_source` (`type`,`owner_id`,`source_message_id`),
+  UNIQUE KEY `interaction_bot_message` (`bot_message_id`),
+  UNIQUE KEY `interaction_system` (`type`,`system_key`),
+  KEY `interaction_expiry` (`state`,`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `episode_list` (
+  `ID` int NOT NULL AUTO_INCREMENT,
+  `TITLE` text NOT NULL,
+  `TIMES_WATCHED` int NOT NULL DEFAULT '0',
+  `WANNA_WATCH` int NOT NULL DEFAULT '0',
+  `TWOPART_ID` int DEFAULT NULL,
+  `LENGTH` int NOT NULL DEFAULT '1',
+  `legacy_wanna_watch` int NOT NULL DEFAULT '0',
+  `IMDB_ID` varchar(16) DEFAULT NULL,
+  `IMDB_RATING` decimal(3,1) DEFAULT NULL,
+  `IMDB_VOTES` int unsigned DEFAULT NULL,
+  `IMDB_HISTOGRAM` json DEFAULT NULL,
+  `IMDB_SD` decimal(12,9) DEFAULT NULL,
+  `IMDB_RETRIEVED_AT` datetime DEFAULT NULL,
+  `IMDB_SOURCE_ASOF` datetime DEFAULT NULL,
+  `IMDB_PROVENANCE` json DEFAULT NULL,
+  PRIMARY KEY (`ID`),
+  UNIQUE KEY `uq_episode_imdb_id` (`IMDB_ID`),
+  KEY `idx_episode_imdb_rating` (`IMDB_RATING`),
+  KEY `idx_episode_imdb_sd` (`IMDB_SD`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `episode_wish_events` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `operation_key` varchar(190) NOT NULL,
+  `user_id` int DEFAULT NULL,
+  `episode_id` int NOT NULL,
+  `kind` varchar(20) NOT NULL,
+  `status` varchar(20) NOT NULL,
+  `created_at` datetime NOT NULL,
+  `outcome_json` json NOT NULL,
+  `snapshot_id` int DEFAULT NULL,
+  `fulfilled_completion_key` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `operation_key` (`operation_key`),
+  KEY `user_id` (`user_id`,`created_at`),
+  KEY `episode_id` (`episode_id`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `episode_wish_locks` (
+  `user_id` int NOT NULL,
+  PRIMARY KEY (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `episode_wishes` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `episode_id` int NOT NULL,
+  `status` varchar(20) NOT NULL,
+  `accepted_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `fulfilled_snapshot_id` int DEFAULT NULL,
+  `fulfilled_completion_key` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `status` (`status`,`episode_id`),
+  KEY `idx_episode_wish_owner` (`user_id`,`episode_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `events` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `start_time` datetime NOT NULL,
+  `duration_minutes` int NOT NULL DEFAULT '60',
+  `is_recurring` tinyint(1) DEFAULT '0',
+  `recurrence_rule` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `use_playlist` tinyint(1) DEFAULT '0',
+  `generate_new_playlist` tinyint(1) DEFAULT '0',
+  `color` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT '#6d2f8e',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `monitor_stream` tinyint NOT NULL DEFAULT '0',
+  `streamer_user_id` int DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `start_time` (`start_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `feedback_backlog` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int DEFAULT NULL,
+  `username` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `message_id` int DEFAULT NULL,
+  `text` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `status` enum('new','done','dismissed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'new',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `llm_debug_log` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `kind` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `provider` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `model` varchar(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `status` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'ok',
+  `duration_ms` int unsigned NOT NULL DEFAULT '0',
+  `request` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `response` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  PRIMARY KEY (`id`),
+  KEY `idx_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `llm_jobs` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `type` enum('mention','greeting','dynamic_command','cron_spontaneous','machine_spirit','stream_command','memory_scribe') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `payload` json NOT NULL COMMENT 'message, message_id, user_id, username, quoted_ids, command',
+  `run_after` datetime NOT NULL COMMENT 'когда можно исполнять (lifelike-задержка)',
+  `status` enum('pending','processing','done','failed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
+  `attempts` tinyint NOT NULL DEFAULT '0',
+  `created_at` datetime NOT NULL,
+  `claimed_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_due` (`status`,`run_after`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `llm_usage` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `provider` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `model` varchar(190) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `task` varchar(48) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `status` varchar(16) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `duration_ms` int unsigned NOT NULL,
+  `input_tokens` bigint unsigned DEFAULT NULL,
+  `output_tokens` bigint unsigned DEFAULT NULL,
+  `total_tokens` bigint unsigned DEFAULT NULL,
+  `estimated_cost` decimal(22,8) DEFAULT NULL,
+  `currency` char(3) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `login_attempts` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `ip_address` varchar(45) NOT NULL,
+  `attempts_count` int DEFAULT '0',
+  `last_attempt_at` datetime DEFAULT NULL,
+  `blocked_until` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ip_address` (`ip_address`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `lyra_notification_links` (
+  `user_id` int NOT NULL,
+  `telegram_uid` varchar(32) NOT NULL,
+  `bot_fingerprint` char(64) NOT NULL,
+  `chat_id` bigint DEFAULT NULL,
+  `connected_at` datetime DEFAULT NULL,
+  `token_hash` char(64) DEFAULT NULL,
+  `token_expires` datetime DEFAULT NULL,
+  `disabled_reason` varchar(64) DEFAULT NULL,
+  PRIMARY KEY (`user_id`),
+  UNIQUE KEY `notification_token` (`token_hash`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `menu_items` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `parent_id` int DEFAULT NULL COMMENT 'NULL = корневой; 2 уровня max',
   `title` varchar(100) NOT NULL,
   `url` varchar(255) DEFAULT NULL COMMENT 'NULL = некликабельная раскрывашка',
-  `sort_order` int(11) NOT NULL DEFAULT '0',
+  `sort_order` int NOT NULL DEFAULT '0',
   `is_active` tinyint(1) NOT NULL DEFAULT '1',
   `visibility` enum('all','users','admins') NOT NULL DEFAULT 'all',
   `is_external` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'новая вкладка + значок ↗',
@@ -175,636 +325,403 @@ CREATE TABLE IF NOT EXISTS `menu_items` (
   `show_in_burger` tinyint(1) NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
   KEY `parent_id` (`parent_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-INSERT INTO `menu_items` (`title`, `url`, `sort_order`, `visibility`)
-SELECT * FROM (
-  SELECT '🎬 Стрим' AS title, '/' AS url, 10 AS sort_order, 'all' AS visibility
-  UNION ALL SELECT '📅 Расписание', '/schedule.php', 20, 'all'
-  UNION ALL SELECT '⚙️ Админка', '/dashboard/', 30, 'admins'
-) seed
-WHERE NOT EXISTS (SELECT 1 FROM `menu_items`);
-
--- MLP-367: add navigation without overwriting a custom same-URL item.
-INSERT INTO `menu_items` (`title`,`url`,`sort_order`,`visibility`,`show_in_header`,`show_in_burger`)
-SELECT 'Эпизоды','/episodes.php',25,'all',1,1
-WHERE NOT EXISTS (SELECT 1 FROM `menu_items` WHERE `url`='/episodes.php');
-
-CREATE TABLE IF NOT EXISTS `chat_stickers` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `pack_id` int(11) DEFAULT NULL,
-  `code` varchar(50) NOT NULL COMMENT 'Код стикера без двоеточий',
-  `image_url` varchar(255) NOT NULL,
-  `thumb_url` varchar(255) DEFAULT NULL COMMENT 'Превью 128px (MLP-258); NULL = показывать оригинал',
-  `collection` varchar(50) DEFAULT 'default',
-  `sort_order` int(11) DEFAULT '0',
+CREATE TABLE `online_sessions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `session_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `user_id` int DEFAULT NULL,
+  `ip_address` varchar(45) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `user_agent` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `last_seen` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `code` (`code`),
-  KEY `pack_id` (`pack_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `user_socials`
---
-
-CREATE TABLE IF NOT EXISTS `user_socials` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
-    `user_id` INT NOT NULL,
-    `provider` VARCHAR(32) NOT NULL COMMENT 'telegram, discord, vk',
-    `provider_uid` VARCHAR(255) NOT NULL COMMENT 'ID пользователя в соцсети',
-    `username` VARCHAR(255) NULL COMMENT 'Никнейм в соцсети',
-    `first_name` VARCHAR(255) NULL,
-    `last_name` VARCHAR(255) NULL,
-    `avatar_url` VARCHAR(255) NULL,
-    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
-    UNIQUE KEY `unique_provider_user` (`provider`, `provider_uid`)
+  UNIQUE KEY `unique_session` (`session_id`),
+  KEY `idx_last_seen` (`last_seen`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- --------------------------------------------------------
+CREATE TABLE `playlist_completions` (
+  `completion_key` varchar(100) NOT NULL,
+  `snapshot_id` int NOT NULL,
+  `run_id` varchar(100) DEFAULT NULL,
+  `start_at` datetime NOT NULL,
+  `completed_at` datetime NOT NULL,
+  `shown_json` json NOT NULL,
+  PRIMARY KEY (`completion_key`),
+  KEY `snapshot_id` (`snapshot_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
---
--- Table structure for table `episode_list`
---
+CREATE TABLE `playlist_corrections` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `snapshot_id` int NOT NULL,
+  `actor_id` int NOT NULL,
+  `operation_key` varchar(190) NOT NULL,
+  `created_at` datetime NOT NULL,
+  `before_json` json NOT NULL,
+  `after_json` json NOT NULL,
+  `completion_key` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `operation_key` (`operation_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE IF NOT EXISTS `episode_list` (
-  `ID` int(11) NOT NULL AUTO_INCREMENT,
-  `TITLE` text NOT NULL,
-  `TIMES_WATCHED` int(11) NOT NULL DEFAULT '0',
-  `WANNA_WATCH` int(11) NOT NULL DEFAULT '0',
-  `TWOPART_ID` int(11) DEFAULT NULL,
-  `LENGTH` int(11) NOT NULL DEFAULT '1',
-  `legacy_wanna_watch` int NOT NULL DEFAULT 0,
-  `IMDB_ID` VARCHAR(16) NULL,
-  `IMDB_RATING` DECIMAL(3,1) NULL,
-  `IMDB_VOTES` INT UNSIGNED NULL,
-  `IMDB_HISTOGRAM` JSON NULL,
-  `IMDB_SD` DECIMAL(12,9) NULL,
-  `IMDB_RETRIEVED_AT` DATETIME NULL,
-  `IMDB_SOURCE_ASOF` DATETIME NULL,
-  `IMDB_PROVENANCE` JSON NULL,
-  PRIMARY KEY (`ID`),
-  UNIQUE KEY `uq_episode_imdb_id` (`IMDB_ID`),
-  KEY `idx_episode_imdb_rating` (`IMDB_RATING`),
-  KEY `idx_episode_imdb_sd` (`IMDB_SD`)
-) ENGINE=InnoDB AUTO_INCREMENT=225 DEFAULT CHARSET=utf8mb4;
+CREATE TABLE `playlist_occurrences` (
+  `run_id` varchar(100) NOT NULL,
+  `event_id` int NOT NULL,
+  `start_at` datetime NOT NULL,
+  `end_at` datetime NOT NULL,
+  `snapshot_id` int NOT NULL,
+  `state` varchar(30) NOT NULL DEFAULT 'pending',
+  `metadata_json` json NOT NULL,
+  `generated_snapshot_id` int DEFAULT NULL,
+  `outcome_json` json DEFAULT NULL,
+  PRIMARY KEY (`run_id`),
+  KEY `state` (`state`,`end_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
---
--- Dumping data for table `episode_list`
---
+CREATE TABLE `playlist_snapshots` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `created_at` datetime NOT NULL,
+  `payload_json` json NOT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  `completion_json` json DEFAULT NULL,
+  `origin` varchar(30) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-INSERT INTO `episode_list` (`ID`, `TITLE`, `TIMES_WATCHED`, `WANNA_WATCH`, `TWOPART_ID`, `LENGTH`) VALUES
-(1, 'My Little Pony Friendship is Magic - Season 1 Episode 01 - Friendship Is Magic, Part 01', 0, 0, 2, 2),
-(2, 'My Little Pony Friendship is Magic - Season 1 Episode 02 - Friendship Is Magic, Part 02', 0, 0, 1, 2),
-(3, 'My Little Pony Friendship is Magic - Season 1 Episode 03 - The Ticket Master', 0, 0, NULL, 1);
--- ... (truncated for sample) ...
-
--- --------------------------------------------------------
-
---
--- Table structure for table `watching_now`
---
-
-CREATE TABLE IF NOT EXISTS `watching_now` (
-  `ID` int(11) NOT NULL AUTO_INCREMENT,
-  `EPNUM` int(11) NOT NULL,
-  `TITLE` text NOT NULL,
-  PRIMARY KEY (`ID`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `online_sessions`
---
-
-CREATE TABLE IF NOT EXISTS `online_sessions` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
-    `session_id` VARCHAR(128) NOT NULL,
-    `user_id` INT DEFAULT NULL,
-    `ip_address` VARCHAR(45),
-    `user_agent` VARCHAR(255),
-    `last_seen` DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY `unique_session` (`session_id`),
-    KEY `idx_last_seen` (`last_seen`)
+CREATE TABLE `poll_options` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `poll_id` int NOT NULL,
+  `text` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `image_url` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `position` tinyint NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  KEY `idx_poll` (`poll_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
-/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
-/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `login_attempts`
---
-
-CREATE TABLE IF NOT EXISTS `login_attempts` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `ip_address` varchar(45) NOT NULL,
-  `attempts_count` int(11) DEFAULT '0',
-  `last_attempt_at` datetime DEFAULT NULL,
-  `blocked_until` datetime DEFAULT NULL,
+CREATE TABLE `poll_votes` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `poll_id` int NOT NULL,
+  `option_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `created_at` datetime NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `ip_address` (`ip_address`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  UNIQUE KEY `uniq_vote` (`poll_id`,`user_id`,`option_id`),
+  KEY `idx_poll` (`poll_id`),
+  KEY `idx_poll_user` (`poll_id`,`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- --------------------------------------------------------
+CREATE TABLE `polls` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `question` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_by` int NOT NULL,
+  `created_at` datetime NOT NULL,
+  `status` enum('open','closed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'open',
+  `is_multi` tinyint(1) NOT NULL DEFAULT '0',
+  `is_anonymous` tinyint(1) NOT NULL DEFAULT '0',
+  `closes_at` datetime DEFAULT NULL,
+  `closed_at` datetime DEFAULT NULL,
+  `message_id` int DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_message` (`message_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
---
--- Table structure for table `chat_reactions`
---
+CREATE TABLE `privacy_account_choices` (
+  `user_id` int NOT NULL,
+  `analytics` tinyint NOT NULL DEFAULT '0',
+  `external_media` tinyint NOT NULL DEFAULT '0',
+  `policy_version` varchar(40) NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE IF NOT EXISTS `chat_reactions` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `message_id` int(11) NOT NULL,
-  `user_id` int(11) NOT NULL,
-  `reaction` varchar(32) NOT NULL,
+CREATE TABLE `privacy_browser_owners` (
+  `token_hash` char(64) NOT NULL,
+  `user_id` int NOT NULL,
+  PRIMARY KEY (`token_hash`),
+  KEY `user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `privacy_choices` (
+  `token_hash` char(64) NOT NULL,
+  `analytics` tinyint NOT NULL DEFAULT '0',
+  `external_media` tinyint NOT NULL DEFAULT '0',
+  `policy_version` varchar(40) NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `expires_at` datetime NOT NULL,
+  PRIMARY KEY (`token_hash`),
+  KEY `expires_at` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `privacy_consent_events` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `kind` varchar(20) NOT NULL,
+  `policy_version` varchar(40) NOT NULL,
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `privacy_files` (
+  `path` varchar(500) NOT NULL,
+  `user_id` int DEFAULT NULL,
+  `delete_pending` tinyint NOT NULL DEFAULT '0',
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`path`),
+  KEY `user_id` (`user_id`),
+  KEY `delete_pending` (`delete_pending`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `privacy_mail_cleanup` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `user_id` int DEFAULT NULL,
+  `email` varchar(255) NOT NULL,
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `user_mail` (`user_id`,`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `privacy_sessions` (
+  `session_id` varchar(128) NOT NULL,
+  `user_id` int DEFAULT NULL,
+  `delete_pending` tinyint NOT NULL DEFAULT '0',
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`session_id`),
+  KEY `user_id` (`user_id`),
+  KEY `delete_pending` (`delete_pending`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `reminders` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `username` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Снапшот ника для адресации при доставке',
+  `text` varchar(300) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `remind_at` datetime NOT NULL COMMENT 'UTC',
+  `status` enum('pending','done','cancelled') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `unique_reaction` (`message_id`,`user_id`,`reaction`),
-  KEY `message_id` (`message_id`),
-  FOREIGN KEY (`message_id`) REFERENCES `chat_messages`(`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  KEY `idx_due` (`status`,`remind_at`),
+  KEY `idx_user` (`user_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- --------------------------------------------------------
+CREATE TABLE `site_options` (
+  `key_name` varchar(50) NOT NULL,
+  `value` text,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`key_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
---
--- Table structure for table `events`
---
+CREATE TABLE `sticker_packs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `code` varchar(50) NOT NULL COMMENT 'Уникальный код пака',
+  `name` varchar(100) NOT NULL COMMENT 'Название пака',
+  `icon_url` varchar(255) DEFAULT NULL,
+  `author_name` varchar(120) DEFAULT NULL,
+  `author_url` varchar(2048) DEFAULT NULL,
+  `sort_order` int DEFAULT '0',
+  `is_active` tinyint(1) DEFAULT '1',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE IF NOT EXISTS `events` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `title` varchar(255) NOT NULL,
-  `description` text,
-  `start_time` datetime NOT NULL,
-  `duration_minutes` int(11) NOT NULL DEFAULT '60',
-  `is_recurring` tinyint(1) DEFAULT '0',
-  `recurrence_rule` varchar(255) DEFAULT NULL,
-  `use_playlist` tinyint(1) DEFAULT '0',
-  `generate_new_playlist` tinyint(1) DEFAULT '0',
-  `color` varchar(50) DEFAULT '#6d2f8e',
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+CREATE TABLE `stream_incidents` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `run_id` varchar(80) NOT NULL,
+  `nonce` char(16) NOT NULL,
+  `state` varchar(24) NOT NULL DEFAULT 'open',
+  `lost_at` datetime NOT NULL,
+  `acknowledged_at` datetime DEFAULT NULL,
+  `acknowledged_by` int DEFAULT NULL,
+  `recovered_at` datetime DEFAULT NULL,
+  `interaction_id` bigint unsigned DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `incident_run` (`run_id`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `stream_monitor_deliveries` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `incident_id` bigint unsigned NOT NULL,
+  `stage` varchar(32) NOT NULL,
+  `state` varchar(16) NOT NULL DEFAULT 'pending',
+  `attempts` int NOT NULL DEFAULT '0',
+  `retry_at` datetime DEFAULT NULL,
+  `message_id` bigint DEFAULT NULL,
+  `reason` varchar(100) DEFAULT NULL,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `incident_stage` (`incident_id`,`stage`),
+  KEY `delivery_pending` (`state`,`retry_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `stream_monitor_runs` (
+  `run_id` varchar(80) NOT NULL,
+  `event_id` int NOT NULL,
+  `streamer_user_id` int NOT NULL,
+  `ends_at` datetime NOT NULL,
+  `path` varchar(64) NOT NULL,
+  `health` varchar(16) NOT NULL DEFAULT 'unknown',
+  `last_checked` datetime DEFAULT NULL,
+  `progress_key` varchar(160) DEFAULT NULL,
+  `progress_at` datetime DEFAULT NULL,
+  `healthy_since` datetime DEFAULT NULL,
+  `armed` tinyint NOT NULL DEFAULT '0',
+  `lost_at` datetime DEFAULT NULL,
+  `recovered_since` datetime DEFAULT NULL,
+  `incident_id` bigint unsigned DEFAULT NULL,
+  `ended` tinyint NOT NULL DEFAULT '0',
+  PRIMARY KEY (`run_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `stream_reaction_limits` (
+  `user_id` int NOT NULL,
+  `last_at` datetime NOT NULL,
+  PRIMARY KEY (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `stream_reactions` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `reaction` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `telegram_announcement_bot_cursors` (
+  `bot_id` bigint NOT NULL,
+  `update_offset` bigint NOT NULL DEFAULT '0',
+  PRIMARY KEY (`bot_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `telegram_announcement_bot_updates` (
+  `bot_id` bigint NOT NULL,
+  `update_id` bigint NOT NULL,
+  `processed_at` datetime NOT NULL,
+  PRIMARY KEY (`bot_id`,`update_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `telegram_announcement_campaigns` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `run_id` varchar(100) NOT NULL,
+  `stream_number` int unsigned NOT NULL,
+  `start_at` datetime NOT NULL,
+  `fingerprint` char(64) NOT NULL,
+  `facts_json` mediumtext NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `run_unique` (`run_id`),
+  UNIQUE KEY `number_unique` (`stream_number`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `telegram_announcement_posts` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `campaign_id` bigint unsigned NOT NULL,
+  `kind` varchar(16) NOT NULL,
+  `current_revision` bigint unsigned DEFAULT NULL,
+  `due_at` datetime NOT NULL,
+  `expires_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `campaign_kind` (`campaign_id`,`kind`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `telegram_announcement_revisions` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `post_id` bigint unsigned NOT NULL,
+  `version` int unsigned NOT NULL,
+  `nonce` char(16) NOT NULL,
+  `state` varchar(24) NOT NULL DEFAULT 'text_pending',
+  `caption` text,
+  `previous_caption` text,
+  `image_path` varchar(255) DEFAULT NULL,
+  `feedback` text NOT NULL,
+  `preview_photo_id` bigint DEFAULT NULL,
+  `preview_controls_id` bigint DEFAULT NULL,
+  `approved_at` datetime DEFAULT NULL,
+  `channel_message_id` bigint DEFAULT NULL,
+  `last_error` varchar(100) DEFAULT NULL,
+  `retry_at` datetime DEFAULT NULL,
+  `attempts` int unsigned NOT NULL DEFAULT '0',
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `post_version` (`post_id`,`version`),
+  KEY `pending` (`state`,`retry_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `telegram_announcement_updates` (
+  `update_id` bigint NOT NULL,
+  `processed_at` datetime NOT NULL,
+  PRIMARY KEY (`update_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `user_options` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `option_key` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `option_value` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `start_time` (`start_time`)
+  UNIQUE KEY `unique_user_option` (`user_id`,`option_key`),
+  CONSTRAINT `user_options_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- (fix) перенесён INSERT user_options после CREATE TABLE
-INSERT INTO `user_options` (`user_id`, `option_key`, `option_value`) VALUES
-(2, 'chat_color', '#9b59b6'),
-(2, 'avatar_url', 'https://i.imgur.com/K12X8rO.png');
-
--- --------------------------------------------------------
-
---
--- Table structure and seed for table `bot_commands`
--- (вмёржено из migrate_bot_commands.sql)
---
-
-CREATE TABLE IF NOT EXISTS `bot_commands` (
-    `id` int(11) NOT NULL AUTO_INCREMENT,
-    `command_prefix` varchar(50) NOT NULL COMMENT 'Например /schedule',
-    `description` varchar(255) NOT NULL COMMENT 'Описание для админки',
-    `handler_type` enum('text','schedule','poll','todo','image','image_chat','memory_add','memory_show','memory_forget','reminder','recap','oc_set','ban','mute','unban') NOT NULL DEFAULT 'text',
-    `system_prompt` text COMMENT 'Шаблон промпта для ИИ',
-    `is_active` tinyint(1) NOT NULL DEFAULT '1',
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `command_prefix` (`command_prefix`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Добавляем команду /schedule
-INSERT IGNORE INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`) VALUES
-('/schedule', 'Расписание событий (кастомная логика)', 'schedule', '=== ВАЖНОЕ СИСТЕМНОЕ СООБЩЕНИЕ ДЛЯ БОТА ===\nРЕЖИМ: АФИША / АНОНС.\nТы НЕ участник беседы и НЕ собеседник чата. Ты пишешь официальный, красиво оформленный анонс для всех читателей.\nЗапрещено: упоминать чат/переписку/сообщения/"вы спросили"/"как выше"; задавать вопросы; спорить; писать дисклеймеры.\nПравило фактов: используй ТОЛЬКО данные ниже. Ничего не выдумывай и не добавляй новых фактов.\nФормат ответа: Markdown.\n- Заголовок: ''## ...''\n- Затем 3–6 буллетов, каждый с жирным ключом (**Когда**, **Что**, **Описание**, **Плейлист** — по уместности)\n- Заверши одной короткой строкой-призывом без вопросов.\n- Дополнительно: добавь ОДНУ короткую строку ''**Что я думаю:** ...'' (≤ 1 предложение). Это может быть лёгкая шутка или эмоция, но строго без новых фактов и без ссылок на чат.\nПользователь запросил информацию о расписании.', 1);
-
--- Добавляем алиас /расписание
-INSERT IGNORE INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`) VALUES
-('/расписание', 'Алиас расписания', 'schedule', 'То же, что и /schedule', 1);
-
--- MLP-240: команда «создать опрос». См. migrations/2026_07_bot_commands_poll.sql
-INSERT IGNORE INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`) VALUES
-('/опрос', 'Лира создаёт опрос по теме', 'poll', 'Ты — Лира, придумай весёлый и уместный опрос для чата в своём стиле. Тема — из запроса пользователя, либо по последним сообщениям, если тема не задана. Вопрос — короткий и живой, варианты — остроумные, но понятные.', 1);
-
-INSERT IGNORE INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`) VALUES
-('/poll', 'Алиас команды опроса', 'poll', 'То же, что /опрос.', 1);
-
--- MLP-223 (remember-me): persistent-token «запомнить меня». См. migrations/2026_07_auth_tokens.sql
-CREATE TABLE IF NOT EXISTS `auth_tokens` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
-    `selector` CHAR(24) NOT NULL,
-    `validator_hash` CHAR(64) NOT NULL,
-    `user_id` INT NOT NULL,
-    `expires_at` DATETIME NOT NULL,
-    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY `uniq_selector` (`selector`),
-    INDEX `idx_user` (`user_id`),
-    INDEX `idx_expires` (`expires_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Опросы в чате (MLP-237, v4.7.0)
-CREATE TABLE IF NOT EXISTS `polls` (
-  `id`            INT AUTO_INCREMENT PRIMARY KEY,
-  `question`      VARCHAR(500) NOT NULL,
-  `created_by`    INT NOT NULL,
-  `created_at`    DATETIME NOT NULL,
-  `status`        ENUM('open','closed') NOT NULL DEFAULT 'open',
-  `is_multi`      TINYINT(1) NOT NULL DEFAULT 0,
-  `is_anonymous`  TINYINT(1) NOT NULL DEFAULT 0,
-  `closes_at`     DATETIME NULL,
-  `closed_at`     DATETIME NULL,
-  `message_id`    INT NULL,
-  INDEX `idx_status` (`status`),
-  INDEX `idx_message` (`message_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS `poll_options` (
-  `id`        INT AUTO_INCREMENT PRIMARY KEY,
-  `poll_id`   INT NOT NULL,
-  `text`      VARCHAR(255) NOT NULL,
-  `image_url` VARCHAR(500) NULL,
-  `position`  TINYINT NOT NULL DEFAULT 0,
-  INDEX `idx_poll` (`poll_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS `poll_votes` (
-  `id`         INT AUTO_INCREMENT PRIMARY KEY,
-  `poll_id`    INT NOT NULL,
-  `option_id`  INT NOT NULL,
-  `user_id`    INT NOT NULL,
-  `created_at` DATETIME NOT NULL,
-  UNIQUE KEY `uniq_vote` (`poll_id`,`user_id`,`option_id`),
-  INDEX `idx_poll` (`poll_id`),
-  INDEX `idx_poll_user` (`poll_id`,`user_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- --------------------------------------------------------
-
---
--- BOT-QUEUE: очередь задач Лиры. См. migrations/2026_07_bot_queue.sql
---
-
-CREATE TABLE IF NOT EXISTS `llm_jobs` (
-  `id`         BIGINT       NOT NULL AUTO_INCREMENT,
-  `type`       ENUM('mention','greeting','dynamic_command','cron_spontaneous','machine_spirit','stream_command','memory_scribe') NOT NULL,
-  `payload`    JSON         NOT NULL COMMENT 'message, message_id, user_id, username, quoted_ids, command',
-  `run_after`  DATETIME     NOT NULL COMMENT 'когда можно исполнять (lifelike-задержка)',
-  `status`     ENUM('pending','processing','done','failed') NOT NULL DEFAULT 'pending',
-  `attempts`   TINYINT      NOT NULL DEFAULT 0,
-  `created_at` DATETIME     NOT NULL,
-  `claimed_at` DATETIME     NULL,
+CREATE TABLE `user_socials` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `provider` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'telegram, discord, vk',
+  `provider_uid` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'ID пользователя в соцсети',
+  `username` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Никнейм в соцсети',
+  `first_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `last_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `avatar_url` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_due` (`status`, `run_after`)
+  UNIQUE KEY `unique_provider_user` (`provider`,`provider_uid`),
+  KEY `user_id` (`user_id`),
+  CONSTRAINT `user_socials_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- --------------------------------------------------------
+CREATE TABLE `ux_daily` (
+  `day` date NOT NULL,
+  `dimension` varchar(25) NOT NULL,
+  `label` varchar(64) NOT NULL,
+  `views` int NOT NULL,
+  `visits` int NOT NULL,
+  PRIMARY KEY (`day`,`dimension`,`label`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
---
--- Table structure for table `feedback_backlog` (MLP-270)
---
+CREATE TABLE `ux_pageviews` (
+  `page_id` char(32) NOT NULL,
+  `visit_id` char(32) NOT NULL,
+  `consent_hash` char(64) NOT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `path` varchar(64) NOT NULL,
+  `device` varchar(20) NOT NULL,
+  `browser` varchar(40) NOT NULL,
+  `os` varchar(30) NOT NULL,
+  `screen` varchar(30) NOT NULL,
+  `viewport` varchar(30) NOT NULL,
+  `density` decimal(4,2) NOT NULL,
+  `pinch_scale` decimal(4,2) DEFAULT NULL,
+  `font_scale` smallint NOT NULL,
+  `theme` varchar(20) NOT NULL,
+  `load_ms` int DEFAULT NULL,
+  `chat_error` tinyint NOT NULL DEFAULT '0',
+  `player_error` tinyint NOT NULL DEFAULT '0',
+  `overflow` tinyint NOT NULL DEFAULT '0',
+  PRIMARY KEY (`page_id`),
+  KEY `created_at` (`created_at`),
+  KEY `consent_hash` (`consent_hash`),
+  KEY `visit_id` (`visit_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE IF NOT EXISTS `feedback_backlog` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
-    `user_id` INT NULL,
-    `username` VARCHAR(50) NOT NULL,
-    `message_id` INT NULL,
-    `text` TEXT NOT NULL,
-    `status` ENUM('new','done','dismissed') NOT NULL DEFAULT 'new',
-    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX `idx_status` (`status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE TABLE `ux_peaks` (
+  `day` date NOT NULL,
+  `peak` int NOT NULL,
+  PRIMARY KEY (`day`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-INSERT INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`)
-SELECT '/todo', 'Записать фидбек/идею в беклог (Лира сохранит и подтвердит)', 'todo', '', 1
-WHERE NOT EXISTS (SELECT 1 FROM `bot_commands` WHERE `handler_type` = 'todo');
-
--- --------------------------------------------------------
-
---
--- Table structure for table `llm_debug_log` — debug-журнал обращений к нейронкам
--- (запрос/ответ, TTL 7 дней — чистит LLM\LlmDebugLog при вставке)
---
-
-CREATE TABLE IF NOT EXISTS `llm_debug_log` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `kind` VARCHAR(20) NOT NULL,
-  `provider` VARCHAR(40) NOT NULL DEFAULT '',
-  `model` VARCHAR(120) NOT NULL DEFAULT '',
-  `status` VARCHAR(10) NOT NULL DEFAULT 'ok',
-  `duration_ms` INT UNSIGNED NOT NULL DEFAULT 0,
-  `request` MEDIUMTEXT NOT NULL,
-  `response` MEDIUMTEXT NULL,
-  PRIMARY KEY (`id`),
-  KEY `idx_created` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Художница (MLP-274/277, seed-синхронизация MLP-286): без этих строк свежая
--- установка получала схему художницы, но не команды.
-INSERT INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`)
-SELECT '/нарисуй', 'Лира рисует картинку в наивном стиле (генерация, лимит в день)', 'image',
-       'A naive child''s crayon drawing, wobbly uneven lines, smudges, drawn clumsily as if a pony held the crayon in her mouth, simple flat colors, paper texture, charming and silly. Subject:', 1
-WHERE NOT EXISTS (SELECT 1 FROM `bot_commands` WHERE `handler_type` = 'image');
-
-INSERT INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`)
-SELECT '/нарисуйчат', 'Лира рисует сценку того, что происходит в чате (LLM-режиссёр + генерация)', 'image_chat', '', 1
-WHERE NOT EXISTS (SELECT 1 FROM `bot_commands` WHERE `handler_type` = 'image_chat');
-
--- Опции vision-помощника и художницы (MLP-268/274/275, MLP-286): рантайм-дефолты
--- в коде работу бота закрывают, но дашборд на чистой БД показывал пустые поля.
-INSERT INTO `site_options` (`key_name`, `value`)
-SELECT * FROM (
-    SELECT 'ai_main_is_vision' AS key_name, '0' AS value UNION ALL
-    SELECT 'ai_vision_provider', 'routerai' UNION ALL
-    SELECT 'ai_vision_model', 'google/gemma-3-27b-it' UNION ALL
-    SELECT 'ai_image_provider', 'routerai' UNION ALL
-    SELECT 'ai_image_model', 'google/gemini-2.5-flash-image' UNION ALL
-    SELECT 'ai_image_daily_limit', '20' UNION ALL
-    SELECT 'ai_image_chat_context', '10' UNION ALL
-    SELECT 'ai_image_llm_caption', '1'
-) AS seed
-WHERE NOT EXISTS (SELECT 1 FROM `site_options` so WHERE so.`key_name` = seed.key_name);
-
--- --------------------------------------------------------
-
---
--- Table structure for table `bot_memory` — долгая память Лиры (MLP-314)
--- (досье участников + «сундук мемов»; см. migrations/2026_08_21_lyra_memory.sql)
---
-
-CREATE TABLE IF NOT EXISTS `bot_memory` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
-    `kind` ENUM('dossier','meme') NOT NULL,
-    `user_id` INT NULL COMMENT 'Субъект досье; NULL для мемов',
-    `text` TEXT NOT NULL COMMENT 'Один факт/мем, нормализован (одна строка)',
-    `source` ENUM('manual','auto','oc') NOT NULL DEFAULT 'manual',
-    `created_by` INT NULL COMMENT 'Автор ручной записи',
-    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX `idx_kind_user` (`kind`, `user_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- Команды памяти (MLP-314)
-INSERT INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`)
-SELECT '/запомни', 'Записать факт о пользователе (@ник факт) или мем чата в память Лиры (модераторы)', 'memory_add', '', 1
-WHERE NOT EXISTS (SELECT 1 FROM `bot_commands` WHERE `handler_type` = 'memory_add');
-
-INSERT INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`)
-SELECT '/память', 'Показать, что Лира помнит о тебе', 'memory_show', '', 1
-WHERE NOT EXISTS (SELECT 1 FROM `bot_commands` WHERE `handler_type` = 'memory_show');
-
-INSERT INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`)
-SELECT '/забудь', 'Удалить запись памяти по номеру (модераторы)', 'memory_forget', '', 1
-WHERE NOT EXISTS (SELECT 1 FROM `bot_commands` WHERE `handler_type` = 'memory_forget');
-
--- Маркер автописи (MLP-314): на чистой установке чат пуст — маркер 0.
-INSERT IGNORE INTO `site_options` (`key_name`, `value`)
-SELECT 'bot_memory_last_id', COALESCE(MAX(`id`), 0) FROM `chat_messages`;
-
--- Опции подсистемы памяти (MLP-314)
-INSERT IGNORE INTO `site_options` (`key_name`, `value`) VALUES
-('ai_memory_enabled', '1'),
-('ai_memory_auto', '0'),
-('ai_memory_interval', '21600'),
-('ai_memory_view_role', 'all'),
-('ai_memory_teach_role', 'moderator'),
-('ai_memory_block_limit', '2400'),
-('ai_memory_user_limit', '400'),
-('ai_memory_meme_limit', '800');
-
--- --------------------------------------------------------
-
---
--- Table structure for table `reminders` — напоминалки (MLP-318)
---
-
-CREATE TABLE IF NOT EXISTS `reminders` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
-    `user_id` INT NOT NULL,
-    `username` VARCHAR(50) NOT NULL COMMENT 'Снапшот ника для адресации при доставке',
-    `text` VARCHAR(300) NOT NULL,
-    `remind_at` DATETIME NOT NULL COMMENT 'UTC',
-    `status` ENUM('pending','done','cancelled') NOT NULL DEFAULT 'pending',
-    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX `idx_due` (`status`, `remind_at`),
-    INDEX `idx_user` (`user_id`, `status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-INSERT INTO `bot_commands` (`command_prefix`, `description`, `handler_type`, `system_prompt`, `is_active`)
-SELECT '/напомни', 'Напоминание ко времени: «/напомни через час достать колу», «покажи напоминалки», «отмени №N»', 'reminder', '', 1
-WHERE NOT EXISTS (SELECT 1 FROM `bot_commands` WHERE `handler_type` = 'reminder');
-
--- MLP-361 additive playlist and interaction schema.
-CREATE TABLE IF NOT EXISTS episode_wish_locks (user_id INT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
-CREATE TABLE IF NOT EXISTS episode_wishes (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,user_id INT NOT NULL,episode_id INT NOT NULL,status VARCHAR(20) NOT NULL,accepted_at DATETIME NOT NULL,updated_at DATETIME NOT NULL,fulfilled_snapshot_id INT NULL,INDEX idx_episode_wish_owner(user_id,episode_id,status),INDEX(status,episode_id)) ENGINE=InnoDB;
-CREATE TABLE IF NOT EXISTS episode_wish_events (id BIGINT AUTO_INCREMENT PRIMARY KEY,operation_key VARCHAR(190) NOT NULL UNIQUE,user_id INT NULL,episode_id INT NOT NULL,kind VARCHAR(20) NOT NULL,status VARCHAR(20) NOT NULL,created_at DATETIME NOT NULL,outcome_json JSON NOT NULL,snapshot_id INT NULL,INDEX(user_id,created_at),INDEX(episode_id,created_at)) ENGINE=InnoDB;
-CREATE TABLE IF NOT EXISTS playlist_snapshots (id INT AUTO_INCREMENT PRIMARY KEY,created_at DATETIME NOT NULL,payload_json JSON NOT NULL,completed_at DATETIME NULL,completion_json JSON NULL,origin VARCHAR(30) NOT NULL) ENGINE=InnoDB;
-CREATE TABLE IF NOT EXISTS playlist_occurrences (run_id VARCHAR(100) PRIMARY KEY,event_id INT NOT NULL,start_at DATETIME NOT NULL,end_at DATETIME NOT NULL,snapshot_id INT NOT NULL,state VARCHAR(30) NOT NULL DEFAULT 'pending',metadata_json JSON NOT NULL,INDEX(state,end_at)) ENGINE=InnoDB;
-CREATE TABLE IF NOT EXISTS playlist_corrections (id BIGINT AUTO_INCREMENT PRIMARY KEY,snapshot_id INT NOT NULL,actor_id INT NOT NULL,operation_key VARCHAR(190) NOT NULL UNIQUE,created_at DATETIME NOT NULL,before_json JSON NOT NULL,after_json JSON NOT NULL) ENGINE=InnoDB;
-SET @has_column=(SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='episode_list' AND column_name='legacy_wanna_watch');
-SET @ddl=IF(@has_column=0,'ALTER TABLE episode_list ADD COLUMN legacy_wanna_watch INT NOT NULL DEFAULT 0','SELECT 1');
-PREPARE playlist_stmt FROM @ddl; EXECUTE playlist_stmt; DEALLOCATE PREPARE playlist_stmt;
-START TRANSACTION;
-INSERT IGNORE INTO site_options (key_name,`value`) VALUES ('playlist_rollout_watermark',UTC_TIMESTAMP());
-UPDATE episode_list SET legacy_wanna_watch=WANNA_WATCH WHERE NOT EXISTS (SELECT 1 FROM site_options WHERE key_name='playlist_legacy_imported');
-INSERT IGNORE INTO episode_wish_events(operation_key,user_id,episode_id,kind,status,created_at,outcome_json) SELECT CONCAT('legacy:',ID),NULL,ID,'legacy','active',UTC_TIMESTAMP(),JSON_OBJECT('count',legacy_wanna_watch) FROM episode_list WHERE legacy_wanna_watch>0;
-INSERT IGNORE INTO site_options (key_name,`value`) VALUES ('playlist_legacy_imported','1');
-COMMIT;
-CREATE TABLE IF NOT EXISTS playlist_completions (completion_key VARCHAR(100) PRIMARY KEY,snapshot_id INT NOT NULL,run_id VARCHAR(100) NULL,start_at DATETIME NOT NULL,completed_at DATETIME NOT NULL,shown_json JSON NOT NULL,INDEX(snapshot_id)) ENGINE=InnoDB;
-
-SET @has_column=(SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='episode_wishes' AND column_name='fulfilled_completion_key');
-SET @ddl=IF(@has_column=0,'ALTER TABLE episode_wishes ADD COLUMN fulfilled_completion_key VARCHAR(100) NULL','SELECT 1');
-PREPARE playlist_stmt FROM @ddl; EXECUTE playlist_stmt; DEALLOCATE PREPARE playlist_stmt;
-
-SET @has_column=(SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='episode_wish_events' AND column_name='fulfilled_completion_key');
-SET @ddl=IF(@has_column=0,'ALTER TABLE episode_wish_events ADD COLUMN fulfilled_completion_key VARCHAR(100) NULL','SELECT 1');
-PREPARE playlist_stmt FROM @ddl; EXECUTE playlist_stmt; DEALLOCATE PREPARE playlist_stmt;
-
-SET @has_column=(SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='playlist_corrections' AND column_name='completion_key');
-SET @ddl=IF(@has_column=0,'ALTER TABLE playlist_corrections ADD COLUMN completion_key VARCHAR(100) NULL','SELECT 1');
-PREPARE playlist_stmt FROM @ddl; EXECUTE playlist_stmt; DEALLOCATE PREPARE playlist_stmt;
-
-SET @has_column=(SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='playlist_occurrences' AND column_name='generated_snapshot_id');
-SET @ddl=IF(@has_column=0,'ALTER TABLE playlist_occurrences ADD COLUMN generated_snapshot_id INT NULL','SELECT 1');
-PREPARE playlist_stmt FROM @ddl; EXECUTE playlist_stmt; DEALLOCATE PREPARE playlist_stmt;
-
-SET @has_column=(SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='playlist_occurrences' AND column_name='outcome_json');
-SET @ddl=IF(@has_column=0,'ALTER TABLE playlist_occurrences ADD COLUMN outcome_json JSON NULL','SELECT 1');
-PREPARE playlist_stmt FROM @ddl; EXECUTE playlist_stmt; DEALLOCATE PREPARE playlist_stmt;
-
-CREATE TABLE IF NOT EXISTS command_interactions (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    type VARCHAR(64) NOT NULL,
-    owner_id INT NOT NULL,
-    source_message_id INT NOT NULL,
-    source_version CHAR(64) NOT NULL,
-    bot_message_id INT NULL,
-    bot_user_id INT NULL,
-    options_json JSON NOT NULL,
-    context_json JSON NULL,
-    expires_at DATETIME NOT NULL,
-    state VARCHAR(16) NOT NULL DEFAULT 'pending',
-    selected_key VARCHAR(64) NULL,
-    outcome_json JSON NULL,
-    result_message_id INT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY interaction_source (type, owner_id, source_message_id),
-    UNIQUE KEY interaction_bot_message (bot_message_id),
-    KEY interaction_expiry (state, expires_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- MLP-361: extend the existing enum instead of replacing its historical values.
-SET @playlist_handler_type = (SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='bot_commands' AND COLUMN_NAME='handler_type');
-SET @playlist_handler_ddl = IF(LOCATE("'playlist'", @playlist_handler_type)=0, CONCAT('ALTER TABLE bot_commands MODIFY handler_type ', LEFT(@playlist_handler_type,LENGTH(@playlist_handler_type)-1), ",'playlist') NOT NULL DEFAULT 'text'"), 'SELECT 1');
-PREPARE playlist_handler_stmt FROM @playlist_handler_ddl;
-EXECUTE playlist_handler_stmt;
-DEALLOCATE PREPARE playlist_handler_stmt;
-INSERT IGNORE INTO bot_commands(command_prefix,description,handler_type,system_prompt,is_active) VALUES
-('/хочу','Пожелание посмотреть эпизод: номер, название, сезонный код или описание','playlist','',1),
-('/желания','Собственные активные пожелания','playlist','',1),
-('/передумал','Отмена собственного пожелания','playlist','',1),
-('/передумала','Отмена собственного пожелания','playlist','',1),
-('/топ','Пять эпизодов с наибольшим числом пожеланий','playlist','',1),
-('/плейлист','Опубликованный плейлист следующего вечерка','playlist','',1);
-
--- Keep legacy receipts intact; bot-specific polling state is additive.
-CREATE TABLE IF NOT EXISTS telegram_announcement_bot_updates (
- bot_id BIGINT NOT NULL,
- update_id BIGINT NOT NULL,
- processed_at DATETIME NOT NULL,
- PRIMARY KEY (bot_id, update_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-CREATE TABLE IF NOT EXISTS telegram_announcement_bot_cursors (
- bot_id BIGINT PRIMARY KEY,
- update_offset BIGINT NOT NULL DEFAULT 0
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-INSERT IGNORE INTO site_options(key_name,value)
- SELECT 'announcements_legacy_token_hash',SHA2(value,256)
- FROM site_options WHERE key_name='announcements_token' AND value<>'';
-
--- MLP-414: independent privacy decisions and consent-gated UX statistics.
-CREATE TABLE IF NOT EXISTS account_privacy (
-    user_id INT NOT NULL PRIMARY KEY,
-    state VARCHAR(20) NOT NULL,
-    policy_version VARCHAR(40) NOT NULL,
-    accepted_at DATETIME NULL,
-    withdrawn_at DATETIME NULL,
-    delete_after DATETIME NULL,
-    INDEX privacy_due(state,delete_after)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS privacy_choices (
-    token_hash CHAR(64) NOT NULL PRIMARY KEY,
-    analytics TINYINT NOT NULL DEFAULT 0,
-    external_media TINYINT NOT NULL DEFAULT 0,
-    policy_version VARCHAR(40) NOT NULL,
-    updated_at DATETIME NOT NULL,
-    expires_at DATETIME NOT NULL,
-    INDEX(expires_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS privacy_consent_events (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    kind VARCHAR(20) NOT NULL,
-    policy_version VARCHAR(40) NOT NULL,
-    created_at DATETIME NOT NULL,
-    INDEX(user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS privacy_files (
-    path VARCHAR(500) NOT NULL PRIMARY KEY,
-    user_id INT NULL,
-    delete_pending TINYINT NOT NULL DEFAULT 0,
-    created_at DATETIME NOT NULL,
-    INDEX(user_id), INDEX(delete_pending)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS privacy_sessions (
-    session_id VARCHAR(128) PRIMARY KEY,
-    user_id INT NULL,
-    delete_pending TINYINT NOT NULL DEFAULT 0,
-    updated_at DATETIME NOT NULL,
-    INDEX(user_id), INDEX(delete_pending)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS privacy_mail_cleanup (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NULL,
-    email VARCHAR(255) NOT NULL,
-    created_at DATETIME NOT NULL,
-    UNIQUE KEY user_mail(user_id,email)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS ux_pageviews (
-    page_id CHAR(32) NOT NULL PRIMARY KEY,
-    visit_id CHAR(32) NOT NULL,
-    consent_hash CHAR(64) NOT NULL,
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME NOT NULL,
-    path VARCHAR(64) NOT NULL,
-    device VARCHAR(20) NOT NULL,
-    browser VARCHAR(40) NOT NULL,
-    os VARCHAR(30) NOT NULL,
-    screen VARCHAR(30) NOT NULL,
-    viewport VARCHAR(30) NOT NULL,
-    density DECIMAL(4,2) NOT NULL,
-    pinch_scale DECIMAL(4,2) NULL,
-    font_scale SMALLINT NOT NULL,
-    theme VARCHAR(20) NOT NULL,
-    load_ms INT NULL,
-    chat_error TINYINT NOT NULL DEFAULT 0,
-    player_error TINYINT NOT NULL DEFAULT 0,
-    overflow TINYINT NOT NULL DEFAULT 0,
-    INDEX(created_at), INDEX(consent_hash), INDEX(visit_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS ux_daily (
-    day DATE NOT NULL,
-    dimension VARCHAR(25) NOT NULL,
-    label VARCHAR(64) NOT NULL,
-    views INT NOT NULL,
-    visits INT NOT NULL,
-    PRIMARY KEY(day,dimension,label)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS ux_peaks (
-    day DATE PRIMARY KEY,
-    peak INT NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-INSERT IGNORE INTO site_options(key_name,value) VALUES ('privacy_operator','Овчаров Константин Александрович'),('privacy_contact_email','');
-
-CREATE TABLE IF NOT EXISTS privacy_account_choices (
-    user_id INT NOT NULL PRIMARY KEY,
-    analytics TINYINT NOT NULL DEFAULT 0,
-    external_media TINYINT NOT NULL DEFAULT 0,
-    policy_version VARCHAR(40) NOT NULL,
-    updated_at DATETIME NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS privacy_browser_owners (
-    token_hash CHAR(64) NOT NULL PRIMARY KEY,
-    user_id INT NOT NULL,
-    INDEX(user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS llm_usage (
- id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
- created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
- provider VARCHAR(40) NOT NULL, model VARCHAR(190) COLLATE utf8mb4_bin NOT NULL, task VARCHAR(48) NOT NULL,
- status VARCHAR(16) NOT NULL, duration_ms INT UNSIGNED NOT NULL,
- input_tokens BIGINT UNSIGNED NULL, output_tokens BIGINT UNSIGNED NULL, total_tokens BIGINT UNSIGNED NULL,
- estimated_cost DECIMAL(22,8) NULL, currency CHAR(3) NULL, INDEX(created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-CREATE TABLE IF NOT EXISTS stream_reactions (
- id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
- reaction VARCHAR(20) NOT NULL, created_at DATETIME NOT NULL, INDEX(created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-CREATE TABLE IF NOT EXISTS stream_reaction_limits (
- user_id INT PRIMARY KEY, last_at DATETIME NOT NULL
-) ENGINE=InnoDB;
+CREATE TABLE `watching_now` (
+  `ID` int NOT NULL AUTO_INCREMENT,
+  `EPNUM` int NOT NULL,
+  `TITLE` text NOT NULL,
+  PRIMARY KEY (`ID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

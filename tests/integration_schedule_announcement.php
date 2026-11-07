@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__.'/integration_helpers.php';
 if ((it_config()['db']['host'] ?? '') !== 'db') it_skip('requires isolated Docker database');
+it_require_db()->close();
 $db=\Infra\Database::getInstance()->getConnection();
 $db->begin_transaction();
 try {

@@ -62,15 +62,28 @@ try {
     check($caught instanceof UserError, 'пустой POST-аплоад → UserError');
 
     // --- 2. Системный сбой → НЕ UserError ---
-    // login длиннее колонки users.login (VARCHAR(50)) → strict-режим MySQL (dev-контур: STRICT_TRANS_TABLES)
-    // роняет INSERT, mysqli (режим исключений PHP 8.1+) бросает mysqli_sql_exception.
+    // Сценарий переполнения явно включает STRICT только для соединения приложения.
+    // Остальные проверки сохраняют исходный режим сервера.
     $caught = null;
+    $applicationDb = Infra\Database::getInstance()->getConnection();
+    $originalSqlMode = $applicationDb->query('SELECT @@SESSION.sql_mode')->fetch_row()[0];
+    $sqlModes = explode(',', $originalSqlMode);
+    $sqlModes[] = 'STRICT_TRANS_TABLES';
+    $strictSqlMode = implode(',', array_unique(array_filter($sqlModes)));
+    $modeStatement = $applicationDb->prepare('SET SESSION sql_mode=?');
     try {
+        $modeStatement->bind_param('s', $strictSqlMode);
+        $modeStatement->execute();
         $um->createUser(str_repeat('x', 300), 'password123');
     } catch (Throwable $e) {
         $caught = $e;
+    } finally {
+        $modeStatement->bind_param('s', $originalSqlMode);
+        $modeStatement->execute();
+        $modeStatement->close();
     }
-    check($caught !== null, 'слишком длинный login роняет создание (системный путь достижим)');
+    check($caught instanceof mysqli_sql_exception && $caught->getCode() === 1406, 'слишком длинный login роняет создание (системный путь достижим)');
+    check($applicationDb->query('SELECT @@SESSION.sql_mode')->fetch_row()[0] === $originalSqlMode, 'исходный sql_mode соединения восстановлен');
     check(!($caught instanceof UserError), 'системный сбой — НЕ UserError (' . ($caught ? get_class($caught) : '—') . ')');
 
     // --- 3. UserError — подкласс Exception (обратная совместимость catch(Exception)) ---

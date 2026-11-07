@@ -1,4 +1,18 @@
 <?php
+namespace Infra {
+    class ConfigManager {
+        private static ?self $instance = null;
+        private array $cache = [];
+        public static function getInstance(): self { return self::$instance ??= new self(); }
+        public function getOption($key, $default = null) { return $this->cache[$key] ?? $default; }
+    }
+}
+namespace Domain {
+    class AnnouncementStore {
+        public function nextNumber(): int { return 1; }
+    }
+}
+namespace {
 require_once __DIR__.'/../autoload.php';
 use LLM\AnnouncementContent;
 use LLM\AnnouncementSynopsis;
@@ -35,7 +49,7 @@ check386($c->summaryCalls===1,'reformulation reuses synopsis result');
 check386($w->calls[0][1]===$w->calls[1][1],'writer retries retain absolute deadline');
 check386(str_contains($w->calls[1][0],'validation_errors') && str_contains($w->calls[1][0],'Удали объяснения'),'writer receives concrete validation feedback');
 check386(str_contains($w->calls[0][0],'COMMUNITY_CANARY') && str_contains($w->calls[0][0],'PUBLIC_CHAT_CANARY'),'persona writer retains memory and actual chat evidence');
-check386(str_contains($w->calls[0][0],'перед сюжетами явно поясни') && str_contains($w->calls[0][0],'первого лица'),'writer instructed to connect invitation and viewing programme');
+check386(mb_stripos($w->calls[0][0],'перед сюжетами явно поясни') !== false && str_contains($w->calls[0][0],'первого лица'),'writer instructed to connect invitation and viewing programme');
 $w->drafts=[$body];$c->debut=false;$c->generateText($f,'reminder',179);
 check386(str_contains(end($w->calls)[0],'"is_first_publication":false') && str_contains(end($w->calls)[0],'reminder_minutes'),'later reminder does not repeat Telegram debut');
 $w->calls=[];$w->drafts=array_fill(0,4,'Общий анонс без даты.');check386($c->generateText($f,'main',179)===null && count($w->calls)===3,'writer stops after two repairs without canned public text');
@@ -76,3 +90,4 @@ check386(AnnouncementSynopsis::decode(json_encode($rows),$catalogue,['https://ex
 check386(count(AnnouncementSynopsis::catalogue([['ids'=>[1,2],'titles'=>['Part One','Part Two']]]))===2,'paired story has a synopsis for each part');
 check386(AnnouncementSynopsis::catalogue([['ids'=>[1,2],'titles'=>['Part One']]])===[],'malformed snapshot rejected');
 echo $fail?"FAIL: $fail\n":"ALL PASS\n";exit($fail?1:0);
+}

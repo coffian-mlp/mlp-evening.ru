@@ -16,6 +16,10 @@ services:
 
   # Интерпретатор PHP
   php:
+    entrypoint: ["/bin/sh", "/var/www/html/.docker/php/entrypoint.sh"]
+    command: ["php-fpm"]
+    depends_on:
+      - db
     build:
       context: .
       dockerfile: .docker/php/Dockerfile
@@ -43,9 +47,6 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS}
     volumes:
       - db_data:/var/lib/mysql
-      # Магия! Этот файл автоматически выполнится при первом запуске контейнера,
-      # создав структуру таблиц и наполнив их данными.
-      - ./database.sample.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - mlp-net
 

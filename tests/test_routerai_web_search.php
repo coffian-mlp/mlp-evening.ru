@@ -1,5 +1,18 @@
 <?php
+namespace Infra {
+    class ConfigManager {
+        public static function getInstance(): self { return new self(); }
+        public function getOption($key, $default = null) { return $key === 'ai_send_images' ? 0 : $default; }
+    }
+}
+namespace Domain {
+    class LlmUsage {
+        public static function record(array $row): void {}
+    }
+}
 namespace LLM {
+    class LlmDebugLog { public static function log(...$arguments): void {} }
+
     // External provider transport fixture; application endpoints and domain methods remain real.
     function curl_init($url) { return new \stdClass(); }
     function curl_setopt($handle, $option, $value) { $GLOBALS['router_fixture_options'][$option] = $value; return true; }
@@ -11,7 +24,7 @@ namespace LLM {
 namespace {
     require_once __DIR__.'/../autoload.php';
     $fail=0;function expect($ok,$label){global $fail;echo($ok?'PASS ':'FAIL ').$label."\n";if(!$ok)$fail++;}
-    $main=new \LLM\RouterAIProvider('fake-fixture-key','z-ai/glm-5.3',null,200);
+    $main=(new \LLM\RouterAIProvider('fake-fixture-key','z-ai/glm-5.3',null,200))->withVision(false);
     $search=$main->withWebSearch(3)->withReasoningEffort('low')->withTimeout(12);
     expect($search->askChat([['role'=>'user','content'=>'fixture query']],'fixture prompt')==='{"candidates":[]}','actual provider response parsed');
     $data=json_decode($GLOBALS['router_fixture_options'][CURLOPT_POSTFIELDS],true);
