@@ -221,6 +221,7 @@ final class Privacy
             (new ChatManager())->touchPrivacy($userId);
             (new EpisodeManager())->suspendPrivacy($userId,!$accept);
             if (!$accept) {
+                (new MemoryEpisodeManager($db))->eraseUser($userId);
                 (new LyraNotifications())->disconnect($userId);
                 $identity=(new UserManager())->privacyIdentity($userId);
                 if(!empty($identity['email'])){
@@ -362,4 +363,13 @@ final class Privacy
     public static function finishMail(int $id): void {
         $db=Database::getInstance()->getConnection();$stmt=$db->prepare('DELETE FROM privacy_mail_cleanup WHERE id=?');$stmt->bind_param('i',$id);$stmt->execute();
     }
+    /** Missing legacy consent rows retain the existing access policy. */
+    public static function memoryStates(array $ids, bool $lock = false): array {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if (!$ids) return [];
+        sort($ids);
+        $db = Database::getInstance()->getConnection();
+        return $db->query('SELECT user_id,state FROM account_privacy WHERE user_id IN (' . implode(',', $ids) . ') ORDER BY user_id' . ($lock ? ' FOR UPDATE' : ''))->fetch_all(MYSQLI_ASSOC);
+    }
+
 }

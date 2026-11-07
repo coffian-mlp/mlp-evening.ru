@@ -31,7 +31,7 @@ RedirectMatch 403 (?i)^/(migrations|database|tests|scripts|dev_knowledge|docs|lo
 RedirectMatch 403 (?i)^/src/.*\.(php|inc|sql|md)$
 
 # 4.3 CLI-скрипты в корне запускаются только из командной строки.
-<FilesMatch "^(migrate|bootstrap|bot_worker|cron_llm)\.php$">
+<FilesMatch "^(migrate|bootstrap|bot_worker|cron_llm|cron_memory_embeddings)\.php$">
     Order allow,deny
     Deny from all
 </FilesMatch>

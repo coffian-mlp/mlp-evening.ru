@@ -338,7 +338,11 @@ class UserManager {
     public function deleteUser($id) {
         $stmt = $this->db->prepare("DELETE FROM users WHERE id = ?");
         $stmt->bind_param("i", $id);
-        if ($stmt->execute()) {
+        $deleted = \Infra\Transaction::run($this->db, function () use ($stmt, $id) {
+            (new MemoryEpisodeManager($this->db))->eraseUser((int)$id);
+            return $stmt->execute();
+        });
+        if ($deleted) {
             $this->clearUserCache($id);
             return true;
         }
@@ -758,10 +762,13 @@ class UserManager {
     }
 
     public function eraseUserData(int $userId): void {
-        foreach (['DELETE FROM audit_logs WHERE user_id=? OR (target_id=? AND action IN (\'ban\',\'unban\',\'mute\',\'unmute\',\'purge\'))','DELETE FROM user_options WHERE user_id=?','DELETE FROM users WHERE id=?'] as $sql) {
-            $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
-            $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
-        }
+        \Infra\Transaction::run($this->db, function () use ($userId) {
+            (new MemoryEpisodeManager($this->db))->eraseUser($userId);
+            foreach (['DELETE FROM audit_logs WHERE user_id=? OR (target_id=? AND action IN (\'ban\',\'unban\',\'mute\',\'unmute\',\'purge\'))','DELETE FROM user_options WHERE user_id=?','DELETE FROM users WHERE id=?'] as $sql) {
+                $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
+                $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
+            }
+        });
     }
 
     public function privacyIdentity(int $userId, bool $lock = false): ?array {
@@ -777,4 +784,13 @@ class UserManager {
     public function mentionDirectory(): array {
         return $this->db->query('SELECT id,login,nickname FROM users WHERE 1'.Privacy::sqlFilter('id'))->fetch_all(MYSQLI_ASSOC);
     }
+    /** Current source identities; locked reads participate in index publication. */
+    public function memoryIdentityIds(array $ids, bool $lock = false): array {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if (!$ids) return [];
+        sort($ids);
+        $rows = $this->db->query('SELECT id FROM users WHERE id IN (' . implode(',', $ids) . ') ORDER BY id' . ($lock ? ' FOR UPDATE' : ''))->fetch_all(MYSQLI_ASSOC);
+        return array_map('intval', array_column($rows, 'id'));
+    }
+
 }

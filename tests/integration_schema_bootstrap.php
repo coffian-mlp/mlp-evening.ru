@@ -14,7 +14,7 @@ try {
         check(bootstrap_install($db, false) === 'installed', 'empty database bootstrap succeeds');
         check(bootstrap_schema_hash($db) === bootstrap_manifest()['schema_sha256'], 'full schema contract matches');
         check(count(migrate_applied($db)) === 43, 'only verified snapshot migrations recorded');
-        check(migration_pending(migrate_all_files(dirname(__DIR__) . '/migrations'), migrate_applied($db)) === [], 'no pending migrations');
+        check(migration_pending(migrate_all_files(dirname(__DIR__) . '/migrations'), migrate_applied($db)) === array_values(array_diff(migrate_all_files(dirname(__DIR__) . '/migrations'), bootstrap_manifest()['migrations'])), 'future migrations remain pending after frozen bootstrap');
         $db->query('ALTER TABLE users MODIFY reset_token_hash VARCHAR(255) NULL');
         try {
             bootstrap_verify_install($db, bootstrap_manifest());

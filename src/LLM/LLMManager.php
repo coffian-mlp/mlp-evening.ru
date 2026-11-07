@@ -956,6 +956,29 @@ class LLMManager {
         }
     }
 
+    /** Dedicated background association profile; never writes a chat message. */
+    public function memoryAssociationProfile(): string {
+        $provider = $this->fastProviders[0] ?? null;
+        return $provider === null ? 'unconfigured' : get_class($provider) . '|' . LlmDebugLog::providerModel($provider) . '|tags-only-low-v1';
+    }
+
+    public function generateMemoryAssociations(string $text, string $prompt, float $deadline): ?string {
+        $provider = $this->fastProviders[0] ?? null;
+        if (!$this->isEnabled() || !$provider || !method_exists($provider, 'withTimeout')) return null;
+        if (method_exists($provider, 'getModel') && trim((string)ConfigManager::getInstance()->getOption('ai_fast_model', '')) === '') return null;
+        return RequestDeadline::within($deadline, function () use ($provider, $text, $prompt, $deadline) {
+            if (!$this->prepareScopedProxy() || RequestDeadline::expired()) return null;
+            $remaining = max(1, min(20, (int)ceil($deadline - microtime(true))));
+            $call = $provider->withTimeout($remaining);
+            if (method_exists($call, 'withVision')) $call = $call->withVision(false);
+            if ($call instanceof RouterAIProvider) $call = $call->withReasoningEffort('low')->withMaxTokens(1000);
+            // Call the chosen cheap provider once. Completion usage is captured by its adapter.
+            return UsageMeter::within('memory_associations', fn() => $call->askChat([
+                ['role'=>'user', 'content'=>json_encode(['source_data'=>$text], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)]
+            ], $prompt));
+        });
+    }
+
     private function prepareScopedProxy(): bool {
         return !$this->vlessLink || (new XrayManager())->ensureRunning($this->vlessLink);
     }

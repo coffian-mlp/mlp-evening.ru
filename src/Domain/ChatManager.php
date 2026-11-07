@@ -184,7 +184,7 @@ class ChatManager {
         
         $updateStmt = $this->db->prepare("UPDATE chat_messages SET message = ?, edited_at = UTC_TIMESTAMP() WHERE id = ?");
         $updateStmt->bind_param("si", $newMessage, $messageId);
-        $res = $updateStmt->execute();
+        $res = MemoryEpisodeManager::change('chat', [(int)$messageId], fn() => $updateStmt->execute());
         
         if ($res) {
             // Broadcast Update
@@ -237,7 +237,7 @@ class ChatManager {
         // Также обновляем edited_at, чтобы стрим заметил изменение!
         $updateStmt = $this->db->prepare("UPDATE chat_messages SET is_deleted = 1, deleted_at = UTC_TIMESTAMP(), edited_at = UTC_TIMESTAMP() WHERE id = ?");
         $updateStmt->bind_param("i", $messageId);
-        $res = $updateStmt->execute();
+        $res = MemoryEpisodeManager::change('chat', [(int)$messageId], fn() => $updateStmt->execute());
         
         if ($res) {
             // Broadcast Delete
@@ -298,7 +298,7 @@ class ChatManager {
         // edited_at обновляется принудительно, чтобы стрим подхватил изменение статуса
         $updateStmt = $this->db->prepare("UPDATE chat_messages SET is_deleted = 0, deleted_at = NULL, edited_at = UTC_TIMESTAMP() WHERE id = ?");
         $updateStmt->bind_param("i", $messageId);
-        $res = $updateStmt->execute();
+        $res = MemoryEpisodeManager::change('chat', [(int)$messageId], fn() => $updateStmt->execute());
         
         if ($res) {
             // Broadcast Restore (send full message again)
@@ -330,7 +330,7 @@ class ChatManager {
         $idsList = implode(',', $ids);
         // Обновляем edited_at, чтобы клиенты увидели изменение
         $updateSql = "UPDATE chat_messages SET is_deleted = 1, deleted_at = UTC_TIMESTAMP(), edited_at = UTC_TIMESTAMP() WHERE id IN ($idsList)";
-        if ($this->db->query($updateSql)) {
+        if (MemoryEpisodeManager::change('chat', $ids, fn() => $this->db->query($updateSql))) {
             // Broadcast Purge (send list of IDs)
             $this->broadcast([
                 'type' => 'purge',
@@ -1152,10 +1152,13 @@ class ChatManager {
 
 
     public function eraseUserData(int $userId): void {
-        foreach (['UPDATE chat_messages SET user_id=NULL,username=\'Удалённый пользователь\',message=\'\',quoted_msg_ids=NULL,is_deleted=1,is_pinned=0,deleted_at=UTC_TIMESTAMP(),edited_at=UTC_TIMESTAMP() WHERE user_id=?','DELETE FROM chat_reactions WHERE user_id=?'] as $sql) {
-            $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
-            $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
-        }
+        \Infra\Transaction::run($this->db, function () use ($userId) {
+            (new MemoryEpisodeManager($this->db))->eraseUser($userId);
+            foreach (['UPDATE chat_messages SET user_id=NULL,username=\'Удалённый пользователь\',message=\'\',quoted_msg_ids=NULL,is_deleted=1,is_pinned=0,deleted_at=UTC_TIMESTAMP(),edited_at=UTC_TIMESTAMP() WHERE user_id=?','DELETE FROM chat_reactions WHERE user_id=?'] as $sql) {
+                $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
+                $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
+            }
+        });
     }
 
     public function privacyExport(int $userId): array {
@@ -1176,6 +1179,17 @@ class ChatManager {
     }
     public function touchPrivacy(int $userId): void {
         $stmt=$this->db->prepare('UPDATE chat_messages SET edited_at=UTC_TIMESTAMP() WHERE user_id=?');$stmt->bind_param('i',$userId);$stmt->execute();
+    }
+
+    /** Raw source rows for the background indexer; eligibility is checked before indexing. */
+    public function memorySourceRows(?array $ids = null, bool $lock = false): array {
+        $where = '';
+        if ($ids !== null) {
+            $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+            if (!$ids) return [];
+            $where = ' WHERE id IN (' . implode(',', $ids) . ')';
+        }
+        return $this->db->query('SELECT * FROM chat_messages' . $where . ' ORDER BY id' . ($lock ? ' FOR UPDATE' : ''))->fetch_all(MYSQLI_ASSOC);
     }
 
 }

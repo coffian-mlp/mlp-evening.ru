@@ -428,3 +428,66 @@ MLP_BASE_URL=http://127.0.0.1:8091 npx playwright test \
 New PHP suites cover bounded previous-event evidence, Moscow scheduling, captions and Roman numbering, owner-only Telegram updates, durable approval revisions, regeneration, delivery ambiguity and a fake-transport worker flow. Run with `php tests/run_all.php` inside an isolated Docker database (`DB_HOST=db`). External Telegram/LLM requests are replaced by test seams. Integration fixtures remove only their own rows and restore options. The generation/content tests do not publish messages.
 
 Production activation also requires a dedicated bot token, independently verified owner Telegram ID, channel posting permission and a private `/start`. See `deploy/telegram-announcements.md`. Telegram mobile UI acceptance is performed in the owner's actual conversation after configuration; it cannot be verified through the site's Playwright fixtures.
+
+### MLP-456 — локальные UI-проверки инвалидизации памяти
+
+`mlp-456-semantic-memory.ui.spec.js` проверяет edit/delete/restore чата, правку памяти, отзыв согласия и откат источника при отказе записи индекса. Fixture CLI разрешён только внутри Docker с `DB_NAME=mlp456pw` и `MLP456_PW_FIXTURE=1`. Временный trigger с SIGNAL моделирует отказ существующей производной таблицы, создаётся root только в этой disposable БД и удаляется cleanup. Внешняя LLM выключена. Сценарий не предназначен для production.
+
+В корне рабочего checkout создай отдельную копию без production-конфигураций. Путь и порт закреплены в spec.
+
+```bash
+mkdir -p docs/tests/MLP-456/fix4/pw-workspace
+rsync -a --exclude='.git' --exclude='docs' --exclude='dev_knowledge' \
+  --exclude='node_modules' --exclude='.env*' --exclude='config.php' \
+  --exclude='centrifugo_config.json' --exclude='upload' --exclude='logs' \
+  --exclude='cache' --exclude='test-results' --exclude='playwright-report' \
+  --exclude='.claude' --exclude='.codex' --exclude='.agents' --exclude='.cursor' \
+  ./ docs/tests/MLP-456/fix4/pw-workspace/
+python3 - <<'PY'
+from pathlib import Path
+import re, secrets
+root = Path('docs/tests/MLP-456/fix4/pw-workspace')
+text = Path('.env.example').read_text()
+values = dict(DB_HOST='db', DB_NAME='mlp456pw', DB_USER='mlp456pw',
+              DB_PASS=secrets.token_hex(16), DB_ROOT_PASS=secrets.token_hex(16),
+              CHAT_DRIVER='sse', CENTRIFUGO_API_KEY='', CENTRIFUGO_SECRET='')
+for key, value in values.items():
+    pattern = r'(?m)^' + key + r'=.*$'
+    text = re.sub(pattern, key+'='+value, text) if re.search(pattern, text) else text+'\n'+key+'='+value+'\n'
+(root/'.env').write_text(text)
+(root/'.env').chmod(0o600)
+(root/'docs/tests/MLP-456').mkdir(parents=True, exist_ok=True)
+PY
+cat > docs/tests/MLP-456/fix4/pw.override.yml <<'YAML'
+services:
+  php:
+    ports:
+      - "127.0.0.1:18546:18546"
+YAML
+mlp456_pw_compose() {
+  docker compose -p mlp456pw \
+    -f docs/tests/MLP-456/fix4/pw-workspace/docker-compose.yml \
+    -f docs/tests/MLP-456/fix4/pw.override.yml "$@"
+}
+mlp456_pw_compose up -d --build db php
+mlp456_pw_compose exec -T php php migrate.php
+```
+
+В отдельном терминале определи ту же функцию и запусти сервер.
+
+```bash
+mlp456_pw_compose exec -T -e PHP_CLI_SERVER_WORKERS=8 php \
+  php -S 0.0.0.0:18546 -t /var/www/html
+```
+
+Установленные Chromium и Firefox используются через штатный конфиг. При отсутствии пакета или браузеров выполни установку из раздела выше.
+
+```bash
+MLP_BASE_URL=http://localhost:18546 npx playwright test \
+  -c tests/playwright/playwright.config.js mlp-456-semantic-memory.ui.spec.js \
+  --project=chromium-ui --project=firefox-ui \
+  --output=docs/tests/MLP-456/fix4/pw-results
+mlp456_pw_compose down -v
+```
+
+После остановки контура удали только созданную `docs/tests/MLP-456/fix4/pw-workspace`, включая её тестовую `.env`. Fixture setup/cleanup вызывается spec автоматически. Если процесс теста оборван, перед повтором выполни его cleanup в работающем контуре через CLI с `MLP456_PW_FIXTURE=1`. PHP full suite и браузерные сценарии не запускаются одновременно в одной БД.

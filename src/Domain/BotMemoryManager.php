@@ -160,7 +160,7 @@ class BotMemoryManager {
         }
         $stmt = $this->db->prepare("UPDATE bot_memory SET text = ?, source = 'manual' WHERE id = ?");
         $stmt->bind_param('si', $text, $id);
-        return $stmt->execute() && $stmt->affected_rows > 0;
+        return MemoryEpisodeManager::change('memory', [$id], fn() => $stmt->execute() && $stmt->affected_rows > 0);
     }
 
     /** Удаление. Возвращает удалённую строку (для аудита) или null. */
@@ -174,8 +174,10 @@ class BotMemoryManager {
         }
         $stmt = $this->db->prepare("DELETE FROM bot_memory WHERE id = ?");
         $stmt->bind_param('i', $id);
-        $stmt->execute();
-        return $stmt->affected_rows > 0 ? $row : null;
+        return MemoryEpisodeManager::change('memory', [$id], function () use ($stmt, $row) {
+            $stmt->execute();
+            return $stmt->affected_rows > 0 ? $row : null;
+        }, true);
     }
 
     /** Суммарная длина auto-части досье пользователя (порог сжатия — MAX_TEXT). */
@@ -194,6 +196,7 @@ class BotMemoryManager {
         }
         $this->db->begin_transaction();
         try {
+            $this->invalidateSelection("kind='dossier' AND user_id=" . (int)$userId . " AND source='auto'");
             $stmt = $this->db->prepare("DELETE FROM bot_memory WHERE kind = 'dossier' AND user_id = ? AND source = 'auto'");
             $stmt->bind_param('i', $userId);
             $stmt->execute();
@@ -229,6 +232,7 @@ class BotMemoryManager {
         }
         $this->db->begin_transaction();
         try {
+            $this->invalidateSelection("kind='meme' AND source='auto'");
             $this->db->query("DELETE FROM bot_memory WHERE kind = 'meme' AND source = 'auto'");
             $stmt = $this->db->prepare("INSERT INTO bot_memory (kind, user_id, text, source) VALUES ('meme', NULL, ?, 'auto')");
             foreach ($texts as $t) {
@@ -293,10 +297,13 @@ class BotMemoryManager {
         if ($userId <= 0 || !in_array($source, self::SOURCES, true)) {
             return false;
         }
-        $stmt = $this->db->prepare("DELETE FROM bot_memory WHERE kind = 'dossier' AND user_id = ? AND LOWER(text) LIKE 'внешность%'");
-        $stmt->bind_param('i', $userId);
-        $stmt->execute();
-        return $this->add('dossier', $userId, $text, $source, $createdBy);
+        return \Infra\Transaction::run($this->db, function () use ($userId, $text, $source, $createdBy) {
+            $this->invalidateSelection("kind='dossier' AND user_id=" . (int)$userId . " AND LOWER(text) LIKE 'внешность%'");
+            $stmt = $this->db->prepare("DELETE FROM bot_memory WHERE kind = 'dossier' AND user_id = ? AND LOWER(text) LIKE 'внешность%'");
+            $stmt->bind_param('i', $userId);
+            $stmt->execute();
+            return $this->add('dossier', $userId, $text, $source, $createdBy);
+        });
     }
 
     /**
@@ -308,17 +315,40 @@ class BotMemoryManager {
         if ($userId <= 0 || !in_array($source, self::SOURCES, true)) {
             return false;
         }
-        $stmt = $this->db->prepare("DELETE FROM bot_memory WHERE kind = 'dossier' AND user_id = ? AND LOWER(text) LIKE 'ос:%'");
-        $stmt->bind_param('i', $userId);
-        $stmt->execute();
-        return $this->add('dossier', $userId, $text, $source, $createdBy);
+        return \Infra\Transaction::run($this->db, function () use ($userId, $text, $source, $createdBy) {
+            $this->invalidateSelection("kind='dossier' AND user_id=" . (int)$userId . " AND LOWER(text) LIKE 'ос:%'");
+            $stmt = $this->db->prepare("DELETE FROM bot_memory WHERE kind = 'dossier' AND user_id = ? AND LOWER(text) LIKE 'ос:%'");
+            $stmt->bind_param('i', $userId);
+            $stmt->execute();
+            return $this->add('dossier', $userId, $text, $source, $createdBy);
+        });
     }
 
     public function eraseUserData(int $userId): void {
-        foreach (['DELETE FROM bot_memory WHERE user_id=? OR created_by=?'] as $sql) {
-            $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
-            $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
+        \Infra\Transaction::run($this->db, function () use ($userId) {
+            $this->invalidateSelection('user_id=' . $userId . ' OR created_by=' . $userId);
+            foreach (['DELETE FROM bot_memory WHERE user_id=? OR created_by=?'] as $sql) {
+                $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
+                $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
+            }
+        });
+    }
+
+    /** Called inside the source transaction before deleting a selected group. */
+    private function invalidateSelection(string $where): void {
+        $rows = $this->db->query('SELECT id FROM bot_memory WHERE ' . $where . ' ORDER BY id FOR UPDATE')->fetch_all(MYSQLI_ASSOC);
+        (new MemoryEpisodeManager($this->db))->invalidate('memory', array_column($rows, 'id'), true);
+    }
+
+    /** Raw source rows for the background indexer; eligibility is checked before indexing. */
+    public function memorySourceRows(?array $ids = null, bool $lock = false): array {
+        $where = '';
+        if ($ids !== null) {
+            $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+            if (!$ids) return [];
+            $where = ' WHERE id IN (' . implode(',', $ids) . ')';
         }
+        return $this->db->query('SELECT * FROM bot_memory' . $where . ' ORDER BY id' . ($lock ? ' FOR UPDATE' : ''))->fetch_all(MYSQLI_ASSOC);
     }
 
 }

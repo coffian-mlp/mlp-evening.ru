@@ -7,6 +7,9 @@ use Domain\LlmUsage;
 final class UsageMeter
 {
     private static string $task='other';
+    private static int $httpAttempts = 0;
+
+    public static function httpAttempts(): int { return self::$httpAttempts; }
 
     public static function task(): string {return self::$task;}
 
@@ -45,6 +48,7 @@ final class UsageMeter
 
     public static function capture(string $provider,string $model,?string $response,int $httpCode,bool $transportError,int $durationMs,?string $task=null): void
     {
+        self::$httpAttempts++;
         try{
             $body=json_decode($response??'',true);
             $row=self::measurement($provider,$model,is_array($body)?$body:[],$httpCode,$transportError,$durationMs,$task??self::$task);

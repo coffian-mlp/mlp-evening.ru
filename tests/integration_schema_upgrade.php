@@ -11,6 +11,9 @@ $admin->query("CREATE DATABASE `$schema` CHARACTER SET utf8mb4 COLLATE utf8mb4_0
 $db = new mysqli('db', 'root', Infra\Env::get('DB_ROOT_PASS'), $schema);
 $db->set_charset('utf8mb4');
 $manifest = bootstrap_manifest();
+$baselineDir = sys_get_temp_dir() . '/mlp456-baseline-' . bin2hex(random_bytes(6));
+mkdir($baselineDir);
+foreach ($manifest['migrations'] as $file) copy(dirname(__DIR__) . '/migrations/' . $file, $baselineDir . '/' . $file);
 $productionJournal = isset($argv[2])
     ? array_column(json_decode(file_get_contents($argv[2]), true, 512, JSON_THROW_ON_ERROR)['migration_journal'], 'filename')
     : $manifest['migrations'];
@@ -77,7 +80,7 @@ try {
             $before = [];
             foreach ($sentinelQueries as $sql) $before[] = $db->query($sql)->fetch_all(MYSQLI_ASSOC);
             for ($attempt = 0; $attempt < 2; $attempt++) {
-                migrate_database($db, dirname(__DIR__) . '/migrations');
+                migrate_database($db, $baselineDir);
                 check(migration_pending($manifest['migrations'], migrate_applied($db)) === [], 'upgrade has no pending migrations');
                 check(bootstrap_schema_hash($db) === $manifest['schema_sha256'], 'upgrade reaches the full fresh schema contract');
                 $after = [];
@@ -100,6 +103,8 @@ try {
         }
     }
 } finally {
+    foreach (glob($baselineDir . '/*.sql') as $file) unlink($file);
+    rmdir($baselineDir);
     $db->close();
     $admin->query("DROP DATABASE `$schema`");
     $admin->close();
