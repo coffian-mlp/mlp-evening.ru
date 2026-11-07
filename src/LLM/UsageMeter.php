@@ -8,8 +8,20 @@ final class UsageMeter
 {
     private static string $task='other';
     private static int $httpAttempts = 0;
+    private static array $deferred = [];
 
     public static function httpAttempts(): int { return self::$httpAttempts; }
+
+    /** Keep numeric query measurements off the one-second retrieval path. */
+    public static function defer(array $measurement): void {
+        self::$httpAttempts++;
+        self::$deferred[]=$measurement;
+    }
+
+    public static function flushDeferred(): void {
+        $rows=self::$deferred;self::$deferred=[];
+        foreach($rows as $row){try{LlmUsage::record($row);}catch(\Throwable $error){}}
+    }
 
     public static function task(): string {return self::$task;}
 

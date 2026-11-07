@@ -32,6 +32,43 @@ class LLMManager {
     private bool $durableConfirmations = false;
     private ?int $privacyActor = null;
 
+    private ?MemoryRetriever $memoryRetriever = null;
+    private ?string $memoryRetrieverProfile = null;
+    private ?array $memoryRecallMetadata = null;
+    private ?string $memoryRecallContextHash = null;
+    private int $memoryRecallContextCount = 0;
+
+    /** Explicit ordinary-reply hook; all other context builders retain their old behavior. */
+    public function recallOrdinaryContext(array $context, string $query, array $actorIds): array {
+        $this->memoryRecallMetadata=null;$this->memoryRecallContextHash=null;
+        $config=ConfigManager::getInstance();
+        if(!(int)$config->getOption('ai_memory_recall_enabled',0)||!(int)$config->getOption('ai_memory_enabled',1))return $context;
+        $owner=(int)$config->getOption('ai_owner_user_id',0);
+        $actors=array_values(array_unique(array_map('intval',$actorIds)));
+        if($owner<=0||$actors!==[$owner])return $context;
+        $budget=MemoryLimits::setting('ai_memory_block_limit',$config->getOption('ai_memory_block_limit',2400));if(!$budget)return $context;
+        try {
+            $embedding=RouterAIEmbeddingProvider::fromConfig(static function() {});
+            $associations=new MemoryAssociations(static fn()=>null,$this->memoryAssociationProfile());
+            $profile=hash('sha256',$embedding->profile().'|'.$associations->profile());
+            if($this->memoryRetriever===null||($this->memoryRetrieverProfile!==null&&$this->memoryRetrieverProfile!==$profile)){
+                $this->memoryRetriever=new MemoryRetriever(new \Domain\MemoryEpisodeManager(),new MemorySourceReader(),$profile,$this->botUserId);
+                $this->memoryRetrieverProfile=$profile;
+            }
+            $result=$this->memoryRetriever->recall($context,$query,$budget,(bool)(int)$config->getOption('ai_memory_recall_expand',0),$owner);
+            $this->memoryRecallMetadata=$result['metadata'];$context=$result['context'];
+        }catch(\Throwable $error){$this->memoryRecallMetadata=['reason'=>'search_error','error_class'=>get_class($error),'sources'=>[]];}
+        $this->memoryRecallContextCount=count($context);$this->memoryRecallContextHash=hash('sha256',serialize($context));return $context;
+    }
+
+    public function memoryRecallMetadata(): ?array { return $this->memoryRecallMetadata; }
+
+    private function debugReplyRequest(string $prompt, array $context): array {
+        $request=['system'=>$prompt,'messages'=>$context];
+        if($this->memoryRecallMetadata!==null&&$this->memoryRecallContextHash===hash('sha256',serialize(array_slice($context,0,$this->memoryRecallContextCount))))$request['memory_recall']=$this->memoryRecallMetadata;
+        return LlmDebugLog::redactRecall($request);
+    }
+
     public function privacyActorId(): ?int { return $this->privacyActor; }
 
     public function withPrivacyActor(int $userId, callable $work): mixed {
@@ -244,6 +281,7 @@ class LLMManager {
                 }
 
                 $context = $this->buildContext($this->contextLimit());
+                $context = $this->recallOrdinaryContext($context, (string)$message, [(int)($contextData['user_id'] ?? 0)]);
                 $response = $this->generateReply($context);
                 $response = $this->applyReplyReaction($response, $context, (int)($contextData['message_id'] ?? 0));
                 
@@ -672,7 +710,7 @@ class LLMManager {
                 $usageTask=UsageMeter::task()==='other'?($this->usageTask==='other'?$logKind:$this->usageTask):UsageMeter::task();
                 $response = UsageMeter::ask($usageTask,$call,$context,$prompt,$deadlineAt,$timeoutSec??60);
                 LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
-                    ['system' => $prompt, 'messages' => $context], (string)$response, 'ok',
+                    $this->debugReplyRequest($prompt, $context), (string)$response, 'ok',
                     (int)round((microtime(true) - $t0) * 1000));
 
                 // Единая очистка + выходной guard против прорыва системных инструкций/контекста.
@@ -702,13 +740,13 @@ class LLMManager {
                 // промолчит. В журнал — статус truncated и полученный обрубок. Следующий провайдер — как при сбое.
                 error_log("LLM Provider truncated (" . get_class($provider) . "): " . $e->getMessage());
                 LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
-                    ['system' => $prompt, 'messages' => $context], $e->partial, 'truncated',
+                    $this->debugReplyRequest($prompt, $context), $e->partial, 'truncated',
                     (int)round((microtime(true) - $t0) * 1000));
                 continue;
             } catch (Exception $e) {
                 error_log("LLM Provider Error (" . get_class($provider) . "): " . $e->getMessage());
                 LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
-                    ['system' => $prompt, 'messages' => $context], $e->getMessage(), 'error',
+                    $this->debugReplyRequest($prompt, $context), $e->getMessage(), 'error',
                     (int)round((microtime(true) - $t0) * 1000));
                 continue; // Try next provider
             }
@@ -988,6 +1026,7 @@ class LLMManager {
      * $extraInstruction — доп. указание режима (адресация/сводность) из ReplyPolicy::instruction().
      */
     public function generateReply(array $context, string $extraInstruction = '', bool $fast = false): ?string {
+        try {
         $prompt = $this->personaPrompt();
         if ($extraInstruction !== '') {
             $prompt .= "\n\n" . $extraInstruction;
@@ -996,6 +1035,7 @@ class LLMManager {
             $prompt .= ReactionParser::instruction($context);
         }
         return $this->askWithFallback($context, $prompt, 'chat', null, $fast);
+        } finally { UsageMeter::flushDeferred(); }
     }
 
     public function applyReplyReaction(?string $raw, array $context, int $default): string {
@@ -1403,7 +1443,7 @@ class LLMManager {
         try {
             $again = UsageMeter::ask(UsageMeter::task() !== 'other' ? UsageMeter::task() : ($this->usageTask !== 'other' ? $this->usageTask : $logKind), $provider, $context, $retryPrompt, $deadlineAt, $timeoutSec);
             LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
-                ['system' => $retryPrompt, 'messages' => $context], (string)$again, 'ok',
+                $this->debugReplyRequest($retryPrompt, $context), (string)$again, 'ok',
                 (int)round((microtime(true) - $t0) * 1000));
             $again = ResponseSanitizer::clean($again, $botNickname, $botLogin);
             if ($again !== null && $again !== '' && !ResponseSanitizer::hasImage($again) && ResponseSanitizer::isMeaningful($again)) {

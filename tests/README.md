@@ -491,3 +491,24 @@ mlp456_pw_compose down -v
 ```
 
 После остановки контура удали только созданную `docs/tests/MLP-456/fix4/pw-workspace`, включая её тестовую `.env`. Fixture setup/cleanup вызывается spec автоматически. Если процесс теста оборван, перед повтором выполни его cleanup в работающем контуре через CLI с `MLP456_PW_FIXTURE=1`. PHP full suite и браузерные сценарии не запускаются одновременно в одной БД.
+
+
+### MLP-456 — поиск в обычном ответе
+
+`test_memory_retrieval.php` проверяет cosine/fusion, бюджет и echo guard; `integration_memory_recall.php` — fake-provider корпус, точные ники/даты, актуальность, приватность, оба ordinary входа, дедлайн API и реальную SQL-блокировку. Внешние провайдеры в тестах не вызываются. Оба файла входят в `tests/run_all.php`.
+
+`mlp-456-recall-settings.ui.spec.js` запускается только локально. Повтори disposable-процедуру MLP-456 выше, заменив все пути `fix4/pw-workspace` и `fix4/pw.override.yml` на `phase2/pw-workspace` и `phase2/pw.override.yml`. Сохрани проект `mlp456pw`, новую синтетическую `.env` с DB_NAME=mlp456pw и порт 18546. После миграции и запуска PHP server:
+
+```bash
+MLP_BASE_URL=http://localhost:18546 npx playwright test \
+  -c tests/playwright/playwright.config.js mlp-456-recall-settings.ui.spec.js \
+  --project=chromium-ui --project=firefox-ui \
+  --output=docs/tests/MLP-456/phase2/pw-results
+```
+
+Spec использует защищённую CLI fixture, не требует production credentials и проверяет эффективные значения, HTML max и серверное ограничение сохранения. После проверки выполни адресный compose down -v и удали только созданную phase2/pw-workspace с её тестовой `.env`. PHP suite и UI не должны одновременно использовать одну БД.
+
+
+Починка MLP-456 phase2: `integration_memory_recall_review.php` через настоящий ordinary generation проверяет main/fallback/transient/language retry, truncation/error, централизованное redaction и атрибуцию одинаковых nickname в конечных фоновых/focus блоках. Векторы и ответы — synthetic fakes, внешнего API нет. Также проверяются пустой запрос, weak/partial/complete lexical evidence и структурный identifier. Набор входит в штатный runner; production guard общий с остальными integration.
+
+`test_memory_recall_edges.php` проверяет JSON redaction при Unicode/slash escaping, вложенных массивах и сериализованных строках, побайтное сохранение обычного debug и адресную очистку имени бота без удаления темы. `integration_memory_recall_review.php` дополнительно проверяет эти сериализации в настоящем logger и сравнивает BOOLEAN evidence после очистки операторного ввода на MySQL. Оба файла входят в штатный runner; внешние API не вызываются.

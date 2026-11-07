@@ -25,7 +25,7 @@ class ResponseSanitizer {
         // (1) Отрезаем всё, начиная с маркеров служебных врезок/дампа контекста.
         // MLP-314: '[Заметки Лиры' — маркер блока памяти; в leakSignal НЕ добавляется
         // (regex-alternation сломался бы о '[', а порог 15 симв. ел бы короткие ответы).
-        $cutMarkers = ['[Системное правило]', '[Система]', '[Инструкция', '[Задача]', 'Контекст:', '=== ВАЖНОЕ СИСТЕМНОЕ', '[Заметки Лиры', '[Время]', '[Кто сейчас в чате]', '[Чат]:'];
+        $cutMarkers = ['[Системное правило]', '[Система]', '[Инструкция', '[Задача]', 'Контекст:', '=== ВАЖНОЕ СИСТЕМНОЕ', '[Заметки Лиры', '[Воспоминания]', '[К этой реплике]', '[Время]', '[Кто сейчас в чате]', '[Чат]:'];
         foreach ($cutMarkers as $mk) {
             $pos = mb_stripos($text, $mk, 0, 'UTF-8');
             if ($pos !== false) {
@@ -49,6 +49,7 @@ class ResponseSanitizer {
         // (4) Обёртка кавычками + HTML-сущности (ChatManager при сохранении снова экранирует).
         $text = preg_replace('/^"(.*)"$/us', '$1', trim($text));
         $text = self::stripMessageIds(html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        foreach ($cutMarkers as $marker) { $position = mb_stripos($text, $marker); if ($position !== false) $text = trim(mb_substr($text, 0, $position)); }
         $text = self::stripSpeakerPrefix(trim($text), $botNickname, $botLogin);
         $text = trim($text);
 

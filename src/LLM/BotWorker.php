@@ -189,6 +189,7 @@ class BotWorker {
         // даёт инструкция ПОСЛЕДНЕЙ РЕПЛИКОЙ, не system (уроки MLP-293/308).
         $ctxLimit = max(4, min(100, (int)$this->config->getOption('ai_context_messages', 24)));
         $context = $this->llm->buildReplyContext($ctxLimit, null, null, true, null, $decision['quote_text'] ?? implode(' ', array_column($mentions, 'message')));
+        $context = $this->llm->recallOrdinaryContext($context, $decision['quote_text'] ?? implode(' ', array_column($mentions, 'message')), array_map(static fn($m) => (int)($m['user_id'] ?? 0), $mentions));
         $instr = ReplyPolicy::instruction($decision);
         if ($instr !== '') {
             $context[] = ['role' => 'user', 'content' => $instr];

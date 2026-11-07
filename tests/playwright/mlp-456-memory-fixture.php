@@ -53,6 +53,10 @@ if ($mode === 'setup') {
     exit;
 }
 $state = json_decode(file_get_contents($statePath), true, 512, JSON_THROW_ON_ERROR);
+if ($mode === 'oversized-limits') {
+    foreach (['ai_memory_block_limit'=>10000,'ai_memory_user_limit'=>4000,'ai_memory_meme_limit'=>4000] as $key=>$value) $config->setOption($key,$value);
+    echo '{}'; exit;
+}
 if ($mode === 'inspect') {
     $message = $db->query('SELECT message,is_deleted FROM chat_messages WHERE id='.(int)$state['message_id'])->fetch_assoc();
     $memory = $db->query('SELECT text FROM bot_memory WHERE id='.(int)$state['memory_id'])->fetch_assoc();

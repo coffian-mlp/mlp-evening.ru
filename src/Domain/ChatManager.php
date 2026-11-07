@@ -1192,4 +1192,12 @@ class ChatManager {
         return $this->db->query('SELECT * FROM chat_messages' . $where . ' ORDER BY id' . ($lock ? ' FOR UPDATE' : ''))->fetch_all(MYSQLI_ASSOC);
     }
 
+    /** One bounded lexical predicate; only IDs leave this candidate stage. */
+    public function memoryRecallIds(string $term): array {
+        if($term==='')return [];
+        $term='%'.str_replace(['\\','%','_'],['\\\\','\\%','\\_'],mb_substr($term,0,80)).'%';
+        $stmt=$this->db->prepare('SELECT id FROM chat_messages WHERE is_deleted=0 AND message LIKE ? ORDER BY id DESC LIMIT 40');
+        $stmt->bind_param('s',$term);$stmt->execute();return array_map('intval',array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC),'id'));
+    }
+
 }

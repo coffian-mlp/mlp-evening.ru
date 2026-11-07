@@ -92,6 +92,8 @@ class SettingsController {
         'stream_command_cooldown' => 'uint',
         'ai_debug_log'          => 'int', // debug-журнал обращений к нейронкам (llm_debug_log, TTL 7 дней)
         // --- ИИ: память Лиры (MLP-314) ---
+        'ai_memory_recall_enabled' => 'int',
+        'ai_memory_recall_expand' => 'int',
         'ai_memory_enabled'     => 'int',  // выключатель подсистемы (0 = поведение до фичи, AC-8)
         'ai_memory_auto'        => 'int',  // фаза 2: автопись (включает владелец после ревизии)
         'ai_memory_interval'    => 'uint', // период автописи, сек (кламп ≥300 у потребителя)
@@ -162,7 +164,8 @@ class SettingsController {
                     $config->setOption($key, (int)$raw);
                     break;
                 case 'uint':
-                    $config->setOption($key, max(0, (int)$raw));
+                    $value = in_array($key, ['ai_memory_block_limit','ai_memory_user_limit','ai_memory_meme_limit'], true) ? \LLM\MemoryLimits::setting($key, $raw) : max(0, (int)$raw);
+                    $config->setOption($key, $value);
                     break;
                 case 'string':
                     $config->setOption($key, trim((string)$raw));

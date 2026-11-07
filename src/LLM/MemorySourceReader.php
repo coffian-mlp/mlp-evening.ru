@@ -80,4 +80,31 @@ final class MemorySourceReader
         }
         return true;
     }
+    /** Batch hydration never trusts cached text, membership signatures or old consent. */
+    public function recall(array $records, array $members, string $profile, int $botId, callable $check, callable $prepare): array
+    {
+        $groups=[];$sourceIds=['chat'=>[],'memory'=>[]];
+        foreach($members as $member){$check();$kind=$member['source_kind'];if(!isset($sourceIds[$kind]))continue;$groups[$member['episode_id']][]=$member;$sourceIds[$kind][]=(int)$member['source_id'];}
+        $prepare();$chat=$this->chat->memorySourceRows($sourceIds['chat']);$prepare();$memory=$this->memory->memorySourceRows($sourceIds['memory']);
+        $allowed=$this->allowedUsers(array_merge($chat,$memory),false,$check,$prepare);
+        $rows=['chat'=>array_column($chat,null,'id'),'memory'=>array_column($memory,null,'id')];$result=[];
+        foreach($records as $id=>$record){
+            $check();$refs=[];$lines=[];$keys=[];$valid=true;
+            foreach($groups[$id]??[] as $member){
+                $check();$kind=$member['source_kind'];$row=$rows[$kind][$member['source_id']]??null;
+                if(!$row||!$this->eligible($row,$kind,$allowed)||MemoryEpisodeBuilder::signature($row,$kind)!==$member['source_signature']){$valid=false;break;}
+                $refs[]=['source_id'=>(int)$member['source_id'],'user_id'=>(int)($member['user_id']??0),'related_user_id'=>(int)($member['related_user_id']??0),'start_offset'=>(int)$member['start_offset'],'end_offset'=>(int)$member['end_offset'],'signature'=>$member['source_signature']];
+                $text=MemoryEpisodeBuilder::text($row,$kind);$part=mb_substr($text,(int)$member['start_offset'],(int)$member['end_offset']-(int)$member['start_offset']);
+                $author=$kind==='chat'?mb_substr(preg_replace('/\s+/u',' ',(string)$row['username']),0,80):'user_id='.(int)($row['user_id']??$row['created_by']??0);
+                $role=$kind==='chat'?((int)$row['user_id']===$botId?'bot':'user'):'memory';
+                $lines[]=['source'=>$kind.':'.$member['source_id'],'author'=>$author,'user_id'=>isset($row['user_id'])?(int)$row['user_id']:null,'role'=>$role,'date_utc'=>$row['created_at'],'text'=>mb_substr($part,0,600)];$keys[]=$kind.':'.$member['source_id'];
+            }
+            if(!$valid||!$refs)continue;
+            $hash=hash('sha256',json_encode([MemoryEpisodeBuilder::VERSION,$botId,$profile,$refs],JSON_THROW_ON_ERROR));
+            if(!hash_equals($record['source_hash'],$hash))continue;
+            $result[$id]=['id'=>(int)$id,'date'=>$record['started_at'],'source_ids'=>array_values(array_unique($keys)),'lines'=>$lines,'summary'=>implode(' ',array_map(static fn($l)=>'['.$l['role'].' user_id='.($l['user_id']??'null').'] '.$l['author'].': '.$l['text'],$lines))];
+        }
+        return $result;
+    }
+
 }

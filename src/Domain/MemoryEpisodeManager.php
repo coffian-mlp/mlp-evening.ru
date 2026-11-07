@@ -160,4 +160,68 @@ final class MemoryEpisodeManager
         return array_map('intval', array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC), 'id'));
     }
 
+    public function recallVectors(string $profile): array
+    {
+        $stmt=$this->db->prepare("SELECT id,revision,source_hash,dimensions,embedding FROM memory_episodes WHERE status='ready' AND profile_hash=? AND dimensions=512 ORDER BY id");
+        $stmt->bind_param('s',$profile);$stmt->execute();return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    }
+
+    public function recallAssociationIds(string $query, string $profile, array $cosines = [], array $strong = []): array
+    {
+        $stmt=$this->db->prepare("SELECT id,MATCH(associations) AGAINST(? IN NATURAL LANGUAGE MODE) AS score FROM memory_episodes WHERE status='ready' AND profile_hash=? AND MATCH(associations) AGAINST(? IN NATURAL LANGUAGE MODE)");
+        $stmt->bind_param('sss',$query,$profile,$query);$stmt->execute();$scores=[];
+        foreach($stmt->get_result()->fetch_all(MYSQLI_ASSOC)as$row)$scores[(int)$row['id']]=(float)$row['score'];
+        foreach($strong as$id)if(!isset($scores[$id]))$scores[$id]=0.0;
+        return array_slice(self::recallLexicalOrder($scores,$cosines),0,8);
+    }
+
+    /** All meaningful terms must be present; structured identifiers bypass FT token-size limits. */
+    public function recallStrongAssociationIds(array $terms, string $profile): array
+    {
+        $words=[];$identifier='';
+        foreach($terms as$term){
+            if($identifier===''&&preg_match('/[\p{L}]/u',$term)&&preg_match('/[0-9]/',$term)&&str_contains($term,'-'))$identifier=$term;
+            foreach(preg_split('/[^\p{L}\p{N}_]+/u',$term,-1,PREG_SPLIT_NO_EMPTY)as$word)if(mb_strlen($word)>=3)$words[$word]=true;
+        }
+        $boolean=implode(' ',array_map(static fn($word)=>'+'.$word,array_keys($words)));
+        $like='%'.str_replace(['\\','%','_'],['\\\\','\\%','\\_'],$identifier).'%';
+        if($boolean===''&&$identifier==='')return [];
+        $stmt=$this->db->prepare("SELECT id FROM memory_episodes WHERE status='ready' AND profile_hash=? AND ((?<>'' AND MATCH(associations) AGAINST(? IN BOOLEAN MODE)) OR (?<>'' AND associations LIKE ?))");
+        $stmt->bind_param('sssss',$profile,$boolean,$boolean,$identifier,$like);$stmt->execute();return array_map('intval',array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC),'id'));
+    }
+
+    public static function recallLexicalOrder(array $scores, array $cosines): array
+    {
+        uksort($scores,static function($a,$b)use($scores,$cosines){
+            if(abs($scores[$b]-$scores[$a])>1e-9)return $scores[$b]<=>$scores[$a];
+            return (($cosines[$b]??-1)<=>($cosines[$a]??-1))?:($a<=>$b);
+        });
+        return array_keys($scores);
+    }
+
+    public function recallSourceIds(array $sourceIds, array $userIds, ?string $date, string $profile): array
+    {
+        $sourceIds=array_values(array_filter(array_map('intval',$sourceIds)));$userIds=array_values(array_filter(array_map('intval',$userIds)));
+        $parts=[];
+        if($sourceIds)$parts[]="(s.source_kind='chat' AND s.source_id IN (".implode(',',$sourceIds).'))';
+        if($userIds){$ids=implode(',',$userIds);$parts[]="(s.user_id IN ($ids) OR s.related_user_id IN ($ids))";}
+        if($date!==null){$day=$this->db->real_escape_string($date);$parts[]="(e.started_at<'$day'+INTERVAL 1 DAY AND e.ended_at>='$day')";}
+        if(!$parts)return [];
+        $stmt=$this->db->prepare("SELECT DISTINCT e.id,e.ended_at FROM memory_episodes e JOIN memory_episode_sources s ON s.episode_id=e.id WHERE e.status='ready' AND e.profile_hash=? AND (".implode(' OR ',$parts).') ORDER BY e.ended_at DESC,e.id LIMIT 8');
+        $stmt->bind_param('s',$profile);$stmt->execute();return array_map('intval',array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC),'id'));
+    }
+
+    public function recallRecords(array $ids, string $profile): array
+    {
+        $ids=array_slice(array_values(array_unique(array_filter(array_map('intval',$ids)))),0,24);if(!$ids)return [];
+        $stmt=$this->db->prepare("SELECT id,source_kind,source_hash,revision,started_at,ended_at FROM memory_episodes WHERE status='ready' AND profile_hash=? AND id IN (".implode(',',$ids).')');
+        $stmt->bind_param('s',$profile);$stmt->execute();return array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC),null,'id');
+    }
+
+    public function recallMembers(array $ids): array
+    {
+        $ids=array_slice(array_values(array_unique(array_filter(array_map('intval',$ids)))),0,24);if(!$ids)return [];
+        return $this->db->query('SELECT episode_id,source_kind,source_id,user_id,related_user_id,start_offset,end_offset,source_signature FROM memory_episode_sources WHERE episode_id IN ('.implode(',',$ids).') ORDER BY episode_id,source_id,start_offset')->fetch_all(MYSQLI_ASSOC);
+    }
+
 }

@@ -114,12 +114,12 @@ class LyraMemory {
         // Кламп-потолок 8000 (~4 страницы): страховка от случайного «999999» в поле,
         // не рекомендация. Цена блока — токены в КАЖДОМ ответе бота (решение владельца
         // 22.08: рабочее значение 6000, «4000 маловато»).
-        $blockLimit = min(8000, max(0, (int)$config->getOption('ai_memory_block_limit', 2400)));
+        $blockLimit = min(MemoryLimits::BLOCK, max(0, (int)$config->getOption('ai_memory_block_limit', 2400)));
         if ($blockLimit === 0) {
             return null;
         }
-        $userLimit = min(2000, max(100, (int)$config->getOption('ai_memory_user_limit', 400)));
-        $memeLimit = min(2000, max(100, (int)$config->getOption('ai_memory_meme_limit', 800)));
+        $userLimit = min(MemoryLimits::ENTRY, max(100, (int)$config->getOption('ai_memory_user_limit', 400)));
+        $memeLimit = min(MemoryLimits::ENTRY, max(100, (int)$config->getOption('ai_memory_meme_limit', 800)));
 
         $botId = $this->llm->getBotUserId();
         $ids = [];

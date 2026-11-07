@@ -36,8 +36,10 @@ class LlmDebugLog {
             return;
         }
         try {
+            $found=false;$request=self::redactRecall($request,$found);
+            $recall=$found||(is_array($request)&&!empty($request['memory_recall']['sources']));
             $req = self::squash($request);
-            $res = $response === null ? null : self::squash($response);
+            $res = $response === null ? null : ($recall ? '[Recall reply text omitted from debug log]' : self::squash($response));
             $db = Database::getInstance()->getConnection();
             $stmt = $db->prepare(
                 "INSERT INTO llm_debug_log (kind, provider, model, status, duration_ms, request, response)
@@ -49,6 +51,25 @@ class LlmDebugLog {
         } catch (\Throwable $e) {
             error_log('LlmDebugLog: ' . get_class($e) . ': ' . $e->getMessage());
         }
+    }
+
+    /** Privacy boundary for every caller, including retries and direct utility logging. */
+    public static function redactRecall(mixed $data, ?bool &$found = null): mixed {
+        if(is_array($data)){foreach($data as $key=>$value)$data[$key]=self::redactRecall($value,$found);return $data;}
+        if(!is_string($data))return $data;
+        if($data==='[Recall source text omitted from debug log]'){$found=true;return $data;}
+        // Inspect serialized values before looking for literal Unicode markers.
+        // Ordinary JSON must retain its original whitespace and escaping byte for byte.
+        $json=json_decode($data,true);
+        if(json_last_error()===JSON_ERROR_NONE&&(is_array($json)||is_string($json))){
+            $jsonFound=false;$redacted=self::redactRecall($json,$jsonFound);
+            if($jsonFound){$found=true;return json_encode($redacted,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);}
+            return $data;
+        }
+        $decoded=html_entity_decode($data,ENT_QUOTES|ENT_HTML5,'UTF-8');
+        $positions=[];foreach([MemoryRecallBlock::MARKER,MemoryRecallBlock::FOCUS]as$marker){$position=mb_stripos($decoded,$marker);if($position!==false)$positions[]=$position;}
+        if(!$positions)return $data;
+        $found=true;return trim(mb_substr($decoded,0,min($positions))).'[Recall source text omitted from debug log]';
     }
 
     /**

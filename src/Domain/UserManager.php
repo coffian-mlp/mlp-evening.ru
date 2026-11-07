@@ -793,4 +793,14 @@ class UserManager {
         return array_map('intval', array_column($rows, 'id'));
     }
 
+    /** Exact unique aliases, including two-character names; ambiguity never grants an identity. */
+    public function memoryRecallIdentityIds(array $terms): array {
+        $terms=array_slice(array_values(array_unique(array_filter($terms))),0,12);if(!$terms)return [];
+        $marks=implode(',',array_fill(0,count($terms),'?'));
+        $stmt=$this->db->prepare("SELECT id,login,nickname FROM users WHERE login IN ($marks) OR nickname IN ($marks)");
+        $values=array_merge($terms,$terms);$stmt->bind_param(str_repeat('s',count($values)),...$values);$stmt->execute();$rows=$stmt->get_result()->fetch_all(MYSQLI_ASSOC);$ids=[];
+        foreach($terms as $term){$matches=[];foreach($rows as $row)if(mb_strtolower($row['login'])===mb_strtolower($term)||mb_strtolower($row['nickname']??'')===mb_strtolower($term))$matches[(int)$row['id']]=true;if(count($matches)===1)$ids[]=array_key_first($matches);}
+        return array_values(array_unique($ids));
+    }
+
 }

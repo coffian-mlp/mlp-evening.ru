@@ -18,13 +18,13 @@ final class RouterAIEmbeddingProvider implements EmbeddingProviderInterface
         $this->meter = $meter ?? static fn($raw,$code,$error,$duration) => UsageMeter::capture('routerai', self::MODEL, $raw, $code, $error, $duration, 'memory_embedding_index');
     }
 
-    public static function fromConfig(): self
+    public static function fromConfig(?callable $meter = null): self
     {
         $config = ConfigManager::getInstance();
         $proxy = (string)$config->getOption('ai_proxy_url', '');
         if (str_starts_with($proxy, 'socks5://')) $proxy = 'socks5h://' . substr($proxy, 9);
         if (str_starts_with($proxy, 'vless://')) $proxy = 'socks5h://127.0.0.1:10808';
-        return new self((string)$config->getOption('ai_routerai_key', ''), $proxy === '' ? null : $proxy);
+        return new self((string)$config->getOption('ai_routerai_key', ''), $proxy === '' ? null : $proxy, null, $meter);
     }
 
     public function profile(): string

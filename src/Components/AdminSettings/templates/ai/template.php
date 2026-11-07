@@ -422,9 +422,9 @@ $config = $arResult['config']; // Helper
         <div class="form-group">
             <label class="form-label">Бюджеты блока памяти, символов (весь блок / досье одного участника / мемы)</label>
             <div style="display: flex; gap: 8px;">
-                <input type="number" name="ai_memory_block_limit" value="<?= htmlspecialchars($config->getOption('ai_memory_block_limit', 2400)) ?>" class="form-input" title="Общий кап блока (0 = блока нет)">
-                <input type="number" name="ai_memory_user_limit" value="<?= htmlspecialchars($config->getOption('ai_memory_user_limit', 400)) ?>" class="form-input" title="Бюджет досье одного участника">
-                <input type="number" name="ai_memory_meme_limit" value="<?= htmlspecialchars($config->getOption('ai_memory_meme_limit', 800)) ?>" class="form-input" title="Бюджет мемов в блоке">
+                <input type="number" name="ai_memory_block_limit" min="0" max="<?= \LLM\MemoryLimits::BLOCK ?>" value="<?= htmlspecialchars(\LLM\MemoryLimits::setting('ai_memory_block_limit', $config->getOption('ai_memory_block_limit', 2400))) ?>" class="form-input" title="Общий кап блока (0 = блока нет)">
+                <input type="number" name="ai_memory_user_limit" min="100" max="<?= \LLM\MemoryLimits::ENTRY ?>" value="<?= htmlspecialchars(\LLM\MemoryLimits::setting('ai_memory_user_limit', $config->getOption('ai_memory_user_limit', 400))) ?>" class="form-input" title="Бюджет досье одного участника">
+                <input type="number" name="ai_memory_meme_limit" min="100" max="<?= \LLM\MemoryLimits::ENTRY ?>" value="<?= htmlspecialchars(\LLM\MemoryLimits::setting('ai_memory_meme_limit', $config->getOption('ai_memory_meme_limit', 800))) ?>" class="form-input" title="Бюджет мемов в блоке">
             </div>
         </div>
 
