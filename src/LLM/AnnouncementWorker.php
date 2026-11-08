@@ -172,7 +172,8 @@ final class AnnouncementWorker
 
     private function respond(array $update, string $text): void
     {
-        $text = $this->content->editorText($text);
+        $text = (new LLMManager())->withAddressedMessages(isset($update['callback_query']) ? [] : [(string)($update['message']['text'] ?? '')],
+            fn() => $this->content->editorText($text));
         try {
             if (isset($update['callback_query'])) {
                 $this->telegram->request('answerCallbackQuery',['callback_query_id'=>$update['callback_query']['id'],'text'=>mb_substr($text,0,190),'show_alert'=>true]);
@@ -275,7 +276,7 @@ final class AnnouncementWorker
 
     private function notify(string $text): void
     {
-        $text = $this->content->editorText($text);
+        $text = (new LLMManager())->withAddressedMessages([], fn() => $this->content->editorText($text));
         try { $this->telegram->request('sendMessage',['chat_id'=>$this->owner,'text'=>$text]); }
         catch (TelegramBotException $e) {
             $this->journal->record('owner_notification_failed',[],$e);

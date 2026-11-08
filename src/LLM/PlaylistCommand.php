@@ -179,7 +179,11 @@ final class PlaylistCommand
         if (empty($result['outcome'])) return false;
         if (!empty($result['reply_message_id'])) return $manager->publishResult($id, $actor, '') !== null;
         // Factual text is generated before the owner locks any rows or performs delivery.
-        $text = $this->replyText($result['outcome'], time() + 20, ['actor_id' => $actor, 'data' => $result['handler_context']]);
+        $source = (new ChatManager())->getMessageById((int)$result['source_message_id']);
+        $query = $source && empty($source['is_deleted']) && (int)$source['user_id'] === $actor
+            ? html_entity_decode((string)$source['raw_message'], ENT_QUOTES | ENT_HTML5, 'UTF-8') : '';
+        $text = $this->llm->withAddressedMessages([$query],
+            fn() => $this->replyText($result['outcome'], time() + 20, ['actor_id' => $actor, 'data' => $result['handler_context']]));
         return $manager->publishResult($id, $actor, $text) !== null;
     }
 
@@ -580,7 +584,8 @@ final class PlaylistCommand
     private function say(array $outcome, int $quote, int $deadline, string $marker = '', ?string $deliveryKey = null): int
     {
         $source = (new ChatManager())->getMessageById($quote);
-        $text = $this->replyText($outcome, $deadline, ['actor_id' => (int)($source['user_id'] ?? 0), 'data' => []]);
+        $text = $this->llm->withAddressedMessages([html_entity_decode((string)($source['raw_message'] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8')],
+            fn() => $this->replyText($outcome, $deadline, ['actor_id' => (int)($source['user_id'] ?? 0), 'data' => []]));
         $deliveryKey ??= 'source_' . $quote;
         $id = $this->llm->botSay($text . ($marker ? "\n" . $marker : '') . "\n" . '[[command-delivery:' . $deliveryKey . ']]', [$quote]);
         if (!is_int($id) || $id <= 0) throw new \RuntimeException('Command reply failed');
@@ -809,7 +814,8 @@ final class PlaylistCommand
 
     private function publishWishOutcome(array $outcome, array $source, int $actor, int $deadline): bool
     {
-        $text = $this->replyText($outcome, $deadline, ['actor_id' => $actor, 'data' => []]);
+        $text = $this->llm->withAddressedMessages([html_entity_decode((string)($source['raw_message'] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8')],
+            fn() => $this->replyText($outcome, $deadline, ['actor_id' => $actor, 'data' => []]));
         $sourceId = (int)$source['id'];
         $version = ChatManager::interactionSourceVersion($source);
         $chat = new ChatManager();

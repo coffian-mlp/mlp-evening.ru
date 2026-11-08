@@ -28,6 +28,10 @@ class LLMManager {
     private $proxyUrl;
     private $vlessLink;
     private string $commandMessage = '';
+    /** null inherits the current command; [] explicitly means no addressed human request. */
+    private ?array $addressedMessages = null;
+    /** Synchronous process scope: nested handlers may construct their own manager. */
+    private static ?array $processAddressedMessages = null;
     private ?array $replyJob = null;
     private bool $durableConfirmations = false;
     private ?int $privacyActor = null;
@@ -167,12 +171,16 @@ class LLMManager {
         $previousActor=$this->privacyActor;
         $this->privacyActor=isset($contextData['user_id'])?(int)$contextData['user_id']:null;
         $previous = $this->commandMessage;
+        $previousAddressed = $this->addressedMessages;
         $previousDurable = $this->durableConfirmations;
         $this->durableConfirmations = !empty($contextData['_durable_confirmations']);
         $this->commandMessage = $triggerType === 'dynamic_command' ? (string)($contextData['message'] ?? '') : '';
+        $this->addressedMessages = in_array($triggerType, ['mention', 'dynamic_command'], true)
+            && empty($contextData['schedule_announcement']) && $this->usageTask !== 'announcement'
+            ? [(string)($contextData['message'] ?? '')] : [];
         $usageTask=$triggerType==='dynamic_command'?'command_'.($contextData['command']['handler_type']??'text'):(string)$triggerType;
-        try { return UsageMeter::within($usageTask,fn()=>$this->processTriggerInner($triggerType, $contextData)); }
-        finally { $this->commandMessage = $previous; $this->durableConfirmations = $previousDurable; $this->privacyActor=$previousActor; }
+        try { return $this->withAddressedMessages($this->addressedMessages, fn() => UsageMeter::within($usageTask,fn()=>$this->processTriggerInner($triggerType, $contextData))); }
+        finally { $this->commandMessage = $previous; $this->addressedMessages = $previousAddressed; $this->durableConfirmations = $previousDurable; $this->privacyActor=$previousActor; }
     }
 
     /** Bounded background for explicit subjects; identities never grant action permissions. */
@@ -614,7 +622,7 @@ class LLMManager {
             . "«Голосовалочка! Обожаю такие штуки.»"
         ];
 
-        $raw = $this->askWithFallback($context, $this->personaPrompt());
+        $raw = $this->withAddressedMessages([], fn() => $this->askWithFallback($context, $this->personaPrompt()));
         $parsed = self::parseBotVote($raw, count($poll['options']));
 
         $idx = $parsed['index'];
@@ -697,6 +705,8 @@ class LLMManager {
         $prompt .= "\n[Чат]: это групповой чат, участников несколько. Каждая строка «[ЧЧ:ММ] Имя: …» — реплика ОТДЕЛЬНОГО человека; "
             . "не сливай разных людей в одного собеседника и не отвечай «ты»/«твой» без @Имя, если в окне говорили несколько человек. "
             . "Обращаешься к конкретному человеку — начни с @Имя (только к тому, чьи слова обсуждаешь); реплика без @ — ко всем.";
+
+        if ($logKind === 'chat') $prompt .= "\n" . self::CJK_REMINDER;
 
         foreach (($fast ? $this->fastProviders : $this->providers) as $provider) {
             if ($deadlineAt !== null && microtime(true) >= $deadlineAt) {
@@ -816,7 +826,7 @@ class LLMManager {
 
     public function commandConfirmationText(string $instruction, ?string $mustContain, string $message): ?string {
         $previous = $this->commandMessage; $this->commandMessage = $message;
-        try { return $this->liveText($instruction, $mustContain); }
+        try { return $this->withAddressedMessages([$message], fn() => $this->liveText($instruction, $mustContain)); }
         finally { $this->commandMessage = $previous; }
     }
 
@@ -898,6 +908,7 @@ class LLMManager {
     public function forAnnouncements(): self {
         $copy = clone $this;
         $copy->usageTask = 'announcement';
+        $copy->addressedMessages = [];
         $copy->providers = array_map(static fn($p) => $p instanceof RouterAIProvider
             ? $p->withMaxTokens(max(8192, TokenBudget::fromConfig())) : clone $p, $this->fastProviders);
         return $copy;
@@ -951,8 +962,12 @@ class LLMManager {
         $context = $actionContext === null ? [] : $this->buildActionContext($actionContext);
         if ($context === null) return null;
         $context[] = ['role' => 'user', 'content' => $instruction . "\n" . self::LANG_REMINDER];
+        $clarifications = $actionContext['data']['clarifications'] ?? [];
+        $hasActionRequest = array_key_exists('original_query', $actionContext['data'] ?? []) || array_key_exists('clarifications', $actionContext['data'] ?? []);
+        $currentMessage = $hasActionRequest ? (string)($clarifications ? end($clarifications) : ($actionContext['data']['original_query'] ?? '')) : null;
         $raw = $this->scopedCall($context,
-            $this->personaPrompt() . ($trustedTask !== null ? "\n\n[Текущая служебная задача, обязательна]:\n" . $trustedTask : ''), $deadlineSec, $timeoutSec, true);
+            $this->personaPrompt() . ($trustedTask !== null ? "\n\n[Текущая служебная задача, обязательна]:\n" . $trustedTask : ''), $deadlineSec, $timeoutSec, true,
+            $currentMessage);
         $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
         if ($text === '' || ($mustContain !== null && mb_stripos($text, $mustContain) === false)) return null;
         if ($actionContext !== null) {
@@ -972,7 +987,7 @@ class LLMManager {
         return $addressed;
     }
 
-    private function scopedCall(array $context, string $prompt, int $deadlineSec, int $timeoutSec, bool $chat): ?string {
+    private function scopedCall(array $context, string $prompt, int $deadlineSec, int $timeoutSec, bool $chat, ?string $currentMessage = null): ?string {
         if (!$this->isEnabled()) return null;
         $remaining = $deadlineSec - time();
         $provider = $this->providers[0] ?? null;
@@ -987,7 +1002,7 @@ class LLMManager {
             $raw = UsageMeter::ask($usageTask,$call,$context,$prompt,(float)$deadlineSec,$timeoutSec);
             $clean = ResponseSanitizer::clean($raw);
             if (!$clean || ($chat && (!ResponseSanitizer::isMeaningful($clean) || ResponseSanitizer::hasImage($clean)))) return null;
-            return $clean;
+            return $chat ? $this->cjkCleaned($clean, $this->allowedCjk($currentMessage)) : $clean;
         } catch (\Throwable $e) {
             error_log('Playlist utility unavailable: ' . get_class($e));
             return null;
@@ -1019,6 +1034,15 @@ class LLMManager {
 
     private function prepareScopedProxy(): bool {
         return !$this->vlessLink || (new XrayManager())->ensureRunning($this->vlessLink);
+    }
+
+    /** Server-selected requests, separate from the model context and instruction text. */
+    public function withAddressedMessages(array $messages, callable $generate): mixed {
+        $previous = $this->addressedMessages;
+        $previousProcess = self::$processAddressedMessages;
+        $this->addressedMessages = self::$processAddressedMessages = $messages;
+        try { return $generate(); }
+        finally { $this->addressedMessages = $previous; self::$processAddressedMessages = $previousProcess; }
     }
 
     /**
@@ -1417,45 +1441,79 @@ class LLMManager {
      * живёт в системном промпте персоны, а инструкция команды приходит последней репликой —
      * до неё оно доживает не всегда: glm-5.3 вставлял «reports», «ban», «sniff-sniff» (26.09).
      */
-    public const LANG_REMINDER = 'Пиши только по-русски, без английских слов и звукоподражаний (ники и команды — как есть).';
+    public const CJK_REMINDER = 'Не используй иероглифы, кану и хангыль вне явных цитат, ников, команд и URL.';
+    public const LANG_REMINDER = 'Пиши только по-русски, без английских слов и звукоподражаний (ники и команды — как есть).' . "\n" . self::CJK_REMINDER;
 
-    /**
-     * Страж латиницы (MLP-356, по решению владельца 26.09): английские слова в реплике Лиры, которых
-     * нет ни в репликах людей, ни в данных контекста, ни среди ников, — повод для одной повторной
-     * генерации тем же провайдером с перечнем слов, которые надо переписать. Напоминание о языке
-     * (MLP-355) не спасает, когда модель копирует свой прошлый ответ из контекста («sniff-sniff»).
-     * Повтор не удался — отдаём первый вариант: ответ важнее тишины. Только kind=chat: служебные
-     * вызовы (режиссёр сцены) пишут по-английски намеренно.
-     */
-    private function latinChecked(string $clean, LLMProviderInterface $provider, array $context, string $prompt, string $logKind, string $botNickname, string $botLogin, float $deadlineAt, int $timeoutSec): string {
-        if ($logKind !== 'chat') {
-            return $clean;
-        }
+    /** One language retry for Latin and CJK together, sharing the original request deadline. */
+    private function latinChecked(string $clean, LLMProviderInterface $provider, array $context, string $prompt, string $logKind, string $botNickname, string $botLogin, float $deadlineAt, int $timeoutSec): ?string {
+        if ($logKind !== 'chat') return $clean;
+        $cjkAllowed = $this->allowedCjk();
+        $clean = $this->cjkNormalized($clean, $cjkAllowed);
         $allowed = $this->allowedLatin($context, $prompt);
         $foreign = ResponseSanitizer::foreignLatin($clean, $allowed);
-        if (!$foreign) {
-            return $clean;
-        }
+        $cjk = CjkGuard::foreign($clean, $cjkAllowed);
+        if (!$foreign && !$cjk) return $this->cjkCleaned($clean, $cjkAllowed);
         $list = implode(', ', array_slice($foreign, 0, 6));
-        error_log("askWithFallback: латиница в ответе ({$list}) — повторная генерация");
-        $retryPrompt = $prompt . "\n\n[Язык]: в прошлом варианте ответа были английские слова ({$list}). Напиши ответ заново, полностью по-русски.";
-        $t0 = microtime(true);
-        try {
-            $again = UsageMeter::ask(UsageMeter::task() !== 'other' ? UsageMeter::task() : ($this->usageTask !== 'other' ? $this->usageTask : $logKind), $provider, $context, $retryPrompt, $deadlineAt, $timeoutSec);
-            LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
-                $this->debugReplyRequest($retryPrompt, $context), (string)$again, 'ok',
-                (int)round((microtime(true) - $t0) * 1000));
-            $again = ResponseSanitizer::clean($again, $botNickname, $botLogin);
-            if ($again !== null && $again !== '' && !ResponseSanitizer::hasImage($again) && ResponseSanitizer::isMeaningful($again)) {
-                if (ResponseSanitizer::foreignLatin($again, $allowed)) {
-                    error_log('askWithFallback: латиница осталась и после повтора — отдаём повтор');
+        $retryPrompt = $prompt . ($cjk
+            ? "\n\n[Язык]: в прошлом варианте ответа были случайные иероглифы или другие иностранные слова. Напиши ответ заново, полностью по-русски; сохрани явные цитаты, ники, команды и URL."
+            : "\n\n[Язык]: в прошлом варианте ответа были английские слова ({$list}). Напиши ответ заново, полностью по-русски.");
+        $remaining = min($deadlineAt, RequestDeadline::at() ?? $deadlineAt) - RequestDeadline::now();
+        if ($remaining >= 5) {
+            $t0 = microtime(true);
+            try {
+                $again = UsageMeter::ask(UsageMeter::task() !== 'other' ? UsageMeter::task() : ($this->usageTask !== 'other' ? $this->usageTask : $logKind), $provider, $context, $retryPrompt, $deadlineAt, $timeoutSec);
+                LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
+                    $this->debugReplyRequest($retryPrompt, $context), (string)$again, 'ok',
+                    (int)round((microtime(true) - $t0) * 1000));
+                $again = ResponseSanitizer::clean($again, $botNickname, $botLogin);
+                if ($again !== null) $again = $this->cjkNormalized($again, $cjkAllowed);
+                if ($again !== null && $again !== '' && !ResponseSanitizer::hasImage($again) && ResponseSanitizer::isMeaningful($again)) {
+                    $clean = $again;
                 }
-                return $again;
+            } catch (\Throwable $e) {
+                error_log('askWithFallback: language retry unavailable: ' . get_class($e));
+            }
+        }
+        return $this->cjkCleaned($clean, $cjkAllowed);
+    }
+
+    /** Recheck markers created by typography normalization without decoding ordinary replies twice. */
+    private function cjkNormalized(string $text, array $allowed): string {
+        $normalized = CjkGuard::normalize($text, $allowed);
+        // Shield existing literal entities: the first clean() has already decoded the model response.
+        return $normalized === $text ? $text : ResponseSanitizer::clean(htmlspecialchars($normalized, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    }
+
+    /** Bounded responses use the same local cleanup without starting another model call. */
+    private function cjkCleaned(string $text, array $allowed): ?string {
+        $text = $this->cjkNormalized($text, $allowed);
+        if ($text === null || ResponseSanitizer::hasImage($text)) return null;
+        if (CjkGuard::foreign($text, $allowed)) {
+            $text = CjkGuard::strip($text, $allowed);
+            if (!ResponseSanitizer::isMeaningful(ReactionParser::extract($text)['text'])) return null;
+        }
+        return ResponseSanitizer::isMeaningful($text) ? $text : null;
+    }
+
+    /** Only explicitly addressed requests grant quotes; background and policy prose never do. */
+    private function allowedCjk(?string $currentMessage = null): array {
+        // Announcement profiles are an explicit boundary; only their own feedback scope is allowed.
+        $inherited = $this->usageTask === 'announcement' ? ($this->addressedMessages ?? [])
+            : (self::$processAddressedMessages ?? $this->addressedMessages ?? [$this->commandMessage]);
+        $messages = $currentMessage !== null ? [$currentMessage] : $inherited;
+        $allowed = [];
+        foreach ($messages as $message) $allowed = array_merge($allowed, CjkGuard::quoted((string)$message));
+        try {
+            foreach ((new UserManager())->getAllUsers() as $user) {
+                foreach (['nickname', 'login'] as $key) {
+                    $name = (string)($user[$key] ?? '');
+                    if (CjkGuard::foreign($name)) $allowed[] = $name;
+                }
             }
         } catch (\Throwable $e) {
-            error_log('askWithFallback: повтор из-за латиницы не удался: ' . $e->getMessage());
+            error_log('CJK nickname allowlist unavailable: ' . get_class($e));
         }
-        return $clean;
+        return $allowed;
     }
 
     /**

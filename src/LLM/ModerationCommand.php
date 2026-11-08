@@ -155,6 +155,11 @@ final class ModerationCommand {
     }
 
     public function handle(array $command, array $contextData): bool {
+        return $this->llm->withAddressedMessages([(string)($contextData['message'] ?? '')],
+            fn() => $this->handleAddressed($command, $contextData));
+    }
+
+    private function handleAddressed(array $command, array $contextData): bool {
         $action   = (($command['handler_type'] ?? '') === 'mute') ? 'mute' : 'ban';
         $prefix   = '/' . ltrim((string)($command['command_prefix'] ?? ($action === 'mute' ? 'мут' : 'бан')), '/');
         $username = (string)($contextData['username'] ?? 'Гость');

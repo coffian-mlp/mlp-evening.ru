@@ -170,7 +170,7 @@ class StreamCommand {
         }
 
         $context = $ask === null ? $llm->buildReplyContext($llm->contextLimit()) : [];
-        $raw = $ask !== null ? $ask($context, $instruction) : $llm->generateReply($context, $instruction);
+        $raw = $ask !== null ? $ask($context, $instruction) : $llm->withAddressedMessages($isOwner ? [$message] : [], fn() => $llm->generateReply($context, $instruction));
 
         // Бот может ответить реакцией вместо/вместе с текстом — как в обычной ветке.
         $msgId = !empty($payload['message_id']) ? (int)$payload['message_id'] : null;
@@ -206,7 +206,7 @@ class StreamCommand {
         // MLP-314: без блока памяти — latency-критичный путь (контекст урезан не зря).
         $context = $ask === null ? $llm->buildReplyContext($limit, null, null, true, false) : [];
         $context[] = ['role' => 'user', 'content' => $instruction];
-        $raw = $ask !== null ? $ask($context, $instruction) : $llm->generateReply($context);
+        $raw = $ask !== null ? $ask($context, $instruction) : $llm->withAddressedMessages([], fn() => $llm->generateReply($context));
         $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
         if ($text === '') {
             // Объявление перерыва обязано прозвучать (MLP-311): молчание провайдера

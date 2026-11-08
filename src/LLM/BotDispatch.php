@@ -143,12 +143,12 @@ class BotDispatch {
         $queue->fail([$id]);
         $llm ??= new LLMManager();
         $username = (string)($payload['username'] ?? 'Гость');
-        $llm->botSayLive(
+        $llm->withAddressedMessages([(string)($payload['message'] ?? '')], fn() => $llm->botSayLive(
             "@{$username} попросил рисунок, но ты уже три минуты занята другим рисунком. Этот запрос не начинался и не стоит в очереди. "
                 . "Коротко объясни @{$username}, что сейчас занята, и попроси повторить команду чуть позже. Не обещай автоматического выполнения.",
             "@{$username}, сейчас занята другим рисунком. Повтори команду чуть позже — этот ещё не начинала.",
             [], "@{$username}"
-        );
+        ));
     }
 
     /** Read-only commands share the queue receipt contract even on synchronous hosting. */

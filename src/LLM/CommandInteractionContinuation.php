@@ -207,7 +207,9 @@ final class CommandInteractionContinuation
         if ($chat->findBotReplyTo($sourceId, $marker)) return true;
         $handler = (new CommandInteractionManager($registry))->continuationHandler($payload['notice']['type']);
         if (($handler['permission'])($actor, []) === false) return false;
-        $text = ($handler['format'])('clarifying', ['code' => $payload['notice']['code'], '_deadline' => time() + 20, '_action_context' => ['actor_id' => $actor, 'data' => []]]);
+        $source = $chat->getMessageById($sourceId);
+        $text = (new LLMManager())->withAddressedMessages([html_entity_decode((string)($source['raw_message'] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8')],
+            fn() => ($handler['format'])('clarifying', ['code' => $payload['notice']['code'], '_deadline' => time() + 20, '_action_context' => ['actor_id' => $actor, 'data' => []]]));
         return self::publishNotice($payload, $handler, $text, $marker);
     }
 

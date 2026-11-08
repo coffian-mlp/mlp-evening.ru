@@ -194,7 +194,8 @@ class BotWorker {
         if ($instr !== '') {
             $context[] = ['role' => 'user', 'content' => $instr];
         }
-        $raw = $this->llm->generateReply($context);
+        $raw = $this->llm->withAddressedMessages(array_column($mentions, 'message'),
+            fn() => $this->llm->generateReply($context));
 
         // Бот может поставить реакцию вместо/вместе с текстом.
         // Реакцию вешаем на цитируемое (single) или новейшее сообщение из пачки.
@@ -405,11 +406,11 @@ class BotWorker {
             $this->llm->withPrivacyActor((int)$r['user_id'],function() use ($r) {
             $fallback = "@{$r['username']}, напоминаю: {$r['text']} ⏰";
             if ($this->llm->isEnabled()) {
-                $this->llm->botSayLive(
+                $this->llm->withAddressedMessages([], fn() => $this->llm->botSayLive(
                     "Ты обещала @{$r['username']} напомнить, и время пришло — напомни СЕЙЧАС о: «{$r['text']}». "
                     . "Одна-две фразы в своём стиле, ОБЯЗАТЕЛЬНО обратись @{$r['username']} и передай суть напоминания. Не задавай вопросов.",
                     $fallback, [], '@' . $r['username']
-                );
+                ));
             } else {
                 $this->llm->botSay($fallback);
             }

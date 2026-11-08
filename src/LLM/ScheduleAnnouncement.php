@@ -50,7 +50,7 @@ final class ScheduleAnnouncement {
             . 'Напиши только вступление в 1–3 предложениях; полный список новых серий добавит код, не перечисляй серии сама. '
             . 'Если доставка задержалась, не выдавай завершение за только что произошедшее и не зови на уже закончившееся событие. '
             . 'Момент учёта просмотра (UTC): ' . $completedAt . ".\n" . $scheduleContext;
-        $intro = $llm->liveText($instruction, 'просмотр засчитан');
+        $intro = $llm->withAddressedMessages([], fn() => $llm->liveText($instruction, 'просмотр засчитан'));
         if (!$intro || mb_stripos($intro, 'просмотр засчитан') === false || preg_match('/^[\s\W]*SILENCE[\s\W]*$/iu', $intro)) return false;
         $list = [];
         foreach ($titles as $index => $title) $list[] = ($index + 1) . '. ' . $title;

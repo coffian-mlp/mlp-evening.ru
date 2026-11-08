@@ -27,11 +27,11 @@ final class DrawingChatCollection
         try {
             if ($chat->findBotReplyTo($sourceId, $marker)) return true;
             $version = ChatManager::interactionSourceVersion($source);
-            $text = DrawingCommand::liveReply($llm,
+            $text = $llm->withAddressedMessages([html_entity_decode((string)$source['raw_message'], ENT_QUOTES | ENT_HTML5, 'UTF-8')], fn() => DrawingCommand::liveReply($llm,
                 'Объяви чату: сейчас даёшь одну минуту на пожелания к рисунку по беседе. Пожелания можно прислать ответом с цитатой на это сообщение. Затем сама начнёшь рисовать с учётом пожеланий. Никаких подтверждений или нажатий не требуется; кнопок нет. Не проси черновик или повторное описание. 1–2 коротких предложения в своём характере.',
                 'Даю минуту на пожелания к рисунку по чату — отвечайте с цитатой на это сообщение. Потом начну рисовать сама, подтверждать ничего не нужно.', time()+30,
                 ['actor_id'=>(int)$payload['user_id'], 'data'=>[]]
-            );
+            ));
             $published = $chat->addInteractionMessageGuarded($llm->getBotUserId(), $llm->getBotNickname(), $text."\n".$marker, [$sourceId],
                 static function () use ($chat, $command, $payload, $sourceId, $version): void {
                     if (self::source($command, $payload) === null) throw new \Core\UserError('Команда рисунка уже недоступна.');

@@ -53,6 +53,11 @@ class LyraArtist {
      * дневной лимит ai_image_daily_limit (генерация дороже текста).
      */
     public function handleDraw(array $command, array $contextData, ?callable $generator = null): bool {
+        return $this->llm->withAddressedMessages([(string)($contextData['message'] ?? '')],
+            fn() => $this->handleDrawAddressed($command, $contextData, $generator));
+    }
+
+    private function handleDrawAddressed(array $command, array $contextData, ?callable $generator): bool {
         $this->privacyOwnerId=isset($contextData['user_id'])?(int)$contextData['user_id']:null;
         $subject = BotCommandManager::stripPrefix($command, (string)($contextData['message'] ?? ''), 'нарисуй');
         $drafts = new DrawingCommand($this->llm);
@@ -88,6 +93,11 @@ class LyraArtist {
      * в художественное описание сценки, дальше — общий путь художницы.
      */
     public function handleDrawChat(array $command, array $contextData, ?callable $director = null, ?callable $generator = null): bool {
+        return $this->llm->withAddressedMessages(!empty($contextData['auto']) ? [] : [(string)($contextData['message'] ?? '')],
+            fn() => $this->handleDrawChatAddressed($command, $contextData, $director, $generator));
+    }
+
+    private function handleDrawChatAddressed(array $command, array $contextData, ?callable $director, ?callable $generator): bool {
         $this->privacyOwnerId=isset($contextData['user_id'])?(int)$contextData['user_id']:null;
         if (empty($contextData['auto']) && !empty($contextData['message_id'])) {
             if (!isset($contextData['drawing_chat_window'])) return DrawingChatCollection::begin($this->llm, $command, $contextData);
