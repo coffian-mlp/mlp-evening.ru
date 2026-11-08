@@ -22,7 +22,8 @@ class MemoryController {
         }
 
         $bm = new BotMemoryManager();
-        $page = $bm->getPage($limit, $offset, $kind);
+        $includeArchived = (string)($_POST['include_archived'] ?? '0') === '1';
+        $page = $bm->getPage($limit, $offset, $kind, $includeArchived);
 
         // Ники владельцев досье для отображения; отсутствующий пользователь -> пометка в UI.
         $userIds = array_values(array_unique(array_filter(array_map(

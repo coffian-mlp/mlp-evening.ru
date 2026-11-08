@@ -99,8 +99,10 @@ CREATE TABLE `bot_memory` (
   `created_by` int DEFAULT NULL COMMENT 'Автор ручной записи',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `is_archived` tinyint NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
-  KEY `idx_kind_user` (`kind`,`user_id`)
+  KEY `idx_kind_user` (`kind`,`user_id`),
+  KEY `idx_memory_active` (`kind`,`is_archived`,`source`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `chat_reactions` (

@@ -97,7 +97,7 @@ final class MemorySourceReader
                 $text=MemoryEpisodeBuilder::text($row,$kind);$part=mb_substr($text,(int)$member['start_offset'],(int)$member['end_offset']-(int)$member['start_offset']);
                 $author=$kind==='chat'?mb_substr(preg_replace('/\s+/u',' ',(string)$row['username']),0,80):'user_id='.(int)($row['user_id']??$row['created_by']??0);
                 $role=$kind==='chat'?((int)$row['user_id']===$botId?'bot':'user'):'memory';
-                $lines[]=['source'=>$kind.':'.$member['source_id'],'author'=>$author,'user_id'=>isset($row['user_id'])?(int)$row['user_id']:null,'role'=>$role,'date_utc'=>$row['created_at'],'text'=>mb_substr($part,0,600)];$keys[]=$kind.':'.$member['source_id'];
+                $lines[]=['source'=>$kind.':'.$member['source_id'],'author'=>$author,'user_id'=>isset($row['user_id'])?(int)$row['user_id']:null,'role'=>$role,'date_utc'=>$row['created_at'],'text'=>$part];$keys[]=$kind.':'.$member['source_id'];
             }
             if(!$valid||!$refs)continue;
             $hash=hash('sha256',json_encode([MemoryEpisodeBuilder::VERSION,$botId,$profile,$refs],JSON_THROW_ON_ERROR));

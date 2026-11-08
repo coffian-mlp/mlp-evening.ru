@@ -23,7 +23,7 @@ try{
    $journal=$db->query('SELECT * FROM schema_migrations ORDER BY id')->fetch_all(MYSQLI_ASSOC);
    migrate_database($db,dirname(__DIR__).'/migrations');
    check(migration_pending(migrate_all_files(dirname(__DIR__).'/migrations'),migrate_applied($db))===[],'all future migrations applied through normal upgrade');
-   check(count(migrate_applied($db))===count($manifest['migrations'])+1,'one incremental migration recorded');
+   check(count(migrate_applied($db))===count($manifest['migrations'])+2,'semantic index and archive incremental migrations recorded');
    $hash=bootstrap_schema_hash($db);
    if($expected===null)$expected=$hash;
    check($expected===$hash,'fresh plus upgrade and existing upgrade have identical structure');

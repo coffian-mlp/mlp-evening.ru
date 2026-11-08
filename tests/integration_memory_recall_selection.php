@@ -1,0 +1,86 @@
+<?php
+ob_start();require_once __DIR__.'/integration_helpers.php';$db=it_require_db();
+require_once dirname(__DIR__).'/migrate.php';migrate_database($db,dirname(__DIR__).'/migrations');
+use LLM\MemoryRecallText;use LLM\MemoryEpisodeBuilder;use LLM\MemoryRetriever;use Domain\MemoryEpisodeManager;
+$marker='it_selection_'.bin2hex(random_bytes(5));$users=[];$sources=[];$records=[];$memories=[];$profile=hash('sha256',$marker);
+try{
+ foreach(['Owner','SelectionBot']as$i=>$name)$users[]=(new Domain\UserManager())->createUser($marker.'_'.$i,'Aa!'.bin2hex(random_bytes(8)),'user',$name);
+ [$owner,$bot]=$users;$store=new MemoryEpisodeManager();$reader=new LLM\MemorySourceReader();$builder=new MemoryEpisodeBuilder($bot);
+ $unit=array_fill(0,512,0.0);$unit[0]=1;
+ $publish=function(string$text,string$tags,float$cosine)use($db,$owner,$store,$reader,$builder,$profile,&$sources,&$records){
+  $s=$db->prepare("INSERT INTO chat_messages(user_id,username,message,created_at) VALUES(?,'Owner',?,'2026-11-08 00:00:00')");$s->bind_param('is',$owner,$text);$s->execute();$id=(int)$db->insert_id;$sources[]=$id;
+  $row=(new Domain\ChatManager())->memorySourceRows([$id])[0];$episode=$builder->chat([$row],$profile)[0];$record=$store->register($episode,$reader->current(...));$v=array_fill(0,512,0.0);$v[0]=$cosine;$v[1]=sqrt(1-$cosine*$cosine);$store->publish($episode,$record,$tags,$v,$reader->current(...));$records[]=(int)$record['id'];return[$id,(int)$record['id']];
+ };
+ // Snowball intentionally differs for попугай/попугая; this fixture supplies both forms.
+ [$parrot,$parrotEpisode]=$publish(str_repeat('Обычное начало. ',70).'трёхлитровый попугай: видели трёхлитрового попугая из дела DL-6','трёхлитровый попугай, трёхлитрового попугая, DL-6',0.3);
+ [$nearIdentifier,$nearEpisode]=$publish('Здесь только DL-60 и другая история','DL-60',0.3);
+ [$weak,$weakEpisode]=$publish('Нерелевантные кредиты и магазин','кредиты магазин',0.395394);
+ [$sourceOnly,$sourceEpisode]=$publish('Фаленопсис растёт рядом с орхидеей','комнатное растение',0.3);
+ $roots=MemoryRecallText::roots('трехлитрового попугая');
+ check(in_array($parrotEpisode,$store->recallStrongAssociationIds(MemoryRetriever::terms('трехлитрового попугая'),$profile,$roots),true),'real BOOLEAN FULLTEXT prefixes match inflections and ё/е without reindexing');
+ check(in_array($parrot,(new Domain\ChatManager())->memoryRecallIds($roots[0],$roots),true),'real LIKE prefixes match ё/е and both roots');
+ $idRoots=MemoryRecallText::roots('DL-6');
+ check(!in_array($nearEpisode,$store->recallStrongAssociationIds(['dl-6'],$profile,$idRoots),true),'strong identifier evidence rejects DL-60');
+ check(!in_array($nearIdentifier,(new Domain\ChatManager())->memoryRecallIds('dl-6',$idRoots),true),'source identifier prefix does not admit DL-60');
+ $retriever=new MemoryRetriever($store,$reader,$profile,$bot,fn()=>['vector'=>$unit,'tags'=>'']);
+ $context=[['role'=>'user','content'=>'Вопрос']];$out=$retriever->recall($context,'трехлитрового попугая',8000);
+ check(str_contains(json_encode($out['context'],JSON_UNESCAPED_UNICODE),'chat:'.$parrot),'low cosine with strong lexical support is retained');
+ check(str_contains(end($out['context'])['content'],'трёхлитровый попугай'),'hydration retains match after character 600 and focus shows it');
+ check(!str_contains(json_encode($out['metadata']['sources']),'chat:'.$weak),'observed 0.395 vector-only false match is rejected');
+ $idOut=$retriever->recall($context,'DL-6',8000);check(!in_array($nearEpisode,array_keys($idOut['metadata']['sources']),true),'longer identifier cannot enter through source evidence');
+ $sourceOut=$retriever->recall($context,'орхидея фаленопсиса',8000);
+ check(str_contains(json_encode($sourceOut['metadata']['sources']),'chat:'.$sourceOnly),'all source roots provide lexical support independently of association tags');
+ $none=$retriever->recall($context,'несуществующая тема',8000);check($none['context']===$context,'weak unrelated vectors preserve original context');
+ $roots=MemoryRecallText::roots('DL-6');$ids=$store->recallStrongAssociationIds(['dl-6'],$profile,$roots);
+ check(in_array($parrotEpisode,$ids,true),'literal identifier bypasses short FULLTEXT token limits');
+ foreach(['>Феникс <Райт','+"()-*','']as$input){$query=MemoryRecallText::boolean($input);$store->recallAssociationIds($input,$profile,[],[],$query);check(true,'normalized BOOLEAN query executes without SQL error');}
+ $framed=$retriever->recall($context,'Откуда взялась шутка о трехлитровом попугае?',8000);
+ check(str_contains(json_encode($framed['metadata']['sources']),'chat:'.$parrot),'F3-R1 question frame keeps the topical source');
+ [$bank,$bankEpisode]=$publish('Третья банка с уликами','третья банка',0.3);
+ [$banker,$bankerEpisode]=$publish('Третья банковская история: банкир и банкомат','третья банковская история',0.3);
+ $bankRoots=MemoryRecallText::roots('Что говорили про третью банку?');$bankWeights=$store->recallTopicWeights($bankRoots,$profile,MemoryRecallText::mask(...));
+ $chatMasks=(new Domain\ChatManager())->memoryRecallTopicMasks($bankRoots,$bankWeights,MemoryRecallText::mask(...));
+ check(($chatMasks[$bank]??0)===3,'F3-R2 actual SQL matches both short-inflection topic roots');
+ check(($chatMasks[$banker]??0)!==3,'actual SQL does not merge банка with банковская/банкир/банкомат');
+ $associationMasks=$store->recallTopicMasks($bankRoots,$profile,$bankWeights,MemoryRecallText::mask(...));
+ check(($associationMasks[$bankEpisode]??0)===3&&($associationMasks[$bankerEpisode]??0)!==3,'association and source candidates are confirmed by the same PHP stem equality');
+ $bankRetriever=new MemoryRetriever($store,$reader,$profile,$bot,fn()=>['vector'=>$unit,'tags'=>'']);
+ $bankOut=$bankRetriever->recall($context,'Что говорили про третью банку?',8000);
+ check(isset($bankOut['metadata']['sources'][$bankEpisode])&&!isset($bankOut['metadata']['sources'][$bankerEpisode]),'F3-R2 retrieves the bank inflection without false lexical joins');
+ [$falseSource,$falseEpisode]=$publish('Чужой эпизод о кредитах и магазине','кредиты магазин',0.42319553);
+ $mixedRetriever=new MemoryRetriever($store,$reader,$profile,$bot,fn()=>['vector'=>$unit,'tags'=>'']);
+ $mixed=$mixedRetriever->recall($context,'трехлитрового попугая',8000);
+ check(isset($mixed['metadata']['sources'][$parrotEpisode])&&!isset($mixed['metadata']['sources'][$falseEpisode]),'F3-R1 stricter mixed gate excludes the observed 0.423 vector-only false episode');
+ [$partialSource,$partialEpisode]=$publish('Обычного попугая видели, другая история','попугая',0.45);
+ $ranked=(new MemoryRetriever($store,$reader,$profile,$bot,fn()=>['vector'=>$unit,'tags'=>'']))->recall($context,'трехлитрового попугая',8000);
+ check(isset($ranked['metadata']['sources'][$parrotEpisode])&&!isset($ranked['metadata']['sources'][$partialEpisode]),'a stronger topical match prevents weaker partial matches from filling the shown results');
+ [$cultural,$culturalEpisode]=$publish('Варп открыл портал','варп Омниссия',0.3);
+ [$tagOnly,$tagOnlyEpisode]=$publish('Снова кредиты и магазин','варп Омниссия',0.3);
+ $culturalOut=(new MemoryRetriever($store,$reader,$profile,$bot,fn()=>['vector'=>$unit,'tags'=>'']))->recall($context,'варп Омниссия',8000);
+ check(isset($culturalOut['metadata']['sources'][$culturalEpisode])&&!isset($culturalOut['metadata']['sources'][$tagOnlyEpisode]),'complete associations still need a current source topic and cannot substitute an unrelated episode');
+ $bm=new Domain\BotMemoryManager();$memory=$bm->add('dossier',$owner,'Собирает марки','manual',$owner);$memories[]=$memory;
+ $row=$bm->memorySourceRows([$memory])[0];$episode=$builder->memory([$row],$profile)[0];$record=$store->register($episode,$reader->current(...));$v=array_fill(0,512,0.0);$v[0]=0.6;$v[1]=0.8;
+ $store->publish($episode,$record,$marker.'_0 коллекционер',$v,$reader->current(...));$records[]=(int)$record['id'];
+ $fact=(new MemoryRetriever($store,$reader,$profile,$bot,fn()=>['vector'=>$unit,'tags'=>'']))->recall($context,$marker.'_0 коллекционер',8000);
+ check(array_key_first($fact['metadata']['sources'])===(int)$record['id']&&str_contains(json_encode($fact['context'],JSON_UNESCAPED_UNICODE),'Собирает марки'),'an exact-subject current dossier can use its validated associations with a strong semantic match');
+ $calls=0;$frameOnly=new MemoryRetriever($store,$reader,$profile,$bot,function()use(&$calls,$unit){$calls++;return['vector'=>$unit,'tags'=>''];});
+ check($frameOnly->recall($context,'Что говорили, помнишь, расскажи пожалуйста?',8000)['context']===$context&&$calls===0,'question frame alone never becomes historical topic evidence');
+ [$word,$wordEpisode]=$publish('Лингвистическая тема — слово «откуда» и его значение','откуда',0.3);
+ $wordRetriever=new MemoryRetriever($store,$reader,$profile,$bot,fn()=>['vector'=>$unit,'tags'=>'']);
+ foreach(['«Откуда?»','"Откуда?"','Откуда?']as$question)check(isset($wordRetriever->recall($context,$question,8000)['metadata']['sources'][$wordEpisode]),'F3-R3 explicit or standalone word retrieves the current linguistic source');
+ [$home,$homeEpisode]=$publish('Дом стоит на берегу','дом',0.3);[$domino,$dominoEpisode]=$publish('Игра домино на столе','домино',0.3);
+ $homeOut=(new MemoryRetriever($store,$reader,$profile,$bot,fn()=>['vector'=>$unit,'tags'=>'']))->recall($context,'дому',8000);
+ check(isset($homeOut['metadata']['sources'][$homeEpisode])&&!isset($homeOut['metadata']['sources'][$dominoEpisode]),'F3-R5 дому finds дом and excludes the coarse SQL домино candidate');
+ for($i=0;$i<12;$i++)$publish('Люди и пони топают копытами '.$i,'люди пони копыта',0.49);
+ [$fingers,$fingerEpisode]=$publish('Ловкими пальцами удобнее, чем копытами','пальцы копыта',0.454);
+ $rarityRoots=MemoryRecallText::roots('пальцы люди копыта пони');$rarity=$store->recallTopicWeights($rarityRoots,$profile,MemoryRecallText::mask(...));
+ check($rarity['пальц']>$rarity['пон'],'F3-R4 real corpus document frequency weights the rare subject higher');
+ $rareOut=(new MemoryRetriever($store,$reader,$profile,$bot,fn()=>['vector'=>$unit,'tags'=>'']))->recall($context,'пальцы люди копыта пони',8000);
+ check(array_key_first($rareOut['metadata']['sources'])===$fingerEpisode,'F3-R4 rare fingers outrank higher-cosine common people/pony/hoof matches');
+}finally{
+ foreach($records as$id)$db->query('DELETE FROM memory_episodes WHERE id='.(int)$id);
+ foreach($memories as$id)(new Domain\BotMemoryManager())->delete($id);
+ foreach($sources as$id)$db->query('DELETE FROM chat_messages WHERE id='.(int)$id);
+ foreach($users as$id)$db->query('DELETE FROM users WHERE id='.(int)$id);
+}
+it_done();

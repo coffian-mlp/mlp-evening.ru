@@ -85,7 +85,7 @@ function loadLyraMetrics() {
 // MLP-314: карточка «Память Лиры» — список/правка/удаление записей bot_memory.
 function loadMemory() {
     const kind = document.getElementById('mem-kind-filter').value;
-    $.post('/api.php', { action: 'get_memory', kind: kind, limit: 200, csrf_token: window.csrfToken }, function (res) {
+    $.post('/api.php', { action: 'get_memory', kind: kind, limit: 200, include_archived: '1', csrf_token: window.csrfToken }, function (res) {
         if (!res.success) return;
         document.getElementById('mem-count').innerText = 'в выборке: ' + res.data.total;
         const rows = res.data.items.map(function (it) {
@@ -96,7 +96,8 @@ function loadMemory() {
                 : '—';
             const div = document.createElement('div');
             div.innerText = it.text; // экранирование пользовательского текста
-            const src = it.source === 'auto' ? '🤖 auto' : (it.source === 'oc' ? '🦄 oc' : '✍️ manual');
+            const src = (it.source === 'auto' ? '🤖 auto' : (it.source === 'oc' ? '🦄 oc' : '✍️ manual')) +
+                (Number(it.is_archived) === 1 ? ' · <span class="mem-archive-label">архив</span>' : '');
             const btns = '<button class="btn-small" onclick="editMemoryRow(' + it.id + ')">✏️</button> ' +
                          '<button class="btn-small" onclick="deleteMemoryRow(' + it.id + ')">🗑️</button>';
             return '<tr data-mem-id="' + it.id + '"><td>' + it.id + '</td><td>' + kindIcon + '</td><td>' + owner +

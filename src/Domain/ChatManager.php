@@ -1192,12 +1192,32 @@ class ChatManager {
         return $this->db->query('SELECT * FROM chat_messages' . $where . ' ORDER BY id' . ($lock ? ' FOR UPDATE' : ''))->fetch_all(MYSQLI_ASSOC);
     }
 
+    /** Prefix candidates are confirmed by PHP stem equality before IDs leave the owner. */
+    public function memoryRecallTopicMasks(array $roots, array $weights, callable $confirm): array {
+        $roots=array_slice(array_values($roots),0,12);if(!$roots)return [];
+        $parts=[];$values=[];$types='';
+        foreach($roots as$root){$parts[]='IF(message LIKE ?,?,0)';$values[]='%'.str_replace(['\\','%','_'],['\\\\','\\%','\\_'],$root).'%';$values[]=(float)($weights[$root]??1.0);$types.='sd';}
+        $stmt=$this->db->prepare('SELECT id,message,('.implode('+',$parts).') AS candidate_score FROM chat_messages WHERE is_deleted=0 HAVING candidate_score>0 ORDER BY candidate_score DESC,id DESC LIMIT 80');
+        $stmt->bind_param($types,...$values);$stmt->execute();$masks=[];
+        foreach($stmt->get_result()->fetch_all(MYSQLI_ASSOC)as$row){$mask=(int)$confirm($row['message'],$roots);if($mask)$masks[(int)$row['id']]=$mask;}
+        $scores=[];foreach($masks as$id=>$mask){$scores[$id]=0.0;foreach($roots as$i=>$root)if($mask&(1<<$i))$scores[$id]+=(float)($weights[$root]??1.0);}
+        uksort($masks,static fn($a,$b)=>($scores[$b]<=>$scores[$a])?:($b<=>$a));return array_slice($masks,0,40,true);
+    }
+
     /** One bounded lexical predicate; only IDs leave this candidate stage. */
-    public function memoryRecallIds(string $term): array {
+    public function memoryRecallIds(string $term, array $required = []): array {
         if($term==='')return [];
-        $term='%'.str_replace(['\\','%','_'],['\\\\','\\%','\\_'],mb_substr($term,0,80)).'%';
-        $stmt=$this->db->prepare('SELECT id FROM chat_messages WHERE is_deleted=0 AND message LIKE ? ORDER BY id DESC LIMIT 40');
-        $stmt->bind_param('s',$term);$stmt->execute();return array_map('intval',array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC),'id'));
+        $terms=array_slice(array_values(array_unique(array_merge([$term],$required))),0,12);
+        $values=[];$conditions=[];
+        foreach($terms as$word){
+            $word=mb_substr($word,0,80);$values[]='%'.str_replace(['\\','%','_'],['\\\\','\\%','\\_'],$word).'%';
+            if(!$required){$conditions[]='message LIKE ?';continue;}
+            $values[]='(^|[^[:alnum:]_])'.preg_quote($word,'~').(str_contains($word,'-')?'([^[:alnum:]_-]|$)':'');
+            $conditions[]="(message LIKE ? AND REGEXP_LIKE(REPLACE(REPLACE(message,'ё','е'),'Ё','Е'),?))";
+        }
+        $where=implode(' AND ',$conditions);
+        $stmt=$this->db->prepare('SELECT id FROM chat_messages WHERE is_deleted=0 AND '.$where.' ORDER BY id DESC LIMIT 40');
+        $stmt->bind_param(str_repeat('s',count($values)),...$values);$stmt->execute();return array_map('intval',array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC),'id'));
     }
 
 }

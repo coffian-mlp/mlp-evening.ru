@@ -166,28 +166,32 @@ final class MemoryEpisodeManager
         $stmt->bind_param('s',$profile);$stmt->execute();return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     }
 
-    public function recallAssociationIds(string $query, string $profile, array $cosines = [], array $strong = []): array
+    public function recallAssociationIds(string $query, string $profile, array $cosines = [], array $strong = [], ?string $prefixQuery = null): array
     {
-        $stmt=$this->db->prepare("SELECT id,MATCH(associations) AGAINST(? IN NATURAL LANGUAGE MODE) AS score FROM memory_episodes WHERE status='ready' AND profile_hash=? AND MATCH(associations) AGAINST(? IN NATURAL LANGUAGE MODE)");
-        $stmt->bind_param('sss',$query,$profile,$query);$stmt->execute();$scores=[];
-        foreach($stmt->get_result()->fetch_all(MYSQLI_ASSOC)as$row)$scores[(int)$row['id']]=(float)$row['score'];
+        $search=$prefixQuery??$query;$mode=$prefixQuery===null?'NATURAL LANGUAGE MODE':'BOOLEAN MODE';$scores=[];
+        if($search!==''){
+            $stmt=$this->db->prepare("SELECT id,MATCH(associations) AGAINST(? IN $mode) AS score FROM memory_episodes WHERE status='ready' AND profile_hash=? AND MATCH(associations) AGAINST(? IN $mode)");
+            $stmt->bind_param('sss',$search,$profile,$search);$stmt->execute();
+            foreach($stmt->get_result()->fetch_all(MYSQLI_ASSOC)as$row)$scores[(int)$row['id']]=(float)$row['score'];
+        }
         foreach($strong as$id)if(!isset($scores[$id]))$scores[$id]=0.0;
         return array_slice(self::recallLexicalOrder($scores,$cosines),0,8);
     }
 
     /** All meaningful terms must be present; structured identifiers bypass FT token-size limits. */
-    public function recallStrongAssociationIds(array $terms, string $profile): array
+    public function recallStrongAssociationIds(array $terms, string $profile, ?array $prefixes = null): array
     {
         $words=[];$identifier='';
-        foreach($terms as$term){
+        foreach($prefixes??$terms as$term){
             if($identifier===''&&preg_match('/[\p{L}]/u',$term)&&preg_match('/[0-9]/',$term)&&str_contains($term,'-'))$identifier=$term;
             foreach(preg_split('/[^\p{L}\p{N}_]+/u',$term,-1,PREG_SPLIT_NO_EMPTY)as$word)if(mb_strlen($word)>=3)$words[$word]=true;
         }
-        $boolean=implode(' ',array_map(static fn($word)=>'+'.$word,array_keys($words)));
+        $boolean=implode(' ',array_map(static fn($word)=>'+'.$word.($prefixes===null?'':'*'),array_keys($words)));
         $like='%'.str_replace(['\\','%','_'],['\\\\','\\%','\\_'],$identifier).'%';
         if($boolean===''&&$identifier==='')return [];
-        $stmt=$this->db->prepare("SELECT id FROM memory_episodes WHERE status='ready' AND profile_hash=? AND ((?<>'' AND MATCH(associations) AGAINST(? IN BOOLEAN MODE)) OR (?<>'' AND associations LIKE ?))");
-        $stmt->bind_param('sssss',$profile,$boolean,$boolean,$identifier,$like);$stmt->execute();return array_map('intval',array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC),'id'));
+        $pattern='(^|[^[:alnum:]_])'.preg_quote($identifier,'/').'([^[:alnum:]_-]|$)';
+        $stmt=$this->db->prepare("SELECT id FROM memory_episodes WHERE status='ready' AND profile_hash=? AND ((?<>'' AND MATCH(associations) AGAINST(? IN BOOLEAN MODE)) OR (?<>'' AND associations LIKE ? AND REGEXP_LIKE(associations,?)))");
+        $stmt->bind_param('ssssss',$profile,$boolean,$boolean,$identifier,$like,$pattern);$stmt->execute();return array_map('intval',array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC),'id'));
     }
 
     public static function recallLexicalOrder(array $scores, array $cosines): array
@@ -197,6 +201,57 @@ final class MemoryEpisodeManager
             return (($cosines[$b]??-1)<=>($cosines[$a]??-1))?:($a<=>$b);
         });
         return array_keys($scores);
+    }
+
+    /** Query-time IDF over exact confirmed document stems; no index or source is rewritten. */
+    public function recallTopicWeights(array $roots, string $profile, callable $confirm): array
+    {
+        if(!$roots)return [];
+        $roots=array_slice(array_values($roots),0,12);$frequency=array_fill(0,count($roots),0);$total=0;
+        $stmt=$this->db->prepare("SELECT associations FROM memory_episodes WHERE status='ready' AND profile_hash=?");$stmt->bind_param('s',$profile);$stmt->execute();$rows=$stmt->get_result();
+        while($row=$rows->fetch_assoc()){
+            $mask=(int)$confirm($row['associations'],$roots);$total++;
+            foreach($roots as$i=>$_)if($mask&(1<<$i))$frequency[$i]++;
+        }
+        $weights=[];foreach($roots as$i=>$root)$weights[$root]=log(1+($total+1)/($frequency[$i]+1));return $weights;
+    }
+
+    /** Coarse SQL prefixes discover rows; the caller confirms exact normalized stems in PHP. */
+    public function recallTopicMasks(array $roots, string $profile, array $weights, callable $confirm): array
+    {
+        $roots=array_slice(array_values($roots),0,12);if(!$roots)return [];
+        $parts=[];$values=[];$types='';
+        foreach($roots as$root){$parts[]='IF(associations LIKE ?,?,0)';$values[]='%'.str_replace(['\\','%','_'],['\\\\','\\%','\\_'],$root).'%';$values[]=(float)($weights[$root]??1.0);$types.='sd';}
+        $values[]=$profile;$types.='s';
+        $stmt=$this->db->prepare("SELECT id,associations,(".implode('+',$parts).") AS candidate_score FROM memory_episodes WHERE status='ready' AND profile_hash=? HAVING candidate_score>0 ORDER BY candidate_score DESC,id LIMIT 80");
+        $stmt->bind_param($types,...$values);$stmt->execute();$masks=[];
+        foreach($stmt->get_result()->fetch_all(MYSQLI_ASSOC)as$row){$mask=(int)$confirm($row['associations'],$roots);if($mask)$masks[(int)$row['id']]=$mask;}
+        return self::recallMaskOrder($masks,array_values(array_map(static fn($root)=>(float)($weights[$root]??1.0),$roots)),24);
+    }
+
+    public static function recallMaskOrder(array $masks, array $weights, int $limit): array
+    {
+        $scores=[];foreach($masks as$id=>$mask){$scores[$id]=0.0;foreach($weights as$i=>$weight)if($mask&(1<<$i))$scores[$id]+=$weight;}
+        uksort($masks,static fn($a,$b)=>($scores[$b]<=>$scores[$a])?:($a<=>$b));return array_slice($masks,0,$limit,true);
+    }
+
+    /** Confirm associations for the bounded union, including vector-discovered candidates. */
+    public function recallTopicMasksForIds(array $ids, array $roots, string $profile, callable $confirm): array
+    {
+        $ids=array_slice(array_values(array_unique(array_filter(array_map('intval',$ids)))),0,24);if(!$ids||!$roots)return [];
+        $stmt=$this->db->prepare("SELECT id,associations FROM memory_episodes WHERE status='ready' AND profile_hash=? AND id IN (".implode(',',$ids).')');
+        $stmt->bind_param('s',$profile);$stmt->execute();$masks=[];
+        foreach($stmt->get_result()->fetch_all(MYSQLI_ASSOC)as$row)$masks[(int)$row['id']]=(int)$confirm($row['associations'],$roots);
+        return $masks;
+    }
+
+    public function recallSourceTopicMasks(array $sourceMasks, string $profile, array $weights = []): array
+    {
+        $cases=[];foreach(array_slice($sourceMasks,0,40,true)as$id=>$mask)if((int)$id>0&&(int)$mask>0)$cases[(int)$id]='WHEN '.(int)$id.' THEN '.((int)$mask&4095);
+        if(!$cases)return [];
+        $stmt=$this->db->prepare("SELECT e.id,BIT_OR(CASE s.source_id ".implode(' ',$cases)." ELSE 0 END) AS topic_mask FROM memory_episodes e JOIN memory_episode_sources s ON s.episode_id=e.id WHERE e.status='ready' AND e.profile_hash=? AND s.source_kind='chat' AND s.source_id IN (".implode(',',array_keys($cases)).') GROUP BY e.id');
+        $stmt->bind_param('s',$profile);$stmt->execute();$masks=array_map('intval',array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC),'topic_mask','id'));
+        return self::recallMaskOrder($masks,$weights?:array_fill(0,12,1.0),24);
     }
 
     public function recallSourceIds(array $sourceIds, array $userIds, ?string $date, string $profile): array

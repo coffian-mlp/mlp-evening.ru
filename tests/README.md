@@ -111,6 +111,8 @@ bootstrap и migrate отказывают с диагностикой incomplete
 
 ## Playwright (UI, отдельно)
 
+MLP-456: snapshot схемы обновлён добавляющим флагом `bot_memory.is_archived` и индексом активных записей. Исторический журнал snapshot по-прежнему содержит 43 миграции; `migrate.php` доводит установку до 45 файлов через semantic-memory и memory-archive. `integration_memory_archive.php` проверяет архивирование, изоляцию читателей, поиск, приватность и конкурентную дедупликацию; `integration_memory_archive_migration.php` — чистый/заполненный upgrade в обоих SQL modes. Браузерный набор `mlp-456-memory-archive.ui.spec.js` разрешён только для явного localhost и собственного Docker-контура.
+
 `tests/playwright/` — браузерные сценарии, гоняются против прода
 (см. README там). В раннер `run_all.php` не входят.
 
@@ -512,3 +514,5 @@ Spec использует защищённую CLI fixture, не требует 
 Починка MLP-456 phase2: `integration_memory_recall_review.php` через настоящий ordinary generation проверяет main/fallback/transient/language retry, truncation/error, централизованное redaction и атрибуцию одинаковых nickname в конечных фоновых/focus блоках. Векторы и ответы — synthetic fakes, внешнего API нет. Также проверяются пустой запрос, weak/partial/complete lexical evidence и структурный identifier. Набор входит в штатный runner; production guard общий с остальными integration.
 
 `test_memory_recall_edges.php` проверяет JSON redaction при Unicode/slash escaping, вложенных массивах и сериализованных строках, побайтное сохранение обычного debug и адресную очистку имени бота без удаления темы. `integration_memory_recall_review.php` дополнительно проверяет эти сериализации в настоящем logger и сравнивает BOOLEAN evidence после очистки операторного ввода на MySQL. Оба файла входят в штатный runner; внешние API не вызываются.
+
+`test_russian_stemmer.php` сверяет Snowball Russian с 256 официальными парами из `fixtures/russian_snowball.json`, словоформами проекта и отрицательными парами. `test_memory_recall_selection.php` и `integration_memory_recall_selection.php` проверяют явную цитированную тему, точное подтверждение SQL-кандидатов по основам и ранжирование по редкости темы. Эти наборы входят в штатный runner и не вызывают внешние API.

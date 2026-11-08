@@ -12,7 +12,7 @@ final class MemoryRelevance {
             if (isset($stop[$word])) continue;
             // Light normalization covers Russian inflections without requiring an external index.
             if (preg_match('/^[а-яё]+$/u', $word) && mb_strlen($word) > 5) {
-                $word = preg_replace('/(?:ами|ями|ого|ему|ому|ыми|ими|ов|ев|ах|ях|ам|ям|ой|ей|ая|яя|ое|ее|ые|ие|ую|юю|ом|ем|а|я|ы|и|у|ю|е)$/u', '', $word);
+                $word = self::stemWord($word);
             }
             $terms[$word] = true;
         }
@@ -36,5 +36,10 @@ final class MemoryRelevance {
         $indices = array_keys($rows);
         usort($indices, fn($a, $b) => ($scores[$b] <=> $scores[$a]) ?: ($a <=> $b));
         return array_map(fn($i) => $rows[$i], $indices);
+    }
+
+    /** Existing legacy normalization; recall adds its own prefix rules separately. */
+    public static function stemWord(string $word): string {
+        return preg_replace('/(?:ами|ями|ого|ему|ому|ыми|ими|ов|ев|ах|ях|ам|ям|ой|ей|ая|яя|ое|ее|ые|ие|ую|юю|ом|ем|а|я|ы|и|у|ю|е)$/u', '', $word);
     }
 }
