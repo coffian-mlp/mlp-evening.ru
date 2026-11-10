@@ -153,6 +153,7 @@ class OnlineManager {
         $upd = $this->db->prepare("UPDATE users SET last_seen = UTC_TIMESTAMP() WHERE id = ?");
         $upd->bind_param("i", $userId);
         $upd->execute();
+        if(\LLM\ConversationMemory::enabled('ai_return_memory_enabled')&&$row['gap']!==null){$days=max(1,min(3650,(int)ConfigManager::getInstance()->getOption('ai_return_memory_days',14)));if((int)$row['gap']>=$days*86400)(new ConversationMemoryStore())->tryArrival($userId,(int)$row['gap']);}
         return [
             'login' => (string)$row['login'],
             'gap'   => $row['gap'] === null ? null : (int)$row['gap'],

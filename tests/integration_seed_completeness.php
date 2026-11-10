@@ -67,6 +67,10 @@ try {
         foreach ($tables as $table) $before[$table] = historicalSeedRows($fresh, $table);
         foreach ($dml as $item) $fresh->query($item['sql']);
         foreach ($tables as $table) check($before[$table] === historicalSeedRows($fresh, $table), 'historical replay preserves complete fresh seed: ' . $table);
+        // Both fixtures must include additive post-baseline DML before comparing conditional replay.
+        foreach (array_diff(migrate_all_files(dirname(__DIR__) . '/migrations'), $manifest['migrations']) as $file) {
+            migrate_apply_file($historical, dirname(__DIR__) . '/migrations/' . $file);
+        }
         // Conditional upgrade DML has no input on a fresh installation. Exercise it with synthetic legacy inputs.
         foreach ($pair as $db) {
             $db->query("INSERT INTO site_options(key_name,value) VALUES

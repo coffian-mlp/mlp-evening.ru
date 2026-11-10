@@ -279,4 +279,11 @@ final class MemoryEpisodeManager
         return $this->db->query('SELECT episode_id,source_kind,source_id,user_id,related_user_id,start_offset,end_offset,source_signature FROM memory_episode_sources WHERE episode_id IN ('.implode(',',$ids).') ORDER BY episode_id,source_id,start_offset')->fetch_all(MYSQLI_ASSOC);
     }
 
+    /** Target must actually speak; related_user_id alone is not participation. */
+    public function conversationParticipantIds(int $uid, int $before, string $profile): array {
+        $date = gmdate('Y-m-d H:i:s', $before);
+        $s = $this->db->prepare("SELECT e.id,COUNT(*) AS own_lines,e.ended_at FROM memory_episodes e JOIN memory_episode_sources m ON m.episode_id=e.id WHERE e.status='ready' AND e.profile_hash=? AND e.ended_at<? AND m.source_kind='chat' AND m.user_id=? GROUP BY e.id,e.ended_at ORDER BY own_lines DESC,e.ended_at DESC,e.id DESC LIMIT 24");
+        $s->bind_param('ssi', $profile, $date, $uid); $s->execute(); return array_map('intval', array_column($s->get_result()->fetch_all(MYSQLI_ASSOC), 'id'));
+    }
+
 }

@@ -465,4 +465,13 @@ class JobQueue {
         $stmt->bind_param('iisss',$userId,$userId,$json,$json,$json);$stmt->execute();
     }
 
+    public function claimConversationSummary(): array {
+        $res = $this->db->query("SELECT * FROM llm_jobs WHERE type='evening_summary' AND status='pending' AND run_after<=UTC_TIMESTAMP() ORDER BY id LIMIT 1");
+        return $this->collectAndMark($res);
+    }
+    public function hasConversationReactiveBacklog(): bool {
+        $types = "'" . implode("','", self::REACTIVE_TYPES) . "'";
+        return $this->db->query("SELECT 1 FROM llm_jobs WHERE status IN ('pending','processing') AND type IN ($types) LIMIT 1")->num_rows > 0;
+    }
+
 }

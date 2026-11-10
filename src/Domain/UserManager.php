@@ -803,4 +803,10 @@ class UserManager {
         return array_values(array_unique($ids));
     }
 
+    public function conversationIdentityIds(array $ids, bool $lock=false): array {
+        if(!$lock)return $this->memoryIdentityIds($ids);
+        $ids=array_values(array_unique(array_filter(array_map('intval',$ids))));sort($ids);if(!$ids)return [];
+        return array_map('intval',array_column($this->db->query('SELECT id FROM users WHERE id IN ('.implode(',',$ids).') ORDER BY id FOR UPDATE NOWAIT')->fetch_all(MYSQLI_ASSOC),'id'));
+    }
+
 }

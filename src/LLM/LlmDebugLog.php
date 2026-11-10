@@ -67,7 +67,7 @@ class LlmDebugLog {
             return $data;
         }
         $decoded=html_entity_decode($data,ENT_QUOTES|ENT_HTML5,'UTF-8');
-        $positions=[];foreach([MemoryRecallBlock::MARKER,MemoryRecallBlock::FOCUS]as$marker){$position=mb_stripos($decoded,$marker);if($position!==false)$positions[]=$position;}
+        $positions=[];foreach([MemoryRecallBlock::MARKER,MemoryRecallBlock::FOCUS,ConversationMemoryPolicy::SUMMARY_MARKER,ConversationMemoryPolicy::RETURN_MARKER]as$marker){$position=mb_stripos($decoded,$marker);if($position!==false)$positions[]=$position;}
         if(!$positions)return $data;
         $found=true;return trim(mb_substr($decoded,0,min($positions))).'[Recall source text omitted from debug log]';
     }

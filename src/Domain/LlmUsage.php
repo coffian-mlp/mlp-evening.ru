@@ -10,10 +10,12 @@ final class LlmUsage
 {
     private static ?\mysqli $connection=null;
     private static bool $reportedFailure=false;
+    private static $transientSink=null;
 
     /** Use a separate connection so caller rollbacks cannot erase billed attempts. */
     public static function record(array $row): void
     {
+        if (self::$transientSink !== null) { (self::$transientSink)($row); return; }
         try{
             $row+=self::price($row,self::configuredRates());
             if(self::$connection===null){
@@ -101,4 +103,10 @@ final class LlmUsage
             GROUP BY provider,model,task,currency ORDER BY attempts DESC,provider,model,task')->fetch_all(MYSQLI_ASSOC);
         return ['days'=>$days,'rows'=>$rows,'rates'=>self::configuredRates()];
     }
+    /** Scoped read-only accounting: no pricing query and no persistence connection is opened. */
+    public static function withoutDatabase(callable $work, callable $sink): mixed {
+        $previous=self::$transientSink;self::$transientSink=$sink;
+        try { return $work(); } finally { self::$transientSink=$previous; }
+    }
+
 }

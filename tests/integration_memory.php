@@ -188,6 +188,9 @@ try {
     $cfg->setOption('ai_memory_enabled', '1');
 
     $llm2 = new LLM\LLMManager();
+    // Explicit null provider exercises the command fallback without any network adapter.
+    $commandProvider = new class implements \LLM\LLMProviderInterface { public function askChat(array $c,string $p): ?string { return null; } };
+    foreach (['providers','fastProviders'] as $property) (new ReflectionProperty(\LLM\LLMManager::class,$property))->setValue($llm2,[$commandProvider]);
     $cmdAdd    = ['handler_type' => 'memory_add',    'command_prefix' => '/запомни'];
     $cmdShow   = ['handler_type' => 'memory_show',   'command_prefix' => '/память'];
     $cmdForget = ['handler_type' => 'memory_forget', 'command_prefix' => '/забудь'];

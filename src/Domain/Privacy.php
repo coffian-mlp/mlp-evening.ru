@@ -372,4 +372,11 @@ final class Privacy
         return $db->query('SELECT user_id,state FROM account_privacy WHERE user_id IN (' . implode(',', $ids) . ') ORDER BY user_id' . ($lock ? ' FOR UPDATE' : ''))->fetch_all(MYSQLI_ASSOC);
     }
 
+    /** New conversational memory requires current active consent, including policy version. */
+    public static function conversationStates(array $ids, bool $lock = false): array {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids)))); sort($ids);
+        if (!$ids) return [];
+        return Database::getInstance()->getConnection()->query('SELECT user_id,state,policy_version,(SELECT COALESCE(MAX(e.id),0) FROM privacy_consent_events e WHERE e.user_id=account_privacy.user_id) AS consent_revision FROM account_privacy WHERE user_id IN (' . implode(',', $ids) . ') ORDER BY user_id' . ($lock ? ' FOR UPDATE NOWAIT' : ''))->fetch_all(MYSQLI_ASSOC);
+    }
+
 }

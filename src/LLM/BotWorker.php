@@ -28,12 +28,14 @@ class BotWorker {
     private $polls;
     /** MLP-357: когда последний раз запускался реапер зависших реактивных задач (раз в минуту). */
     private int $lastReapAt = 0;
+    private bool $conversationInstalled = false;
 
     public function __construct() {
         $this->config   = ConfigManager::getInstance();
         $this->db       = Database::getInstance()->getConnection();
         $this->queue    = new JobQueue();
         $this->llm      = new LLMManager();
+        $this->conversationInstalled=ConversationMemory::installed();
         $this->commands = new BotCommandManager();
         $this->events   = new EventManager();
         $this->polls    = new PollManager();
@@ -44,22 +46,24 @@ class BotWorker {
         // Синглтон ConfigManager живёт всё время процесса; в daemon-режиме без
         // сброса кеша тик не увидит правок ai_*-опций из дашборда (AR2-1).
         $this->config->flushCache();
+        // Cleanup runs even when another process owns the publishing worker lock.
+        if($this->conversationInstalled){try{(new \Domain\ConversationMemoryStore())->purge();}catch(\Throwable $e){error_log('Conversation cleanup deferred: '.get_class($e));}}
 
         $res = $this->db->query("SELECT GET_LOCK('bot_worker', 0) AS ok");
         $row = $res ? $res->fetch_assoc() : null;
         if (!$row || (int)$row['ok'] !== 1) {
             return; // другой тик уже идёт
         }
-        try { $this->reapStale(); } catch (\Throwable $e) { error_log('BotWorker reaper error: ' . $e->getMessage()); } // MLP-357
+        try { $this->reapStale(); } catch (\Throwable $e) { error_log('BotWorker reaper error: ' . get_class($e)); } // MLP-357
         try { (new \Domain\PlaylistLifecycle())->tick(); } catch (\Throwable $e) { error_log('BotWorker playlist lifecycle error: ' . get_class($e)); }
         // reactive и proactive изолированы: сбой одного (напр. миграция ещё не прогнана) не роняет другой.
-        try { $this->reactive(); }  catch (\Throwable $e) { error_log('BotWorker reactive error: ' . $e->getMessage()); }
-        try { $this->proactive(); } catch (\Throwable $e) { error_log('BotWorker proactive error: ' . $e->getMessage()); }
-        try { $this->pollParticipation(); } catch (\Throwable $e) { error_log('BotWorker poll error: ' . $e->getMessage()); }
-        try { $this->autoDrawSchedule(); } catch (\Throwable $e) { error_log('BotWorker autodraw error: ' . $e->getMessage()); }
-        try { $this->deliverReminders(); } catch (\Throwable $e) { error_log('BotWorker reminders error: ' . $e->getMessage()); }
+        try { $this->reactive(); }  catch (\Throwable $e) { error_log('BotWorker reactive error: ' . get_class($e)); }
+        try { $this->proactive(); } catch (\Throwable $e) { error_log('BotWorker proactive error: ' . get_class($e)); }
+        try { $this->pollParticipation(); } catch (\Throwable $e) { error_log('BotWorker poll error: ' . get_class($e)); }
+        try { $this->autoDrawSchedule(); } catch (\Throwable $e) { error_log('BotWorker autodraw error: ' . get_class($e)); }
+        try { $this->deliverReminders(); } catch (\Throwable $e) { error_log('BotWorker reminders error: ' . get_class($e)); }
         // MLP-251: страховка авто-закрытия опросов (основной путь — лениво при чтении).
-        try { (new PollManager())->closeExpired(); } catch (\Throwable $e) { error_log('BotWorker closeExpired error: ' . $e->getMessage()); }
+        try { (new PollManager())->closeExpired(); } catch (\Throwable $e) { error_log('BotWorker closeExpired error: ' . get_class($e)); }
         try { $this->config->setOption('bot_worker_heartbeat', (string)time()); } catch (\Throwable $e) {}
         try { $this->queue->purgeOld(168); /* MLP-280: неделя журнала — окно метрик */ } catch (\Throwable $e) {}
         try { (new \Domain\LlmUsage())->purgeExpired(); } catch (\Throwable $e) {}
@@ -67,8 +71,9 @@ class BotWorker {
         // MLP-314: автопись памяти — ПОСЛЕ heartbeat: бюджет scribe (75с) отсчитывается
         // от свежей отметки живости, к концу шага возраст ≤ 75с+ε < 90с (workerStale) —
         // иначе reactive-часть тика съедала бы запас и диспетчер уходил в inline.
-        try { $this->memoryScribeSchedule(); } catch (\Throwable $e) { error_log('BotWorker scribe schedule error: ' . $e->getMessage()); }
-        try { $this->memoryScribeProcess(); } catch (\Throwable $e) { error_log('BotWorker scribe process error: ' . $e->getMessage()); }
+        try { $summaryBusy=$this->conversationMemoryStep(); } catch (\Throwable $e) { $summaryBusy=false;error_log('ConversationMemory: '.get_class($e)); }
+        try { if(!$summaryBusy)$this->memoryScribeSchedule(); } catch (\Throwable $e) { error_log('BotWorker scribe schedule error: ' . get_class($e)); }
+        try { if(!$summaryBusy)$this->memoryScribeProcess(); } catch (\Throwable $e) { error_log('BotWorker scribe process error: ' . get_class($e)); }
         try { $this->config->setOption('bot_worker_heartbeat', (string)time()); } catch (\Throwable $e) {}
         $this->db->query("SELECT RELEASE_LOCK('bot_worker')");
     }
@@ -190,6 +195,8 @@ class BotWorker {
         $ctxLimit = max(4, min(100, (int)$this->config->getOption('ai_context_messages', 24)));
         $context = $this->llm->buildReplyContext($ctxLimit, null, null, true, null, $decision['quote_text'] ?? implode(' ', array_column($mentions, 'message')));
         $context = $this->llm->recallOrdinaryContext($context, $decision['quote_text'] ?? implode(' ', array_column($mentions, 'message')), array_map(static fn($m) => (int)($m['user_id'] ?? 0), $mentions));
+        $context = $this->llm->conversationContext($context, array_map(static fn($m) => (int)($m['user_id'] ?? 0), $mentions));
+        try {
         $instr = ReplyPolicy::instruction($decision);
         if ($instr !== '') {
             $context[] = ['role' => 'user', 'content' => $instr];
@@ -206,15 +213,13 @@ class BotWorker {
         }
         $text = $this->llm->applyReplyReaction($raw, $context, (int)($reactTarget ?? 0));
 
+        $sent = false;
         if ($text !== null && $text !== '') {
             $quoted = $decision['quote_message_id'] ? [(int)$decision['quote_message_id']] : [];
-            $this->llm->getChatManager()->addMessage(
-                $this->llm->getBotUserId(),
-                $this->llm->getBotNickname(),
-                $text,
-                $quoted
-            );
+            $sent = $this->llm->publishConversationReply($text, $quoted);
         }
+        $this->llm->finishConversationMemory((bool)$sent);
+        } finally { $this->llm->finishConversationMemory(false); }
         $this->queue->complete($ids);
     }
 
@@ -502,7 +507,7 @@ class BotWorker {
                 (new MemoryScribe($this->llm))->runScribe($job['data'] ?? []);
                 $this->queue->complete([$id]);
             } catch (\Throwable $e) {
-                error_log('MemoryScribe failed: ' . $e->getMessage());
+                error_log('MemoryScribe failed: ' . get_class($e));
                 $this->queue->fail([$id]); // маркер не сдвинут — батч повторится
             }
         }
@@ -525,4 +530,20 @@ class BotWorker {
             error_log("BotWorker: реапер закрыл зависших задач: {$n}");
         }
     }
+    /** Runs under bot_worker; at most one new background generation per tick. */
+    private function conversationMemoryStep(): bool {
+        if(!ConversationMemory::installed())return false;
+        if(!ConversationMemory::enabled('ai_evening_summary_enabled'))return false;
+        if ($this->queue->hasConversationReactiveBacklog()) return false;
+        ConversationMemory::schedule($this->llm);
+        $jobs = $this->queue->claimConversationSummary();
+        foreach ($jobs as $job) {
+            $this->config->setOption('bot_worker_heartbeat', (string)time());
+            try { ConversationMemory::process($this->llm, $job['data'] ?? []); $this->queue->complete([(int)$job['id']]); }
+            catch (\Throwable $e) { $this->queue->fail([(int)$job['id']]); error_log('Conversation summary failed: ' . get_class($e)); }
+            finally { $this->config->setOption('bot_worker_heartbeat', (string)time()); }
+        }
+        return (bool)$jobs;
+    }
+
 }

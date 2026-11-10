@@ -107,4 +107,32 @@ final class MemorySourceReader
         return $result;
     }
 
+    /** Full range hash detects direct edits as well as mutations through application hooks. */
+    public function conversation(array $rows, int $first, int $cursor, int $bot, bool $lock = false): array {
+        $rows = array_values(array_filter($rows, static fn($r) => (int)$r['id'] >= $first));
+        $ids = array_values(array_unique(array_filter(array_map('intval', array_column($rows, 'user_id')))));
+        $existing = array_fill_keys($this->users->conversationIdentityIds($ids, $lock), true);
+        $states = array_column(Privacy::conversationStates($ids, $lock), null, 'user_id');
+        $version = Privacy::version(); $allowed = []; $blocked = false;
+        foreach ($ids as $id) {
+            $allowed[$id] = isset($existing[$id]) && ($id === $bot || (($states[$id]['state'] ?? '') === 'active' && ($states[$id]['policy_version'] ?? '') === $version));
+            if (!$allowed[$id]) $blocked = true;
+        }
+        $hash = hash_init('sha256'); $covered = [];
+        foreach ($rows as $r) {
+            if (!(int)$r['user_id']) { $blocked = true; }
+            if ((int)$r['id'] <= $cursor) {
+                hash_update($hash, json_encode([$r, $states[(int)$r['user_id']] ?? null, isset($existing[(int)$r['user_id']])], JSON_THROW_ON_ERROR));
+                $covered[] = $r;
+            }
+        }
+        return ['hash' => hash_final($hash), 'blocked' => $blocked, 'rows' => $rows, 'covered' => $covered];
+    }
+
+    public function conversationDossiers(array $ids, callable $prepare): array {
+        $prepare(); $rows = $this->memory->memorySourceRows($ids);
+        $allowed = $this->allowedUsers($rows, false, null, $prepare);
+        return array_values(array_filter($rows, fn($r) => $this->eligible($r, 'memory', $allowed)));
+    }
+
 }

@@ -45,6 +45,9 @@ try {
         $cfg->setOption($k, $v);
     }
     $llm = new LLMManager();
+    // Explicit null provider exercises the command fallback without any network adapter.
+    $commandProvider = new class implements \LLM\LLMProviderInterface { public function askChat(array $c,string $p): ?string { return null; } };
+    foreach (['providers','fastProviders'] as $property) (new ReflectionProperty(\LLM\LLMManager::class,$property))->setValue($llm,[$commandProvider]);
 
     $before = $fm->getPage(1, 0)['total'];
     $llm->processTrigger('dynamic_command', [

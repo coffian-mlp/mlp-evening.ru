@@ -516,3 +516,87 @@ Spec использует защищённую CLI fixture, не требует 
 `test_memory_recall_edges.php` проверяет JSON redaction при Unicode/slash escaping, вложенных массивах и сериализованных строках, побайтное сохранение обычного debug и адресную очистку имени бота без удаления темы. `integration_memory_recall_review.php` дополнительно проверяет эти сериализации в настоящем logger и сравнивает BOOLEAN evidence после очистки операторного ввода на MySQL. Оба файла входят в штатный runner; внешние API не вызываются.
 
 `test_russian_stemmer.php` сверяет Snowball Russian с 256 официальными парами из `fixtures/russian_snowball.json`, словоформами проекта и отрицательными парами. `test_memory_recall_selection.php` и `integration_memory_recall_selection.php` проверяют явную цитированную тему, точное подтверждение SQL-кандидатов по основам и ранжирование по редкости темы. Эти наборы входят в штатный runner и не вызывают внешние API.
+
+### MLP-456: конспект беседы и возвращение
+
+`tests/helpers/conversation_environment.sh up` создаёт изолированную копию без production-конфигурации и отдельный Compose-проект `mlp456phase3`. `strict` / `empty` задают глобальный sql_mode только его MySQL; `test` запускает полный PHP-набор. `serve` поднимает локальный HTTP-сервер с синтетическим completion endpoint; реальных вызовов модели нет.
+
+```bash
+bash tests/helpers/conversation_environment.sh up
+bash tests/helpers/conversation_environment.sh strict
+bash tests/helpers/conversation_environment.sh test
+bash tests/helpers/conversation_environment.sh empty
+bash tests/helpers/conversation_environment.sh test
+bash tests/helpers/conversation_environment.sh serve
+MLP_BASE_URL=http://127.0.0.1:8117 npm run test:e2e -- mlp-456-conversation.ui.spec.js --output=docs/tests/MLP-456/phase3-implementation/playwright-output
+bash tests/helpers/conversation_environment.sh down
+```
+
+`test_conversation_memory.php` проверяет чистые правила; `integration_conversation_memory.php` — генерацию на fake provider, источники/согласие, гонку публикации и резервирование возвращения; `integration_conversation_migration.php` — fresh/upgrade, оба SQL modes и защиту ENUM от неизвестных строк. `replay_conversation_summary.php` исключён из автоматического набора: реальная модель разрешается только двумя явными переключателями и отдельным разрешением фазы. Его результаты содержат ID, размеры и хеши, без копирования production-переписки в отчёт.
+
+Snapshot включает две временные таблицы и добавленное значение очереди; исторические 43 регистрации остаются неизменными. Обычный upgrade доводит установку до46 миграций.
+
+MLP-456, починка фазы 3: `integration_conversation_reviewfix.php` проверяет восемь сценариев независимого ревью (включая прямые изменения источников, внешнее выключение флагов, блокировки и потерю post-step). Доставка returning reply использует `delivery_message_id` в одной транзакции с записью чата. Replay выполняется в READ ONLY / READ COMMITTED транзакции; usage уходит в временный sink памяти процесса, выводятся токены/попытки/расчёт RUB по 43/146 за миллион для z-ai/glm-5.3-flashx. Опт-ин защиты и отдельное разрешение на реальные вызовы остаются обязательными.
+
+Повторные проверки MLP-456: `integration_conversation_lifecycle.php` проверяет
+native queued greeting (ровно37 SQL при flags0), конкурентную публикацию,
+неблокирующие source/consent/erase операции, внешние транзакции и отсутствие post-COMMIT hooks.
+Обычные задачи используют управление и addMessage из d8e43ff: без SQL-retry,
+квитанций задач и новой транзакции. Ошибка ACK оставляет processing до reaper.
+
+Только реально использованный returning block публикуется с квитанцией arrival
+в одной собственной транзакции с сообщением. Его chat_add lock держится до COMMIT;
+duplicate lookup читает актуальные строки. Флаги читаются свежим неблокирующим
+SELECT в обход ConfigManager непосредственно перед публикацией.
+
+Summary читает текущие источники под собственной короткой транзакцией. При внешней
+транзакции, включая native begin_transaction, блок не используется и очистка
+откладывается до worker tick. Source/consent/erase не вызывают код фазы 3 и не
+регистрируют callbacks; число SQL совпадает с baseline при обоих флагах.
+HTTP-чтение конспекта при несовпадении только возвращает отсутствие блока,
+worker очищает производное в собственной транзакции.
+Подпись включает conversation_revision сообщения (повышается тем же UPDATE) и
+последний id privacy_consent_events. Формат edited_at/deleted_at сохранён.
+Триггеров, глобального clock, ledger и квитанций обычных задач нет.
+Известное ограничение прямого SQL A→B→A между успешными наблюдениями сохраняется.
+Пустой flags0 tick добавляет ровно один probe SQL; baseline копируется из d8e43ff.
+
+`conversation_environment.sh` создаёт единственную Docker-сеть `internal: true`.
+Только disposable PHP-контейнер читает `conversation-network.ini` через PHP_INI_SCAN_DIR
+из стабильного каталога; helper проверяет загрузку guard перед run_all/server. Native
+curl_exec отключён, test-only wrapper допускает локальный fake HTTP и фиксирует/роняет
+процесс при внешнем HTTP-вызове, даже если вызывающий код перехватил исключение.
+HTTP stream wrappers отключены. Этот ini и guard не устанавливаются на production.
+Playwright допускает `MLP_BASE_URL=http://php:8117` вместе с
+`MLP_FIXTURE_URL=http://php:8117/_fixture` для запуска браузеров в той же internal-сети;
+fixture route существует только в защищённом synthetic router, не в приложении.
+
+В phase3 UI-сценариях SSE заменён пустым локальным event-stream: сообщения проверяются
+через настоящий reload/API, а не через realtime. Это не проверка SSE-доставки; заглушка
+исключает исчерпание малого пула PHP development server при локальном fake completion.
+
+`integration_conversation_minute.php` проверяет гарантию отзыва: допускается одно
+уже готовящееся сообщение, новый приход и повтор публикации после отзыва запрещены.
+Проверяются hard erasure59 SQL при flags0/1, паритет edit/delete/restore/consent,
+INSERT/UPDATE под gap/row locks, восстановление настроек и read-only HTTP observation.
+Собственные транзакции задают row/metadata wait1с и возвращают исходные настройки.
+Cleanup выполняется до глобального publishing lock: до128 summaries,256 arrivals,
+4096 summary jobs; индекс checked_at обеспечивает обход без голодания.
+Presence только обменивает заранее созданный worker idle slot, с NOWAIT на primary
+и expiry entries. Нет свободного слота — обычный вход без воспоминания.
+Слоты создаются отдельной фоновой транзакцией, поэтому их INSERT не откатывает cleanup.
+В production сначала применяется migration с conversation_revision, затем новый код.
+План фактических cleanup SQL проверяется EXPLAIN на1024 summaries: ordered indices
+conversation_check/arrival_check без filesort. FORCE INDEX и primary-key scalar lookups
+не допускают чтения всех накопленных строк перед LIMIT.
+
+
+MLP-456, починка7: `integration_conversation_slot.php` проверяет общий слот
+`bot_worker` для summary и return: две inline-подготовки, worker+inline,
+два cron-процесса, отзыв между подготовкой и публикацией, потерю соединения,
+стоимость одного ownership SQL и нулевую стоимость при flags0.
+Контекст фазы3 доступен только соединению, уже удерживающему worker lock;
+проверка не захватывает слот и ничего не ждёт. При выключенной очереди,
+ai_worker_mode=inline или stale heartbeat>90с inline отвечает без блоков фазы3.
+Низкоуровневые context fixtures явно удерживают реальную блокировку соединения;
+end-to-end delivery и Playwright проходят через настоящий BotWorker.tick.

@@ -1,0 +1,10 @@
+<?php
+/** Count actual native worker publication, never a real provider. */
+$base=($argv[1]??'')==='baseline';require $base?'/var/www/html/baseline/autoload.php':'/var/www/html/autoload.php';
+if(!is_file('/.dockerenv')||Infra\Env::get('DB_NAME')!=='mlp_phase3')throw new RuntimeException('Disposable only');
+$s=json_decode(file_get_contents($argv[2]),true);$uid=$s['uid'];$bot=$s['bot'];$db=Infra\Database::getInstance()->getConnection();$cfg=Infra\ConfigManager::getInstance();
+foreach(['ai_evening_summary_enabled'=>0,'ai_return_memory_enabled'=>0,'ai_memory_enabled'=>1,'ai_enabled'=>1,'ai_bot_user_id'=>$bot,'ai_lifelike'=>0,'ai_greeting_cooldown'=>0,'ai_reply_min_gap'=>0,'ai_debounce_window'=>0,'ai_online_in_context'=>0,'ai_reactions'=>0,'ai_memory_auto'=>0,'ai_memory_recall_enabled'=>0,'ai_debug_log'=>0]as$k=>$v)$cfg->setOption($k,(string)$v);
+$p=new class implements LLM\LLMProviderInterface{public int $calls=0;public function withTimeout(int $t):static{return$this;}public function askChat(array $c,string $s):?string{return 'Синтетический ответ '.$this->calls++;}};
+$l=new LLM\LLMManager();foreach(['providers','fastProviders']as$prop)(new ReflectionProperty(LLM\LLMManager::class,$prop))->setValue($l,[$p]);$w=new LLM\BotWorker();(new ReflectionProperty($w,'llm'))->setValue($w,$l);$q=new LLM\JobQueue();$counts=[];$states=[];
+for($i=0;$i<6;$i++){$db->query('DELETE FROM llm_jobs');$db->query("DELETE FROM chat_messages WHERE user_id=$bot");$id=$q->enqueue('greeting',['user_id'=>$uid,'username'=>'Synthetic'],-1);$before=(int)$db->query("SHOW GLOBAL STATUS LIKE 'Questions'")->fetch_row()[1];(new ReflectionMethod($w,'reactive'))->invoke($w);$n=(int)$db->query("SHOW GLOBAL STATUS LIKE 'Questions'")->fetch_row()[1]-$before-1;if($i)$counts[]=$n;$states[]=$db->query("SELECT status FROM llm_jobs WHERE id=$id")->fetch_row()[0];}
+echo json_encode(['baseline'=>$base,'path'=>'native queued greeting flags0','sql'=>$counts,'min'=>min($counts),'max'=>max($counts),'fake_calls'=>$p->calls,'all_done'=>count(array_filter($states,fn($s)=>$s==='done'))===count($states)]),"\n";

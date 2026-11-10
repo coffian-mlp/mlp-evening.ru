@@ -182,7 +182,7 @@ class ChatManager {
 
         $newMessage = htmlspecialchars($newMessage, ENT_QUOTES, 'UTF-8');
         
-        $updateStmt = $this->db->prepare("UPDATE chat_messages SET message = ?, edited_at = UTC_TIMESTAMP() WHERE id = ?");
+        $updateStmt = $this->db->prepare("UPDATE chat_messages SET message = ?, edited_at = UTC_TIMESTAMP(),conversation_revision=conversation_revision+1 WHERE id = ?");
         $updateStmt->bind_param("si", $newMessage, $messageId);
         $res = MemoryEpisodeManager::change('chat', [(int)$messageId], fn() => $updateStmt->execute());
         
@@ -235,7 +235,7 @@ class ChatManager {
 
         // Удаление с установкой времени deleted_at
         // Также обновляем edited_at, чтобы стрим заметил изменение!
-        $updateStmt = $this->db->prepare("UPDATE chat_messages SET is_deleted = 1, deleted_at = UTC_TIMESTAMP(), edited_at = UTC_TIMESTAMP() WHERE id = ?");
+        $updateStmt = $this->db->prepare("UPDATE chat_messages SET is_deleted = 1, deleted_at = UTC_TIMESTAMP(), edited_at = UTC_TIMESTAMP(),conversation_revision=conversation_revision+1 WHERE id = ?");
         $updateStmt->bind_param("i", $messageId);
         $res = MemoryEpisodeManager::change('chat', [(int)$messageId], fn() => $updateStmt->execute());
         
@@ -296,7 +296,7 @@ class ChatManager {
 
         // Восстановление: сбрасываем флаг и таймер, обновляем edited_at чтобы чат увидел изменение
         // edited_at обновляется принудительно, чтобы стрим подхватил изменение статуса
-        $updateStmt = $this->db->prepare("UPDATE chat_messages SET is_deleted = 0, deleted_at = NULL, edited_at = UTC_TIMESTAMP() WHERE id = ?");
+        $updateStmt = $this->db->prepare("UPDATE chat_messages SET is_deleted = 0, deleted_at = NULL, edited_at = UTC_TIMESTAMP(),conversation_revision=conversation_revision+1 WHERE id = ?");
         $updateStmt->bind_param("i", $messageId);
         $res = MemoryEpisodeManager::change('chat', [(int)$messageId], fn() => $updateStmt->execute());
         
@@ -329,7 +329,7 @@ class ChatManager {
         // 2. Массово удаляем (помечаем)
         $idsList = implode(',', $ids);
         // Обновляем edited_at, чтобы клиенты увидели изменение
-        $updateSql = "UPDATE chat_messages SET is_deleted = 1, deleted_at = UTC_TIMESTAMP(), edited_at = UTC_TIMESTAMP() WHERE id IN ($idsList)";
+        $updateSql = "UPDATE chat_messages SET is_deleted = 1, deleted_at = UTC_TIMESTAMP(), edited_at = UTC_TIMESTAMP(),conversation_revision=conversation_revision+1 WHERE id IN ($idsList)";
         if (MemoryEpisodeManager::change('chat', $ids, fn() => $this->db->query($updateSql))) {
             // Broadcast Purge (send list of IDs)
             $this->broadcast([
@@ -1154,7 +1154,7 @@ class ChatManager {
     public function eraseUserData(int $userId): void {
         \Infra\Transaction::run($this->db, function () use ($userId) {
             (new MemoryEpisodeManager($this->db))->eraseUser($userId);
-            foreach (['UPDATE chat_messages SET user_id=NULL,username=\'Удалённый пользователь\',message=\'\',quoted_msg_ids=NULL,is_deleted=1,is_pinned=0,deleted_at=UTC_TIMESTAMP(),edited_at=UTC_TIMESTAMP() WHERE user_id=?','DELETE FROM chat_reactions WHERE user_id=?'] as $sql) {
+            foreach (['UPDATE chat_messages SET user_id=NULL,username=\'Удалённый пользователь\',message=\'\',quoted_msg_ids=NULL,is_deleted=1,is_pinned=0,deleted_at=UTC_TIMESTAMP(),edited_at=UTC_TIMESTAMP(),conversation_revision=conversation_revision+1 WHERE user_id=?','DELETE FROM chat_reactions WHERE user_id=?'] as $sql) {
                 $stmt=$this->db->prepare($sql);$values=array_fill(0,substr_count($sql,"?"),$userId);
                 $stmt->bind_param(str_repeat("i",count($values)),...$values);$stmt->execute();
             }
@@ -1218,6 +1218,14 @@ class ChatManager {
         $where=implode(' AND ',$conditions);
         $stmt=$this->db->prepare('SELECT id FROM chat_messages WHERE is_deleted=0 AND '.$where.' ORDER BY id DESC LIMIT 40');
         $stmt->bind_param(str_repeat('s',count($values)),...$values);$stmt->execute();return array_map('intval',array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC),'id'));
+    }
+
+    /** Bounded source window; raw rows stay inside memory composition. */
+    public function conversationMemoryRows(int $since, bool $lock = false): array {
+        $date = gmdate('Y-m-d H:i:s', $since);
+        $stmt = $this->db->prepare('SELECT * FROM chat_messages WHERE created_at>=? ORDER BY created_at,id LIMIT 5001' . ($lock ? ' FOR UPDATE NOWAIT' : ''));
+        $stmt->bind_param('s', $date); $stmt->execute();
+        return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     }
 
 }

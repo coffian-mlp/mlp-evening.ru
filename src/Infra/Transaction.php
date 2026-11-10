@@ -54,6 +54,10 @@ final class Transaction
         }
     }
 
+    public static function active(mysqli $db): bool {
+        $key=spl_object_id($db);return (self::$depth[$key]??0)>0||self::hasTransaction($db,$key);
+    }
+
     public static function depth(mysqli $db): int
     {
         return self::$depth[spl_object_id($db)] ?? 0;

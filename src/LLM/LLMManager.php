@@ -36,6 +36,7 @@ class LLMManager {
     private bool $durableConfirmations = false;
     private ?int $privacyActor = null;
 
+    private ?array $conversationArrival = null;
     private ?MemoryRetriever $memoryRetriever = null;
     private ?string $memoryRetrieverProfile = null;
     private ?array $memoryRecallMetadata = null;
@@ -180,7 +181,7 @@ class LLMManager {
             ? [(string)($contextData['message'] ?? '')] : [];
         $usageTask=$triggerType==='dynamic_command'?'command_'.($contextData['command']['handler_type']??'text'):(string)$triggerType;
         try { return $this->withAddressedMessages($this->addressedMessages, fn() => UsageMeter::within($usageTask,fn()=>$this->processTriggerInner($triggerType, $contextData))); }
-        finally { $this->commandMessage = $previous; $this->addressedMessages = $previousAddressed; $this->durableConfirmations = $previousDurable; $this->privacyActor=$previousActor; }
+        finally { $this->finishConversationMemory(false); $this->commandMessage = $previous; $this->addressedMessages = $previousAddressed; $this->durableConfirmations = $previousDurable; $this->privacyActor=$previousActor; }
     }
 
     /** Bounded background for explicit subjects; identities never grant action permissions. */
@@ -290,6 +291,7 @@ class LLMManager {
 
                 $context = $this->buildContext($this->contextLimit());
                 $context = $this->recallOrdinaryContext($context, (string)$message, [(int)($contextData['user_id'] ?? 0)]);
+                $context = $this->conversationContext($context, [(int)($contextData['user_id'] ?? 0)]);
                 $response = $this->generateReply($context);
                 $response = $this->applyReplyReaction($response, $context, (int)($contextData['message_id'] ?? 0));
                 
@@ -297,7 +299,8 @@ class LLMManager {
                 
                 if ($response && !$isSilence) {
                     $quotedIds = isset($contextData['message_id']) && $contextData['message_id'] ? [$contextData['message_id']] : [];
-                    $this->botSay($response, $quotedIds);
+                    $sent = $this->botSay($response, $quotedIds);
+                    $this->finishConversationMemory((bool)$sent);
                     return true;
                 }
             }
@@ -350,6 +353,7 @@ class LLMManager {
 
             $userLogin = $contextData['username'] ?? 'Гость';
             $context = $this->buildContext($this->contextLimit());
+            $context = $this->conversationContext($context, [$uid]);
             
             $instruction = "Пользователь $userLogin только что зашел на сайт. Поздоровайся с ним, обязательно упомянув его по имени (например, '@$userLogin'). Будь краткой и приветливой.";
             // Инструкция как обычная реплика без префикса "[Система]" — префикс модель иногда выдавала эхом.
@@ -363,7 +367,8 @@ class LLMManager {
             $isSilence = preg_match('/^[^a-zа-яё0-9]*silence[^a-zа-яё0-9]*$/iu', trim($response ?? ''));
             
             if ($response && !$isSilence) {
-                $this->botSay($response);
+                $sent = $this->botSay($response);
+                $this->finishConversationMemory((bool)$sent);
                 return true;
             }
         } elseif ($triggerType === 'dynamic_command') {
@@ -724,6 +729,11 @@ class LLMManager {
                     (int)round((microtime(true) - $t0) * 1000));
 
                 // Единая очистка + выходной guard против прорыва системных инструкций/контекста.
+                if ((ConversationMemory::enabled('ai_evening_summary_enabled') || ConversationMemory::enabled('ai_return_memory_enabled')) && ConversationMemoryPolicy::memoryChars(array_filter($context, static fn($m) => is_string($m['content'] ?? null) && (str_starts_with($m['content'], ConversationMemoryPolicy::SUMMARY_MARKER) || str_starts_with($m['content'], ConversationMemoryPolicy::RETURN_MARKER)))) > 0) {
+                    foreach ([ConversationMemoryPolicy::SUMMARY_MARKER, ConversationMemoryPolicy::RETURN_MARKER] as $marker) {
+                        $pos=mb_stripos((string)$response,$marker); if($pos!==false)$response=mb_substr($response,0,$pos);
+                    }
+                }
                 $clean = ResponseSanitizer::clean($response, $botNickname, $botLogin);
 
                 // MLP-342: для реплик с личностью пустышка без букв («[») — как молчание: следующий провайдер/null,
@@ -732,14 +742,14 @@ class LLMManager {
                 // в никуда): настоящие рисунки код приклеивает к подписи после ответа. Отбрасываем целиком —
                 // текст вокруг выдуманной картинки тоже неправда. Следующий провайдер, иначе фоллбек вызывающего.
                 if ($logKind === 'chat' && $clean !== null && ResponseSanitizer::hasImage($clean)) {
-                    error_log("askWithFallback: ответ с выдуманной картинкой отброшен: " . json_encode(mb_substr($clean, 0, 120), JSON_UNESCAPED_UNICODE));
+                    error_log("askWithFallback: rejected_image_response");
                     continue;
                 }
                 if ($clean !== null && $clean !== '' && ($logKind !== 'chat' || ResponseSanitizer::isMeaningful($clean))) {
                     return $this->latinChecked($clean, $provider, $context, $prompt, $logKind, $botNickname, $botLogin, $deadlineAt, $timeoutSec ?? 60); // MLP-356
                 }
                 if ($clean !== null && $clean !== '') {
-                    error_log("askWithFallback: бессодержательный ответ отброшен: " . json_encode(mb_substr($clean, 0, 40), JSON_UNESCAPED_UNICODE));
+                    error_log("askWithFallback: rejected_empty_response");
                 }
                 // Пусто после очистки: либо провайдер промолчал, либо это был чистый
                 // прорыв системного текста, вырезанный целиком. В чат не постим — лучше
@@ -748,13 +758,13 @@ class LLMManager {
                 // MLP-348: ответ оборван потолком токенов — обрубок не отдаём вызывающему: режиссёр
                 // повторит запрос, автопись не сдвинет маркер, сжатие памяти не затрёт записи, чат
                 // промолчит. В журнал — статус truncated и полученный обрубок. Следующий провайдер — как при сбое.
-                error_log("LLM Provider truncated (" . get_class($provider) . "): " . $e->getMessage());
+                error_log("LLM Provider truncated (" . get_class($provider) . "): " . get_class($e));
                 LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
                     $this->debugReplyRequest($prompt, $context), $e->partial, 'truncated',
                     (int)round((microtime(true) - $t0) * 1000));
                 continue;
             } catch (Exception $e) {
-                error_log("LLM Provider Error (" . get_class($provider) . "): " . $e->getMessage());
+                error_log("LLM Provider Error (" . get_class($provider) . "): " . get_class($e));
                 LlmDebugLog::log($logKind, LlmDebugLog::providerName($provider), LlmDebugLog::providerModel($provider),
                     $this->debugReplyRequest($prompt, $context), $e->getMessage(), 'error',
                     (int)round((microtime(true) - $t0) * 1000));
@@ -848,7 +858,7 @@ class LLMManager {
             $job['data'] = (new JobQueue())->savePayload((int)$job['id'], $job['data']);
             return CommandReplyDelivery::publish($this, $job);
         }
-        return $this->chatManager->addMessage($this->botUserId, $this->getBotUsername(), $text, $quotedIds);
+        return $this->publishConversationReply($text, $quotedIds);
     }
 
     /**
@@ -1110,7 +1120,7 @@ class LLMManager {
                 array_unshift($context, ['role' => 'user', 'content' => $maxChars === null ? $presence : mb_substr($presence, 0, $maxChars)]);
             }
         } catch (\Throwable $e) {
-            error_log("OnlineContext failed (degraded, reply continues): " . $e->getMessage());
+            error_log("OnlineContext failed (degraded, reply continues): " . get_class($e));
         }
         return $context;
     }
@@ -1243,7 +1253,7 @@ class LLMManager {
                 $context = $this->prependPresenceContext($context, $online, $limits['presence_chars'] ?? null);
                 if ($expandPresenceMemory) $audienceIds = OnlineContext::appendSilent($audienceIds, array_column($online['users'] ?? [], 'id'), $this->botUserId);
             } catch (\Throwable $e) {
-                error_log("OnlineContext failed (degraded, reply continues): " . $e->getMessage());
+                error_log("OnlineContext failed (degraded, reply continues): " . get_class($e));
             }
         }
         if ($includeMemory) {
@@ -1251,7 +1261,7 @@ class LLMManager {
                 $memory = (new LyraMemory($this))->buildPromptBlock($audienceIds, true, $memoryQuery);
                 if ($memory !== null) array_unshift($context, ['role' => 'user', 'content' => $memory]);
             } catch (\Throwable $e) {
-                error_log("LyraMemory block failed (degraded, reply continues): " . $e->getMessage());
+                error_log("LyraMemory block failed (degraded, reply continues): " . get_class($e));
             }
         }
         if ($includePinned) {
@@ -1402,7 +1412,7 @@ class LLMManager {
                     $prompt .= "\n\n" . $knowledge;
                 }
             } catch (\Throwable $e) {
-                error_log('ChatKnowledge failed (degraded, persona without rules/roles): ' . $e->getMessage());
+                error_log('ChatKnowledge failed (degraded, persona without rules/roles): ' . get_class($e));
             }
             $this->personaPromptCache = $prompt;
         }
@@ -1428,7 +1438,7 @@ class LLMManager {
             $raw = $this->generateReply($context);
             $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
         } catch (\Throwable $e) {
-            error_log('liveText degraded to fallback: ' . $e->getMessage());
+            error_log('liveText degraded to fallback: ' . get_class($e));
         }
         if ($text === null || $text === '' || preg_match('/^[\s\W]*SILENCE[\s\W]*$/iu', $text) || ($mustContain !== null && mb_stripos($text, $mustContain) === false)) {
             return null;
@@ -1528,6 +1538,7 @@ class LLMManager {
                 continue;
             }
             $c = $m['content'] ?? '';
+            if ((ConversationMemory::enabled('ai_evening_summary_enabled') || ConversationMemory::enabled('ai_return_memory_enabled')) && is_string($c) && (str_starts_with($c, ConversationMemoryPolicy::SUMMARY_MARKER) || str_starts_with($c, ConversationMemoryPolicy::RETURN_MARKER))) continue;
             if (is_array($c)) {
                 foreach ($c as $part) {
                     if (is_array($part) && is_string($part['text'] ?? null)) {
@@ -1543,8 +1554,52 @@ class LLMManager {
                 $texts[] = (string)($u['nickname'] ?? '') . ' ' . (string)($u['login'] ?? '');
             }
         } catch (\Throwable $e) {
-            error_log('allowedLatin: список пользователей недоступен (страж строже): ' . $e->getMessage());
+            error_log('allowedLatin: список пользователей недоступен (страж строже): ' . get_class($e));
         }
         return ResponseSanitizer::latinWords(implode("\n", $texts));
     }
+    public function conversationContext(array $context, array $actors): array {
+        $this->finishConversationMemory(false);
+        $result = ConversationMemory::context($this, $context, $actors);
+        $this->conversationArrival = $result['arrival'];
+        return $result['context'];
+    }
+
+    public function finishConversationMemory(bool $sent): void {
+        if ($this->conversationArrival === null) return;
+        $r = $this->conversationArrival; $this->conversationArrival = null;
+        (new \Domain\ConversationMemoryStore())->finishArrival($r['user_id'], $r['token'], $sent);
+    }
+
+    public function conversationRecallProfile(): string {
+        $embedding = RouterAIEmbeddingProvider::fromConfig(static fn() => null);
+        return hash('sha256', $embedding->profile() . '|' . (new MemoryAssociations(static fn() => null, $this->memoryAssociationProfile()))->profile());
+    }
+
+    public function conversationAllowedLatin(): array {
+        $text = ''; foreach ((new UserManager())->mentionDirectory() as $user) $text .= ' ' . $user['login'] . ' ' . $user['nickname'];
+        return ResponseSanitizer::latinWords($text);
+    }
+
+    /** One cheap background attempt, sharing a strict deadline; no transcript/debug copies. */
+    public function generateConversationSummary(string $payload, float $deadline): ?string {
+        $config = ConfigManager::getInstance(); $provider = $this->fastProviders[0] ?? null;
+        if (!$this->isEnabled() || !$provider || !$config->getOption('ai_fast_model', '') || !method_exists($provider, 'withTimeout')) return null;
+        try { return RequestDeadline::within($deadline, function () use ($provider, $payload, $deadline) {
+            if (!$this->prepareScopedProxy() || RequestDeadline::expired()) return null;
+            $call = $provider->withTimeout(max(1, min(20, (int)ceil($deadline - microtime(true)))));
+            if (method_exists($call, 'withVision')) $call = $call->withVision(false);
+            if ($call instanceof RouterAIProvider) $call = $call->withReasoningEffort('low')->withMaxTokens(1500);
+            return UsageMeter::within('evening_summary', fn() => $call->askChat([['role'=>'user','content'=>$payload]], ConversationMemory::PROMPT));
+        }); } catch (\Throwable $e) {
+            error_log('Conversation summary unavailable: ' . get_class($e));
+            return null;
+        }
+    }
+
+    public function publishConversationReply(string $text,array $quotes=[]): int|bool {
+        if($this->conversationArrival!==null)return (new \Domain\ConversationMemoryStore())->publishArrival($this->conversationArrival['user_id'],$this->conversationArrival['token'],$this->botUserId,$this->getBotUsername(),$text,$quotes);
+        return $this->chatManager->addMessage($this->botUserId,$this->getBotUsername(),$text,$quotes);
+    }
+
 }

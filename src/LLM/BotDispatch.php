@@ -44,6 +44,8 @@ class BotDispatch {
                 && (new JobQueue())->hasRecentByUsername('greeting', $username, $cooldown)) {
                 return;
             }
+            if (ConversationMemory::enabled('ai_return_memory_enabled') && (int)($payload['user_id'] ?? 0) > 0
+                && !(new \Domain\ConversationMemoryStore())->reserveReturnGreeting((int)$payload['user_id'])) return;
         }
 
         // MLP-326: дедуп одинаковых команд — та же команда (с теми же аргументами) уже в очереди

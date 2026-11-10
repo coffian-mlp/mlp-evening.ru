@@ -23,7 +23,7 @@ try{
   check($chat===$db->query('SELECT * FROM chat_messages ORDER BY id')->fetch_all(MYSQLI_ASSOC),'migration preserves chat rows');
   check((int)$db->query('SELECT COUNT(*) FROM bot_memory WHERE is_archived<>0')->fetch_row()[0]===0,'existing rows default to active');
   check($db->query("SHOW INDEX FROM bot_memory WHERE Key_name='idx_memory_active'")->num_rows===3,'active-reader index exists');
-  check(count(migrate_applied($db))===45,'fresh and populated migrate.php reach 45 applied files');
+  check(count(migrate_applied($db))===46,'fresh and populated migrate.php reach 46 applied files');
   check($journal===array_slice($db->query('SELECT * FROM schema_migrations ORDER BY id')->fetch_all(MYSQLI_ASSOC),0,count($journal)),'existing journal IDs and timestamps are preserved');
   $hash=bootstrap_schema_hash($db);if($expected===null)$expected=$hash;check($expected===$hash,'fresh and production-shaped populated schemas converge in both modes');
   migrate_apply_file($db,$root.'/migrations/'.$archive);check($hash===bootstrap_schema_hash($db),'archive SQL itself is idempotent');
