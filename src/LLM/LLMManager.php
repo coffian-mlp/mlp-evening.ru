@@ -1452,7 +1452,8 @@ class LLMManager {
      * до неё оно доживает не всегда: glm-5.3 вставлял «reports», «ban», «sniff-sniff» (26.09).
      */
     public const CJK_REMINDER = 'Не используй иероглифы, кану и хангыль вне явных цитат, ников, команд и URL.';
-    public const LANG_REMINDER = 'Пиши только по-русски, без английских слов и звукоподражаний (ники и команды — как есть).' . "\n" . self::CJK_REMINDER;
+    private const TITLE_REMINDER = 'Оригинальные названия игр, фильмов, книг, песен и серий можно оставлять как есть, в кавычках «…». Остальное — только по-русски, без английских слов и звукоподражаний (ники и команды — как есть).';
+    public const LANG_REMINDER = self::TITLE_REMINDER . "\n" . self::CJK_REMINDER;
 
     /** One language retry for Latin and CJK together, sharing the original request deadline. */
     private function latinChecked(string $clean, LLMProviderInterface $provider, array $context, string $prompt, string $logKind, string $botNickname, string $botLogin, float $deadlineAt, int $timeoutSec): ?string {
@@ -1460,13 +1461,13 @@ class LLMManager {
         $cjkAllowed = $this->allowedCjk();
         $clean = $this->cjkNormalized($clean, $cjkAllowed);
         $allowed = $this->allowedLatin($context, $prompt);
-        $foreign = ResponseSanitizer::foreignLatin($clean, $allowed);
+        $foreign = ResponseSanitizer::foreignLatinInReply($clean, $allowed);
         $cjk = CjkGuard::foreign($clean, $cjkAllowed);
         if (!$foreign && !$cjk) return $this->cjkCleaned($clean, $cjkAllowed);
         $list = implode(', ', array_slice($foreign, 0, 6));
         $retryPrompt = $prompt . ($cjk
-            ? "\n\n[Язык]: в прошлом варианте ответа были случайные иероглифы или другие иностранные слова. Напиши ответ заново, полностью по-русски; сохрани явные цитаты, ники, команды и URL."
-            : "\n\n[Язык]: в прошлом варианте ответа были английские слова ({$list}). Напиши ответ заново, полностью по-русски.");
+            ? "\n\n[Язык]: в прошлом варианте ответа были случайные иероглифы или другие иностранные слова. Напиши ответ заново, полностью по-русски; сохрани явные цитаты, ники, команды и URL. " . self::TITLE_REMINDER
+            : "\n\n[Язык]: в прошлом варианте ответа были английские слова ({$list}). Напиши ответ заново. " . self::TITLE_REMINDER);
         $remaining = min($deadlineAt, RequestDeadline::at() ?? $deadlineAt) - RequestDeadline::now();
         if ($remaining >= 5) {
             $t0 = microtime(true);

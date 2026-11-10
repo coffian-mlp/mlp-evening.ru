@@ -128,4 +128,38 @@ class ResponseSanitizer {
         $allowedSet = array_flip(array_map('strtolower', $allowed));
         return array_values(array_filter(self::latinWords($reply), static fn($w) => !isset($allowedSet[$w])));
     }
+
+    /** Reply-only title exemptions (MLP-458); the shared summary parser stays strict. */
+    public static function foreignLatinInReply(string $reply, array $allowed): array {
+        // Exempt occurrences, never vocabulary. Regex failures retain the input of that stage.
+        $mask = static fn($m) => strtr($m[0], 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', str_repeat(' ', 52));
+        $text = preg_replace_callback('~https?://\\S+~u', static fn($m) => str_repeat(' ', strlen($m[0])), $reply) ?? $reply;
+        $text = preg_replace_callback('/«[^»]*»|"[^"]*"|“[^”]*”|„[^“]*“/u', $mask, $text) ?? $text;
+        $capital = "[A-Z][A-Za-z]*(?:['-][A-Za-z]+)*";
+        $connector = '(?:a|an|the|and|or|of|in|on|at|to|for|from|with|without|by|as|is|vs|versus|into|over|under)';
+        $boundary = "[\\p{L}\\p{N}_@/'-]";
+        // Tokenize once instead of matching an unbounded nested connector chain.
+        $pattern = '~(?<!' . $boundary . ')(?:' . $capital . '|' . $connector . ')(?!' . $boundary . ')~u';
+        if (preg_match_all($pattern, $text, $tokens, PREG_OFFSET_CAPTURE) === false) return self::foreignLatin($text, $allowed);
+        $spans = []; $start = null; $lastCapital = 0; $capitals = 0; $previousEnd = 0;
+        $finish = static function () use (&$spans, &$start, &$lastCapital, &$capitals) {
+            if ($capitals >= 2) $spans[] = [$start, $lastCapital];
+            $start = null; $capitals = 0;
+        };
+        foreach ($tokens[0] as [$word, $offset]) {
+            $gap = substr($text, $previousEnd, $offset - $previousEnd);
+            if (strspn($gap, " \t") !== strlen($gap)) $finish();
+            $previousEnd = $offset + strlen($word);
+            if ($word[0] >= 'A' && $word[0] <= 'Z') {
+                $start ??= $offset; $capitals++; $lastCapital = $previousEnd;
+            }
+        }
+        $finish();
+        $out = ''; $cursor = 0;
+        foreach ($spans as [$start, $end]) {
+            $out .= substr($text, $cursor, $start - $cursor) . $mask([substr($text, $start, $end - $start)]);
+            $cursor = $end;
+        }
+        return self::foreignLatin($out . substr($text, $cursor), $allowed);
+    }
 }
