@@ -1,11 +1,11 @@
 <?php
-// MLP-456 additive archive snapshot; historical migration registration remains unchanged.
+// MLP-456 additive conversation snapshot; historical migration registration remains unchanged.
 return [
-    'id' => 'mlp456-2026-11-08-archive',
-    'schema_sha256' => 'd56797a90948b3613eec3e87abb350364ae2ee88439d46e64ae55195eb1bf5a7',
+    'id' => 'mlp456-2026-11-09-conversation-minute-cleanup',
+    'schema_sha256' => '21edb8d38888a94098b0c2e63b190db32ef38eb43941c84c5c9475a2f76d437b',
     'seed_sha256' => 'c35cd5449133bfb75a405595e3656aa6627b45b7da798a9c82db44b00576d66d',
     'files' => [
-        'database.sample.sql' => '434d619661dc2b30baac5bc52cf93af249216c1e9d58a6ab15395124c4e3483c',
+        'database.sample.sql' => '5814e50c5e3bd4e3a76ac7fbc9a8643db49ec26e79dc825097059def9fe26612',
         'database.seed.sql' => '7374b05caa3008156e950a72e413ff1ea984195d18cd4cad09911428fa6e67f3',
         'database.demo.sql' => 'd028294a5b21ed9182cb7dbaa4aa4be9e70eb0712bedaedb48768798b301432b',
     ],

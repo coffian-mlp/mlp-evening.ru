@@ -33,6 +33,7 @@ CREATE TABLE `chat_messages` (
   `message` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   `edited_at` datetime DEFAULT NULL,
+  `conversation_revision` bigint unsigned NOT NULL DEFAULT 0,
   `is_deleted` tinyint(1) DEFAULT '0',
   `deleted_at` datetime DEFAULT NULL,
   `quoted_msg_ids` json DEFAULT NULL,
@@ -263,7 +264,7 @@ CREATE TABLE `llm_debug_log` (
 
 CREATE TABLE `llm_jobs` (
   `id` bigint NOT NULL AUTO_INCREMENT,
-  `type` enum('mention','greeting','dynamic_command','cron_spontaneous','machine_spirit','stream_command','memory_scribe') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `type` enum('mention','greeting','dynamic_command','cron_spontaneous','machine_spirit','stream_command','memory_scribe','evening_summary') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `payload` json NOT NULL COMMENT 'message, message_id, user_id, username, quoted_ids, command',
   `run_after` datetime NOT NULL COMMENT 'когда можно исполнять (lifelike-задержка)',
   `status` enum('pending','processing','done','failed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
@@ -727,3 +728,38 @@ CREATE TABLE `watching_now` (
   `TITLE` text NOT NULL,
   PRIMARY KEY (`ID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS bot_conversation_summaries (
+    session_key CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,
+    first_id INT NOT NULL,
+    started_at DATETIME NOT NULL,
+    expires_at DATETIME NOT NULL,
+    cursor_id INT NOT NULL DEFAULT 0,
+    source_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+    summary_text TEXT NOT NULL,
+    checked_at DATETIME(6) NOT NULL DEFAULT '1970-01-01 00:00:00.000000',
+    has_data TINYINT GENERATED ALWAYS AS (CHAR_LENGTH(summary_text)>0 OR CHAR_LENGTH(source_hash)>0 OR cursor_id<>0) STORED,
+    revision BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    last_attempt DATETIME NULL,
+    disabled TINYINT NOT NULL DEFAULT 0,
+    KEY conversation_expiry (expires_at),
+    KEY conversation_check (checked_at,session_key),
+    KEY conversation_material (has_data,expires_at),
+    KEY conversation_start (started_at,first_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS bot_memory_arrivals (
+    user_id INT NOT NULL PRIMARY KEY,
+    token CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    gap_seconds BIGINT UNSIGNED NOT NULL,
+    consent_revision BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    checked_at DATETIME(6) NOT NULL DEFAULT '1970-01-01 00:00:00.000000',
+    expires_at DATETIME NOT NULL,
+    state VARCHAR(16) NOT NULL DEFAULT 'pending',
+    claimed_at DATETIME NULL,
+    greeting_reserved_at DATETIME NULL,
+    delivery_message_id INT NULL,
+    KEY arrival_expiry (expires_at),
+    KEY arrival_check (checked_at,user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
