@@ -37,6 +37,7 @@ class LLMManager {
     private ?int $privacyActor = null;
 
     private ?array $conversationArrival = null;
+    private array $conversationSegments = [];
     private ?MemoryRetriever $memoryRetriever = null;
     private ?string $memoryRetrieverProfile = null;
     private ?array $memoryRecallMetadata = null;
@@ -354,8 +355,11 @@ class LLMManager {
             $userLogin = $contextData['username'] ?? 'Гость';
             $context = $this->buildContext($this->contextLimit());
             $context = $this->conversationContext($context, [$uid]);
+            if (ConversationMemory::enabled('ai_return_memory_enabled')) $context = ReturnMemory::focus($context, true, $this->conversationSegments);
             
             $instruction = "Пользователь $userLogin только что зашел на сайт. Поздоровайся с ним, обязательно упомянув его по имени (например, '@$userLogin'). Будь краткой и приветливой.";
+            $returnInstruction = ConversationMemory::enabled('ai_return_memory_enabled') ? ReturnMemory::instruction($context, true, $this->conversationSegments) : '';
+            if ($returnInstruction !== '') $instruction = "Обязательно обратись к @$userLogin. " . $returnInstruction;
             // Инструкция как обычная реплика без префикса "[Система]" — префикс модель иногда выдавала эхом.
             $context[] = [
                 'role' => 'user',
@@ -1061,6 +1065,11 @@ class LLMManager {
      */
     public function generateReply(array $context, string $extraInstruction = '', bool $fast = false): ?string {
         try {
+        if (ConversationMemory::enabled('ai_return_memory_enabled')) {
+            $context = ReturnMemory::focus($context, false, $this->conversationSegments);
+            $returnInstruction = ReturnMemory::instruction($context, false, $this->conversationSegments);
+            if ($returnInstruction !== '') $extraInstruction .= "\n" . $returnInstruction;
+        }
         $prompt = $this->personaPrompt();
         if ($extraInstruction !== '') {
             $prompt .= "\n\n" . $extraInstruction;
@@ -1563,10 +1572,12 @@ class LLMManager {
         $this->finishConversationMemory(false);
         $result = ConversationMemory::context($this, $context, $actors);
         $this->conversationArrival = $result['arrival'];
+        $this->conversationSegments = $result['arrival'] !== null ? $result['segments'] : [];
         return $result['context'];
     }
 
     public function finishConversationMemory(bool $sent): void {
+        $this->conversationSegments = [];
         if ($this->conversationArrival === null) return;
         $r = $this->conversationArrival; $this->conversationArrival = null;
         (new \Domain\ConversationMemoryStore())->finishArrival($r['user_id'], $r['token'], $sent);

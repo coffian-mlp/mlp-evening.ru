@@ -62,10 +62,10 @@ final class ConversationMemory
         } catch(MemoryIndexDeadline|\mysqli_sql_exception $e) { return false; }
         finally { if($sqlBudget)$sqlBudget->restore(); }
     }
-    /** @return array{context:array,arrival:?array} */
+    /** @return array{context:array,arrival:?array,segments:array} */
     public static function context(LLMManager $llm,array $context,array $actors): array
     {
-        $original=['context'=>$context,'arrival'=>null];$summary=self::enabled('ai_evening_summary_enabled');$returned=self::enabled('ai_return_memory_enabled');
+        $original=['context'=>$context,'arrival'=>null,'segments'=>[]];$summary=self::enabled('ai_evening_summary_enabled');$returned=self::enabled('ai_return_memory_enabled');
         if(!$summary&&!$returned)return $original;
         // Only the publishing worker may prepare protected blocks; inline never takes its lock.
         $db=\Infra\Database::getInstance()->getConnection();
@@ -78,15 +78,15 @@ final class ConversationMemory
             foreach($actors as$id)if($id<1||!Privacy::isActive($id))return $original;
             $db=\Infra\Database::getInstance()->getConnection();$budget=new MemoryIndexBudget($db,microtime(true)+0.2);
             $blocks=[];$frame=null;
-            if($summary){$frame=$store->frame($llm->getBotUserId());$budget->prepare();if(!$frame&&PHP_SAPI==='cli')$store->retireUnresolved(null);if($frame){$text=$store->summary($frame,$llm->getBotUserId(),PHP_SAPI==='cli');if($text)$blocks[]=$text;}}
+            if($summary){$frame=$store->frame($llm->getBotUserId());$budget->prepare();if(!$frame&&PHP_SAPI==='cli')$store->retireUnresolved(null);if($frame){$text=$store->summary($frame,$llm->getBotUserId(),PHP_SAPI==='cli');if($text)$blocks['summary']=$text;}}
             if($returned&&count($actors)===1){
                 $token=$store->claimArrival($actors[0]);
-                if($token){$arrival=['user_id'=>$actors[0],'token'=>$token];$blocks[]=(new ReturnMemory())->block($llm,$actors[0],$frame['started']??time(),$budget);}
+                if($token){$arrival=['user_id'=>$actors[0],'token'=>$token];$blocks['return']=(new ReturnMemory())->block($llm,$actors[0],$frame['started']??time(),$budget);}
             }
             $budget->check();$cap=MemoryLimits::setting('ai_memory_block_limit',ConfigManager::getInstance()->getOption('ai_memory_block_limit',2400));
             $out=ConversationMemoryPolicy::apply($context,array_values(array_filter($blocks)),$cap);
             if($out===$context&&$arrival){$store->finishArrival($arrival['user_id'],$arrival['token'],false);$arrival=null;}
-            return ['context'=>$out,'arrival'=>$arrival];
+            return ['context'=>$out,'arrival'=>$arrival,'segments'=>$arrival?$blocks:[]];
         }catch(\Throwable $e){error_log('Conversation context unavailable: '.get_class($e));if($arrival)$store->finishArrival($arrival['user_id'],$arrival['token'],false);return $original;}
         finally{if($budget)$budget->restore();}
     }

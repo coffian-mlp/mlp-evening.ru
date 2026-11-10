@@ -81,7 +81,7 @@ try{
  $profileLLM=new class($profile) extends LLM\LLMManager {public function __construct(private string $profile){parent::__construct();}public function conversationRecallProfile():string{return $this->profile;}};
  foreach(['providers','fastProviders']as$p)(new ReflectionProperty(LLM\LLMManager::class,$p))->setValue($profileLLM,[$fake]);
  $out=$profileLLM->conversationContext($ctx,[$human]);$encoded=json_encode($out,JSON_UNESCAPED_UNICODE);
- check(str_contains($encoded,'Синтетический интерес')&&str_contains($encoded,'chat:'.$historical),'returned non-owner receives dossier and actual participation');
+ check(str_contains($encoded,'Синтетическая шутка о чайнике')&&!str_contains($encoded,'Синтетический интерес'),'returned non-owner receives one own episode joke instead of the full dossier');
  $messages[]=$profileLLM->botSay('Синтетическая опубликованная реплика возвращения');$profileLLM->finishConversationMemory(true);
  check($profileLLM->conversationContext($ctx,[$human])===$ctx,'second answer has no duplicate return block');
  $store->arrival($human,30*86400);check($profileLLM->conversationContext($ctx,[$human,$other])===$ctx,'mixed burst cannot consume an arbitrary target');
