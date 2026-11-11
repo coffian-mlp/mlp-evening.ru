@@ -24,6 +24,7 @@ class YandexGPTProvider implements LLMProviderInterface {
 
     private function askWithinDeadline(array $messagesContext, string $systemPrompt): ?string {
         $messagesContext = VisionFormatter::maybeExpand($messagesContext, false);
+        [$systemPrompt, $messagesContext] = ProviderSystemPrompt::merge($systemPrompt, $messagesContext);
         if (empty($this->apiKey) || empty($this->folderId)) {
             throw new Exception("YandexGPT API key or Folder ID is missing");
         }

@@ -88,6 +88,7 @@ try {
         check(str_starts_with($reply($before)??'',$expected) && count($p->calls)===($kind==='own'?1:2),'R2 artist public '.$branch.' '.$kind);
     }
     $cfg->setOption('bot_last_manual_draw','0');$cfg->setOption('bot_last_autodraw','0');
+    for($i=0;$i<12;$i++)$input($owner,$ownerName,'Synthetic spacing message '.$i);
     $p=$install(['Автоматический рисунок «法庭».','Автоматический рисунок «法庭».']);$before=$lastId();
     $llm->withAddressedMessages(['«法庭»'],fn()=>$artist->handleDrawChat(['handler_type'=>'image_chat'],['auto'=>true],static fn()=>'A pony reads a book.',static fn()=>'/upload/lyra/cjk-auto-fixture.jpg'));
     check(str_starts_with($reply($before)??'','Автоматический рисунок «».') && count($p->calls)===2,'R2 automatic artist never inherits the surrounding request');

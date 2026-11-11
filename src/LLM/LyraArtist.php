@@ -328,6 +328,7 @@ class LyraArtist {
         $prompt = $stylePrefix . ' ' . $drawingSubject; // MLP-341: сцена целиком, без обрезки
 
         if ($this->referenceUrl !== null) $prompt = 'Edit the provided image. Preserve its composition, characters and drawing technique except for the explicitly requested changes. Requested changes: ' . $subject;
+        if ($auto && DrawingSchedule::automaticBlocked()) return true;
         $generator = $generator ?? fn(string $text) => ImageGenerator::generate($text, null, $this->referenceUrl);
         $url = $generator($prompt);
 
@@ -340,6 +341,7 @@ class LyraArtist {
             // сцену переписывает режиссёр; словарь остаётся запасным путём.
             $safe = $this->rewriteSceneSafe($drawingSubject) ?? self::softenScene($drawingSubject);
             if ($drawingIdentity !== null) $safe .= "\n" . $drawingIdentity;
+            if ($auto && DrawingSchedule::automaticBlocked()) return true;
             $url = $generator($stylePrefix . ' ' . $safe);
         }
 

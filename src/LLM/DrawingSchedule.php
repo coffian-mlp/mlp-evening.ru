@@ -7,6 +7,7 @@ use Infra\ConfigManager;
 /** Shared admission for worker and synchronous drawing paths. */
 final class DrawingSchedule {
     public const MANUAL_COOLDOWN = 1800;
+    public const AUTO_MIN_MESSAGES = 12;
 
     public static function run(bool $auto, callable $draw): bool {
         $db = \Infra\Database::getInstance()->getConnection();
@@ -23,7 +24,11 @@ final class DrawingSchedule {
 
     public static function automaticBlocked(): bool {
         $lastManual = (int)(ConfigManager::getInstance()->getOptionDetails('bot_last_manual_draw')['value'] ?? 0);
-        return time() - $lastManual < self::MANUAL_COOLDOWN || (new JobQueue())->hasManualDrawing();
+        $queue=new JobQueue();
+        return time() - $lastManual < self::MANUAL_COOLDOWN || $queue->hasManualDrawing()
+            || $queue->hasAwaitingParticipantReply()
+            || !(new \Domain\ChatManager())->hasMessagesSinceLastDrawing(
+                (int)ConfigManager::getInstance()->getOption('ai_bot_user_id',0),self::AUTO_MIN_MESSAGES);
     }
 
     public static function manualPublished(): void {

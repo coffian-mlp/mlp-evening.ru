@@ -5,12 +5,14 @@ use Domain\MemoryEpisodeManager;
 use Domain\ChatManager;
 use Domain\UserManager;
 
-/** One-second hybrid recall, failing back atomically to the original context. */
+/** Bounded hybrid recall, failing back atomically to the original context. */
 final class MemoryRetriever
 {
     public const MIN_COSINE = 0.41;
     public const MIN_LEXICAL_COSINE = 0.15;
     public const MIN_MIXED_VECTOR_COSINE = 0.56;
+    public const BUDGET_SECONDS = 2.5;
+    public const QUERY_SECONDS = 1.2;
     private MemoryVectorMatrix $matrix;
     private $query;
 
@@ -22,7 +24,8 @@ final class MemoryRetriever
 
     public function recall(array $context, string $query, int $budget, bool $expand = false, ?int $actorId = null): array
     {
-        $start = microtime(true); $deadline = $start + 1.0; $queryDeadline = $deadline; $sql = null;
+        $start = microtime(true); $deadline = $start + self::BUDGET_SECONDS; $queryDeadline = $deadline; $sql = null;
+        $stage = $start; $stageName = 'setup';
         $meta = ['reason'=>'', 'stages_ms'=>[], 'sources'=>[], 'scores'=>[], 'expansion'=>$expand];
         try {
             $sql = new MemoryIndexBudget($this->store->connection(), $deadline - 0.02);
@@ -43,15 +46,15 @@ final class MemoryRetriever
             // Exact identity words remain structural even when a nickname is also a stopword.
             foreach($identities as$identity)$identityWords=array_merge($identityWords,array_column(MemoryRecallText::tokens(implode(' ',$identity)),'stem'));
             $date=self::date($query);$structuralOnly=!array_diff($roots,$identityWords,$date===null?[]:[$date]);
-            $stage = microtime(true);
-            $queryDeadline = min($deadline - 0.15, microtime(true) + 0.75);
+            $stage = microtime(true); $stageName = 'query';
+            $queryDeadline = min($deadline - 0.15, microtime(true) + self::QUERY_SECONDS);
             $response = ($this->query)($query, $queryDeadline, $expand);
             $check();$meta['query_usage']=$response['usage']??[];$meta['stages_ms']['query'] = (microtime(true)-$stage)*1000;
-            $stage = microtime(true);
+            $stage = microtime(true); $stageName = 'vector';
             $vector = $this->matrix->top($response['vector'], function () use ($prepare) { $prepare();return $this->store->recallVectors($this->profile); }, $check, 20);
             $cosines=$this->matrix->similarities();
             $meta['stages_ms']['vector'] = (microtime(true)-$stage)*1000;
-            $stage = microtime(true);
+            $stage = microtime(true); $stageName = 'candidates';
             $fullMask=(1<<count($roots))-1;
             $confirm=static function($text,$topics)use($check){$check();return MemoryRecallText::mask($text,$topics);};
             $prepare();$weights=$this->store->recallTopicWeights($roots,$this->profile,$confirm);$totalWeight=max(1e-9,array_sum($weights));
@@ -67,7 +70,7 @@ final class MemoryRetriever
             uksort($evidence,static fn($a,$b)=>($weight($evidence[$b])<=>$weight($evidence[$a]))?:(($cosines[$b]??-1)<=>($cosines[$a]??-1))?:($a<=>$b));
             $scores=self::fuse([array_keys($evidence),array_keys($vector),$structural]);$check();
             $meta['stages_ms']['candidates']=(microtime(true)-$stage)*1000;
-            $stage=microtime(true);$ids=array_keys($scores);$prepare();$records=$this->store->recallRecords($ids,$this->profile);
+            $stage=microtime(true);$stageName='hydration';$ids=array_keys($scores);$prepare();$records=$this->store->recallRecords($ids,$this->profile);
             $prepare();$associationEvidence=$this->store->recallTopicMasksForIds(array_keys($records),$roots,$this->profile,$confirm)+$associationEvidence;
             foreach($scores as $id=>$_){$version=$this->matrix->version((int)$id);if($version!==null&&(!isset($records[$id])||(int)$records[$id]['revision']!==$version['revision']||$records[$id]['source_hash']!==$version['source_hash']))unset($vector[$id],$evidence[$id],$cosines[$id]);}
             $scores=self::fuse([array_keys($evidence),array_keys($vector),$structural]);
@@ -102,8 +105,13 @@ final class MemoryRetriever
             $meta['reason']=$output===$context?($selected?'memory_budget':'no_current_sources'):'ok';
             return ['context'=>$output,'metadata'=>$meta+['total_ms'=>(microtime(true)-$start)*1000]];
         } catch (\Throwable $error) {
-            $meta['reason']=microtime(true)>=$queryDeadline||$error instanceof MemoryIndexDeadline?'deadline':'search_error';
+            $meta['stages_ms'][$stageName]=(microtime(true)-$stage)*1000;
+            $timedOut=$error instanceof MemoryIndexDeadline
+                ||($error instanceof \mysqli_sql_exception && in_array($error->getCode(),[1205,3024],true))
+                ||microtime(true)>=($stageName==='query'?$queryDeadline:$deadline-0.02);
+            $meta['reason']=$timedOut?'deadline':'search_error';
             $meta['error_class']=get_class($error);$meta['sources']=[];$meta['scores']=[];
+            self::logFailure($meta);
             return ['context'=>$context,'metadata'=>$meta+['total_ms'=>(microtime(true)-$start)*1000]];
         } finally {
             if($sql!==null)$sql->restore();
@@ -154,5 +162,14 @@ final class MemoryRetriever
     {
         $scores=[];foreach($channels as $ids)foreach(array_values(array_unique($ids)) as $rank=>$id)$scores[$id]=($scores[$id]??0)+1/(60+$rank+1);
         uksort($scores,static fn($a,$b)=>($scores[$b]<=>$scores[$a])?:($a<=>$b));return array_slice($scores,0,24,true);
+    }
+
+    /** Numeric diagnostics only; exception messages and source/actor identifiers are excluded. */
+    public static function logFailure(array $metadata): void
+    {
+        error_log('MemoryRetriever: '.json_encode([
+            'reason'=>$metadata['reason'], 'error_class'=>$metadata['error_class'],
+            'stages_ms'=>array_map(static fn($ms)=>round($ms,1),$metadata['stages_ms']??[]),
+        ],JSON_UNESCAPED_SLASHES));
     }
 }

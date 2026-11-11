@@ -1228,4 +1228,21 @@ class ChatManager {
         return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     }
 
+    /** Count all live messages after this bot's last drawing, excluding only its own images. */
+    public function hasMessagesSinceLastDrawing(int $botId, int $minimum): bool {
+        $drawing='!\\[[^\\]]*\\]\\(/upload/lyra/[a-zA-Z0-9_.-]+\\)';
+        $stmt=$this->db->prepare("SELECT id FROM chat_messages WHERE user_id=? AND is_deleted=0
+            AND REGEXP_LIKE(message,?,'c') ORDER BY id DESC LIMIT 1");
+        $stmt->bind_param('is',$botId,$drawing);$stmt->execute();
+        $row=$stmt->get_result()->fetch_assoc();
+        if (!$row) return true;
+        $id=(int)$row['id'];$minimum=max(1,$minimum);
+        // Participant images count as messages; only this bot's pictures are excluded.
+        $image='!\\[[^\\]]*\\]\\((https?://|/)[^)[:space:]]+\\)|https?://[^[:space:]<>]+[.](jpg|jpeg|png|gif|webp)([?][^[:space:]<>]*)?($|[[:space:]])';
+        $stmt=$this->db->prepare("SELECT id FROM chat_messages WHERE id>? AND is_deleted=0
+            AND (user_id IS NULL OR user_id<>? OR NOT REGEXP_LIKE(message,?,'i')) ORDER BY id LIMIT ?");
+        $stmt->bind_param('iisi',$id,$botId,$image,$minimum);$stmt->execute();
+        return $stmt->get_result()->num_rows >= $minimum;
+    }
+
 }

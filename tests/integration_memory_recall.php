@@ -50,13 +50,13 @@ try{
  $debug=new ReflectionMethod($llm,'debugReplyRequest');$logged=$debug->invoke($llm,'system',array_merge($out,[['role'=>'user','content'=>'Reply instruction']]));
  check(isset($logged['memory_recall']['sources'])&&!str_contains(json_encode($logged['messages'],JSON_UNESCAPED_UNICODE),'Омегона'),'debug keeps numeric metadata and omits new source text even with reply instruction');
  $timeout=new MemoryRetriever($store,$reader,$profile,$bot,function($q,$deadline){usleep(max(0,(int)(($deadline-microtime(true))*1e6)));throw new RuntimeException('fake timeout');});
- $start=microtime(true);$out=$timeout->recall($ctx,'query',8000);check($out['context']===$ctx&&microtime(true)-$start<1.0,'timeout returns legacy within one second');check($out['metadata']['reason']==='search_error'||$out['metadata']['reason']==='deadline','degradation reason is metadata');
+ $start=microtime(true);$out=$timeout->recall($ctx,'query',8000);check($out['context']===$ctx&&microtime(true)-$start<2.5,'timeout returns legacy within 2.5 seconds');check($out['metadata']['reason']==='search_error'||$out['metadata']['reason']==='deadline','degradation reason is metadata');
  $it=it_config()['db'];$peer=new mysqli($it['host'],$it['user'],$it['pass'],$it['name']);
  try{
   $peer->query('LOCK TABLES chat_messages WRITE');
   $locked=new MemoryRetriever($store,$reader,$profile,$bot,function()use($vectors){usleep(200000);return ['vector'=>$vectors[1],'tags'=>''];});
   $start=microtime(true);$lockedResult=$locked->recall($ctx,'unmatchedneedle',8000);$elapsed=microtime(true)-$start;
-  check($lockedResult['context']===$ctx&&$elapsed<1.0,'real SQL lock degrades inside one-second budget');echo 'RECALL_SQL_LOCK_SECONDS='.$elapsed."\n";
+  check($lockedResult['context']===$ctx&&$elapsed<2.5,'real SQL lock degrades inside 2.5-second budget');echo 'RECALL_SQL_LOCK_SECONDS='.$elapsed."\n";
  }finally{$peer->query('UNLOCK TABLES');$peer->close();}
  $error=new MemoryRetriever($store,$reader,$profile,$bot,fn()=>throw new RuntimeException('fake failure'));check($error->recall($ctx,'query',8000)['context']===$ctx,'provider failure does not break reply');
  // Actual ordinary entry points capture the generated context, with no external model.

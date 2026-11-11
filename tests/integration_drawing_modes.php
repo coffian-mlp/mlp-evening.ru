@@ -52,6 +52,7 @@ try {
     check(!LLM\CommandInteractionContinuation::routeMessage(['message_id'=>$response,'user_id'=>$owner],$registry),'reply to a finished picture remains ordinary conversation');
 
     $cfg->setOption('bot_last_manual_draw','0');$cfg->setOption('bot_last_autodraw','0');
+    for($i=0;$i<12;$i++)$chat->addMessage($owner,'Modes owner','Synthetic spacing message '.$i);
     $artist->handleDrawChat($command,['auto'=>true],static fn()=> 'A mint pony reads a book.',$generator);
     check($calls===2 && count($llm->instructions)===1,'automatic drawing skips collection and confirmations');
     $direct=$commands['image'];$source=$chat->addMessage($owner,'Modes owner',$direct['command_prefix'].' замок');

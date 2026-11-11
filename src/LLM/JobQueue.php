@@ -474,4 +474,9 @@ class JobQueue {
         return $this->db->query("SELECT 1 FROM llm_jobs WHERE status IN ('pending','processing') AND type IN ($types) LIMIT 1")->num_rows > 0;
     }
 
+    /** A delayed reply is still owed; automatic drawing has no age-based exception. */
+    public function hasAwaitingParticipantReply(): bool {
+        return $this->db->query("SELECT 1 FROM llm_jobs WHERE status IN ('pending','processing')
+            AND type IN ('mention','greeting') LIMIT 1")->num_rows > 0;
+    }
 }

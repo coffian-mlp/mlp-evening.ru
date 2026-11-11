@@ -18,7 +18,7 @@ class ImageGenerator {
     const UPLOAD_DIR = '/upload/lyra/';
     const MAX_DIM = 1024;
     const JPEG_QUALITY = 88;
-    const TIMEOUT = 90; // генерация 5–30с, берём с запасом
+    const TIMEOUT = 150; // успешная генерация занимает 53–72с; запас на медленные ответы
 
     /** Причина последнего сбоя generate() — сырьё для живого извинения Лиры. */
     private static ?string $lastError = null;

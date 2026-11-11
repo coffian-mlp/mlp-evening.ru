@@ -66,6 +66,7 @@ class GigaChatProvider implements LLMProviderInterface {
 
     private function askWithinDeadline(array $messagesContext, string $systemPrompt): ?string {
         $messagesContext = VisionFormatter::maybeExpand($messagesContext, false);
+        [$systemPrompt, $messagesContext] = ProviderSystemPrompt::merge($systemPrompt, $messagesContext);
         if (empty($this->authKey)) {
             throw new Exception("GigaChat Auth Key is missing");
         }

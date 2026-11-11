@@ -128,6 +128,7 @@ try {
     $cleanupMsgIds[] = (int)$row['id'];
 
     // Director execution can overlap a new request from the chat producer.
+    for ($i=0;$i<12;$i++) $ins($humanId, "Synthetic spacing message $i");
     $manualDuringDirector = 0; $generatorCalls = 0;
     $artist->handleDrawChat($cmd, ['auto'=>true], function() use ($queue, &$manualDuringDirector) {
         $manualDuringDirector = $queue->enqueue('dynamic_command', ['command'=>['handler_type'=>'image']], 3600);
@@ -158,6 +159,7 @@ try {
     $calls=0;
     $artist->handleDrawChat($cmd, ['auto'=>true], function() use (&$calls) { $calls++; return 'scene'; }, function() use (&$calls) { $calls++; return '/upload/lyra/fixture.jpg'; });
     check($calls===0, 'queued automatic drawing respects successful manual cooldown');
+    for ($i=0;$i<12;$i++) $ins($humanId, "Synthetic spacing message $i");
     $ins($humanId, "$marker new human activity");
     $cfg->setOption('bot_last_autodraw','0');
     $cfg->setOption('bot_last_manual_draw',(string)(time()-1799));

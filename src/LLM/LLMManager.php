@@ -63,7 +63,8 @@ class LLMManager {
             }
             $result=$this->memoryRetriever->recall($context,$query,$budget,(bool)(int)$config->getOption('ai_memory_recall_expand',0),$owner);
             $this->memoryRecallMetadata=$result['metadata'];$context=$result['context'];
-        }catch(\Throwable $error){$this->memoryRecallMetadata=['reason'=>'search_error','error_class'=>get_class($error),'sources'=>[]];}
+        }catch(\Throwable $error){$this->memoryRecallMetadata=['reason'=>'search_error','error_class'=>get_class($error),'sources'=>[]];MemoryRetriever::logFailure($this->memoryRecallMetadata);}
+        $context=MemoryRecallBlock::missing($context,$this->memoryRecallMetadata['reason']??'');
         $this->memoryRecallContextCount=count($context);$this->memoryRecallContextHash=hash('sha256',serialize($context));return $context;
     }
 

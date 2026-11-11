@@ -54,4 +54,14 @@ final class MemoryRecallBlock
         foreach($window as$source){$source['text']=mb_substr($source['text'],0,300);$candidate=json_encode(array_merge($lines,[$source]),JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);if(mb_strlen($candidate)>800)break;$lines[]=$source;}
         return $lines;
     }
+
+    public static function missing(array $context, string $reason): array
+    {
+        if (!in_array($reason,['deadline','search_error','no_current_sources','memory_budget'],true)) return $context;
+        $context[]=['role'=>'system','content'=>'Поиск исторической памяти не дал подтверждённых воспоминаний к этой реплике. '
+            .'Только если собеседник просит вспомнить конкретный прошлый случай: честно скажи, что точно его не помнишь; можно попросить напомнить. '
+            .'Не собирай такой случай из мемов, заметок о завсегдатаях и догадок и не выдавай их за воспоминание. '
+            .'На обычный вопрос, шутку или текущую тему отвечай как обычно, без заявлений о памяти.'];
+        return $context;
+    }
 }
