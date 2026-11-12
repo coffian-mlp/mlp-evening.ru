@@ -15,6 +15,12 @@ do {
         }
         \Infra\ConfigManager::getInstance()->setOption('lyra_bot_heartbeat',gmdate('Y-m-d H:i:s'));
     }catch(\LLM\BotPollBusy $e){ /* The durable update stays pending until the publisher releases its lock. */ }
-    catch(\Throwable $e){(new \Infra\AnnouncementLog())->record('poll_failed',[],$e);error_log('Lyra private bot tick failed: '.get_class($e));}
+    catch(\Throwable $e){
+        if(\Infra\Database::connectionLost($e)){
+            error_log('Lyra private bot database connection lost: '.get_class($e).' code='.(int)$e->getCode());
+            exit(1);
+        }
+        (new \Infra\AnnouncementLog())->record('poll_failed',[],$e);error_log('Lyra private bot tick failed: '.get_class($e));
+    }
     if($loop)usleep((int)(max(0.1,3-(microtime(true)-$started))*1000000));
 }while($loop);

@@ -39,6 +39,8 @@ systemctl enable --now mlp-stream-monitor.service mlp-lyra-bot.service
 
 The services run as `fastuser` with 128 MiB memory limits each. The private bot uses Telegram long polling with a 20-second server timeout; it does not generate announcement images or publish scheduled posts. Set the site option `lyra_bot_polling_external=1` after confirming the private bot service is active. Announcement generation/publication continue in the existing minute cron. Both the compatibility poller and the dedicated service use one advisory lock and the existing durable per-bot update cursor.
 
+On MySQL connection loss (client/server codes 2002, 2003, 2006, 2013, 2055, 4031 or 1053), both workers log the exception class and numeric code and exit with status 1. The existing `Restart=always` / `RestartSec=5` units start a fresh process and connection; startup failures while MySQL is unavailable follow the same restart policy. Stream supervision resumes from its durable run state. Other tick exceptions retain their existing retry behavior. No service configuration change is required.
+
 On future code deployments, restart these two application workers after the migration/code update. Do not restart or stop MediaMTX to test notifications on production. Diagnostics:
 
 ```sh

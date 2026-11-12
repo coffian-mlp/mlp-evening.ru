@@ -36,4 +36,10 @@ class Database {
     public function getConnection() {
         return $this->connection;
     }
+
+    /** Connection failures require a fresh daemon process; ordinary SQL errors do not. */
+    public static function connectionLost(\Throwable $error): bool {
+        return $error instanceof \mysqli_sql_exception
+            && in_array((int)$error->getCode(), [2002, 2003, 2006, 2013, 2055, 4031, 1053], true);
+    }
 }

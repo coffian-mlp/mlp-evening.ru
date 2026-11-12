@@ -600,3 +600,29 @@ MLP-456, починка7: `integration_conversation_slot.php` проверяет
 ai_worker_mode=inline или stale heartbeat>90с inline отвечает без блоков фазы3.
 Низкоуровневые context fixtures явно удерживают реальную блокировку соединения;
 end-to-end delivery и Playwright проходят через настоящий BotWorker.tick.
+
+### MLP-461: восстановление демонов после потери MySQL
+
+`test_database_connection_lost.php` проверяет коды соединения и исключение обычных SQL-ошибок; `test_daemon_database_loss.php` запускает настоящие CLI-циклы с process-local исключениями и проверяет exit 1, продолжение обычных ошибок и безопасный лог. Оба входят в полный PHP-набор.
+
+Для проверки настоящего обрыва используется отдельный Compose-проект `mlp461`, синтетическая БД и сеть `internal: true`. Helper копирует только Git HEAD, затем подставляет текущие файлы тестов. Требуется локальный PHP 8.3 Docker image с mysqli, mbstring и curl; по умолчанию используется `mlp457-php:latest`, другой совместимый image задаётся через `MLP_DAEMON_PHP_IMAGE` перед `up`. Production-конфигурация не монтируется. Telegram использует существующий fake-transport seam, MediaMTX/HLS — два локальных HTTP-сервера; остальные HTTP-вызовы блокируются guard и отсутствием внешнего маршрута.
+
+```bash
+bash tests/helpers/daemon_environment.sh up
+bash tests/helpers/daemon_environment.sh exec php tests/helpers/daemon_fixture.php setup
+docker compose -p mlp461 -f docs/tests/MLP-461/compose.yml exec -d php php -S 127.0.0.1:8897 tests/helpers/daemon_media.php
+docker compose -p mlp461 -f docs/tests/MLP-461/compose.yml exec -d php php -S 127.0.0.1:8898 tests/helpers/daemon_media.php
+# До коммита исправления копия HEAD позволяет воспроизвести исходное зависание:
+python3 tests/helpers/daemon_recovery.py before
+bash tests/helpers/daemon_environment.sh sync
+python3 tests/helpers/daemon_recovery.py after
+# Отдельная чистая схема и исторический baseline для проверок фазы 3:
+bash tests/helpers/daemon_environment.sh suite
+bash tests/helpers/daemon_environment.sh exec php tests/helpers/daemon_fixture.php mode strict
+bash tests/helpers/daemon_environment.sh test
+bash tests/helpers/daemon_environment.sh exec php tests/helpers/daemon_fixture.php mode empty
+bash tests/helpers/daemon_environment.sh test
+bash tests/helpers/daemon_environment.sh down
+```
+
+`daemon_recovery.py` останавливает **только MySQL этого disposable-проекта** на 25 секунд. Супервизор повторяет `Restart=always`, задержку 5 секунд и лимит 5 стартов за 10 секунд; это модель, а не запуск настоящего systemd. Проверяется сохранение активного run, отсутствие ложного инцидента/уведомлений и восстановление обоих heartbeat. Результаты без пользовательских данных сохраняются в `docs/tests/MLP-461/`; `down` удаляет контейнеры, том, сеть и копию со своей тестовой `.env`. Полный набор запускается после остановки супервизоров.
