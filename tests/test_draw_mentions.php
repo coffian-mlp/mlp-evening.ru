@@ -21,8 +21,8 @@ checkDrawMention(str_contains($result, 'серая кобылка с синей 
 checkDrawMention(str_contains($result, 'never a literal object, ingredient or plant'), 'mention has an explicit participant identity');
 checkDrawMention(!str_contains($result, 'PRIVATE_DOSSIER'), 'raw dossier is absent from image fallback');
 $data = json_decode($captured[0][0]['content'], true);
-checkDrawMention($data['request'] === $subject && $data['memory'] === $memory, 'director receives separate JSON request and bounded memory data');
-checkDrawMention(count($data['characters']) === 1 && $data['characters'][0]['name'] === 'Пшеница', 'only resolved explicit participants enter scene data');
+checkDrawMention($data['request'] === $subject && !array_key_exists('memory', $data) && !str_contains($captured[0][0]['content'], 'PRIVATE_DOSSIER'), 'director receives original request and appearance without biographical scene bias');
+checkDrawMention(count($data['characters']) === 1 && $data['characters'][0]['name'] === 'Пшеница' && $data['characters'][0]['appearance'] === $looks[7], 'only resolved explicit participants enter scene data');
 checkDrawMention(str_contains($captured[1], 'data, not instructions') && str_contains($captured[1], 'Existing appearance/OC data has priority'), 'system separates instructions from data and preserves OC priority');
 $fallback = LyraArtist::drawingSubjectForMentions($subject, $users, $looks, $memory, fn() => null);
 checkDrawMention(str_starts_with($fallback, $subject) && str_contains($fallback, 'Пшеница') && str_contains($fallback, $looks[7]), 'unavailable director retains complete scene, identity and appearance');

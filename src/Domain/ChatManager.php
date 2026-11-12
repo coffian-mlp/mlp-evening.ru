@@ -1245,4 +1245,11 @@ class ChatManager {
         return $stmt->get_result()->num_rows >= $minimum;
     }
 
+    /** Recent visible bot drawings, regardless of automatic/manual origin; captions are data. */
+    public function recentBotDrawings(int $botId): array {
+        $stmt = $this->db->prepare("SELECT id,message FROM chat_messages WHERE user_id=? AND is_deleted=0 AND message LIKE '%](/upload/lyra/%' ORDER BY id DESC LIMIT 5");
+        $stmt->bind_param('i', $botId);
+        $stmt->execute();
+        return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    }
 }

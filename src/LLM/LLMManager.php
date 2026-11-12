@@ -354,13 +354,18 @@ class LLMManager {
             }
 
             $userLogin = $contextData['username'] ?? 'Гость';
-            $context = $this->buildContext($this->contextLimit());
+            $context = $this->buildContext($this->contextLimit(), greeting: true);
+            $hasDialogue = (bool)array_filter($context, static fn($m) => isset($m['chat_message_id']));
             $context = $this->conversationContext($context, [$uid]);
             if (ConversationMemory::enabled('ai_return_memory_enabled')) $context = ReturnMemory::focus($context, true, $this->conversationSegments);
+            // A long event may keep a summary frame alive beyond IDLE. Return focus runs first
+            // so its trusted anchor survives even when it originally shared a block with the summary.
+            if (!$hasDialogue) $context = array_values(array_filter($context, static fn($m) => !str_starts_with((string)($m['content'] ?? ''), ConversationMemoryPolicy::SUMMARY_MARKER)));
             
             $instruction = "Пользователь $userLogin только что зашел на сайт. Поздоровайся с ним, обязательно упомянув его по имени (например, '@$userLogin'). Будь краткой и приветливой.";
             $returnInstruction = ConversationMemory::enabled('ai_return_memory_enabled') ? ReturnMemory::instruction($context, true, $this->conversationSegments) : '';
             if ($returnInstruction !== '') $instruction = "Обязательно обратись к @$userLogin. " . $returnInstruction;
+            $instruction .= GreetingContext::TIME_INSTRUCTION;
             // Инструкция как обычная реплика без префикса "[Система]" — префикс модель иногда выдавала эхом.
             $context[] = [
                 'role' => 'user',
@@ -1157,7 +1162,7 @@ class LLMManager {
      * null = наследует $includePinned — пути с отключённым закрепом (проактив до гейтов,
      * режиссёр) память не получают, регресс MLP-260 исключён.
      */
-    private function buildContext($limit = 24, $maxAgeHours = null, $beforeId = null, $includePinned = true, ?bool $includeMemory = null, ?string $memoryQuery = null) {
+    private function buildContext($limit = 24, $maxAgeHours = null, $beforeId = null, $includePinned = true, ?bool $includeMemory = null, ?string $memoryQuery = null, bool $greeting = false) {
         $memoryQuery = $memoryQuery ?? ($this->commandMessage !== '' ? $this->commandMessage : null);
         $includeMemory = $includeMemory ?? $includePinned;
         // MLP-269 (v2): бот ВИДИТ факт удаления (драма с массовой чисткой — повод
@@ -1168,6 +1173,8 @@ class LLMManager {
         $messages = $this->chatManager->getMessages($fetchLimit, $beforeId);
 
         $currentTime = time();
+        // Only an arrival greeting drops ended dialogue; ordinary replies keep their history.
+        if ($greeting && GreetingContext::idle($messages, (int)$this->botUserId, $currentTime)) $messages = [];
 
         // Собираем от свежих к старым, пока не наберём $limit ЖИВЫХ.
         $entries = [];
