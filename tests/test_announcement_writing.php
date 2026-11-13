@@ -78,6 +78,15 @@ try {
  foreach (['EPISODE_CANARY','EVENT_CANARY','NIGHT_CANARY','COMMUNITY_CANARY','PUBLIC_CHAT_CANARY','CAPTION_CANARY'] as $marker)check386(!str_contains($image,$marker),'disabled source absent from image request: '.$marker);
  $edited['announcements_image_reminder_use_chat']='1';$edited['announcements_image_reminder_use_memory']='1';$edited['announcements_image_reminder_use_caption']='1';$cache->setValue($config,$edited);
  $image=$c->imageInstruction($f,'reminder','CAPTION_CANARY');check386(str_contains($image,'PUBLIC_CHAT_CANARY') && str_contains($image,'COMMUNITY_CANARY') && str_contains($image,'CAPTION_CANARY'),'image context switches actually include selected data');
+ $edited['announcements_image_reminder_use_style']='1';
+ $edited['ai_image_style_prompt']='';$edited['ai_image_techniques']='SYNTHETIC_TECHNIQUE';$cache->setValue($config,$edited);
+ $image=$c->imageInstruction($f,'reminder','CAPTION_CANARY');
+ check386(str_starts_with($image,'SYNTHETIC_TECHNIQUE. Hand-made amateur artwork:'),'announcement fallback uses the shared approved style and configured technique');
+ check386(str_contains($image,'Subject: REMINDER_IMAGE_CANARY') && substr_count($image,'Subject:')===1,'announcement instructions follow one correctly separated Subject marker');
+ check386(!str_contains($image,'{technique}') && str_contains($image,'CAPTION_CANARY'),'announcement fallback resolves technique and preserves subject context');
+ $edited['ai_image_style_prompt']='CUSTOM_STYLE {technique}. Subject:';$cache->setValue($config,$edited);
+ $image=$c->imageInstruction($f,'reminder','CAPTION_CANARY');
+ check386(str_starts_with($image,'CUSTOM_STYLE SYNTHETIC_TECHNIQUE. Subject:'),'configured announcement style still overrides fallback');
  unset($edited['announcements_prompt_image_main'],$edited['announcements_prompt_image_reminder']);$cache->setValue($config,$edited);$settings=Domain\AnnouncementSettings::values();
  check386($settings['announcements_prompt_image_main']==='LEGACY_IMAGE_CANARY' && $settings['announcements_prompt_image_reminder']==='LEGACY_IMAGE_CANARY','existing custom shared image prompt preserved in both new fields');
 } finally {$cache->setValue($config,$initial);}

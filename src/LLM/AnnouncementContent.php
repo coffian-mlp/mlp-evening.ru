@@ -235,7 +235,7 @@ class AnnouncementContent {
             'Context: '.json_encode($data,JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
         if ($use('style')) {
             $config=ConfigManager::getInstance();$style=trim((string)$config->getOption('ai_image_style_prompt',''));
-            if ($style==='') $style="A naive child's crayon drawing, wobbly uneven lines, smudges, simple flat colors, paper texture, charming and silly.";
+            if ($style==='') $style=LyraArtist::DEFAULT_STYLE_PROMPT;
             $prompt=LyraArtist::applyTechnique($style,$config).' '.$prompt;
         }
         return $prompt;

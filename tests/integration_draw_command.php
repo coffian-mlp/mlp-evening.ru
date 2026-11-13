@@ -20,7 +20,7 @@ $fixtureBotId = (new \Domain\UserManager())->createUser('it_user_draw_' . bin2he
 
 try {
     $cfg = \Infra\ConfigManager::getInstance();
-    foreach (['ai_live_confirm' => '0', 'ai_enabled' => '1', 'ai_bot_user_id' => (string)$fixtureBotId, 'ai_routerai_key' => 'it-dummy', 'ai_image_daily_limit' => '20', 'ai_image_llm_caption' => '0', 'ai_memory_enabled' => '1'] as $k => $v) {
+    foreach (['ai_live_confirm' => '0', 'ai_enabled' => '1', 'ai_bot_user_id' => (string)$fixtureBotId, 'ai_routerai_key' => 'it-dummy', 'ai_image_daily_limit' => '20', 'ai_image_llm_caption' => '0', 'ai_memory_enabled' => '1', 'ai_image_style_prompt' => '', 'ai_image_techniques' => 'SYNTHETIC_DRAW_TECHNIQUE'] as $k => $v) {
         $optBackup[$k] = $cfg->getOption($k, null);
         $cfg->setOption($k, $v);
     }
@@ -143,7 +143,8 @@ try {
     $director = function () { return 'two ponies argue about apples while a third laughs'; };
     $artist->handleDrawChat($cmdChat, ['username' => 'ИтПони'], $director, $fake);
     check(str_contains((string)$captured, 'two ponies argue'), 'сцена режиссёра ушла в генератор');
-    check(str_contains((string)$captured, 'ТЕСТ-СТИЛЬ:') || str_contains((string)$captured, 'crayon'), 'стиль-префикс применён к сцене');
+    check(str_starts_with((string)$captured, 'SYNTHETIC_DRAW_TECHNIQUE. Hand-made amateur artwork:')
+        && str_contains((string)$captured, 'Subject: two ponies argue'), 'утверждённый запасной стиль и заданная техника применены к сцене');
     $row = $conn->query("SELECT id, message FROM chat_messages WHERE user_id=$fixtureBotId ORDER BY id DESC LIMIT 1")->fetch_assoc();
     $msgIds[] = (int)$row['id'];
     check(str_contains($row['message'], '![рисунок]'), 'сценка чата запощена');

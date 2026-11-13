@@ -35,7 +35,7 @@ function fakeConfig(string $techniques): ConfigManager {
     };
 }
 
-$style = "A naive child's {technique}, charming and silly. Subject:";
+$style = '{technique}. Hand-made amateur artwork, lively and a little clumsy. Subject:';
 
 echo "== Подстановка ==\n";
 $out = LyraArtist::applyTechnique($style, fakeConfig('watercolour painting'));
@@ -55,13 +55,29 @@ for ($i = 0; $i < 60; $i++) {
 ok(count($seen) === 3, 'за 60 прогонов встретились все три техники (рандом работает)');
 
 echo "\n== Границы ==\n";
-$noPlaceholder = "A naive child's watercolor painting. Subject:";
+$noPlaceholder = 'Hand-made amateur watercolour painting. Subject:';
 ok(LyraArtist::applyTechnique($noPlaceholder, fakeConfig('crayon')) === $noPlaceholder,
     'без плейсхолдера промпт не меняется (обратная совместимость)');
 $out = LyraArtist::applyTechnique($style, fakeConfig(''));
 ok(strpos($out, '{technique}') === false, 'пустая опция — берётся встроенный набор');
 $out = LyraArtist::applyTechnique($style, fakeConfig('|  |'));
 ok(strpos($out, '{technique}') === false, 'мусорный список не оставляет плейсхолдер в промпте');
+
+echo "\n== Утверждённые запасные значения MLP-462 ==\n";
+$hasStyle = defined(LyraArtist::class . '::DEFAULT_STYLE_PROMPT');
+ok($hasStyle && hash('sha256', LyraArtist::DEFAULT_STYLE_PROMPT) === '35cd422fe6dd740528bc8788484c8f36d04853697f2419dc087da1847f34a97d',
+    'запасной стиль дословно совпадает с утверждённым значением');
+ok(hash('sha256', LyraArtist::DEFAULT_TECHNIQUES) === 'dfeced056dd894bad3b4c6430408b3bf930065b0fc25b6950d331a2dc4d2fc13',
+    'запасной список дословно совпадает с утверждённым значением');
+$defaults = array_map('trim', explode('|', LyraArtist::DEFAULT_TECHNIQUES));
+ok(count($defaults) === 11 && !in_array('', $defaults, true), '11 непустых запасных техник');
+ok(count(array_filter($defaults, fn($t) => str_starts_with($t, 'grotesque image'))) === 2,
+    'гротеск записан дважды');
+if ($hasStyle) {
+    $out = LyraArtist::applyTechnique(LyraArtist::DEFAULT_STYLE_PROMPT, fakeConfig(''));
+    ok(!str_contains($out, '{technique}') && str_ends_with($out, 'Subject:'),
+        'запасные стиль и техники образуют готовую приставку к сцене');
+}
 
 echo $fail ? "\nFAIL ($fail)\n" : "\nALL PASS\n";
 exit($fail ? 1 : 0);
