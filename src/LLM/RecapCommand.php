@@ -32,7 +32,7 @@ class RecapCommand {
     }
 
     public function handle(array $command, array $contextData): bool {
-        $username = (string)($contextData['username'] ?? 'Гость');
+        $username = \Domain\UserMention::currentAddressName((int)($contextData['user_id'] ?? 0), (string)($contextData['username'] ?? 'Гость'));
         $userId   = (int)($contextData['user_id'] ?? 0);
         // MLP-345 (беклог №19): модератор подводит итог вечера за другого — «/штош @ник».
         $target = self::parseTarget(BotCommandManager::stripPrefix($command, (string)($contextData['message'] ?? ''), 'штош'));
@@ -47,7 +47,7 @@ class RecapCommand {
                 return true;
             }
             $targetId   = (int)$user['id'];
-            $targetNick = ($user['nickname'] !== null && $user['nickname'] !== '') ? $user['nickname'] : $user['login'];
+            $targetNick = \Domain\UserMention::currentAddressName((int)$user['id'], (string)$user['login']);
             $rows   = (new ChatManager())->getUserMessagesSince($targetId, self::HOURS);
             $digest = self::digest($rows, self::MAX_MESSAGES, self::MAX_CHARS);
             $this->llm->botSayLive(

@@ -9,6 +9,46 @@ final class UserMention {
         return trim(preg_replace('/[\p{Cf}]/u', '', $name));
     }
 
+    /** A nickname is an address only when no other identity owns that alias. */
+    public static function addressName(array $user, array $directory): string {
+        $nick = self::normalize((string)($user['nickname'] ?? ''));
+        if ($nick !== '' && !preg_match('/[\r\n<>@]/u', $nick)) {
+            $key = mb_strtolower($nick);
+            foreach ($directory as $other) {
+                if ((int)$other['id'] === (int)$user['id']) continue;
+                foreach (['login', 'nickname'] as $field) {
+                    if (mb_strtolower(self::normalize((string)($other[$field] ?? ''))) === $key) return (string)$user['login'];
+                }
+            }
+            return $nick;
+        }
+        return (string)$user['login'];
+    }
+
+    /** Resolve queued or saved names by id at use time; guests keep their name. */
+    public static function currentAddressName(int $userId, string $fallback = 'Гость'): string {
+        if ($userId <= 0) return $fallback;
+        $directory = (new UserManager())->mentionDirectory();
+        foreach ($directory as $user) {
+            if ((int)$user['id'] === $userId) return self::addressName($user, $directory);
+        }
+        return $fallback;
+    }
+
+    /** Canonicalize known mentions in bot output, without changing human messages. */
+    public static function addressMentions(string $text, array $directory): string {
+        // Code and link destinations are literal data, not addresses to participants.
+        $parts = preg_split('~(```[\s\S]*?(?:```|$)|`[^`\n]*`|!?\[[^\]\n]*\]\([^\n]*?\)|<[^>\n]*>|https?://[^\s<>]+)~u', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
+        foreach ($parts as $index => &$part) {
+            if ($index % 2) continue;
+            foreach (array_reverse(self::matches($part, $directory)) as $match) {
+                $part = substr_replace($part, '@' . self::addressName($match['user'], $directory), $match['offset'], strlen($match['raw']));
+            }
+        }
+        unset($part);
+        return implode('', $parts);
+    }
+
     private static ?array $rows = null;
     private static int $loadedAt = 0;
 

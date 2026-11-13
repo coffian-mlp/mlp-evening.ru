@@ -27,7 +27,7 @@ try{
  $child=function($test,$args)use($uid,$bot,$cursor){$pipes=[];$p=proc_open(array_merge([PHP_BINARY,__DIR__.'/helpers/'.$test],$args),[1=>['pipe','w'],2=>['pipe','w']],$pipes);$out=stream_get_contents($pipes[1]);$err=stream_get_contents($pipes[2]);foreach($pipes as$x)fclose($x);if(proc_close($p)||$err!=='')throw new RuntimeException('Lifecycle child failed: '.$err);return json_decode(trim($out),true,512,JSON_THROW_ON_ERROR);};
  $state=dirname(__DIR__).'/lifecycle-state.json';
  if(in_array($case,['all','queued'],true)){
-  file_put_contents($state,json_encode(['uid'=>$uid,'bot'=>$bot]));$base=$child('conversation_queue_probe.php',['baseline',$state]);$now=$child('conversation_queue_probe.php',['current',$state]);echo json_encode(['baseline'=>$base,'current'=>$now]),"\n";$ok($base['min']===37&&$base['max']===37&&$now['min']===37&&$now['max']===37&&$now['all_done']&&$now['fake_calls']===6,'queued native flags0 greeting equals baseline37 SQL');unlink($state);$cfg->flushCache();
+  file_put_contents($state,json_encode(['uid'=>$uid,'bot'=>$bot]));$base=$child('conversation_queue_probe.php',['baseline',$state]);$now=$child('conversation_queue_probe.php',['current',$state]);echo json_encode(['baseline'=>$base,'current'=>$now]),"\n";$ok($base['min']===37&&$base['max']===37&&$now['min']===39&&$now['max']===39&&$now['all_done']&&$now['fake_calls']===6,'queued native flags0 greeting adds directory and privacy lookups to baseline37 SQL');unlink($state);$cfg->flushCache();
  }
  if(in_array($case,['all','ordinary','return'],true)){
   foreach(['ordinary','return']as$kind){if($case!=='all'&&$case!==$kind)continue;

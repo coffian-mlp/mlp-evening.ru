@@ -59,7 +59,7 @@ final class CommandDedup {
                 'username' => (string)($data['username'] ?? ''),
                 'status'   => (string)$job['status'],
                 'age'      => max(0, (int)($job['age'] ?? 0)),
-            ];
+            ] + (isset($data['user_id']) ? ['user_id' => (int)$data['user_id']] : []);
         }
         return null;
     }

@@ -152,7 +152,7 @@ class LyraMemory {
             return true; // defense in depth: диспатч уже гейтит, молча выходим
         }
         $payload = BotCommandManager::stripPrefix($command, $contextData['message'] ?? '', 'запомни');
-        $username = $contextData['username'] ?? 'Гость';
+        $username = \Domain\UserMention::currentAddressName((int)($contextData['user_id'] ?? 0), (string)($contextData['username'] ?? 'Гость'));
         $moderatorId = isset($contextData['user_id']) ? (int)$contextData['user_id'] : null;
 
         if ($payload === '') {
@@ -179,7 +179,7 @@ class LyraMemory {
             }
             $kind = 'dossier';
             $targetUserId = (int)$target['id'];
-            $nick = ($target['nickname'] !== null && $target['nickname'] !== '') ? $target['nickname'] : $target['login'];
+            $nick = \Domain\UserMention::currentAddressName((int)$target['id'], (string)$target['login']);
             $targetLabel = "{$nick} ({$target['login']})";
             $payload = $text;
         }
@@ -227,7 +227,7 @@ class LyraMemory {
         if (!(int)ConfigManager::getInstance()->getOption('ai_memory_enabled', 1)) {
             return true; // defense in depth (AC-8): rollback-рычаг гасит и уже поставленный job
         }
-        $username = $contextData['username'] ?? 'Гость';
+        $username = \Domain\UserMention::currentAddressName((int)($contextData['user_id'] ?? 0), (string)($contextData['username'] ?? 'Гость'));
         if (empty($contextData['allowed'])) {
             $this->llm->botSay("@{$username}, эта команда сейчас не для твоей роли — так настроили Принцессы.");
             return true;
@@ -265,7 +265,7 @@ class LyraMemory {
             return true;
         }
         $payload = BotCommandManager::stripPrefix($command, $contextData['message'] ?? '', 'забудь');
-        $username = $contextData['username'] ?? 'Гость';
+        $username = \Domain\UserMention::currentAddressName((int)($contextData['user_id'] ?? 0), (string)($contextData['username'] ?? 'Гость'));
         $moderatorId = isset($contextData['user_id']) ? (int)$contextData['user_id'] : null;
 
         if (!preg_match('/№?\s*(\d+)/u', $payload, $m)) {

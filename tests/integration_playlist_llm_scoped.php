@@ -137,7 +137,7 @@ namespace {
             check($manager->actionRecipientPrefix(0)==='' && $manager->actionRecipientPrefix(2147483647)==='','missing actor has no invented recipient prefix');
             $db->query("UPDATE users SET login='unsafe login',nickname='<b>@friend</b> Name' WHERE id=".(int)$foreign);
             check($manager->addressActionReply('@friend, привет.',$foreign)===null,'unsafe login cannot authorize nickname mention');
-            check($manager->actionRecipientPrefix($foreign)==='friend Name, ','unsafe login uses plain nickname without HTML or generated mention');
+            check($manager->actionRecipientPrefix($foreign)==='@unsafe login, ','unsafe nickname falls back to resolvable login including spaces');
             $db->query("UPDATE users SET login='it_mlp362_foreign_restored_".(int)$foreign."' WHERE id=".(int)$foreign);
             check($manager->liveTextBounded('Result',null,time()+12,10,null,['actor_id'=>$actor,'data'=>['oversize'=>str_repeat('a',32769)]])===null,'oversized action data fails without model call');
             foreach (['@друг, результат готов.','@собеседник, результат готов.','@invented_actor результат готов.'] as $badAddress) {

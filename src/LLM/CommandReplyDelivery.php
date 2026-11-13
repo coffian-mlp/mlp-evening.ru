@@ -61,6 +61,7 @@ final class CommandReplyDelivery {
         if (!\Domain\Privacy::payloadAllowed($job['data'] ?? [])) { (new JobQueue())->complete([(int)$job['id']]); return 0; }
         $db = Database::getInstance()->getConnection(); $id = (int)$job['id'];
         $reply = $job['data']['prepared_reply']; $payload = null; $receipt = 0;
+        if (str_contains($reply['text'], '@')) $reply['text'] = \Domain\UserMention::addressMentions($reply['text'], (new \Domain\UserManager())->mentionDirectory());
         $chat = $llm->getChatManager();
         try {
             $messageId = $chat->addInteractionMessageGuarded($llm->getBotUserId(), $llm->getBotNickname(), $reply['text'], $reply['quotes'],

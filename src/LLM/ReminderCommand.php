@@ -95,7 +95,7 @@ class ReminderCommand {
     }
 
     public function handle(array $command, array $contextData): bool {
-        $username = (string)($contextData['username'] ?? 'Гость');
+        $username = \Domain\UserMention::currentAddressName((int)($contextData['user_id'] ?? 0), (string)($contextData['username'] ?? 'Гость'));
         $userId = isset($contextData['user_id']) ? (int)$contextData['user_id'] : 0;
         if ($userId <= 0) {
             $this->llm->botSayLive(

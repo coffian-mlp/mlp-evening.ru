@@ -10,6 +10,7 @@ $saved=[];$ids=[];$eventIds=[];$suffix=bin2hex(random_bytes(5));$now=time()+100;
 foreach(['ai_bot_user_id','stream_source','self_hosted_hls_url','stream_monitor_default_streamer','announcements_token','announcements_channel','stream_monitor_heartbeat'] as $key)$saved[$key]=$cfg->getOption($key,null);
 try{
     foreach(['host'=>'streamer','other'=>'user','admin'=>'admin','bot'=>'user'] as $name=>$role)$ids[$name]=$users->createUser('it_mlp444_'.$name.'_'.$suffix,bin2hex(random_bytes(20)),$role,'Monitor '.$name);
+    $users->updateUser($ids['other'],['nickname'=>'Monitor host']); // Ambiguous display names must not transfer the ping.
     $cfg->setOption('ai_bot_user_id',(string)$ids['bot']);$cfg->setOption('stream_source','self_hosted');$cfg->setOption('self_hosted_hls_url','/live/evening/index.m3u8');
     $cfg->setOption('stream_monitor_default_streamer',(string)$ids['host']);$cfg->setOption('announcements_token','123456:'.str_repeat('a',35));$cfg->setOption('announcements_channel','@test_channel');
     $uid=(string)(700000000+$ids['host']);
@@ -40,6 +41,7 @@ try{
     $check($incident!==null && $writes===1 && !$sent,'45s writes one LLM/fallback chat message');
     $delivery=$store->deliveries((int)$incident['id'])[0];$chat=(new Domain\ChatManager())->getMessageById((int)$delivery['message_id']);
     $check(str_contains($chat['raw_message'],'[[command:')&&str_contains($chat['raw_message'],'Сигнал эфира пропал'),'warning binds generic system controls and fallback text');
+    $check(str_starts_with($chat['raw_message'],'@it_mlp444_host_'.$suffix.', '),'stream warning uses unambiguous current address instead of duplicate nickname');
     $manager=new Domain\CommandInteractionManager(LLM\CommandInteractions::registry());
     $check(!$manager->readPublic((int)$incident['interaction_id'],$ids['other'],(int)$delivery['message_id'])['can_act'],'viewer cannot control incident');
     $check($manager->readPublic((int)$incident['interaction_id'],$ids['admin'],(int)$delivery['message_id'])['can_act'],'administrator may act for streamer');

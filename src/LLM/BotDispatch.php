@@ -144,7 +144,7 @@ class BotDispatch {
         // Inline mode cannot rely on an external queue consumer after admission times out.
         $queue->fail([$id]);
         $llm ??= new LLMManager();
-        $username = (string)($payload['username'] ?? 'Гость');
+        $username = \Domain\UserMention::currentAddressName((int)($payload['user_id'] ?? 0), (string)($payload['username'] ?? 'Гость'));
         $llm->withAddressedMessages([(string)($payload['message'] ?? '')], fn() => $llm->botSayLive(
             "@{$username} попросил рисунок, но ты уже три минуты занята другим рисунком. Этот запрос не начинался и не стоит в очереди. "
                 . "Коротко объясни @{$username}, что сейчас занята, и попроси повторить команду чуть позже. Не обещай автоматического выполнения.",

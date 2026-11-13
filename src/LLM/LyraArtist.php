@@ -73,7 +73,7 @@ class LyraArtist {
 
     private function handleDrawUnlocked(array $command, array $contextData, ?callable $generator): bool {
         $subject = BotCommandManager::stripPrefix($command, (string)($contextData['message'] ?? ''), 'нарисуй');
-        $username = (string)($contextData['username'] ?? 'Гость');
+        $username = \Domain\UserMention::currentAddressName((int)($contextData['user_id'] ?? 0), (string)($contextData['username'] ?? 'Гость'));
 
         if ($subject === '') {
             $this->llm->botSay("@$username, а что рисовать-то? Скажи так: /нарисуй <что-нибудь> — и я возьмусь за кисть! 🎨");
@@ -102,7 +102,7 @@ class LyraArtist {
     }
 
     private function handleDrawChatUnlocked(array $command, array $contextData, ?callable $director, ?callable $generator): bool {
-        $username = (string)($contextData['username'] ?? 'Гость');
+        $username = \Domain\UserMention::currentAddressName((int)($contextData['user_id'] ?? 0), (string)($contextData['username'] ?? 'Гость'));
         // MLP-316: авто-запуск по расписанию (BotWorker::autoDrawSchedule) — без адресата,
         // отказы и сбои не постятся в чат (авто-режим не должен спамить извинениями).
         $isAuto = !empty($contextData['auto']);

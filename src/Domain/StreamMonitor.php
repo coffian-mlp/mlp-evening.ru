@@ -244,7 +244,7 @@ final class StreamMonitor
                 ['key'=>'intentional','label'=>'Остановил намеренно','payload'=>['incident_id'=>(int)$i['id'],'action'=>'intentional']],
             ],$run['ends_at']);
             $streamer=(new UserManager())->getUserById((int)$run['streamer_user_id']);
-            $text='@'.($streamer['nickname']?:$streamer['login']).", ".$text."\n[[command:".$interaction.']]';
+            $text='@'.UserMention::currentAddressName((int)$streamer['id'], (string)$streamer['login']).", ".$text."\n[[command:".$interaction.']]';
         }
         $message=(new ChatManager())->addMessage($botId,$bot['nickname']?:$bot['login'],$text,[],true);
         if(!$message)throw new \RuntimeException('Stream notification chat delivery failed');

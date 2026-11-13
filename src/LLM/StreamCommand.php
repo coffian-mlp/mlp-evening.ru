@@ -129,7 +129,7 @@ class StreamCommand {
 
         $message  = (string)($payload['message'] ?? '');
         $senderId = (int)($payload['user_id'] ?? 0);
-        $username = (string)($payload['username'] ?? '');
+        $username = \Domain\UserMention::currentAddressName((int)($payload['user_id'] ?? 0), (string)($payload['username'] ?? ''));
         // Пустое значение из формы дашборда не должно обезличивать владельца.
         $ownerId  = (int)$config->getOption('stream_command_owner_id', 1) ?: 1;
         $botId    = $llm->getBotUserId();

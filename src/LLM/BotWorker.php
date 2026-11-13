@@ -159,6 +159,13 @@ class BotWorker {
 
     private function handleMentions(array $mentions): void {
         $ids = array_map(static fn($m) => (int)$m['id'], $mentions);
+        $directory = (new \Domain\UserManager())->mentionDirectory();
+        $byId = array_column($directory, null, 'id');
+        foreach ($mentions as &$mention) {
+            $user = $byId[(int)($mention['user_id'] ?? 0)] ?? null;
+            if ($user !== null) $mention['username'] = \Domain\UserMention::addressName($user, $directory);
+        }
+        unset($mention);
 
         $decision = ReplyPolicy::decide($mentions, [
             'spam_threshold'    => (int)$this->config->getOption('ai_spam_threshold', 4),
@@ -409,6 +416,7 @@ class BotWorker {
         }
         foreach ((new \Domain\ReminderManager())->claimDue(5) as $r) {
             $this->llm->withPrivacyActor((int)$r['user_id'],function() use ($r) {
+            $r['username'] = \Domain\UserMention::currentAddressName((int)$r['user_id'], (string)$r['username']);
             $fallback = "@{$r['username']}, напоминаю: {$r['text']} ⏰";
             if ($this->llm->isEnabled()) {
                 $this->llm->withAddressedMessages([], fn() => $this->llm->botSayLive(

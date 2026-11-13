@@ -125,7 +125,7 @@ final class ModerationCommand {
      * Pure: кого звать — модераторы и админы из присутствующих, кроме бота и исключённых
      * (обвиняемый, жалобщик). $roleById: id => role. Возвращает ники без повторов.
      */
-    public static function staffToCall(array $onlineUsers, array $roleById, array $excludeIds): array {
+    public static function staffToCall(array $onlineUsers, array $roleById, array $excludeIds, ?array $directory = null): array {
         $nicks = [];
         foreach ($onlineUsers as $u) {
             $id = (int)($u['id'] ?? 0);
@@ -135,7 +135,9 @@ final class ModerationCommand {
             if (!ModerationPolicy::isStaff($roleById[$id] ?? null)) {
                 continue;
             }
-            $nick = trim((string)($u['nickname'] ?? ''));
+            $nick = $directory !== null
+                ? \Domain\UserMention::addressName($u, $directory)
+                : trim((string)($u['nickname'] ?? ''));
             if ($nick !== '' && !in_array($nick, $nicks, true)) {
                 $nicks[] = $nick;
             }
@@ -162,7 +164,7 @@ final class ModerationCommand {
     private function handleAddressed(array $command, array $contextData): bool {
         $action   = (($command['handler_type'] ?? '') === 'mute') ? 'mute' : 'ban';
         $prefix   = '/' . ltrim((string)($command['command_prefix'] ?? ($action === 'mute' ? 'мут' : 'бан')), '/');
-        $username = (string)($contextData['username'] ?? 'Гость');
+        $username = \Domain\UserMention::currentAddressName((int)($contextData['user_id'] ?? 0), (string)($contextData['username'] ?? 'Гость'));
         $userId   = (int)($contextData['user_id'] ?? 0);
         $actorRole = (string)($contextData['moderator_role'] ?? '');
         $isModerator = $userId > 0 && ModerationPolicy::isStaff($actorRole);
@@ -193,7 +195,7 @@ final class ModerationCommand {
             return true;
         }
         $targetId   = (int)$target['id'];
-        $targetNick = trim((string)($target['nickname'] ?? '')) ?: (string)$target['login'];
+        $targetNick = \Domain\UserMention::currentAddressName((int)$target['id'], (string)$target['login']);
         $targetRole = (string)($target['role'] ?? 'user');
 
         if ($targetId === $this->llm->getBotUserId()) {
@@ -320,7 +322,10 @@ final class ModerationCommand {
             foreach ((array)$users->getAllUsers() as $u) {
                 $roleById[(int)($u['id'] ?? 0)] = (string)($u['role'] ?? 'user');
             }
-            $staff = self::staffToCall($online['users'] ?? [], $roleById, [$this->llm->getBotUserId(), $targetId, $reporterId]);
+            $directory = $users->mentionDirectory();
+            $onlineIds = array_map('intval', array_column($online['users'] ?? [], 'id'));
+            $present = array_values(array_filter($directory, static fn($u) => in_array((int)$u['id'], $onlineIds, true)));
+            $staff = self::staffToCall($present, $roleById, [$this->llm->getBotUserId(), $targetId, $reporterId], $directory);
         } catch (\Throwable $e) {
             error_log('ModerationCommand: online staff lookup failed: ' . $e->getMessage());
         }
@@ -404,7 +409,7 @@ final class ModerationCommand {
             return true;
         }
         $targetId   = (int)$target['id'];
-        $targetNick = trim((string)($target['nickname'] ?? '')) ?: (string)$target['login'];
+        $targetNick = \Domain\UserMention::currentAddressName((int)$target['id'], (string)$target['login']);
         $result = $users->applyModeration($userId, $targetId, 'lift');
         if ($result['error'] !== null) {
             $this->llm->botSayLive(self::refusalInstruction($username, $result['error'], 'снять санкцию с участника'), "@{$username}, {$result['error']}", [], "@{$username}");

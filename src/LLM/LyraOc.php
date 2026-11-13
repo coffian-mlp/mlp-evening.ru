@@ -205,7 +205,7 @@ class LyraOc {
             if ($id <= 0 || $id === $botId) continue;
             $rows = $dossiers[$id] ?? [];
             if (self::hasAppearance($rows)) continue;
-            $nick = BotMemoryManager::normalizeText((string)($u['nickname'] ?? ''));
+            $nick = \Domain\UserMention::currentAddressName($id, (string)($u['nickname'] ?? ''));
             if ($nick === '') continue;
             $task = [['role' => 'user', 'content' => self::taskText($nick, LyraArtist::colorName((string)($u['chat_color'] ?? '')), array_column($rows, 'text'))]];
             $raw = $this->llm->generateUtility($task, self::PROMPT, 25);
@@ -292,7 +292,7 @@ class LyraOc {
 
     /** /яос <описание> — человек задаёт или переписывает СВОЙ облик (без прав; гости — нет). */
     public function handleSetOwn(array $command, array $contextData): bool {
-        $username = (string)($contextData['username'] ?? 'Гость');
+        $username = \Domain\UserMention::currentAddressName((int)($contextData['user_id'] ?? 0), (string)($contextData['username'] ?? 'Гость'));
         $userId = (int)($contextData['user_id'] ?? 0);
         if ($userId <= 0) {
             $this->llm->botSay("@{$username}, облик запоминаю только зарегистрированным — сначала войди на сайт.");

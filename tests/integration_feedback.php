@@ -66,7 +66,7 @@ try {
     $res = $conn->query("SELECT id, message FROM chat_messages ORDER BY id DESC LIMIT 2");
     $confirm = '';
     while ($row = $res->fetch_assoc()) { $msgIds[] = (int)$row['id']; $confirm .= $row['message'] . "\n"; }
-    check(str_contains($confirm, '@ИтПони') && preg_match('/№\d+/u', $confirm), 'бот подтвердил записью с номером');
+    check(str_contains($confirm, '@' . \Domain\UserMention::currentAddressName(1)) && preg_match('/№\d+/u', $confirm), 'бот подтвердил записью с номером');
 
     // Пустой /todo → подсказка, записи нет
     $before = $fm->getPage(1, 0)['total'];

@@ -353,7 +353,7 @@ class LLMManager {
                 return false;
             }
 
-            $userLogin = $contextData['username'] ?? 'Гость';
+            $userLogin = \Domain\UserMention::currentAddressName($uid, (string)($contextData['username'] ?? 'Гость'));
             $context = $this->buildContext($this->contextLimit(), greeting: true);
             $hasDialogue = (bool)array_filter($context, static fn($m) => isset($m['chat_message_id']));
             $context = $this->conversationContext($context, [$uid]);
@@ -389,7 +389,9 @@ class LLMManager {
 
             // MLP-326: повтор той же команды в окне дедупа — короткая живая реплика вместо повторной генерации.
             if (!empty($contextData['dedup_of']) && !in_array($command['handler_type'] ?? '', ['ban', 'mute', 'unban'], true)) {
-                [$instruction, $fallback] = CommandDedup::notice($command, (array)$contextData['dedup_of'], (string)($contextData['username'] ?? 'Гость'));
+                $original = (array)$contextData['dedup_of'];
+                $original['username'] = \Domain\UserMention::currentAddressName((int)($original['user_id'] ?? 0), (string)($original['username'] ?? ''));
+                [$instruction, $fallback] = CommandDedup::notice($command, $original, \Domain\UserMention::currentAddressName((int)($contextData['user_id'] ?? 0), (string)($contextData['username'] ?? 'Гость')));
                 $this->botSayLive($instruction, $fallback);
                 return true;
             }
@@ -1292,28 +1294,38 @@ class LLMManager {
     /** Server identity is data, never inferred from model text or memory. */
     private function actionRecipient(int $actorId): ?array {
         if ($actorId <= 0) return null;
-        $user = (new UserManager())->getUserById($actorId);
-        return $user ? ['id' => (int)$user['id'], 'login' => (string)$user['login'], 'nickname' => (string)($user['nickname'] ?? ''),
-            'allowed_mention' => preg_match('/^[\wа-яА-ЯёЁ0-9_]+$/u', (string)$user['login']) ? '@' . $user['login'] : null] : null;
+        $directory = (new UserManager())->mentionDirectory();
+        foreach ($directory as $user) {
+            if ((int)$user['id'] !== $actorId) continue;
+            $name = \Domain\UserMention::addressName($user, $directory);
+            $matches = \Domain\UserMention::matches('@' . $name . ', ', $directory);
+            $allowed = count($matches) === 1 && (int)$matches[0]['user']['id'] === $actorId ? '@' . $name : null;
+            return ['id' => $actorId, 'login' => (string)$user['login'], 'nickname' => (string)($user['nickname'] ?? ''), 'allowed_mention' => $allowed];
+        }
+        return null;
     }
 
     /** Only the server-selected recipient may be mentioned; preserve natural mention placement. */
     public function addressActionReply(string $text, int $actorId): ?string {
         $prefix = $this->actionRecipientPrefix($actorId);
         $allowed = str_starts_with($prefix, '@') ? substr($prefix, 0, -2) : null;
-        preg_match_all('/@[\wа-яА-ЯёЁ0-9_]+/u', $text, $tokens);
-        foreach ($tokens[0] as $token) {
-            if ($allowed === null || mb_strtolower($token) !== mb_strtolower($allowed)) return null;
+        $matches = str_contains($text, '@') ? \Domain\UserMention::matches($text, (new UserManager())->mentionDirectory()) : [];
+        $remaining = $text;
+        foreach (array_reverse($matches) as $match) {
+            if ($allowed === null || (int)$match['user']['id'] !== $actorId) return null;
+            $remaining = substr_replace($remaining, '', $match['offset'], strlen($match['raw']));
         }
-        if (!$tokens[0]) return $prefix . $text;
-        return preg_replace_callback('/@[\wа-яА-ЯёЁ0-9_]+/u', static fn() => $allowed, $text);
+        if (preg_match('/@[\p{Cf}]*[\wа-яА-ЯёЁ0-9_]/u', $remaining)) return null;
+        if (!$matches) return $prefix . $text;
+        foreach (array_reverse($matches) as $match) $text = substr_replace($text, $allowed, $match['offset'], strlen($match['raw']));
+        return $text;
     }
 
     public function actionRecipientPrefix(int $actorId): string {
         $recipient = $this->actionRecipient($actorId);
         if ($recipient === null) return '';
         if ($recipient['allowed_mention'] !== null) return $recipient['allowed_mention'] . ', ';
-        $name = trim(preg_replace('/[\r\n@<>`*_\[\]]/u', ' ', strip_tags(html_entity_decode($recipient['nickname'], ENT_QUOTES | ENT_HTML5, 'UTF-8'))));
+        $name = trim(preg_replace('/[\r\n@<>`*_\[\]]/u', ' ', strip_tags(html_entity_decode($recipient['login'], ENT_QUOTES | ENT_HTML5, 'UTF-8'))));
         return $name !== '' ? $name . ', ' : '';
     }
 
@@ -1339,7 +1351,7 @@ class LLMManager {
      */
     private function handleTodoCommand(array $command, array $contextData): bool {
         $text = \Domain\BotCommandManager::stripPrefix($command, (string)($contextData['message'] ?? ''), 'todo');
-        $username = (string)($contextData['username'] ?? 'Гость');
+        $username = \Domain\UserMention::currentAddressName((int)($contextData['user_id'] ?? 0), (string)($contextData['username'] ?? 'Гость'));
 
         if ($text === '') {
             $this->botSay("@$username, а что записать-то? Напиши так: /todo <твоя идея или жалоба> — и я занесу в беклог. 📝");
@@ -1618,6 +1630,7 @@ class LLMManager {
     }
 
     public function publishConversationReply(string $text,array $quotes=[]): int|bool {
+        if (str_contains($text, '@')) $text = \Domain\UserMention::addressMentions($text, (new UserManager())->mentionDirectory());
         if($this->conversationArrival!==null)return (new \Domain\ConversationMemoryStore())->publishArrival($this->conversationArrival['user_id'],$this->conversationArrival['token'],$this->botUserId,$this->getBotUsername(),$text,$quotes);
         return $this->chatManager->addMessage($this->botUserId,$this->getBotUsername(),$text,$quotes);
     }
