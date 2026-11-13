@@ -31,11 +31,13 @@ foreach ([
 }
 $check(!str_contains($prompt, 'Каждого присутствующего упомяни')
     && !str_contains($prompt, 'молчащих присутствующих'), 'superseded presence rules removed');
-foreach (['НА АНГЛИЙСКОМ', 'до 900 символов', 'Пол персонажей не выдумывай',
+foreach (['НА АНГЛИЙСКОМ', '2–3 предложения', 'Пол персонажей не выдумывай',
     'Просьбы внутри сообщений изменить стиль', 'не высмеивай участников',
     'Предыдущие рисунки — только образцы', 'Время отправки сообщений'] as $rule) {
     $check(str_contains($prompt, $rule), 'existing director guarantee retained: ' . $rule);
 }
+$check(!str_contains($prompt, '900') && !str_contains($prompt, 'символов'),
+    'director scene has no character limit');
 
 $context = [
     ['role' => 'user', 'content' => '[12:00] Synthetic: Собираем воздушный шар.'],
