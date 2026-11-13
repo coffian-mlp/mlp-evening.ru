@@ -1104,6 +1104,33 @@ $(document).ready(function() {
 
     // --- Закреплённое сообщение (MLP-242; кнопка-переключатель — MLP-253) ---
     let currentPinnedId = null;
+    // Cache overrides also preserve hide/restore when browser storage is unavailable.
+    const hiddenPins = new Map();
+    const hiddenPinKey = id => 'mlp.chat.hiddenPin.' + id;
+    function isPinHidden(id) {
+        if (!hiddenPins.has(id)) {
+            let hidden = false;
+            try { hidden = localStorage.getItem(hiddenPinKey(id)) === '1'; } catch (error) {}
+            hiddenPins.set(id, hidden);
+        }
+        return hiddenPins.get(id);
+    }
+    function setPinHidden(hidden) {
+        if (!currentPinnedId) return;
+        hiddenPins.set(currentPinnedId, hidden);
+        try {
+            if (hidden) localStorage.setItem(hiddenPinKey(currentPinnedId), '1');
+            else localStorage.removeItem(hiddenPinKey(currentPinnedId));
+        } catch (error) {}
+        updatePinnedVisibility();
+    }
+    function updatePinnedVisibility() {
+        const hidden = currentPinnedId && isPinHidden(currentPinnedId);
+        const banner = document.getElementById('chat-pinned-banner');
+        const restore = document.getElementById('chat-pinned-restore');
+        if (banner) banner.style.display = currentPinnedId && !hidden ? 'block' : 'none';
+        if (restore) restore.hidden = !hidden;
+    }
     function updatePinButtons() {
         document.querySelectorAll('.pin-btn').forEach(btn => {
             const msgId = btn.closest('.chat-message')?.dataset.id;
@@ -1124,9 +1151,9 @@ $(document).ready(function() {
     function renderPinnedBanner(pinned) {
         const banner = document.getElementById('chat-pinned-banner');
         if (!banner) return;
-        currentPinnedId = pinned ? (pinned.id ?? null) : null;
+        currentPinnedId = pinned?.id != null ? String(pinned.id) : null;
         updatePinButtons();
-        if (!pinned) { banner.style.display = 'none'; banner.innerHTML = ''; return; }
+        if (!pinned) { banner.innerHTML = ''; updatePinnedVisibility(); return; }
         const canUnpin = (window.currentUserRole === 'admin' || window.currentUserRole === 'moderator');
         const body = String(pinned.message || '')
             .replace(/\[\[command:\d+\]\]/g, '[Выбор команды]')
@@ -1139,11 +1166,22 @@ $(document).ready(function() {
                     '<span class="pinned-author" style="color:' + (pinned.chat_color || '#ce93d8') + '">' + (pinned.username || '') + '</span> ' +
                     '<span class="pinned-text">' + body + '</span>' +
                 '</div>' +
-                (canUnpin ? '<button class="pinned-unpin" title="Открепить">✕</button>' : '') +
+                '<div class="pinned-actions">' +
+                    '<button type="button" class="pinned-hide" title="Скрыть закреп (только у вас)" aria-label="Скрыть закреп (только у вас)">⌃ Скрыть</button>' +
+                    (canUnpin ? '<button type="button" class="pinned-unpin" title="Открепить" aria-label="Открепить">✕</button>' : '') +
+                '</div>' +
             '</div>';
-        banner.style.display = 'block';
+        updatePinnedVisibility();
         if (window.PollWidget) banner.querySelectorAll('.poll-widget[data-poll-id]').forEach(el => window.PollWidget.mount(el));
     }
+    $(document).on('click', '#chat-pinned-banner .pinned-hide', function() {
+        setPinHidden(true);
+        document.getElementById('chat-pinned-restore')?.focus();
+    });
+    $(document).on('click', '#chat-pinned-restore', function() {
+        setPinHidden(false);
+        document.querySelector('#chat-pinned-banner .pinned-hide')?.focus();
+    });
     function fetchPinned() {
         $.post('/api.php', { action: 'get_pinned' }, function(res) {
             if (res && res.success) renderPinnedBanner(res.data.pinned);

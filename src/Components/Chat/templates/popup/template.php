@@ -89,6 +89,7 @@ $telegramAuthEnabled = $arResult['telegram_auth_enabled'];
         </div>
 
         <div class="chat-settings">
+            <button type="button" id="chat-pinned-restore" class="chat-pinned-restore" title="Показать закреп" aria-label="Показать закреп" hidden>📌</button>
             <?php require dirname(__DIR__, 4) . '/templates/theme-switch.php'; ?>
             <span id="online-counter" class="online-badge" title="Онлайн">(0)</span>
             <button id="chat-search-btn" class="icon-btn" title="Поиск">🔍</button>
