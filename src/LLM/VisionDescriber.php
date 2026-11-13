@@ -69,9 +69,19 @@ class VisionDescriber {
         if (!VisionFormatter::isImageUrl($url)) {
             return null; // не картинка — без обращений к кешу/конфигу (pure-гейт)
         }
+        if (str_starts_with($url, '/') && VisionFormatter::localImagePath($url, dirname(__DIR__, 2)) === null) {
+            return null; // A cached description must not bypass the local file access boundary.
+        }
 
         $cache = $cache ?? new FileCache('vision');
-        $key = md5($url);
+        $frames = 0;
+        $imagePart = null;
+        // Determine the actual representation before reading either success or failure caches.
+        if (VisionFormatter::isLocalGif($url)) {
+            if (RequestDeadline::expired()) return null;
+            $imagePart = VisionFormatter::resolveForModel($url, $frames);
+        }
+        $key = md5($url . ($frames > 1 ? '|gif-storyboard-v1' : ''));
 
         $hit = $cache->get($key, self::CACHE_TTL);
         if ($hit !== null && isset($hit['d']) && $hit['d'] !== '') {
@@ -84,9 +94,8 @@ class VisionDescriber {
 
         if (RequestDeadline::expired()) return null;
 
-        // Превью готовим только на живом пути (ConfigManager→БД); с инжектированной
-        // моделью (тесты) отдаём URL как есть — resolveForModel там не нужен.
-        $imagePart = ($model !== null) ? $url : VisionFormatter::resolveForModel($url);
+        // Non-GIF previews are lazy; injected models keep the original URL for these images.
+        $imagePart = $imagePart ?? (($model !== null) ? $url : VisionFormatter::resolveForModel($url, $frames));
         if ($imagePart === null) {
             return null; // не смогли подготовить превью
         }
@@ -94,7 +103,7 @@ class VisionDescriber {
         $model = $model ?? [self::class, 'callModel'];
         try {
             if (RequestDeadline::expired()) return null;
-            $desc = $model($imagePart);
+            $desc = $model($imagePart, null, $frames);
         } catch (\Throwable $e) {
             error_log('VisionDescriber: ' . get_class($e) . ': ' . $e->getMessage());
             if (self::isPermanentFailure($e->getMessage())) {
@@ -121,10 +130,11 @@ class VisionDescriber {
      * null — провайдер не настроен, картинка не разрешилась или сбой.
      */
     public static function describeWith(string $url, string $prompt): ?string {
-        $imagePart = VisionFormatter::resolveForModel($url);
+        $frames = 0;
+        $imagePart = VisionFormatter::resolveForModel($url, $frames);
         if ($imagePart === null) return null;
         try {
-            $out = self::callModel($imagePart, $prompt);
+            $out = self::callModel($imagePart, $prompt, $frames);
         } catch (\Throwable $e) {
             error_log('VisionDescriber::describeWith: ' . $e->getMessage());
             return null;
@@ -133,12 +143,13 @@ class VisionDescriber {
         return $out !== '' ? $out : null;
     }
 
-    private static function callModel(string $imagePart, ?string $promptOverride = null): ?string {
+    private static function callModel(string $imagePart, ?string $promptOverride = null, int $storyboardFrames = 0): ?string {
         $c = ConfigManager::getInstance();
         $providerKey = (string)$c->getOption('ai_vision_provider', 'routerai');
         $modelName = (string)$c->getOption('ai_vision_model', 'google/gemma-3-27b-it');
         // MLP-275: промпт помощника настраивается из дашборда (пустой = дефолт). MLP-337: явный промпт вызова — приоритетнее.
         $prompt = $promptOverride ?? (trim((string)$c->getOption('ai_vision_prompt', '')) ?: self::PROMPT);
+        if ($storyboardFrames > 1) $prompt .= "\n" . VisionFormatter::animationHint($storyboardFrames);
 
         // socks5-прокси поддерживаем; vless — нет (помощник по умолчанию на RouterAI, ему прокси не нужен).
         $proxy = (string)$c->getOption('ai_proxy_url', '');

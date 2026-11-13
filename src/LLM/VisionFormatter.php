@@ -84,11 +84,11 @@ class VisionFormatter {
      * Подготовить ОДНУ картинку для отправки модели (MLP-268, зовёт VisionDescriber):
      * data-URI превью для локальных файлов или абсолютный URL, null — не картинка.
      */
-    public static function resolveForModel(string $url): ?string {
+    public static function resolveForModel(string $url, ?int &$storyboardFrames = null): ?string {
         $c = ConfigManager::getInstance();
         $base = (string)$c->getOption('ai_public_base_url', 'https://mlp-evening.ru');
         $webroot = realpath(__DIR__ . '/../..');
-        return self::resolveImage($url, rtrim($base, '/'), $webroot ?: null);
+        return self::resolveImage($url, rtrim($base, '/'), $webroot ?: null, $storyboardFrames);
     }
 
     /**
@@ -122,8 +122,10 @@ class VisionFormatter {
         $parts = [];
         foreach ($m[1] as $raw) {
             if ($budget <= 0) break;
-            $img = self::resolveImage(trim($raw), $base, $webroot);
+            $frames = 0;
+            $img = self::resolveImage(trim($raw), $base, $webroot, $frames);
             if ($img !== null) {
+                if ($frames > 1) $parts[] = ['type' => 'text', 'text' => self::animationHint($frames)];
                 $parts[] = ['type' => 'image_url', 'image_url' => ['url' => $img]];
                 $budget--;
             }
@@ -142,7 +144,8 @@ class VisionFormatter {
     }
 
     /** data-URI уменьшенного превью (локальный файл) или абсолютный URL (внешний), либо null. */
-    private static function resolveImage(string $url, string $base, ?string $webroot): ?string {
+    private static function resolveImage(string $url, string $base, ?string $webroot, ?int &$storyboardFrames = null): ?string {
+        $storyboardFrames = 0;
         if (self::imageMime($url) === null) {
             return null; // не картинка
         }
@@ -151,10 +154,11 @@ class VisionFormatter {
             // MLP-357: файла нет — описывать нечего. Раньше уходил запасной абсолютный URL, модель
             // получала 404 и падала с кодом 1210 (26.09: выдуманная Лирой ссылка на «рисунок»);
             // в режиме «основная модель видит картинки» такой URL ронял весь ответ.
-            if (!is_file($webroot . rawurldecode((string)strtok($url, '?#')))) {
+            $path = self::localImagePath($url, $webroot);
+            if ($path === null) {
                 return null;
             }
-            $dataUri = self::thumbnailDataUri($webroot . $url);
+            $dataUri = self::thumbnailDataUri($path, $storyboardFrames);
             if ($dataUri !== null) {
                 return $dataUri;
             }
@@ -170,7 +174,8 @@ class VisionFormatter {
     }
 
     /** Читает локальный файл, ужимает через GD до MAX_DIM и возвращает data:image/jpeg;base64,... */
-    private static function thumbnailDataUri(string $path): ?string {
+    private static function thumbnailDataUri(string $path, ?int &$storyboardFrames = null): ?string {
+        $storyboardFrames = 0;
         if (!is_file($path) || !function_exists('imagecreatefromstring')) {
             return null;
         }
@@ -182,9 +187,14 @@ class VisionFormatter {
         if ($w < 1 || $h < 1 || ($w * $h) > self::MAX_PIXELS) {
             return null; // битая или слишком большая по памяти — пропускаем
         }
-        $bytes = @file_get_contents($path);
+        $isGif = ($info[2] ?? null) === IMAGETYPE_GIF;
+        $bytes = $isGif ? @file_get_contents($path, false, null, 0, GifStoryboard::MAX_BYTES + 1) : @file_get_contents($path);
         if ($bytes === false) {
             return null;
+        }
+        if ($isGif && ($storyboard = GifStoryboard::render($bytes)) !== null) {
+            $storyboardFrames = $storyboard['frames'];
+            return 'data:image/jpeg;base64,' . base64_encode($storyboard['jpeg']);
         }
         $src = @imagecreatefromstring($bytes);
         if (!$src) {
@@ -217,6 +227,38 @@ class VisionFormatter {
     }
 
     private static function imageMime(string $url): ?string {
-        return preg_match('#\.(png|jpe?g|gif|webp|bmp)(\?|$)#i', $url) ? 'image' : null;
+        return preg_match('#\.(png|jpe?g|gif|webp|bmp)([?\#]|$)#i', $url) ? 'image' : null;
+    }
+
+    public static function animationHint(int $frames): string {
+        return 'Это раскадровка анимации (GIF): ' . $frames . ' кадров по порядку слева направо, сверху вниз, номера в углах. Опиши, что происходит в движении целиком, а не каждый кадр по отдельности.';
+    }
+
+    public static function isLocalGif(string $url): bool {
+        $path = self::localImagePath($url, dirname(__DIR__, 2));
+        return $path !== null && (@getimagesize($path)[2] ?? null) === IMAGETYPE_GIF;
+    }
+
+    /** Resolve only public site files; validate both the URL and the canonical symlink target. */
+    public static function localImagePath(string $url, string $webroot): ?string {
+        $path = rawurldecode(preg_split('/[?#]/', $url, 2)[0]);
+        if ($path === '' || $path[0] !== '/' || str_contains($path, "\0") || str_contains($path, '\\')) return null;
+        // Reject ambiguous nested escapes rather than letting another URL decoder reinterpret them.
+        if (preg_match('/%[0-9a-f]{2}/i', $path)) return null;
+        $blocked = ['tests', 'migrations', 'database', 'scripts', 'docs', 'dev_knowledge',
+            'logs', 'cache', 'tools', 'deploy', 'node_modules'];
+        $isPublic = static function (string $relative) use ($blocked): bool {
+            $relative = ltrim($relative, '/');
+            return !preg_match('#(^|/)\.#', $relative)
+                && !in_array(explode('/', $relative, 2)[0], $blocked, true);
+        };
+        if (!$isPublic($path)) return null;
+        $root = realpath($webroot);
+        if ($root === false) return null;
+        $prefix = rtrim($root, '/') . '/';
+        $resolved = realpath($prefix . ltrim($path, '/'));
+        if ($resolved === false || !str_starts_with($resolved, $prefix)
+            || !$isPublic(substr($resolved, strlen($prefix))) || !is_file($resolved)) return null;
+        return $resolved;
     }
 }
