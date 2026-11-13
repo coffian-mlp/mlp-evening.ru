@@ -4,12 +4,13 @@ namespace LLM {
     /** Substitute only the external transport; real description, prompt, debug and cache code runs. */
     class RouterAIProvider implements LLMProviderInterface {
         public static array $calls = [];
+        public static string $answer = 'Синтетический объект перемещается по кадру.';
         public function __construct(...$args) {}
         public function withConfiguredReasoning(): self { return $this; }
         public function withTimeout(int $seconds): self { return $this; }
         public function askChat(array $messagesContext, string $systemPrompt): ?string {
             self::$calls[] = ['messages'=>$messagesContext,'system'=>$systemPrompt];
-            return 'Синтетический объект перемещается по кадру.';
+            return self::$answer;
         }
     }
 }
@@ -52,13 +53,32 @@ try {
     $row=$db->query("SELECT request FROM llm_debug_log WHERE model='".$db->real_escape_string($tag)."' ORDER BY id DESC LIMIT 1")->fetch_assoc();
     check($row && str_contains($row['request'],$hint) && !str_contains($row['request'],'data:image/'),'debug log retains instruction, strips base64');
 
+    $text754=str_repeat('я',753).'✓';
+    LLM\RouterAIProvider::$answer=$text754;
+    $lengthUrl=$url.'?length=754';
+    $full=LLM\VisionDescriber::describe($lengthUrl,null,$cache);
+    check($full===$text754,'storyboard preserves all 754 Unicode characters');
+    check(($cache->get(md5($lengthUrl.'|gif-storyboard-v1'),604800)['d']??null)===$text754,'storyboard cache key unchanged and stores full 754 characters');
+    $context=LLM\VisionDescriber::maybeDescribe([['role'=>'user','content'=>'![x]('.$lengthUrl.')']],null,$cache);
+    check($context[0]['content']==='[Картинка: '.$text754.']','model context receives complete storyboard description');
+    $director=LLM\LyraArtist::directorTask($context,'',[],'','synthetic framing');
+    check(str_contains($director[0]['content']??'',$text754),'director transcript preserves complete storyboard description');
+    LLM\RouterAIProvider::$answer=str_repeat('б',1199).'✓';
+    $cut=LLM\VisionDescriber::describe($url.'?length=1200',null,$cache);
+    check($cut===str_repeat('б',999).'…','1200 storyboard characters become exactly 1000 with ellipsis');
+    LLM\RouterAIProvider::$answer=str_repeat('в',999).'✓';
+    check(LLM\VisionDescriber::describe($url.'?length=1000',null,$cache)===LLM\RouterAIProvider::$answer,'exactly 1000 storyboard characters are not truncated');
+
     file_put_contents($file,gif_fixture([['color'=>1]]));
     LLM\VisionDescriber::describeWith($url,'Still prompt');
     check(end(LLM\RouterAIProvider::$calls)['system']==='Still prompt','single frame has no animation hint');
+    LLM\RouterAIProvider::$answer=$text754;
+    check(LLM\VisionDescriber::describe($url.'?single-length=754',null,$cache)===str_repeat('я',599).'…','single-frame GIF keeps 600-character limit');
     $pngUrl='/upload/chat/'.$tag.'.png'; $png=dirname(__DIR__).$pngUrl; $files[]=$png;
     $im=imagecreatetruecolor(48,48);imagepng($im,$png);
     LLM\VisionDescriber::describeWith($pngUrl,'PNG prompt');
     check(end(LLM\RouterAIProvider::$calls)['system']==='PNG prompt','PNG has no animation hint');
+    check(LLM\VisionDescriber::describe($pngUrl,null,$cache)===str_repeat('я',599).'…','754 static-image characters become 600 with ellipsis');
     $privateUrl='/tests/'.$tag.'.gif';$privateFile=dirname(__DIR__).$privateUrl;$files[]=$privateFile;
     file_put_contents($privateFile,gif_fixture([['color'=>1],['color'=>2]]));
     $before=count(LLM\RouterAIProvider::$calls);

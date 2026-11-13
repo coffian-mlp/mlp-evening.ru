@@ -24,6 +24,7 @@ class VisionDescriber {
     /** MLP-357: картинку, которую провайдер отверг (4xx, код 1210), час не пробуем снова. */
     const FAIL_TTL = 3600;
     const MAX_LEN = 600;      // жёсткий потолок длины описания, символов
+    const MAX_LEN_STORYBOARD = 1000;
 
     const PROMPT = 'Опиши изображение подробно и по делу: что изображено, какой текст виден (процитируй), обстановка. 2–4 предложения на русском. Без вступлений, оценок и вопросов.';
 
@@ -116,8 +117,9 @@ class VisionDescriber {
         if ($desc === '') {
             return null; // пустое не кешируем — попробуем в следующий раз
         }
-        if (mb_strlen($desc) > self::MAX_LEN) {
-            $desc = mb_substr($desc, 0, self::MAX_LEN - 1) . '…';
+        $maxLen = $frames > 1 ? self::MAX_LEN_STORYBOARD : self::MAX_LEN;
+        if (mb_strlen($desc) > $maxLen) {
+            $desc = mb_substr($desc, 0, $maxLen - 1) . '…';
         }
 
         $cache->set($key, ['d' => $desc, 'url' => $url]);
