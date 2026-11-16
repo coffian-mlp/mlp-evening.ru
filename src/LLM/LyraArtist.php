@@ -233,20 +233,21 @@ class LyraArtist {
      * вместо подписи). Контекст урезан до 10 сообщений (образец MLP-311): комментарию
      * свежего рисунка длинная история только конкурент. $username null = авто-режим.
      */
-    private function captionFromDescription(string $desc, string $subject, ?string $username): ?string {
+    private function captionFromDescription(string $desc, string $subject, ?string $username, ?string $technique = null): ?string {
         if ($username === null) {
             $instr = "Ты сама решила нарисовать сценку по мотивам беседы в чате: «" . mb_substr($subject, 0, 200) . "». "
                 . "Взглянув на результат, ты видишь: «{$desc}». "
                 . "Это задание ВАЖНЕЕ продолжения беседы: не отвечай на предыдущие сообщения. "
-                . "Скажи чату 1–2 предложения в своём стиле: вручи рисунок, прокомментируй что получилось (можно с самоиронией про рисование копытом). "
+                . "Скажи чату 1–2 предложения в своём стиле: вручи рисунок, прокомментируй как художница: что задумала, какую технику выбрала и что в рисунке удалось — уверенно и тепло, без самоуничижения. Не шути о том, как держишь кисть, и не извиняйся за качество. "
                 . "Без адресата и без вопросов. Рисунок уже готов: не проси черновик, описание или подтверждение, не упоминай кнопки. НЕ вставляй ссылки и картинки — рисунок приложится сам. Не пересказывай описание дословно.";
         } else {
             $instr = "Ты только что НАРИСОВАЛА картинку по просьбе @$username: «" . mb_substr($subject, 0, 200) . "». "
                 . "Взглянув на результат, ты видишь: «{$desc}». "
                 . "Это задание ВАЖНЕЕ продолжения беседы: не отвечай на другие сообщения. "
-                . "Ответь @$username в своём стиле, 1–2 предложения: вручи рисунок, прокомментируй что получилось (можно с самоиронией про рисование копытом). "
+                . "Ответь @$username в своём стиле, 1–2 предложения: вручи рисунок, прокомментируй как художница: что задумала, какую технику выбрала и что в рисунке удалось — уверенно и тепло, без самоуничижения. Не шути о том, как держишь кисть, и не извиняйся за качество. "
                 . "Рисунок уже готов: не проси черновик, описание или подтверждение, не упоминай кнопки. НЕ вставляй ссылки и картинки — рисунок приложится сам. Не пересказывай описание дословно.";
         }
+        if ($technique !== null) $instr .= "\nТехника рисунка: " . $technique;
         $context = $this->llm->buildReplyContext(min(10, $this->llm->contextLimit()), null, null, true, false);
         $context[] = ['role' => 'user', 'content' => $instr];
         return $this->llm->generateReply($context);
@@ -257,7 +258,8 @@ class LyraArtist {
      * заменяется на одну из ai_image_techniques. Нет плейсхолдера — промпт не трогаем
      * (обратная совместимость со стилями, где материал прописан жёстко).
      */
-    public static function applyTechnique(string $style, ConfigManager $config): string {
+    public static function applyTechnique(string $style, ConfigManager $config, ?string &$technique = null): string {
+        $technique = null;
         if (mb_strpos($style, '{technique}') === false) {
             return $style;
         }
@@ -267,9 +269,11 @@ class LyraArtist {
         }
         $list = array_values(array_filter(array_map('trim', explode('|', $raw)), fn($t) => $t !== ''));
         if (!$list) {
+            $technique = 'drawing';
             return str_replace('{technique}', 'drawing', $style);
         }
-        return str_replace('{technique}', $list[array_rand($list)], $style);
+        $technique = $list[array_rand($list)];
+        return str_replace('{technique}', $technique, $style);
     }
 
     /** Общее ядро художницы (MLP-277): лимит → стиль → генерация → живой комментарий/фолбэк. */
@@ -297,7 +301,7 @@ class LyraArtist {
                 error_log('LyraArtist auto-draw skipped: daily limit reached');
                 return true;
             }
-            $this->llm->botSay("@$username, у меня краски на сегодня закончились ($limit рисунков в день — потом копыта отваливаются). Приходи завтра! 🎨");
+            $this->llm->botSay("@$username, у меня краски на сегодня закончились ($limit рисунков в день). Приходи завтра! 🎨");
             return true;
         }
 
@@ -309,7 +313,9 @@ class LyraArtist {
         if ($stylePrefix === '') {
             $stylePrefix = self::DEFAULT_STYLE_PROMPT;
         }
-        $stylePrefix = self::applyTechnique($stylePrefix, $config);
+        $stylePrefix = self::applyTechnique($stylePrefix, $config, $technique);
+        // An edit preserves the reference technique, not the newly selected style.
+        if ($this->referenceUrl !== null) $technique = null;
         $drawingIdentity = null;
         $drawingSubject = $resolveMentions ? $this->mentionedDrawingSubject($subject, $drawingIdentity) : $subject;
         $prompt = $stylePrefix . ' ' . $drawingSubject; // MLP-341: сцена целиком, без обрезки
@@ -365,23 +371,23 @@ class LyraArtist {
         // и комментирует основной LLM с личностью и контекстом. Отключаемо;
         // при любом сбое — фолбэк на фикс-подписи ниже.
         if ($config->getOption('ai_image_llm_caption', 1)) {
-            $caption = $this->describeOwnDrawing($url, $subject, $auto ? null : $username);
+            $caption = $this->describeOwnDrawing($url, $subject, $auto ? null : $username, $technique);
             if ($caption !== null) {
                 return $this->publishDrawing($caption . "\n![рисунок](" . $url . ")", $auto);
             }
         }
 
         $captions = [
-            "@%s, вот! Рисовала копытом, так что не суди строго. 🎨\n![рисунок](%s)",
-            "@%s, та-дам! Кисть держала во рту, но вроде похоже? 🖌️\n![рисунок](%s)",
-            "@%s, готово! Бон-Бон говорит — «узнаваемо». Это комплимент? 🎨\n![рисунок](%s)",
-            "@%s, держи! Немного намазюкала за краями, но душу вложила. ✨\n![рисунок](%s)",
+            "@%s, вот! Собрала замысел в выразительную композицию. 🎨\n![рисунок](%s)",
+            "@%s, та-дам! Поработала с ритмом линий — рисунок получился живым. 🖌️\n![рисунок](%s)",
+            "@%s, готово! В этом рисунке мне особенно нравится настроение. 🎨\n![рисунок](%s)",
+            "@%s, держи! Выделила главное и добавила выразительные детали. ✨\n![рисунок](%s)",
         ];
         if ($auto) {
             // Безадресные авто-подписи: Лира рисует по собственному почину.
             $autoCaptions = [
                 "Подглядела за вашей беседой — и не удержалась, нарисовала! 🎨\n![рисунок](%s)",
-                "Настроение чата в одной картинке (рисовала копытом, простите). 🖌️\n![рисунок](%s)",
+                "Собрала настроение чата в одной композиции — мне нравится, как оно раскрылось! 🖌️\n![рисунок](%s)",
                 "Художницу видно по мольберту! Вот вам сценка. ✨\n![рисунок](%s)",
             ];
             return $this->publishDrawing(sprintf($autoCaptions[array_rand($autoCaptions)], $url), true);
@@ -607,13 +613,13 @@ class LyraArtist {
     }
 
     /** MLP-276: vision смотрит на готовый рисунок → основная LLM комментирует в характере. */
-    private function describeOwnDrawing(string $url, string $subject, ?string $username): ?string {
+    private function describeOwnDrawing(string $url, string $subject, ?string $username, ?string $technique = null): ?string {
         try {
             $desc = VisionDescriber::describe($url);
             if ($desc === null) {
                 return null;
             }
-            $raw = $this->captionFromDescription($desc, $subject, $username);
+            $raw = $this->captionFromDescription($desc, $subject, $username, $technique);
             $text = trim((string)(ReactionParser::extract((string)$raw)['text'] ?? ''));
             // Модель иногда копирует формат контекста «[HH:MM] Имя:» — срезаем (прецедент 23050).
             $text = trim(preg_replace('/^\[\d{1,2}:\d{2}\]\s*[^:\n]{1,40}:\s*/u', '', $text));
