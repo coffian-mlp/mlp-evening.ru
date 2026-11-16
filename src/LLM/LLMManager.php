@@ -382,6 +382,7 @@ class LLMManager {
                 return true;
             }
         } elseif ($triggerType === 'dynamic_command') {
+            if (!ScheduleAnnouncement::allowed($contextData)) return true;
             if (($contextData['schedule_announcement'] ?? '') === 'playlist_finished') {
                 return ScheduleAnnouncement::deliver($this, $contextData);
             }
@@ -433,7 +434,7 @@ class LLMManager {
                 $now = time();
                 // AR3-1: recurrence-раскрытие — единая точка в EventManager.
                 $em = new EventManager();
-                $expandedEvents = EventManager::expandOccurrences($em->getAllRaw(), 7, $now);
+                $expandedEvents = EventManager::expandWithNextOccurrences($em->getAllRaw(), 7, $now);
 
                 // MLP-322: модель получает «сейчас», идущее и следующее событие (для анонсов
                 // воркера — ещё и целевое, по event_run_id) с уже посчитанными интервалами.

@@ -660,3 +660,32 @@ bash tests/helpers/drawing_environment.sh down
 Playwright проверяет настоящий HTTP→queue→BotWorker→renderer: ответ и одно уведомление второму запросу видны, пока transport barrier удерживает рисунок; затем обе картинки появляются ровно один раз. Отдельный сценарий проходит черновик, цитированное редактирование и минутное collection. Меняется только транспорт провайдера; fixture `tick` вызывает настоящий worker. Сервер и fixture доступны только в owned Docker-копии, браузер блокирует внешние URL и SSE в этом сценарии; realtime не является предметом проверки. Tunnel отдаёт неизменённые публичные JS/CSS/fonts/images из той же копии напрямую, PHP/HTTP направляет внутрь контейнера. Снимки и результаты — `docs/tests/MLP-468/`.
 
 В cron/auto параллельность обеспечивают существующие запуски cron. Один daemon последовательно обслуживает стадии и сохраняет результаты, но не отвечает параллельно собственной подготовке; отдельный процесс/cron для него этим изменением не устанавливается. Inline сам доставляет сохранённый результат под worker lock; длительное ожидание доставки заканчивается явным terminal outcome без повторной генерации. Генерация изображения не гарантирует отмену upstream после timeout: повтор может увеличить стоимость. Transport retry ограничен тремя попытками на generate; отдельная safety-переделка допускает новый generate, а анонсы сохраняют свои существующие повторы целой фазы.
+
+### MLP-471: срок повторов и пропуски дат
+
+`tests/helpers/recurrence_environment.sh` создаёт отдельный Docker-проект `mlp471`,
+синтетическую БД, копию исходников в `docs/tests/MLP-471/workspace` и закрытую сеть.
+Исторические baseline для тестов памяти и рисования подготавливаются автоматически.
+PHP image собирается штатным Dockerfile; имеющийся совместимый образ можно выбрать
+через `MLP471_PHP_IMAGE`. Production-конфигурация не копируется.
+
+```bash
+bash tests/helpers/recurrence_environment.sh up
+bash tests/helpers/recurrence_environment.sh strict
+bash tests/helpers/recurrence_environment.sh test
+bash tests/helpers/recurrence_environment.sh empty
+bash tests/helpers/recurrence_environment.sh test
+bash tests/helpers/recurrence_environment.sh serve
+# В отдельном терминале: loopback tunnel в закрытую сеть Docker.
+node tests/helpers/recurrence_http_proxy.js
+# Затем в основном терминале:
+MLP_BASE_URL=http://127.0.0.1:8172 npm run test:e2e -- mlp-471-recurrence.ui.spec.js --project=chromium-ui --project=firefox-ui --output=docs/tests/MLP-471/playwright-results
+# Остановить свой proxy через Ctrl+C перед down.
+bash tests/helpers/recurrence_environment.sh down
+```
+
+После правок исходников выполнить `sync` до повторной проверки. Полный PHP-набор и
+браузерные сценарии выполнять последовательно. Фикстура браузера требует localhost,
+Docker, БД `mlp_phase3` и маркер `.mlp471-owned`; создаёт собственных admin/user,
+удаляет только свои события/учётки. Скриншоты и журналы сохраняются в
+`docs/tests/MLP-471/`. Unit и интеграционные PHP-тесты входят в общий раннер.

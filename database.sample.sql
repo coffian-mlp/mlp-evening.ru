@@ -232,6 +232,8 @@ CREATE TABLE `events` (
   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `monitor_stream` tinyint NOT NULL DEFAULT '0',
   `streamer_user_id` int DEFAULT NULL,
+  `recurrence_until` date DEFAULT NULL,
+  `recurrence_skip_dates` json DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `start_time` (`start_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

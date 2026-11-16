@@ -24,6 +24,7 @@ final class CommandReplyDelivery {
 
     public static function processJob(LLMManager $llm, JobQueue $queue, array $job, bool $enabled): void {
         $id = (int)$job['id'];
+        if (ScheduleAnnouncement::cancelIfExcluded($queue, $job)) return;
         if (!\Domain\Privacy::payloadAllowed($job['data'] ?? [])) { $queue->complete([$id]); return; }
         if (!(int)ConfigManager::getInstance()->getOption('ai_enabled', 0)) { $queue->pauseReply($id); return; }
         try {
@@ -52,12 +53,14 @@ final class CommandReplyDelivery {
         } catch (\Throwable $error) {
             error_log('Command reply deferred: job=' . $id . ' class=' . get_class($error));
         }
+        if (ScheduleAnnouncement::cancelIfExcluded($queue, $job)) return;
         if ((int)($job['attempts'] ?? 0) >= self::MAX_ATTEMPTS - 1) $queue->fail([$id]);
         else $queue->release([$id], ScheduleAnnouncement::retryDelay((int)($job['attempts'] ?? 0)));
     }
 
     /** Message and delivery receipt commit together, before realtime transport. */
     public static function publish(LLMManager $llm, array $job): int {
+        if (ScheduleAnnouncement::cancelIfExcluded(new JobQueue(), $job)) return 0;
         if (!\Domain\Privacy::payloadAllowed($job['data'] ?? [])) { (new JobQueue())->complete([(int)$job['id']]); return 0; }
         $db = Database::getInstance()->getConnection(); $id = (int)$job['id'];
         $reply = $job['data']['prepared_reply']; $payload = null; $receipt = 0;
@@ -73,13 +76,17 @@ final class CommandReplyDelivery {
                     $payload = json_decode($row['payload'], true, 512, JSON_THROW_ON_ERROR);
                     $receipt = (int)($payload['reply_message_id'] ?? 0);
                     if ($receipt > 0) throw new \RuntimeException('Reply already delivered');
+                    if (!ScheduleAnnouncement::allowed($payload, true)) throw new \RuntimeException('Schedule occurrence excluded');
                 },
                 function (int $messageId) use ($id, &$payload) {
                     $payload['reply_message_id'] = $messageId;
                     (new JobQueue())->savePayload($id, $payload); (new JobQueue())->complete([$id]);
                 }, true);
         } catch (\Throwable $error) {
-            if ($receipt < 1) throw $error;
+            if ($receipt < 1) {
+                if (ScheduleAnnouncement::cancelIfExcluded(new JobQueue(), $job)) return 0;
+                throw $error;
+            }
             (new JobQueue())->complete([$id]);
             return $receipt;
         }

@@ -45,6 +45,7 @@ class EventController {
             'generate_new_playlist' => (int)($_POST['generate_new_playlist'] ?? 0),
             'color'                 => trim($_POST['color'] ?? '#6d2f8e'),
         ];
+        foreach (['recurrence_until', 'recurrence_skip_dates'] as $key) if (array_key_exists($key, $_POST)) $data[$key] = $_POST[$key];
         foreach(['monitor_stream','streamer_user_id'] as $key)if(array_key_exists($key,$_POST))$data[$key]=(int)$_POST[$key];
 
         $events = new EventManager();

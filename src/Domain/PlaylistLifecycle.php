@@ -15,8 +15,9 @@ final class PlaylistLifecycle
         try {
             $owner = new EpisodeManager();
             $events = (new EventManager())->getAllRaw();
+            $byId = array_column($events, null, 'id');
             $eligible = array_values(array_filter($events, fn($event) => !empty($event['use_playlist']) || !empty($event['generate_new_playlist'])));
-            $expanded = EventManager::expandOccurrences($eligible, 7, $now);
+            $expanded = EventManager::expandWithNextOccurrences($eligible, 7, $now);
             $currentRuns = array_column($expanded, 'run_id');
             $known = [];
             $timeline = [];
@@ -24,6 +25,11 @@ final class PlaylistLifecycle
                 if ($occurrence['real_start_time'] >= $owner->getLifecycleWatermark()) $timeline[$occurrence['run_id']] = $occurrence;
             }
             foreach ($owner->getOccurrences() as $record) {
+                $live = $byId[$record['event_id']] ?? null;
+                if ($live && !EventManager::occurrenceAllowed($live, strtotime($record['start_at'].' UTC')) && in_array($record['state'], ['pending','started','needs_attention','cancelled'], true)) {
+                    if ($record['state'] !== 'cancelled') $owner->setOccurrenceState($record['run_id'], 'cancelled', 'calendar');
+                    continue;
+                }
                 $known[$record['run_id']] = $record;
                 $metadata = json_decode($record['metadata_json'], true);
                 $metadata['real_start_time'] = strtotime($record['start_at'].' UTC');

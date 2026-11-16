@@ -11,6 +11,7 @@ final class ScheduleAnnouncement {
 
     public static function processJob(LLMManager $llm, JobQueue $queue, array $job, bool $enabled): void {
         $id = (int)$job['id'];
+        if (self::cancelIfExcluded($queue, $job)) return;
         try {
             $sent = $enabled && (isset($job['data']['prepared_reply'])
                 ? CommandReplyDelivery::publish($llm, $job)
@@ -19,6 +20,7 @@ final class ScheduleAnnouncement {
             $sent = false;
             error_log('Schedule announcement deferred: ' . get_class($e));
         }
+        if (self::cancelIfExcluded($queue, $job)) return;
         if ($sent) $queue->complete([$id]);
         else $queue->release([$id], self::retryDelay((int)($job['attempts'] ?? 0)));
     }
@@ -29,7 +31,7 @@ final class ScheduleAnnouncement {
         if (!$outcome || ($outcome['state'] ?? '') !== 'completed' || empty($outcome['view_accounted'])) return false;
         $snapshot = $episodes->getSnapshot((int)($outcome['generated_snapshot_id'] ?? 0));
         if (!$snapshot) return false;
-        $expanded = \Domain\EventManager::expandOccurrences((new \Domain\EventManager())->getAllRaw(), 7);
+        $expanded = \Domain\EventManager::expandWithNextOccurrences((new \Domain\EventManager())->getAllRaw(), 7);
         $context = ScheduleData::dataBlock(ScheduleData::snapshot($expanded, time(), $data['event_run_id'] ?? null));
         return self::publish($llm, $snapshot['stories'], $outcome['completed_at'], $context);
     }
@@ -55,5 +57,19 @@ final class ScheduleAnnouncement {
         $list = [];
         foreach ($titles as $index => $title) $list[] = ($index + 1) . '. ' . $title;
         return (bool)$llm->botSay($intro . "\n\n" . implode("\n", $list));
+    }
+    /** Recheck queued announcements against live restrictions before generation and delivery. */
+    public static function allowed(array $data, bool $lock = false): bool {
+        if (empty($data['schedule_announcement']) || !preg_match('/^(\d+)_(\d+)$/D', (string)($data['event_run_id'] ?? ''), $match)) return true;
+        foreach ((new \Domain\EventManager())->getAllRaw($lock) as $event) {
+            if ((int)$event['id'] === (int)$match[1]) return \Domain\EventManager::occurrenceAllowed($event, (int)$match[2]);
+        }
+        return true; // Preserve existing deletion semantics for legacy jobs.
+    }
+
+    public static function cancelIfExcluded(JobQueue $queue, array $job): bool {
+        if (self::allowed($job['data'] ?? [])) return false;
+        $queue->complete([(int)$job['id']]);
+        return true;
     }
 }

@@ -1,6 +1,10 @@
+let eventSkipDates = [];
+
 function openEventModal() {
     document.getElementById('event-form').reset();
     document.getElementById('event_id').value = '';
+    setEventSkipDates([]);
+    document.getElementById('event_recurrence_error').textContent = '';
         document.getElementById('event-modal-title').textContent = 'Добавить событие (Время МСК)';
     toggleRecurrence();
     document.getElementById('event-modal').style.display = 'flex';
@@ -29,6 +33,9 @@ function editEvent(eventData) {
     document.getElementById('event_duration_minutes').value = eventData.duration_minutes;
     document.getElementById('event_is_recurring').checked = eventData.is_recurring == 1;
     document.getElementById('event_recurrence_rule').value = eventData.recurrence_rule || 'weekly';
+    document.getElementById('event_recurrence_until').value = eventData.recurrence_until || '';
+    setEventSkipDates(eventData.recurrence_skip_dates);
+    document.getElementById('event_recurrence_error').textContent = '';
     document.getElementById('event_use_playlist').checked = eventData.use_playlist == 1;
     document.getElementById('event_generate_new_playlist').checked = eventData.generate_new_playlist == 1;
     document.getElementById('event_color').value = eventData.color || '#6d2f8e';
@@ -82,6 +89,9 @@ function saveEvent(e) {
     formData.append('duration_minutes', document.getElementById('event_duration_minutes').value);
     formData.append('is_recurring', document.getElementById('event_is_recurring').checked ? '1' : '0');
     formData.append('recurrence_rule', document.getElementById('event_recurrence_rule').value);
+    const recurring = document.getElementById('event_is_recurring').checked;
+    formData.append('recurrence_until', recurring ? document.getElementById('event_recurrence_until').value : '');
+    formData.append('recurrence_skip_dates', JSON.stringify(recurring ? eventSkipDates : []));
     formData.append('use_playlist', document.getElementById('event_use_playlist').checked ? '1' : '0');
     formData.append('generate_new_playlist', document.getElementById('event_generate_new_playlist').checked ? '1' : '0');
     formData.append('color', document.getElementById('event_color').value);
@@ -142,4 +152,42 @@ function deleteEvent(id) {
         console.error(err);
         alert('Сетевая ошибка');
     });
+}
+
+function setEventSkipDates(value) {
+    if (typeof value === 'string') { try { value = JSON.parse(value); } catch (_) { value = []; } }
+    eventSkipDates = Array.isArray(value) ? [...new Set(value)].sort() : [];
+    const list = document.getElementById('event_skip_dates');
+    list.replaceChildren();
+    eventSkipDates.forEach(date => {
+        const item = document.createElement('li');
+        item.style.marginTop = '6px';
+        item.append(document.createTextNode(date + ' '));
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn-danger';
+        button.style.padding = '3px 8px';
+        button.textContent = 'Удалить';
+        button.setAttribute('aria-label', 'Удалить пропуск ' + date);
+        button.onclick = () => setEventSkipDates(eventSkipDates.filter(value => value !== date));
+        item.append(button);
+        list.append(item);
+    });
+}
+
+function addEventSkipDate() {
+    const input = document.getElementById('event_skip_date');
+    const date = input.value;
+    const base = document.getElementById('event_start_time').value.slice(0, 10);
+    const until = document.getElementById('event_recurrence_until').value;
+    const step = document.getElementById('event_recurrence_rule').value === 'daily' ? 1 : 7;
+    const delta = (Date.parse(date + 'T00:00:00Z') - Date.parse(base + 'T00:00:00Z')) / 86400000;
+    const error = document.getElementById('event_recurrence_error');
+    if (!date || !base || !Number.isFinite(delta) || delta < 0 || delta % step !== 0 || (until && date > until)) {
+        error.textContent = 'Выбери дату вхождения события в пределах срока повторов (МСК).';
+        return;
+    }
+    error.textContent = '';
+    setEventSkipDates([...eventSkipDates, date]);
+    input.value = '';
 }

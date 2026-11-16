@@ -136,6 +136,16 @@
                     <option value="weekly">Еженедельно</option>
                     <option value="daily">Ежедневно (Марафон)</option>
                 </select>
+                <label for="event_recurrence_until">Повторять до (включительно, МСК):</label>
+                <input type="date" id="event_recurrence_until" name="recurrence_until" class="form-input">
+                <small>Оставь пустым, чтобы повторять без ограничения срока.</small>
+                <label for="event_skip_date" style="display:block; margin-top:10px;">Пропустить даты (МСК):</label>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <input type="date" id="event_skip_date" class="form-input" style="flex:1; min-width:0;">
+                    <button type="button" id="event_add_skip" class="btn-primary" onclick="addEventSkipDate()">Добавить дату</button>
+                </div>
+                <ul id="event_skip_dates" aria-label="Пропущенные даты" style="padding-left:20px;"></ul>
+                <p id="event_recurrence_error" role="alert" style="color:#b3261e;"></p>
             </div>
             
             <div class="form-group mb-3 p-2" style="border: 1px dashed rgba(206,147,216,0.5); border-radius: 5px; background: rgba(0,0,0,0.2);">

@@ -13,6 +13,7 @@ final class AnnouncementSchedule
     public static function calculate(array $event, array $settings = []): array
     {
         if (empty($event['use_playlist']) || empty($event['is_recurring']) || ($event['recurrence_rule']??'')!=='weekly' || (int)($event['real_start_time']??0)<=0) return [];
+        if (!EventManager::occurrenceAllowed($event, (int)$event['real_start_time'])) return [];
         $s=$settings+self::defaults();
         $start=(int)$event['real_start_time'];
         $local=(new \DateTimeImmutable('@'.$start))->setTimezone(new \DateTimeZone($s['announcements_timezone']));

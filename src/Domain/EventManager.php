@@ -8,7 +8,7 @@ use Infra\Database;
  * Владелец таблицы `events` (MLP-229).
  * Единая точка SQL к событиям — раньше запросы были размазаны по api.php,
  * AdminEvents, BotWorker и LLMManager. Раскрытие повторяющихся событий
- * (recurrence) остаётся в потребителях; здесь — только доступ к данным.
+ * и общие ограничения повторов принадлежат этому менеджеру.
  */
 class EventManager {
     private $db;
@@ -35,7 +35,7 @@ class EventManager {
 
     /** Публичный набор полей для календаря (без служебных). */
     public function getPublic(): array {
-        return $this->fetch('id, title, description, start_time, duration_minutes, is_recurring, recurrence_rule, use_playlist, color', true);
+        return $this->fetch('id, title, description, start_time, duration_minutes, is_recurring, recurrence_rule, recurrence_until, recurrence_skip_dates, use_playlist, color', true);
     }
 
     /** Единая выборка событий (AR3-4). $columns — внутренняя константа, не пользовательский ввод. */
@@ -64,7 +64,7 @@ class EventManager {
     /**
      * Раскрыть повторяющиеся события в список occurrence'ов на горизонт $horizonDays (AR3-1).
      * Единая точка recurrence-раскрытия (раньше дублировалось в BotWorker и LLMManager).
-     * Базовое вхождение включается всегда (в т.ч. прошедшее — потребитель фильтрует сам по
+     * Базовое вхождение включается, если не исключено сроком или пропуском (в т.ч. прошедшее — потребитель фильтрует сам по
      * real_start_time/endTime). Повторы daily/weekly — пока в пределах горизонта. Каждый
      * occurrence получает `real_start_time` (UTC ts) и `run_id` ("<id>_<ts>"). Отсортировано.
      * $now — для детерминизма/тестов; по умолчанию текущее время.
@@ -77,7 +77,7 @@ class EventManager {
             if (empty($evt['start_time'])) continue; // без даты — не occurrence (strtotime(' UTC') дал бы «сейчас»)
             $start = strtotime($evt['start_time'] . ' UTC');
             if ($start === false) continue;
-            $out[] = array_merge($evt, ['real_start_time' => $start, 'run_id' => ($evt['id'] ?? '') . '_' . $start]);
+            if (self::occurrenceAllowed($evt, $start)) $out[] = array_merge($evt, ['real_start_time' => $start, 'run_id' => ($evt['id'] ?? '') . '_' . $start]);
             if (!empty($evt['is_recurring'])) {
                 $next = $start;
                 while ($next < $horizon) {
@@ -85,7 +85,8 @@ class EventManager {
                     if ($rule === 'daily')       $next += 86400;
                     elseif ($rule === 'weekly')  $next += 86400 * 7;
                     else break;
-                    if ($next < $horizon) {
+                    if (!empty($evt['recurrence_until']) && self::recurrenceDate($next) > $evt['recurrence_until']) break;
+                    if ($next < $horizon && self::occurrenceAllowed($evt, $next)) {
                         $out[] = array_merge($evt, ['real_start_time' => $next, 'run_id' => ($evt['id'] ?? '') . '_' . $next]);
                     }
                 }
@@ -96,26 +97,26 @@ class EventManager {
     }
 
     public function create(array $d): bool {
-        $d=$this->withMonitoring($d);
-        $stmt = $this->db->prepare("INSERT INTO events (title, description, start_time, duration_minutes, is_recurring, recurrence_rule, use_playlist, generate_new_playlist, color, monitor_stream, streamer_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $d=$this->withMonitoring(self::withRecurrence($d));
+        $stmt = $this->db->prepare("INSERT INTO events (title, description, start_time, duration_minutes, is_recurring, recurrence_rule, use_playlist, generate_new_playlist, color, monitor_stream, streamer_user_id, recurrence_until, recurrence_skip_dates) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->bind_param(
-            "sssiisiisii",
+            "sssiisiisiiss",
             $d['title'], $d['description'], $d['start_time'], $d['duration_minutes'],
-            $d['is_recurring'], $d['recurrence_rule'], $d['use_playlist'], $d['generate_new_playlist'], $d['color'], $d['monitor_stream'], $d['streamer_user_id']
+            $d['is_recurring'], $d['recurrence_rule'], $d['use_playlist'], $d['generate_new_playlist'], $d['color'], $d['monitor_stream'], $d['streamer_user_id'], $d['recurrence_until'], $d['recurrence_skip_dates']
         );
         return $stmt->execute();
     }
 
     public function update(int $id, array $d): bool {
-        $existing=$this->db->prepare('SELECT monitor_stream,streamer_user_id FROM events WHERE id=?');
+        $existing=$this->db->prepare('SELECT monitor_stream,streamer_user_id,recurrence_until,recurrence_skip_dates FROM events WHERE id=?');
         $existing->bind_param('i',$id);$existing->execute();
         foreach($existing->get_result()->fetch_assoc()?:[] as $key=>$value)if(!array_key_exists($key,$d))$d[$key]=$value;
-        $d=$this->withMonitoring($d);
-        $stmt = $this->db->prepare("UPDATE events SET title=?, description=?, start_time=?, duration_minutes=?, is_recurring=?, recurrence_rule=?, use_playlist=?, generate_new_playlist=?, color=?, monitor_stream=?, streamer_user_id=? WHERE id=?");
+        $d=$this->withMonitoring(self::withRecurrence($d));
+        $stmt = $this->db->prepare("UPDATE events SET title=?, description=?, start_time=?, duration_minutes=?, is_recurring=?, recurrence_rule=?, use_playlist=?, generate_new_playlist=?, color=?, monitor_stream=?, streamer_user_id=?, recurrence_until=?, recurrence_skip_dates=? WHERE id=?");
         $stmt->bind_param(
-            "sssiisiisiii",
+            "sssiisiisiissi",
             $d['title'], $d['description'], $d['start_time'], $d['duration_minutes'],
-            $d['is_recurring'], $d['recurrence_rule'], $d['use_playlist'], $d['generate_new_playlist'], $d['color'], $d['monitor_stream'], $d['streamer_user_id'], $id
+            $d['is_recurring'], $d['recurrence_rule'], $d['use_playlist'], $d['generate_new_playlist'], $d['color'], $d['monitor_stream'], $d['streamer_user_id'], $d['recurrence_until'], $d['recurrence_skip_dates'], $id
         );
         return $stmt->execute();
     }
@@ -135,5 +136,86 @@ class EventManager {
         $user=$id>0?(new UserManager())->getUserById($id):null;
         if(($d['monitor_stream']||$d['streamer_user_id'])&&(!$user||!UserRoles::has($user,'streamer')||Privacy::isWithdrawn($id)))throw new \Core\UserError('Выбери пользователя с ролью стримера или задай стримера по умолчанию.');
         return $d;
+    }
+    /** Dates in the event form and public calendar are always Moscow dates. */
+    public static function recurrenceDate(int $timestamp): string
+    {
+        return (new \DateTimeImmutable('@'.$timestamp))->setTimezone(new \DateTimeZone('Europe/Moscow'))->format('Y-m-d');
+    }
+
+    public static function occurrenceAllowed(array $event, int $start): bool
+    {
+        $date = self::recurrenceDate($start);
+        if (!empty($event['recurrence_until']) && $date > $event['recurrence_until']) return false;
+        $skips = $event['recurrence_skip_dates'] ?? [];
+        if (is_string($skips)) $skips = json_decode($skips, true) ?: [];
+        return !in_array($date, is_array($skips) ? $skips : [], true);
+    }
+
+    /** Keep the normal window and include the nearest real future run after any skips. */
+    public static function expandWithNextOccurrences(array $events, int $horizonDays = 7, ?int $now = null): array
+    {
+        $now ??= time();
+        $rows = [];
+        foreach ($events as $event) {
+            $days = $horizonDays;
+            $start = empty($event['start_time']) ? false : strtotime($event['start_time'].' UTC');
+            $step = empty($event['is_recurring']) ? 0 : (['daily'=>86400, 'weekly'=>604800][$event['recurrence_rule'] ?? ''] ?? 0);
+            if ($start !== false && $step && (!empty($event['recurrence_until']) || !empty($event['recurrence_skip_dates']))) {
+                $next = $start > $now ? $start : $start + ((int)floor(($now - $start) / $step) + 1) * $step;
+                while (empty($event['recurrence_until']) || self::recurrenceDate($next) <= $event['recurrence_until']) {
+                    if (self::occurrenceAllowed($event, $next)) {
+                        $days = max($days, (int)floor(($next - $now) / 86400) + 1);
+                        break;
+                    }
+                    $next += $step;
+                }
+            }
+            array_push($rows, ...self::expandOccurrences([$event], $days, $now));
+        }
+        usort($rows, static fn($a, $b) => $a['real_start_time'] <=> $b['real_start_time']);
+        return $rows;
+    }
+
+    /** Server-side validation also protects callers other than the admin controller. */
+    private static function withRecurrence(array $data): array
+    {
+        $until = $data['recurrence_until'] ?? null;
+        $skips = $data['recurrence_skip_dates'] ?? null;
+        if ($until === '') $until = null;
+        if ($skips === '' || $skips === null) $skips = [];
+        if (is_string($skips)) {
+            try { $skips = json_decode($skips, false, 512, JSON_THROW_ON_ERROR); }
+            catch (\JsonException $e) { throw new \Core\UserError('Пропуски должны быть списком дат в формате ГГГГ-ММ-ДД.'); }
+        }
+        $validDate = static function ($date): bool {
+            if (!is_string($date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date)) return false;
+            [$year, $month, $day] = array_map('intval', explode('-', $date));
+            return $year >= 1000 && checkdate($month, $day, $year);
+        };
+        if ($until !== null && !$validDate($until)) throw new \Core\UserError('Укажи корректную дату окончания повторов.');
+        if (!is_array($skips) || !array_is_list($skips) || count($skips) > 1000) throw new \Core\UserError('Пропуски должны быть списком дат (не более 1000).');
+        foreach ($skips as $date) if (!$validDate($date)) throw new \Core\UserError('Укажи корректные даты пропусков в формате ГГГГ-ММ-ДД.');
+        if (empty($data['is_recurring'])) {
+            $data['recurrence_until'] = $data['recurrence_skip_dates'] = null;
+            return $data;
+        }
+        if ($until !== null || $skips) {
+            $start = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', (string)$data['start_time'], new \DateTimeZone('UTC'));
+            if (!$start || $start->format('Y-m-d H:i:s') !== $data['start_time']) throw new \Core\UserError('Укажи корректное время начала события.');
+            $base = self::recurrenceDate($start->getTimestamp());
+            if ($until !== null && $until < $base) throw new \Core\UserError('Дата окончания повторов не может быть раньше даты начала (МСК).');
+            $step = ['daily'=>1, 'weekly'=>7][$data['recurrence_rule'] ?? ''] ?? 0;
+            if (!$step) throw new \Core\UserError('Для ограничений повторов выбери ежедневное или еженедельное повторение.');
+            foreach ($skips as $date) {
+                $delta = (int)((strtotime($date.' UTC') - strtotime($base.' UTC')) / 86400);
+                if ($delta < 0 || $delta % $step !== 0 || ($until !== null && $date > $until)) throw new \Core\UserError('Дата пропуска '.$date.' не является датой вхождения события в пределах срока повторов (МСК).');
+            }
+        }
+        $skips = array_values(array_unique($skips));
+        sort($skips);
+        $data['recurrence_until'] = $until;
+        $data['recurrence_skip_dates'] = $skips ? json_encode($skips, JSON_THROW_ON_ERROR) : null;
+        return $data;
     }
 }

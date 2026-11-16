@@ -44,9 +44,14 @@
             const start = new Date(Date.UTC(...match.slice(1).map((v, i) => Number(v) - (i === 1 ? 1 : 0))));
             if (!Number.isFinite(start.getTime())) return;
             const step = event.is_recurring == 1 ? ({daily: 1, weekly: 7}[event.recurrence_rule] || 0) : 0;
+            let skips = event.recurrence_skip_dates || [];
+            if (typeof skips === 'string') { try { skips = JSON.parse(skips); } catch (_) { skips = []; } }
+            if (!Array.isArray(skips)) skips = [];
             let date = start;
             do {
-                result.push({...event, start: new Date(date), key: `${event.id}:${date.getTime()}`});
+                const key = dateKey(date);
+                if (event.recurrence_until && key > event.recurrence_until) break;
+                if (!skips.includes(key)) result.push({...event, start: new Date(date), key: `${event.id}:${date.getTime()}`});
                 if (!step) break;
                 date = new Date(date.getTime() + step * 86400000);
             } while (date < horizon);
