@@ -45,9 +45,16 @@ try {
     ok(VisionDescriber::describe('https://example.com/doc.pdf', $fake, $cache) === null, 'pdf → null без вызова модели');
 
     echo "== обрезка длины ==\n";
-    $long = function () { return str_repeat('а', 2000); };
-    $d = VisionDescriber::describe('https://example.com/long.png', $long, $cache);
-    ok(mb_strlen($d) <= 600, 'описание обрезано до лимита (' . mb_strlen($d) . ')');
+    $text754 = str_repeat('я', 753) . '✓';
+    $full = VisionDescriber::describe('https://example.com/754.png', fn() => $text754, $cache);
+    ok($full === $text754, '754 символа обычной картинки сохраняются целиком');
+    ok(($cache->get(md5('https://example.com/754.png'), 604800)['d'] ?? null) === $text754, 'прежний ключ кеша хранит все 754 символа');
+    $text1000 = str_repeat('я', 999) . '✓';
+    ok(VisionDescriber::describe('https://example.com/1000.png', fn() => $text1000, $cache) === $text1000, 'ровно 1000 символов сохраняются без многоточия');
+    $text1200 = str_repeat('а🙂', 600);
+    $d = VisionDescriber::describe('https://example.com/1200.png', fn() => $text1200, $cache);
+    ok($d === str_repeat('а🙂', 499) . 'а…', '1200 символов обрезаются до 999 и многоточия');
+    ok(mb_strlen($d) === 1000 && mb_check_encoding($d, 'UTF-8'), 'обрезка сохраняет корректный Unicode и предел 1000 символов');
 
     echo "== maybeDescribe: замена в последних сообщениях ==\n";
     $msgs = [
