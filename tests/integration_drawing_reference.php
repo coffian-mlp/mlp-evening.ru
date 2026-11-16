@@ -9,6 +9,7 @@ namespace LLM {
     }
     function curl_getinfo($ch,$option) {return 200;}
     function curl_error($ch) {return '';}
+    function curl_errno($ch) {return 0;}
     function curl_close($ch) {}
 }
 namespace {

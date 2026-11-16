@@ -74,8 +74,11 @@ final class DrawingCommand
         $command = null;
         foreach ((new BotCommandManager())->getActive() as $row) if (($row['handler_type'] ?? '') === 'image' && (int)$row['id'] === (int)$context['command_id']) $command=$row;
         if (!$command) throw new UserError('Команда рисования отключена.');
+        $source=(new ChatManager())->getMessageById((int)$context['source_id']);
+        if (!$source || !empty($source['is_deleted']) || (int)$source['user_id']!==$actor) throw new UserError('Исходная команда недоступна.');
         $job = (new JobQueue())->enqueue('dynamic_command', ['command'=>$command,'user_id'=>$actor,'username'=>$user['nickname'] ?: $user['login'],
             'message_id'=>(int)$context['source_id'],'message'=>$command['command_prefix'].' '.$subject,
+            'drawing_source_version'=>ChatManager::interactionSourceVersion($source),
             'drawing_request'=>['operation'=>$operation,'reference_url'=>$context['reference_url'] ?? null]], 0);
         return ['status'=>'accepted','code'=>'drawing_queued','facts'=>['job_id'=>$job]];
     }

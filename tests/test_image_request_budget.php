@@ -12,6 +12,7 @@ namespace LLM {
     function curl_exec($handle){$GLOBALS['image_budget_called']=true;return '{"error":{"message":"synthetic failure"}}';}
     function curl_getinfo($handle,$option){return 400;}
     function curl_error($handle){return '';}
+    function curl_errno($handle){return 0;}
     function curl_close($handle){}
 }
 namespace {
@@ -20,7 +21,7 @@ $path=tempnam(sys_get_temp_dir(),'image_budget_');$previous=ini_set('error_log',
 try{
  $result=Domain\LlmUsage::withoutDatabase(fn()=>LLM\RequestDeadline::within(microtime(true)-1,fn()=>LLM\ImageGenerator::generate('Synthetic test')),function($row)use(&$usage){$usage[]=$row;});
  $checks=[
-  'native image transport uses a 150 second timeout'=>($GLOBALS['image_budget_options'][CURLOPT_TIMEOUT]??0)===150,
+  'native image transport uses a 110 second timeout'=>($GLOBALS['image_budget_options'][CURLOPT_TIMEOUT]??0)===110,
   'an expired text-request scope does not cut off the separate image request'=>!empty($GLOBALS['image_budget_called']),
   'fake failed request is accounted once without persistence'=>$result===null&&count($usage)===1,
  ];

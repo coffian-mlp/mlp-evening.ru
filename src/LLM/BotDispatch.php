@@ -17,6 +17,11 @@ class BotDispatch {
     /** Диспетчеризация триггера: очередь или inline (с lifelike-задержкой). */
     public static function dispatch(string $type, array $payload): void {
         if (!\Domain\Privacy::payloadAllowed($payload)) return;
+        if ($type==='dynamic_command' && in_array($payload['command']['handler_type'] ?? '',['image','image_chat'],true) && !empty($payload['message_id'])) {
+            $source=(new \Domain\ChatManager())->getMessageById((int)$payload['message_id']);
+            if (!$source || (int)$source['user_id']!==(int)($payload['user_id'] ?? 0) || !empty($source['is_deleted'])) return;
+            $payload['drawing_source_version']=\Domain\ChatManager::interactionSourceVersion($source);
+        }
         if ($type === 'dynamic_command' && in_array($payload['command']['handler_type'] ?? '', ['playlist', 'command_interaction_reply'], true)) {
             // Interactive commands remain recoverable even with AI disabled or a stale worker.
             (new JobQueue())->enqueue($type, $payload, 0);
@@ -64,7 +69,12 @@ class BotDispatch {
                     && in_array((string)($payload['command']['handler_type'] ?? ''), ['image', 'image_chat'], true)) {
                     $botId = (int)ConfigManager::getInstance()->getOption('ai_bot_user_id', 0);
                     $since = gmdate('Y-m-d H:i:s', time() - (int)$original['age'] - 5);
-                    if (!(new \Domain\ChatManager())->botPostedImageSince($since, $botId)) {
+                    $chat=new \Domain\ChatManager();
+                    $image=isset($original['image_message_id']) ? $chat->getMessageById((int)$original['image_message_id']) : null;
+                    $exists=isset($original['image_message_id'])
+                        ? ($image && empty($image['deleted']) && empty($image['is_deleted']) && (int)$image['user_id']===$botId && str_contains($image['raw_message'],'/upload/lyra/'))
+                        : $chat->botPostedImageSince($since,$botId);
+                    if (!$exists) {
                         $original = null;
                     }
                 }
@@ -122,15 +132,39 @@ class BotDispatch {
         @ignore_user_abort(true);
         sleep($delay);
         $until = time() + 180;
+        $managed = false;
         try {
             if ($execute === null) {
                 $llm ??= new LLMManager();
-                $execute = fn() => $llm->processTrigger('dynamic_command', $payload);
+                $execute = function() use ($llm,$queue,$id,$payload,&$managed,$until): void {
+                    $db=\Infra\Database::getInstance()->getConnection();
+                    if (!(int)$db->query("SELECT GET_LOCK('bot_worker',0) AS n")->fetch_assoc()['n']) throw new DrawingBusy('Drawing admission worker busy');
+                    $after=[];
+                    try { $managed=DrawingJob::route($llm,$queue->drawingRow($id),true,$after); }
+                    finally { $db->query("SELECT RELEASE_LOCK('bot_worker')"); }
+                    foreach ($after as $continue) $continue();
+                    if (!$managed) return;
+                    do {
+                        DrawingJob::prepareOne($llm,$id);
+                        $job=$queue->drawingRow($id);
+                        if (!$job || ($job['data']['drawing_v1']['phase'] ?? '')!=='prepare') break;
+                        sleep(1);
+                    } while (time()<$until);
+                    if (($job['data']['drawing_v1']['phase'] ?? '')==='prepare') {
+                        $queue->changeDrawing($id,static function(array $row): ?array {
+                            if (($row['data']['drawing_v1']['phase'] ?? '')!=='prepare' || !empty($row['data']['drawing_v1']['lease_token'])) return null;
+                            $row['data']['drawing_v1']['phase']='terminal'; $row['data']['drawing_v1']['terminal_code']='admission_timeout';
+                            return ['data'=>$row['data'],'status'=>'failed'];
+                        });
+                        return;
+                    }
+                    DrawingJob::inlineDeliver($llm,$id);
+                };
             }
             do {
                 try {
                     $execute();
-                    $queue->complete([$id]);
+                    if (!$managed) $queue->complete([$id]);
                     return;
                 } catch (DrawingBusy $busy) {
                     sleep(1);
@@ -138,7 +172,7 @@ class BotDispatch {
             } while (time() < $until);
         } catch (\Throwable $error) {
             // Only lock contention is known to precede every external side effect.
-            $queue->fail([$id]);
+            if (!$managed) $queue->fail([$id]);
             throw $error;
         }
         // Inline mode cannot rely on an external queue consumer after admission times out.

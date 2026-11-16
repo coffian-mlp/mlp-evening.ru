@@ -10,6 +10,7 @@ final class DrawingSchedule {
     public const AUTO_MIN_MESSAGES = 12;
 
     public static function run(bool $auto, callable $draw): bool {
+        if (DrawingJob::current() !== null) return DrawingJob::current()->run($auto,$draw);
         $db = \Infra\Database::getInstance()->getConnection();
         if ((int)$db->query("SELECT GET_LOCK('bot_drawing', 0) AS acquired")->fetch_assoc()['acquired'] !== 1) {
             throw new DrawingBusy('Another drawing is running');

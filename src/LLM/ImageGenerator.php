@@ -10,15 +10,16 @@ use Infra\ConfigManager;
  * (OpenAI-совместимый, ответ b64_json). Результат пережимается GD в JPEG
  * (наивному стилю не вредит, канал бережёт) и сохраняется в /upload/lyra/.
  *
- * Дневной лимит — счётчик в cache/imagegen/<дата>.json: инкремент делает
- * ТОЛЬКО воркер (он один — гонок нет), генерация дороже текста.
+ * Дневной лимит — счётчик в cache/imagegen/<дата>.json: успешные генерации
+ * учитываются атомарно; сохранённый drawing receipt защищает восстановление от дубля.
  */
 class ImageGenerator {
 
     const UPLOAD_DIR = '/upload/lyra/';
     const MAX_DIM = 1024;
     const JPEG_QUALITY = 88;
-    const TIMEOUT = 150; // успешная генерация занимает 53–72с; запас на медленные ответы
+    const TIMEOUT = 110;
+    const MAX_ATTEMPTS = 3;
 
     /** Причина последнего сбоя generate() — сырьё для живого извинения Лиры. */
     private static ?string $lastError = null;
@@ -35,10 +36,15 @@ class ImageGenerator {
         return (int)($row['count'] ?? 0);
     }
 
-    public static function bumpToday(?FileCache $cache = null, ?string $day = null): void {
+    public static function bumpToday(?FileCache $cache = null, ?string $day = null, ?string $receipt = null): void {
         $cache = $cache ?? new FileCache('imagegen');
         $day = $day ?? gmdate('Y-m-d');
-        $cache->set($day, ['count' => self::todayCount($cache, $day) + 1]);
+        $cache->updateAtomic($day, static function(array $row) use ($receipt): array {
+            if ($receipt !== null && isset($row['receipts'][$receipt])) return $row;
+            $row['count'] = (int)($row['count'] ?? 0) + 1;
+            if ($receipt !== null) $row['receipts'][$receipt] = true;
+            return $row;
+        });
     }
 
     /**
@@ -46,7 +52,7 @@ class ImageGenerator {
      * или null (детали сбоя — в error_log). $model переопределяет настройку
      * (используется дегустацией моделей).
      */
-    public static function generate(string $prompt, ?string $model = null, ?string $reference = null): ?string {
+    public static function generate(string $prompt, ?string $model = null, ?string $reference = null, array $options = []): ?string {
         self::$lastError = null;
         $c = ConfigManager::getInstance();
         $model = $model ?? (string)$c->getOption('ai_image_model', 'black-forest-labs/flux.2-klein-4b');
@@ -105,40 +111,39 @@ class ImageGenerator {
         if ($reference !== null) $logPayload = ['model'=>$model,'prompt'=>$prompt,'reference'=>$reference];
         $headers = ['Authorization: Bearer ' . $key];
         if (!$multipart) $headers[] = 'Content-Type: application/json';
-        $ch = curl_init($endpoint);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST => true,
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_POSTFIELDS => $multipart ? $payload : json_encode($payload),
-            CURLOPT_TIMEOUT => self::TIMEOUT,
-        ]);
-        if ($proxy !== null) {
-            curl_setopt($ch, CURLOPT_PROXY, $proxy);
+        $clock = $options['clock'] ?? static fn() => microtime(true);
+        $pause = $options['pause'] ?? static fn(float $seconds) => usleep((int)round($seconds*1000000));
+        $deadline = $options['deadline'] ?? ($clock() + self::TIMEOUT*self::MAX_ATTEMPTS + 1);
+        $transport = $options['transport'] ?? [self::class, 'transport'];
+        $generation = $options['generation_id'] ?? bin2hex(random_bytes(8));
+        $log = static function(array $request, string $body, string $status, int $ms) use ($options, $provider, $model): void {
+            if (isset($options['debug'])) ($options['debug'])($request, $body, $status, $ms);
+            else LlmDebugLog::log('image', $provider, $model, $request, $body, $status, $ms);
+        };
+        for ($attempt=1; $attempt<=self::MAX_ATTEMPTS; $attempt++) {
+            if (isset($options['guard']) && !($options['guard'])()) { self::$lastError='рисунок больше недоступен'; return null; }
+            $timeout = min(self::TIMEOUT*1000, (int)floor(($deadline-$clock())*1000));
+            if ($timeout < 1) { self::$lastError ??= 'время генерации истекло'; return null; }
+            $exchange = $transport($endpoint,$payload,$headers,$proxy,$multipart,$timeout);
+            $res = (string)($exchange['body'] ?? ''); $code=(int)($exchange['code'] ?? 0);
+            $errno=(int)($exchange['errno'] ?? 0); $err=(string)($exchange['error'] ?? '');
+            $ms=(int)($exchange['duration_ms'] ?? 0);
+            UsageMeter::capture($provider,$model,$res,$code,$errno!==0 || $err!=='',$ms,'image');
+            $request=$logPayload + ['attempt'=>$attempt,'max_attempts'=>self::MAX_ATTEMPTS,'generation_id'=>$generation,
+                'scene_variant'=>$options['scene_variant'] ?? 'original','http_code'=>$code,'curl_errno'=>$errno];
+            $embedded=self::extractError($res);
+            $safety=$errno===0 && self::isSafetyMessage($embedded);
+            if ($errno!==0 || $err!=='' || $code<200 || $code>=300 || $embedded!==null || $res==='') {
+                self::$lastError=$embedded ?? self::failureReason($res,$err,$code);
+                $log($request,$err!=='' ? $err : $res,'error',$ms);
+                if (!$safety && self::retryable($errno,$code) && $attempt<self::MAX_ATTEMPTS) {
+                    $delay=$attempt===1 ? 0.25 : 0.5;
+                    if ($deadline-$clock()>$delay) { $pause($delay); continue; }
+                }
+                return null;
+            }
+            break;
         }
-        $t0 = microtime(true);
-        $res = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $err = curl_error($ch);
-        curl_close($ch);
-        $ms = (int)round((microtime(true) - $t0) * 1000);
-        UsageMeter::capture($provider,$model,is_string($res)?$res:null,(int)$code,(bool)$err,$ms,'image');
-
-        if ($err || $code >= 400 || !$res) {
-            error_log("ImageGenerator [$model] HTTP $code: " . ($err ?: mb_substr((string)$res, 0, 200)));
-            LlmDebugLog::log('image', $provider, $model, $logPayload, $err ?: (string)$res, 'error', $ms);
-            self::$lastError = self::failureReason((string)$res, $err, $code);
-            return null;
-        }
-        // MLP-336: Azure/RouterAI отдают отказ фильтра с HTTP 200 — keep-alive пробелы и JSON error в теле.
-        $embedded = self::extractError((string)$res);
-        if ($embedded !== null) {
-            error_log("ImageGenerator [$model]: отказ в теле 200: $embedded");
-            LlmDebugLog::log('image', $provider, $model, $logPayload, trim((string)$res), 'error', $ms);
-            self::$lastError = $embedded;
-            return null;
-        }
-        LlmDebugLog::log('image', $provider, $model, $logPayload, (string)$res, 'ok', $ms);
         $data = json_decode(trim((string)$res), true);
         $b64 = $data['data'][0]['b64_json'] ?? null;
         if (!$b64 && $reference !== null) {
@@ -148,18 +153,22 @@ class ImageGenerator {
         if (!$b64) {
             error_log("ImageGenerator [$model]: нет b64_json в ответе");
             self::$lastError = 'провайдер прислал ответ без картинки';
+            $log($request,$res,'error',$ms);
             return null;
         }
-        $bytes = base64_decode($b64);
+        $bytes = is_string($b64) ? base64_decode($b64, true) : false;
         if ($bytes === false || $bytes === '') {
             error_log("ImageGenerator [$model]: b64_json не декодировался");
             self::$lastError = 'картинка от провайдера не читается';
+            $log($request,$res,'error',$ms);
             return null;
         }
-        $saved = self::saveJpeg($bytes);
+        $saved = isset($options['save']) ? ($options['save'])($bytes) : self::saveJpeg($bytes);
         if ($saved === null) {
             self::$lastError = 'картинка получена, но не сохранилась на сервере';
         }
+        if ($saved !== null) self::$lastError=null;
+        $log($request,$res,$saved!==null ? 'ok' : 'error',$ms);
         return $saved;
     }
 
@@ -242,5 +251,24 @@ class ImageGenerator {
         $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($path);
         if (!in_array($mime, ['image/jpeg','image/png','image/webp'], true)) throw new \RuntimeException('Invalid drawing reference type');
         return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($path));
+    }
+
+    public static function retryable(int $errno, int $httpCode): bool {
+        if ($errno !== 0) return in_array($errno,[5,6,7,16,18,28,52,55,56,92],true);
+        return $httpCode===429 || ($httpCode>=500 && $httpCode<=599);
+    }
+
+    private static function transport(string $endpoint, array $payload, array $headers, ?string $proxy, bool $multipart, int $timeout): array {
+        $ch=curl_init($endpoint);
+        curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_POST=>true,CURLOPT_HTTPHEADER=>$headers,
+            CURLOPT_POSTFIELDS=>$multipart ? $payload : json_encode($payload),CURLOPT_TIMEOUT=>self::TIMEOUT,
+            CURLOPT_TIMEOUT_MS=>$timeout,CURLOPT_CONNECTTIMEOUT_MS=>min(10000,$timeout)]);
+        if ($proxy!==null) curl_setopt($ch,CURLOPT_PROXY,$proxy);
+        $started=microtime(true);
+        try {
+            $body=curl_exec($ch);
+            return ['body'=>is_string($body)?$body:'','code'=>(int)curl_getinfo($ch,CURLINFO_HTTP_CODE),
+                'errno'=>curl_errno($ch),'error'=>curl_error($ch),'duration_ms'=>(int)round((microtime(true)-$started)*1000)];
+        } finally { curl_close($ch); }
     }
 }

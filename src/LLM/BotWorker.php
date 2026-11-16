@@ -29,6 +29,7 @@ class BotWorker {
     /** MLP-357: когда последний раз запускался реапер зависших реактивных задач (раз в минуту). */
     private int $lastReapAt = 0;
     private bool $conversationInstalled = false;
+    private bool $drawingEnabled = false;
 
     public function __construct() {
         $this->config   = ConfigManager::getInstance();
@@ -41,8 +42,14 @@ class BotWorker {
         $this->polls    = new PollManager();
     }
 
-    /** Один цикл: реактив → проактив → heartbeat. Под общим локом «один голос». */
+    /** Голосовой тик под общим замком, затем подготовка рисунка вне него. */
     public function tick(): void {
+        $this->drawingEnabled=false;
+        $this->voiceTick();
+        if ($this->drawingEnabled) DrawingJob::prepareOne($this->llm);
+    }
+
+    private function voiceTick(): void {
         // Синглтон ConfigManager живёт всё время процесса; в daemon-режиме без
         // сброса кеша тик не увидит правок ai_*-опций из дашборда (AR2-1).
         $this->config->flushCache();
@@ -54,8 +61,10 @@ class BotWorker {
         if (!$row || (int)$row['ok'] !== 1) {
             return; // другой тик уже идёт
         }
+        try {
         try { $this->reapStale(); } catch (\Throwable $e) { error_log('BotWorker reaper error: ' . get_class($e)); } // MLP-357
         try { (new \Domain\PlaylistLifecycle())->tick(); } catch (\Throwable $e) { error_log('BotWorker playlist lifecycle error: ' . get_class($e)); }
+        try { DrawingJob::deliver($this->llm); } catch (\Throwable $e) { error_log('BotWorker drawing delivery error: '.get_class($e)); }
         // reactive и proactive изолированы: сбой одного (напр. миграция ещё не прогнана) не роняет другой.
         try { $this->reactive(); }  catch (\Throwable $e) { error_log('BotWorker reactive error: ' . get_class($e)); }
         try { $this->proactive(); } catch (\Throwable $e) { error_log('BotWorker proactive error: ' . get_class($e)); }
@@ -75,7 +84,7 @@ class BotWorker {
         try { if(!$summaryBusy)$this->memoryScribeSchedule(); } catch (\Throwable $e) { error_log('BotWorker scribe schedule error: ' . get_class($e)); }
         try { if(!$summaryBusy)$this->memoryScribeProcess(); } catch (\Throwable $e) { error_log('BotWorker scribe process error: ' . get_class($e)); }
         try { $this->config->setOption('bot_worker_heartbeat', (string)time()); } catch (\Throwable $e) {}
-        $this->db->query("SELECT RELEASE_LOCK('bot_worker')");
+        } finally { $this->db->query("SELECT RELEASE_LOCK('bot_worker')"); }
     }
 
     // Крутиться заданное время (для cron-режима: cron раз в минуту запускает воркер на ~55с).
@@ -92,6 +101,7 @@ class BotWorker {
 
     private function reactive(): void {
         $enabled = $this->llm->isEnabled();
+        $this->drawingEnabled=$enabled;
 
         // Durable interaction intent survives queue enqueue/claim/process failures.
         CommandInteractionContinuation::reconcile(CommandInteractions::registry());
@@ -100,8 +110,8 @@ class BotWorker {
         foreach ($this->queue->claimDue(50) as $job) {
             $id = (int)$job['id'];
             if (!\Domain\Privacy::payloadAllowed($job['data'] ?? [])) { $this->queue->complete([$id]); continue; }
-            if (!$enabled && (!empty($job['data']['drawing_request']) || !empty($job['data']['drawing_chat_window']))) {
-                $this->queue->release([$id], 30);
+            if (!$enabled && in_array($job['data']['command']['handler_type'] ?? '',['image','image_chat'],true)) {
+                $this->queue->pauseReply($id);
                 continue;
             }
             if (in_array($job['data']['schedule_announcement'] ?? '', ['finished', 'playlist_finished'], true)) {
@@ -117,6 +127,12 @@ class BotWorker {
                 if ($job['type'] === 'greeting') {
                     $this->llm->processTrigger('greeting', $job['data'] ?? []);
                 } elseif ($job['type'] === 'dynamic_command') {
+                    if (in_array($job['data']['command']['handler_type'] ?? '',['image','image_chat'],true)) {
+                        try { $deferred=DrawingJob::route($this->llm,$job); }
+                        catch (DrawingBusy $busy) { $this->queue->waitDrawing($id); continue; }
+                        if (!$deferred) $this->queue->complete([$id]);
+                        continue;
+                    }
                     if ($playlistJob) $this->config->setOption('bot_worker_heartbeat', (string)time());
                     try { $this->llm->processTrigger('dynamic_command', ($job['data'] ?? []) + ['_durable_confirmations' => true]); }
                     catch (DrawingBusy $busy) { $this->queue->release([$id], 3); continue; }
@@ -533,6 +549,7 @@ class BotWorker {
         $this->lastReapAt = time();
         $this->queue->recoverStaleAnnouncements(600);
         $this->queue->recoverStaleCommandReplies(600);
+        DrawingJob::recover();
         $n = $this->queue->failStaleAny(JobQueue::REACTIVE_TYPES, 600);
         if ($n > 0) {
             error_log("BotWorker: реапер закрыл зависших задач: {$n}");

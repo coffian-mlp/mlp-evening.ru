@@ -461,8 +461,9 @@ class JobQueue {
 
     public function eraseUserData(int $userId,array $messageIds): void {
         $json=json_encode(array_values(array_map('intval',$messageIds)));
-        $stmt=$this->db->prepare('DELETE FROM llm_jobs WHERE JSON_UNQUOTE(JSON_EXTRACT(payload,"$.user_id"))=? OR JSON_UNQUOTE(JSON_EXTRACT(payload,"$.owner_id"))=? OR JSON_CONTAINS(?,JSON_EXTRACT(payload,"$.message_id")) OR JSON_OVERLAPS(?,COALESCE(JSON_EXTRACT(payload,"$.confirmation.quotes"),JSON_ARRAY())) OR JSON_OVERLAPS(?,COALESCE(JSON_EXTRACT(payload,"$.prepared_reply.quotes"),JSON_ARRAY()))');
-        $stmt->bind_param('iisss',$userId,$userId,$json,$json,$json);$stmt->execute();
+        $actor=json_encode($userId);
+        $stmt=$this->db->prepare('DELETE FROM llm_jobs WHERE JSON_UNQUOTE(JSON_EXTRACT(payload,"$.user_id"))=? OR JSON_UNQUOTE(JSON_EXTRACT(payload,"$.owner_id"))=? OR JSON_CONTAINS(?,JSON_EXTRACT(payload,"$.message_id")) OR JSON_OVERLAPS(?,COALESCE(JSON_EXTRACT(payload,"$.confirmation.quotes"),JSON_ARRAY())) OR JSON_OVERLAPS(?,COALESCE(JSON_EXTRACT(payload,"$.prepared_reply.quotes"),JSON_ARRAY())) OR JSON_OVERLAPS(?,COALESCE(JSON_EXTRACT(payload,"$.drawing_v1.bindings[*].id"),JSON_ARRAY())) OR JSON_CONTAINS(COALESCE(JSON_EXTRACT(payload,"$.drawing_v1.users"),JSON_ARRAY()),?)');
+        $stmt->bind_param('iisssss',$userId,$userId,$json,$json,$json,$json,$actor);$stmt->execute();
     }
 
     public function claimConversationSummary(): array {
@@ -478,5 +479,46 @@ class JobQueue {
     public function hasAwaitingParticipantReply(): bool {
         return $this->db->query("SELECT 1 FROM llm_jobs WHERE status IN ('pending','processing')
             AND type IN ('mention','greeting') LIMIT 1")->num_rows > 0;
+    }
+
+    public function drawingRow(int $id, bool $lock = false): ?array {
+        $stmt=$this->db->prepare('SELECT * FROM llm_jobs WHERE id=?'.($lock ? ' FOR UPDATE' : ''));
+        $stmt->bind_param('i',$id); $stmt->execute();
+        $row=$stmt->get_result()->fetch_assoc();
+        if (!$row) return null;
+        $row['data']=json_decode($row['payload'],true,512,JSON_THROW_ON_ERROR);
+        return $row;
+    }
+
+    /** Only drawing-owned staged rows; pending legacy commands stay with the ordinary consumer. */
+    public function drawingJobs(): array {
+        $rows=$this->db->query("SELECT * FROM llm_jobs WHERE type='dynamic_command' AND status IN ('processing','failed')
+            AND JSON_EXTRACT(payload,'$.drawing_v1.phase') IS NOT NULL
+            AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.drawing_v1.phase'))<>'terminal' ORDER BY id LIMIT 100")->fetch_all(MYSQLI_ASSOC);
+        foreach ($rows as &$row) $row['data']=json_decode($row['payload'],true,512,JSON_THROW_ON_ERROR);
+        return $rows;
+    }
+
+    /** Row-locked compare-and-set. Callback must perform DB work only and reject stale tokens. */
+    public function changeDrawing(int $id, callable $change): ?array {
+        return \Infra\Transaction::run($this->db,function() use ($id,$change): ?array {
+            $row=$this->drawingRow($id,true);
+            if (!$row) return null;
+            $next=$change($row);
+            if ($next===null) return null;
+            $json=json_encode($next['data'],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
+            $status=$next['status'] ?? $row['status'];
+            $refresh=!empty($next['refresh']) ? ',claimed_at=UTC_TIMESTAMP()' : '';
+            $stmt=$this->db->prepare("UPDATE llm_jobs SET payload=?,status=?$refresh WHERE id=?");
+            $stmt->bind_param('ssi',$json,$status,$id); $stmt->execute();
+            return $this->drawingRow($id);
+        });
+    }
+
+    /** Slot contention is waiting, not a failed generation attempt; never overflow attempts. */
+    public function waitDrawing(int $id, int $seconds = 3): void {
+        $stmt=$this->db->prepare("UPDATE llm_jobs SET status='pending',run_after=DATE_ADD(UTC_TIMESTAMP(),INTERVAL ? SECOND)
+            WHERE id=? AND status='processing' AND JSON_EXTRACT(payload,'$.drawing_v1.phase') IS NULL");
+        $stmt->bind_param('ii',$seconds,$id);$stmt->execute();
     }
 }

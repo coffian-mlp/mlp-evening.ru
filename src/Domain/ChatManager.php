@@ -965,7 +965,7 @@ class ChatManager {
         $stmt = $this->db->prepare(
             "SELECT cm.id, cm.user_id,
                     COALESCE(NULLIF(u.nickname, ''), u.login, cm.username) AS username,
-                    cm.message AS text, cm.created_at
+                    cm.message AS text, cm.created_at, cm.edited_at, cm.conversation_revision
              FROM chat_messages cm
              LEFT JOIN users u ON cm.user_id = u.id
              WHERE cm.id > ? AND cm.is_deleted = 0 " . Privacy::sqlFilter('cm.user_id') . "

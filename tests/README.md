@@ -626,3 +626,37 @@ bash tests/helpers/daemon_environment.sh down
 ```
 
 `daemon_recovery.py` останавливает **только MySQL этого disposable-проекта** на 25 секунд. Супервизор повторяет `Restart=always`, задержку 5 секунд и лимит 5 стартов за 10 секунд; это модель, а не запуск настоящего systemd. Проверяется сохранение активного run, отсутствие ложного инцидента/уведомлений и восстановление обоих heartbeat. Результаты без пользовательских данных сохраняются в `docs/tests/MLP-461/`; `down` удаляет контейнеры, том, сеть и копию со своей тестовой `.env`. Полный набор запускается после остановки супервизоров.
+
+### MLP-468: рисунок вне общего тика и повторы транспорта
+
+`test_image_generator_retries.php` использует поддельные часы и транспорт: transient errno/429/5xx, успех со второй/третьей попытки, предел 110 с × 3, safety без transport retry, malformed/save ошибки, OpenAI multipart edits и RouterAI references. Debug и usage учитываются по фактическим попыткам. `test_image_counter.php` проверяет receipt, старый формат и восстановление по исходному UTC-дню; `integration_image_announcement_retries.php` — общий retry и один учёт успешного анонса. Существующий `test_image_request_budget.php` сохраняет независимость image budget от истёкшего текстового scope.
+
+`integration_drawing_worker_concurrency.php` и `integration_drawing_worker_recovery.php` требуют отдельную синтетическую лабораторию. Они запускают настоящие PHP-процессы с отдельными MySQL-соединениями, барьерами провайдера, реальной публикацией ответа до завершения рисунка, одним busy notice, точными receipts, kill собственного процесса, stale fencing, восстановлением URL/count/attribution, AI disable, source snapshot race и inline без cron. Отдельная архивная копия исходного worker воспроизводит блокировку в RED. Лаборатория копирует только tracked/new source-файлы; production-конфигурация не монтируется, сеть `internal: true`, credentials синтетические. Нужен уже собранный локальный image `mlp457-php:latest` с PHP 8.3, mysqli, curl, mbstring и GD.
+
+```bash
+bash tests/helpers/drawing_environment.sh up
+# Ожидаемые падения исходного 4fdbfec: timeout/retry и ответ до image barrier.
+bash tests/helpers/drawing_environment.sh red
+bash tests/helpers/drawing_environment.sh sync
+bash tests/helpers/drawing_environment.sh exec php tests/test_image_generator_retries.php
+bash tests/helpers/drawing_environment.sh exec php tests/test_image_counter.php
+bash tests/helpers/drawing_environment.sh exec php tests/integration_image_announcement_retries.php
+bash tests/helpers/drawing_environment.sh exec php tests/integration_drawing_worker_concurrency.php
+bash tests/helpers/drawing_environment.sh exec php tests/integration_drawing_worker_recovery.php
+bash tests/helpers/drawing_environment.sh strict
+bash tests/helpers/drawing_environment.sh test
+bash tests/helpers/drawing_environment.sh empty
+bash tests/helpers/drawing_environment.sh test
+# Браузерные сценарии выполнять отдельно от PHP-набора: fixture меняет настройки БД.
+bash tests/helpers/drawing_environment.sh serve
+# В отдельном терминале: loopback tunnel через docker exec, без маршрута наружу.
+node tests/helpers/drawing_http_proxy.js
+# После запуска tunnel, в основном терминале:
+MLP_BASE_URL=http://127.0.0.1:8469 npm run test:e2e -- mlp-468-drawing-worker.ui.spec.js --project=chromium-ui --project=firefox-ui --workers=1
+# Остановить свой tunnel через Ctrl+C, затем удалить лабораторию.
+bash tests/helpers/drawing_environment.sh down
+```
+
+Playwright проверяет настоящий HTTP→queue→BotWorker→renderer: ответ и одно уведомление второму запросу видны, пока transport barrier удерживает рисунок; затем обе картинки появляются ровно один раз. Отдельный сценарий проходит черновик, цитированное редактирование и минутное collection. Меняется только транспорт провайдера; fixture `tick` вызывает настоящий worker. Сервер и fixture доступны только в owned Docker-копии, браузер блокирует внешние URL и SSE в этом сценарии; realtime не является предметом проверки. Tunnel отдаёт неизменённые публичные JS/CSS/fonts/images из той же копии напрямую, PHP/HTTP направляет внутрь контейнера. Снимки и результаты — `docs/tests/MLP-468/`.
+
+В cron/auto параллельность обеспечивают существующие запуски cron. Один daemon последовательно обслуживает стадии и сохраняет результаты, но не отвечает параллельно собственной подготовке; отдельный процесс/cron для него этим изменением не устанавливается. Inline сам доставляет сохранённый результат под worker lock; длительное ожидание доставки заканчивается явным terminal outcome без повторной генерации. Генерация изображения не гарантирует отмену upstream после timeout: повтор может увеличить стоимость. Transport retry ограничен тремя попытками на generate; отдельная safety-переделка допускает новый generate, а анонсы сохраняют свои существующие повторы целой фазы.

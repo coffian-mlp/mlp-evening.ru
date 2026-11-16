@@ -864,6 +864,7 @@ class LLMManager {
      */
     public function botSay(string $text, array $quotedIds = []) {
         if (!\Domain\Privacy::payloadAllowed(['user_id'=>$this->privacyActor,'confirmation'=>['quotes'=>$quotedIds]])) return false;
+        if (DrawingJob::capture($text)) return true;
         if ($this->replyJob !== null) {
             $job = $this->replyJob;
             $job['data']['prepared_reply'] = ['text' => $text, 'quotes' => $quotedIds];
@@ -881,6 +882,7 @@ class LLMManager {
      * LLM ничего не решает — только формулирует; данные в инструкции минимальны.
      */
     public function botSayLive(string $instruction, string $fallback, array $quotedIds = [], ?string $mustContain = null) {
+        if (DrawingJob::capture($fallback,$instruction)) return true;
         if ($this->durableConfirmations) {
             return CommandReplyDelivery::confirmation($this, $instruction, $fallback, $quotedIds, $mustContain, $this->commandMessage);
         }
@@ -1211,7 +1213,7 @@ class LLMManager {
                 'chat_message_id' => (int)$msg['id'],
                 // Имя и время в тексте — чтобы модель знала, кто говорит.
                 'content' => "[$time] {$msg['username']}: " . (($msg['user_id'] == $this->botUserId) ? ResponseSanitizer::stripMessageIds($msg['raw_message']) : $msg['raw_message']),
-            ];
+            ] + (DrawingJob::preparing() ? ['_drawing_binding'=>DrawingJob::snapshot($msg)] : []);
         }
         $memoryUserIds = $memoryUserIds ?? [];
         $entries = array_reverse($entries); // обратно в хронологию

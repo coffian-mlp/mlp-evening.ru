@@ -50,7 +50,7 @@ final class DrawingChatCollection
             $q->get_result()->free(); $q->close();
         }
         if ($published !== null) $chat->publishInteractionMessage($published);
-        if ($inline && $jobId !== null) BotDispatch::runInlineDrawing($jobId, $next, max(0, $next['drawing_chat_window']['until']-time()), null, $llm);
+        if ($inline && $jobId !== null) DrawingJob::afterAdmission(static fn()=>BotDispatch::runInlineDrawing($jobId,$next,max(0,$next['drawing_chat_window']['until']-time()),null,$llm));
         return true;
     }
 
@@ -85,7 +85,7 @@ final class DrawingChatCollection
     {
         $window = $payload['drawing_chat_window'] ?? null;
         if (!$window) return '';
-        $parts = []; $remaining = 8000;
+        $parts = []; $remaining = 8000; $bindings=[];
         $botId = (int)ConfigManager::getInstance()->getOption('ai_bot_user_id', 0);
         foreach ((new ChatManager())->getLiveMessagesSince((int)$window['message_id'], 200) as $message) {
             if (strtotime($message['created_at'].' UTC') > (int)$window['until']) break;
@@ -94,9 +94,12 @@ final class DrawingChatCollection
             if (preg_match('/^[!\/]\p{L}+/u', trim($text))) continue;
             $text = mb_substr($text, 0, min(1500, $remaining));
             $parts[] = ['author'=>$message['username'], 'text'=>$text];
+            $bindings[]=DrawingJob::snapshot(['id'=>$message['id'],'user_id'=>$message['user_id'],'raw_message'=>$message['text'],
+                'edited_at'=>$message['edited_at'],'conversation_revision'=>$message['conversation_revision']]);
             $remaining -= mb_strlen($text);
             if (count($parts) >= 40 || $remaining <= 0) break;
         }
+        DrawingJob::bindSnapshots($bindings);
         return $parts ? json_encode($parts, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) : '';
     }
 

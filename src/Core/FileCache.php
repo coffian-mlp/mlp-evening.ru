@@ -55,4 +55,27 @@ final class FileCache {
         }
         return $this->dir . '/' . $key . '.json';
     }
+
+    /** Serialize the entire read/modify/write operation; readers see an atomic replacement. */
+    public function updateAtomic(string $key, callable $update): array {
+        $file = $this->path($key);
+        if (!is_dir($this->dir) && !mkdir($this->dir, 0777, true) && !is_dir($this->dir)) throw new \RuntimeException('Cache directory unavailable');
+        $lock = fopen($file.'.lock', 'c');
+        if (!$lock) throw new \RuntimeException('Cache lock unavailable');
+        $temporary = null;
+        try {
+            if (!flock($lock, LOCK_EX)) throw new \RuntimeException('Cache lock failed');
+            clearstatcache(true, $file);
+            $data = $update($this->get($key, PHP_INT_MAX) ?? []);
+            $temporary = tempnam($this->dir, '.atomic_');
+            if ($temporary !== false) chmod($temporary,is_file($file) ? (fileperms($file)&0777) : (0666&~umask()));
+            if ($temporary === false || file_put_contents($temporary, json_encode($data, JSON_THROW_ON_ERROR)) === false
+                || !rename($temporary, $file)) throw new \RuntimeException('Cache replacement failed');
+            $temporary = null;
+            return $data;
+        } finally {
+            if (is_string($temporary) && is_file($temporary)) unlink($temporary);
+            flock($lock, LOCK_UN); fclose($lock);
+        }
+    }
 }

@@ -54,12 +54,14 @@ final class CommandDedup {
             if (!empty($data['dedup_of'])) continue;
             if (!empty($data['auto'])) continue; // MLP-344: авторисунок — не команда человека; его молчаливый сбой не должен глушить /нарисуйчат
             if (!in_array((string)($job['status'] ?? ''), ['pending', 'processing', 'done'], true)) continue;
+            if (($job['status'] ?? '')==='done' && isset($data['drawing_v1']['phase']) && empty($data['drawing_v1']['image_message_id'])) continue;
             if (self::key($data['command'] ?? [], (string)($data['message'] ?? '')) !== $key) continue;
             return [
                 'username' => (string)($data['username'] ?? ''),
                 'status'   => (string)$job['status'],
                 'age'      => max(0, (int)($job['age'] ?? 0)),
-            ] + (isset($data['user_id']) ? ['user_id' => (int)$data['user_id']] : []);
+            ] + (isset($data['user_id']) ? ['user_id' => (int)$data['user_id']] : [])
+                + (isset($data['drawing_v1']['image_message_id']) ? ['image_message_id'=>(int)$data['drawing_v1']['image_message_id']] : []);
         }
         return null;
     }

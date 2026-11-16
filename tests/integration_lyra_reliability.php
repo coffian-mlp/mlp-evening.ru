@@ -81,7 +81,7 @@ try{
    $set('bot_last_manual_draw',time());$started=false;LLM\DrawingSchedule::run(false,function()use(&$started){$started=true;return true;});$ok($started,'manual drawing admission retains its behavior');
   }
  }
- if($run('timeout'))$ok(LLM\ImageGenerator::TIMEOUT===150,'image request timeout is 150 seconds');
+ if($run('timeout'))$ok(LLM\ImageGenerator::TIMEOUT===110,'image request timeout is 110 seconds');
 }finally{
  $db->query("DELETE FROM llm_jobs WHERE id>$initialJobId AND type='dynamic_command' AND JSON_EXTRACT(payload,'$.auto')=true");
  foreach($jobs as$id)$db->query('DELETE FROM llm_jobs WHERE id='.(int)$id);

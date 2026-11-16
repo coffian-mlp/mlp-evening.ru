@@ -36,6 +36,7 @@ final class RequestRetry {
             $deadlineAt = RequestDeadline::at();
             $base = $provider;
             return self::run(static function (int $timeout) use ($base, &$provider, $context, $prompt) {
+                DrawingJob::guard();
                 $provider = method_exists($base, 'withTimeout') ? $base->withTimeout($timeout) : $base;
                 return RequestDeadline::within(RequestDeadline::now() + $timeout,
                     static fn() => $provider->askChat($context, $prompt));
