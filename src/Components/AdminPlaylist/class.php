@@ -24,6 +24,7 @@ class AdminPlaylistComponent extends Component {
             if ($completion['completion_key'] === ($_GET['completion_key'] ?? null)) break;
         }
         $this->result['recent_snapshots'] = $manager->getRecentSnapshots();
+        $this->result['editor'] = $manager->getPlaylistEditor();
         $this->result['correction_key'] = 'correction:' . bin2hex(random_bytes(16));
         
         // Extract meta

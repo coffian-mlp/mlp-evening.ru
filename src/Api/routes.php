@@ -8,6 +8,8 @@
  */
 
 return [
+    'edit_upcoming_playlist' => ['role'=>'admin', 'denial_status'=>403, 'handler'=>[\Api\PlaylistController::class,'editUpcoming']],
+    'search_playlist_stories' => ['role'=>'admin', 'denial_status'=>403, 'handler'=>[\Api\PlaylistController::class,'searchStories']],
     'save_stream_monitor_settings'=>['role'=>'admin','handler'=>[\Api\EventController::class,'saveMonitoring']],
     'lyra_notifications_status'=>['role'=>'user','handler'=>[\Api\LyraNotificationsController::class,'status']],
     'lyra_notifications_connect'=>['role'=>'user','handler'=>[\Api\LyraNotificationsController::class,'connect']],

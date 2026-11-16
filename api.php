@@ -98,6 +98,7 @@ try {
     if (isset($apiRoutes[$action])) {
         $route = $apiRoutes[$action];
         if ($route['role'] === 'admin') {
+            if (!Auth::isAdmin() && isset($route['denial_status'])) http_response_code($route['denial_status']);
             Auth::requireApiAdmin();
         } elseif ($route['role'] === 'moderator') {
             // MLP-255: третий уровень иерархии user < moderator < admin.

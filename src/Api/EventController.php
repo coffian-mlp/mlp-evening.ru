@@ -18,7 +18,7 @@ class EventController {
     public static function getPublic(): void {
         $events   = (new EventManager())->getPublic();
         $playlist = (new EpisodeManager())->getSavedPlaylist();
-        Response::json(true, "События загружены", 'success', ['events' => $events, 'playlist' => $playlist]);
+        Response::json(true, "События загружены", 'success', ['events' => $events, 'playlist' => $playlist, 'playlists_by_run' => (new EpisodeManager())->getPublicOccurrencePlaylists()]);
     }
 
     /** Создать/обновить событие (admin). */

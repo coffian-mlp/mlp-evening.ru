@@ -69,4 +69,30 @@ class PlaylistController {
         (new EpisodeManager())->clearWatchingNowLog();
         Response::json(true, "🗑️ Лог истории просмотров очищен.");
     }
+
+    /** Input comes from the dashboard; canonical payloads are constructed only on the server. */
+    public static function editUpcoming(): void {
+        try {
+            $text = static function(string $key): string {
+                if (!isset($_POST[$key]) || !is_string($_POST[$key])) throw new \Core\UserError('Некорректные параметры плейлиста.');
+                return $_POST[$key];
+            };
+            $integer = static function(string $key) use ($text): int {
+                $value = $text($key);
+                if (!preg_match('/^\d{1,10}$/D', $value) || (float)$value > PHP_INT_MAX) throw new \Core\UserError('Некорректный номер пункта.');
+                return (int)$value;
+            };
+            $operation = ['operation'=>$text('operation')];
+            foreach (['episode_id','index','to_index'] as $key) if (isset($_POST[$key])) $operation[$key] = $integer($key);
+            $out = (new EpisodeManager())->editUpcomingPlaylist($text('run_id'), $integer('snapshot_id'), $text('version'), $operation, (int)\Domain\Auth::userId());
+            Response::ok('Плейлист сохранён.', ['editor'=>$out]);
+        } catch (\Throwable $e) { Response::caught($e); }
+    }
+
+    public static function searchStories(): void {
+        try {
+            if (!is_string($_POST['query'] ?? null)) throw new \Core\UserError('Введи название серии или фильма.');
+            Response::ok('Результаты поиска.', ['stories'=>(new EpisodeManager())->searchPlaylistStories($_POST['query'])]);
+        } catch (\Throwable $e) { Response::caught($e); }
+    }
 }

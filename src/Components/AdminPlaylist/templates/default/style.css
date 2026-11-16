@@ -1,0 +1,21 @@
+.playlist-editor { min-width: 0; }
+.playlist-editor ol, .playlist-editor ul { padding-left: 1.5rem; }
+.playlist-editor li { margin-bottom: 1rem; overflow-wrap: anywhere; }
+.playlist-editor button { white-space: normal; text-align: left; max-width: 100%; }
+.playlist-editor-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0; }
+.playlist-editor input { min-width: 0; flex: 1 1 12rem; max-width: 100%; }
+.playlist-editor-warning { color: var(--warning-text, #805600); font-weight: 600; }
+.playlist-editor [data-editor-search] { margin-top: 1rem; padding: .75rem; border: 1px solid #ccc; border-radius: .5rem; }
+.playlist-editor [hidden] { display: none; }
+.playlist-editor button, .playlist-editor input {
+    min-height: 44px;
+    padding: .5rem .75rem;
+    border: 1px solid var(--border-color, #aaa);
+    border-radius: .5rem;
+    color: var(--text-main, #35233f);
+    background: var(--field, #fff);
+    font: inherit;
+}
+.playlist-editor button { cursor: pointer; }
+.playlist-editor button:hover:not(:disabled) { background: var(--hover-surface, #f2e8f3); }
+.playlist-editor button:disabled { opacity: .5; cursor: default; }

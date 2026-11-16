@@ -26,6 +26,7 @@
     let month = currentMonth();
     let events = [];
     let playlist = [];
+    let playlistsByRun = {};
     let currentEvent = null;
     let opener = null;
     let previousOverflow = '';
@@ -72,6 +73,7 @@
             if (!data.success || !Array.isArray(data.data?.events)) throw new Error('Payload');
             events = expand(data.data.events);
             playlist = data.data.playlist || [];
+            playlistsByRun = data.data.playlists_by_run || {};
             loaded = true;
             renderMonth();
             updateNext();
@@ -163,7 +165,8 @@
         document.getElementById('modal-event-duration').textContent = duration(event.duration_minutes);
         document.getElementById('modal-event-desc').textContent = event.description || 'Описание события пока не добавлено.';
         const items = document.getElementById('modal-playlist-content'); items.replaceChildren();
-        if (event.use_playlist == 1) Object.values(playlist).filter(story => story && Array.isArray(story.titles)).forEach(story => story.titles.forEach(title => items.append(el('li', '', title))));
+        const boundPlaylist = playlistsByRun[`${event.id}_${Math.floor(event.start.getTime() / 1000)}`] ?? playlist;
+        if (event.use_playlist == 1) Object.values(boundPlaylist).filter(story => story && Array.isArray(story.titles)).forEach(story => story.titles.forEach(title => items.append(el('li', '', title))));
         document.getElementById('modal-playlist-container').hidden = !items.childNodes.length;
         if (modal.hidden) {previousOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden';}
         modal.hidden = false;

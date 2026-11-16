@@ -146,6 +146,8 @@ $expected = [
     'get_command_interaction' => 'public',
     'act_command_interaction' => 'user',
     'correct_playlist_completion' => 'admin',
+    'edit_upcoming_playlist' => 'admin',
+    'search_playlist_stories' => 'admin',
 ];
 
 echo "== Карта ролей: каждый action объявлен с гейтом «как было» ==\n";

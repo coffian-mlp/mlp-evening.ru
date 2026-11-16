@@ -689,3 +689,39 @@ bash tests/helpers/recurrence_environment.sh down
 Docker, БД `mlp_phase3` и маркер `.mlp471-owned`; создаёт собственных admin/user,
 удаляет только свои события/учётки. Скриншоты и журналы сохраняются в
 `docs/tests/MLP-471/`. Unit и интеграционные PHP-тесты входят в общий раннер.
+
+### MLP-472: редактор плейлиста ближайшего эфира
+
+`integration_playlist_editor.php` проверяет операции, канонические двухсерийные истории,
+фильм, дубли, права доменного метода, версию, журнал, общие снапшоты и чтение через
+публичный API и prompt расписания. `integration_playlist_editor_announcements.php`
+проверяет сохранность подготовленных анонсов, включая пустой плейлист, обычную
+перегенерацию и следующую правку до тика воркера. `integration_playlist_editor_race.php`
+запускает два PHP/MySQL-процесса и проверяет конфликт версии и rollback при отказе аудита.
+Все три входят в полный PHP-набор и требуют Docker-БД (`DB_HOST=db`).
+
+Изолированная лаборатория использует синтетические данные и сеть `internal: true`.
+Production-конфигурации не копируются. По умолчанию нужен уже имеющийся PHP 8.3 image
+`mlp457-php:latest`; другой совместимый image задаётся через `MLP472_PHP_IMAGE`.
+
+```bash
+bash tests/helpers/playlist_editor_environment.sh up
+bash tests/helpers/playlist_editor_environment.sh strict
+bash tests/helpers/playlist_editor_environment.sh test
+bash tests/helpers/playlist_editor_environment.sh empty
+bash tests/helpers/playlist_editor_environment.sh test
+bash tests/helpers/playlist_editor_environment.sh serve
+# В отдельном терминале, только loopback tunnel в закрытую Docker-сеть:
+node tests/helpers/playlist_editor_http_proxy.js
+MLP_BASE_URL=http://127.0.0.1:8174 npm run test:e2e -- mlp-472-playlist-editor.ui.spec.js --project=chromium-ui --project=firefox-ui --output=docs/tests/MLP-472/playwright-results
+# Остановить собственный proxy через Ctrl+C перед down.
+bash tests/helpers/playlist_editor_environment.sh down
+```
+
+После правок исходников выполнить `sync`. PHP-набор и браузерный сценарий запускать
+последовательно: UI-фикстура временно меняет события/опции только синтетической БД,
+создаёт собственные admin/user и восстанавливает исходное состояние в cleanup.
+Браузеры проверяют четыре операции, reload, двухсерийные истории, конфликт версии,
+CSRF, HTTP 403 для обычного пользователя, публичный API, календарь и мобильную ширину.
+Скриншоты и результаты находятся в `docs/tests/MLP-472/`; SSE подменяется локальным
+пустым потоком, доставка realtime не является предметом проверки.

@@ -550,4 +550,141 @@ class EpisodeManager {
         }
         return array_keys($ids);
     }
+
+    /** Read the calendar afresh: stale lifecycle bindings cannot authorize an edit. */
+    private function nearestPlaylistEvent(bool $lock = false): ?array {
+        $events = array_filter((new EventManager())->getAllRaw($lock), fn($e) => !empty($e['use_playlist']));
+        $now = time();
+        foreach (EventManager::expandWithNextOccurrences(array_values($events), 7, $now) as $event) {
+            if ((int)$event['real_start_time'] > $now) return $event;
+        }
+        return null;
+    }
+
+    public function getPlaylistEditor(): ?array {
+        // One consistent view of the snapshot, occurrence and calendar for its version.
+        return $this->tx(function () {
+            $this->publicationLock();
+            return $this->playlistEditorState($this->nearestPlaylistEvent(true));
+        });
+    }
+
+    private function playlistEditorState(?array $event): ?array {
+        if (!$event) return null;
+        $o = $this->rows('SELECT * FROM playlist_occurrences WHERE run_id=? FOR UPDATE', [$event['run_id']])[0] ?? null;
+        if (!$o || $o['state'] !== 'pending' || strtotime($o['start_at'].' UTC') <= time()) return null;
+        $s = $this->getSnapshot((int)$o['snapshot_id']);
+        if (!$s || $s['completed_at'] || !is_array($s['stories'])) return null;
+        if ($o['start_at'] !== gmdate('Y-m-d H:i:s', (int)$event['real_start_time'])) return null;
+        $metadata = json_decode($o['metadata_json'], true, 512, JSON_THROW_ON_ERROR);
+        $version = hash('sha256', json_encode([$s['id'], $s['stories'], $o['run_id'], $event, $o['start_at'], $o['end_at'], $metadata['playlist_edit_version'] ?? ''], JSON_THROW_ON_ERROR));
+        $slots = array_sum(array_column($s['stories'], 'length'));
+        $minutes = (int)$event['duration_minutes'];
+        $announced = (bool)$this->rows('SELECT c.id FROM telegram_announcement_campaigns c JOIN telegram_announcement_posts p ON p.campaign_id=c.id JOIN telegram_announcement_revisions r ON r.post_id=p.id WHERE c.run_id=? AND (r.caption IS NOT NULL OR r.channel_message_id IS NOT NULL) LIMIT 1', [$o['run_id']]);
+        return ['run_id' => $o['run_id'], 'snapshot_id' => $s['id'], 'version' => $version, 'title' => $event['title'],
+            'start_at' => $o['start_at'], 'stories' => $s['stories'], 'used_slots' => $slots, 'capacity_slots' => intdiv($minutes, 24),
+            'duration_minutes' => $minutes, 'estimated_minutes' => $slots * 24, 'over_capacity' => $slots * 24 > $minutes,
+            'announcement_prepared' => $announced];
+    }
+
+    /** Search canonical stories, so selecting either part always selects the whole story. */
+    public function searchPlaylistStories(string $query): array {
+        $query = trim($query);
+        if ($query === '') return [];
+        if (mb_strlen($query) > 200) throw new \Core\UserError('Название для поиска слишком длинное.');
+        $matches = [];
+        foreach (EpisodeCatalog::normalize($this->getAllEpisodes()) as $story) {
+            if (mb_stripos(implode(' / ', $story['titles']), $query) !== false) $matches[] = $story;
+            if (count($matches) >= 20) break;
+        }
+        return $matches;
+    }
+
+    /** Apply exactly one operation under the same publication lock as lifecycle/regeneration. */
+    public function editUpcomingPlaylist(string $runId, int $snapshotId, string $version, array $operation, int $actorId): array {
+        return $this->tx(function () use ($runId, $snapshotId, $version, $operation, $actorId) {
+            $publishedId = $this->publicationLock();
+            $event = $this->nearestPlaylistEvent(true);
+            $actor = $this->rows('SELECT * FROM users WHERE id=? FOR SHARE', [$actorId])[0] ?? [];
+            if (!UserRoles::has($actor, 'admin')) throw new \Core\UserError('Недостаточно прав для изменения плейлиста.');
+            $state = $this->playlistEditorState($event);
+            if (!$state || $state['run_id'] !== $runId || $state['snapshot_id'] !== $snapshotId) throw new \Core\UserError('Этот плейлист уже нельзя изменить. Обнови страницу.');
+            $this->rows('SELECT id FROM playlist_snapshots WHERE id=? FOR UPDATE', [$snapshotId]);
+            if (!hash_equals($state['version'], $version)) throw new \Core\UserError('Плейлист или событие изменены в другом окне. Обнови страницу и повтори правку.');
+            $metadata = json_decode($this->rows('SELECT metadata_json FROM playlist_occurrences WHERE run_id=?', [$runId])[0]['metadata_json'], true, 512, JSON_THROW_ON_ERROR);
+            $campaign = $this->rows('SELECT c.facts_json FROM telegram_announcement_campaigns c WHERE c.run_id=? AND EXISTS(SELECT 1 FROM telegram_announcement_posts p JOIN telegram_announcement_revisions r ON r.post_id=p.id WHERE p.campaign_id=c.id AND (r.caption IS NOT NULL OR r.channel_message_id IS NOT NULL))', [$runId])[0] ?? null;
+            if ($campaign && ((int)($metadata['playlist_edited_snapshot_id'] ?? 0) !== $snapshotId || !isset($metadata['announcement_playlist_snapshot']))) {
+                $facts = json_decode($campaign['facts_json'], true, 512, JSON_THROW_ON_ERROR);
+                // A manual regeneration is an independent change: preserve its new
+                // pre-edit snapshot rather than resurrecting an older campaign snapshot.
+                $campaignSnapshot = $facts['snapshot'] ?? null;
+                $metadata['announcement_playlist_snapshot'] = (int)($campaignSnapshot['id'] ?? 0) === $snapshotId
+                    ? $campaignSnapshot : $this->getSnapshot($snapshotId);
+            }
+            $before = $state['stories'];
+            $after = $before;
+            $kind = $operation['operation'] ?? '';
+            $index = $operation['index'] ?? null;
+            if (!in_array($kind, ['add','replace','remove','move'], true)) throw new \Core\UserError('Неизвестная операция с плейлистом.');
+            if ($kind !== 'add' && (!is_int($index) || !array_key_exists($index, $after))) throw new \Core\UserError('Пункт плейлиста не найден.');
+            if ($kind === 'add' || $kind === 'replace') {
+                $episodeId = $operation['episode_id'] ?? null;
+                if (!is_int($episodeId) || $episodeId <= 0) throw new \Core\UserError('Выбери серию или фильм.');
+                $story = null;
+                foreach (EpisodeCatalog::normalize($this->getAllEpisodes()) as $candidate) {
+                    if (in_array($episodeId, $candidate['ids'], true)) { $story = $candidate; break; }
+                }
+                if (!$story) throw new \Core\UserError('Серия не найдена или её данные неполны.');
+                if ($kind === 'add') $after[] = $story; else $after[$index] = $story;
+            } elseif ($kind === 'remove') {
+                array_splice($after, $index, 1);
+            } else {
+                $to = $operation['to_index'] ?? null;
+                if (!is_int($to) || !array_key_exists($to, $after)) throw new \Core\UserError('Некорректное место в плейлисте.');
+                $story = array_splice($after, $index, 1)[0];
+                array_splice($after, $to, 0, [$story]);
+            }
+            $seen = [];
+            foreach ($after as $story) {
+                if (isset($seen[$story['story_id']])) throw new \Core\UserError('Эта история уже есть в плейлисте.');
+                $seen[$story['story_id']] = true;
+            }
+            if (count($after) > 100) throw new \Core\UserError('В плейлисте может быть не более 100 историй.');
+            $payload = json_encode($after, JSON_THROW_ON_ERROR);
+            // A snapshot can be reused by several occurrences. Never rewrite another run's payload.
+            $shared = $this->rows('SELECT run_id FROM playlist_occurrences WHERE snapshot_id=? AND run_id<>? LIMIT 1 FOR UPDATE', [$snapshotId, $runId]);
+            if ($shared) {
+                $this->sql('INSERT INTO playlist_snapshots(created_at,payload_json,origin) VALUES(UTC_TIMESTAMP(),?,"admin")', [$payload]);
+                $newId = (int)$this->db->insert_id;
+                $this->sql('UPDATE playlist_occurrences SET snapshot_id=? WHERE run_id=?', [$newId, $runId]);
+            } else {
+                $newId = $snapshotId;
+                $this->sql('UPDATE playlist_snapshots SET payload_json=? WHERE id=?', [$payload, $snapshotId]);
+            }
+            $metadata['playlist_edit_version'] = bin2hex(random_bytes(16));
+            $metadata['playlist_edited_snapshot_id'] = $newId;
+            $this->sql('UPDATE playlist_occurrences SET metadata_json=? WHERE run_id=?', [json_encode($metadata, JSON_THROW_ON_ERROR), $runId]);
+            // A completed/current live programme must keep its global projection as well.
+            $activeShared = $this->rows('SELECT run_id FROM playlist_occurrences WHERE snapshot_id=? AND run_id<>? AND start_at<=UTC_TIMESTAMP() AND end_at>UTC_TIMESTAMP() AND state<>"cancelled" LIMIT 1', [$snapshotId, $runId]);
+            if ($publishedId === $snapshotId && !$activeShared) {
+                $this->setOption('current_playlist_snapshot_id', (string)$newId);
+                $this->setOption('current_playlist', $payload);
+            }
+            $details = json_encode(['run_id'=>$runId, 'snapshot_id'=>$snapshotId, 'new_snapshot_id'=>$newId, 'operation'=>$operation, 'before'=>$before, 'after'=>$after], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+            if (strlen($details) > 65535) throw new \Core\UserError('Плейлист слишком велик для сохранения журнала.');
+            if (!(new UserManager())->logAction($actorId, 'playlist_edit', null, $details)) throw new \RuntimeException('Playlist audit failed');
+            // Check the wall clock after all potentially blocking reads/writes, immediately before commit.
+            if ((int)$event['real_start_time'] <= time()) throw new \Core\UserError('Эфир уже начался. Плейлист нельзя изменить.');
+            return $this->playlistEditorState($event);
+        });
+    }
+
+    /** Additive public mapping; the global playlist remains the fallback for unbound runs. */
+    public function getPublicOccurrencePlaylists(): array {
+        $out = [];
+        foreach ($this->rows('SELECT o.run_id,s.payload_json FROM playlist_occurrences o JOIN playlist_snapshots s ON s.id=o.snapshot_id WHERE o.state IN ("pending","started") AND o.end_at>UTC_TIMESTAMP()') as $row) {
+            $out[$row['run_id']] = json_decode($row['payload_json'], true, 512, JSON_THROW_ON_ERROR);
+        }
+        return $out;
+    }
 }

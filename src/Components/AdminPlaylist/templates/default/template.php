@@ -3,6 +3,34 @@
  * @var array $arResult
  */
 ?>
+<?php $editor = $arResult['editor']; ?>
+<section class="card playlist-editor" id="playlist-editor" aria-labelledby="playlist-editor-title">
+    <h3 id="playlist-editor-title">Плейлист ближайшего эфира</h3>
+    <?php if ($editor): ?>
+        <p data-editor-event><?= htmlspecialchars($editor['title']) ?> — <?= htmlspecialchars(\LLM\MskClock::format(strtotime($editor['start_at'].' UTC'), 'd.m.Y H:i')) ?> МСК</p>
+        <p data-editor-duration></p>
+        <p data-editor-announcement class="playlist-editor-warning" <?= $editor['announcement_prepared'] ? '' : 'hidden' ?>>Анонс уже сформирован, правка в него не попадёт.</p>
+        <ol data-editor-list></ol>
+        <div class="playlist-editor-actions">
+            <button type="button" data-editor-add>Добавить серию или фильм</button>
+            <button type="button" data-editor-refresh>Обновить страницу</button>
+        </div>
+        <div data-editor-search hidden>
+            <label for="playlist-story-query" data-editor-search-label>Поиск серии или фильма по названию</label>
+            <div class="playlist-editor-actions">
+                <input type="search" id="playlist-story-query" maxlength="200" autocomplete="off">
+                <button type="button" data-editor-find>Найти</button>
+                <button type="button" data-editor-cancel>Отмена</button>
+            </div>
+            <ul data-editor-results></ul>
+        </div>
+        <p data-editor-status role="status" aria-live="polite"></p>
+        <script type="application/json" data-editor-state><?= json_encode($editor, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?></script>
+    <?php else: ?>
+        <p>Нет доступного для правки плейлиста ближайшего эфира. Редактор доступен после подготовки подборки и только до начала эфира.</p>
+    <?php endif; ?>
+</section>
+
 <!-- Информация о плейлисте -->
 <div class="playlist-info">
     <div>

@@ -58,7 +58,16 @@ class AnnouncementContent {
         foreach ($bindings as $row) if ($row['run_id'] === $live['run_id']) $binding = $row;
         if (!$binding) return null;
         $snapshot = $episodes->getSnapshot((int)$binding['snapshot_id']);
-        if (!self::validateBinding($live, $binding, $snapshot)) return null;
+        // Dashboard edits leave prepared announcements unchanged, including an empty
+        // new playlist. Validate the real binding id before using the frozen content.
+        $metadata = json_decode($binding['metadata_json'], true, 512, JSON_THROW_ON_ERROR);
+        $frozen = $snapshot && (int)($metadata['playlist_edited_snapshot_id'] ?? 0) === (int)$snapshot['id']
+            ? ($metadata['announcement_playlist_snapshot'] ?? null) : null;
+        $validationSnapshot = $snapshot;
+        if ($frozen && $validationSnapshot) $validationSnapshot['stories'] = $frozen['stories'];
+        if (!self::validateBinding($live, $binding, $validationSnapshot)) return null;
+        // A normal regeneration replaces the binding id and releases this content.
+        if ($frozen) $snapshot = $frozen;
         $previous = null;
         foreach ($bindings as $row) {
             if ((int)$row['event_id'] !== (int)$live['id'] || $row['state'] !== 'completed' || empty($row['outcome_json']) || (int)$row['snapshot_id'] <= 0) continue;
